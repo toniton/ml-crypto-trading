@@ -4,28 +4,28 @@ import yfinance as yf
 import pandas as pd
 import os
 
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import precision_score
-
-
+from providers.yahoo_finance import YahooFinance
+from services.model_training_service import ModelTrainingService
 from trends import get_google_trends_factor
 
 ticker = "^GSPC"
 keywords = ["sp500", "S&P 500"]
-
-if os.path.exists("sp500.csv"):
-	sp500 = pd.read_csv("sp500.csv", index_col=1)
+# https://developer.etrade.com/home
+if os.path.exists("localstorage/sp500.csv"):
+	sp500 = pd.read_csv("localstorage/sp500.csv", parse_dates=["Date"])
 	sp500 = sp500.reset_index(drop=True)
 else:
 	sp500 = yf.Ticker(ticker)
 	# TODO change 1mo to max
-	sp500 = sp500.history(period="5mo")
-	sp500.to_csv("sp500.csv")
+	sp500 = sp500.history(period="10y")
+	sp500.to_csv("localstorage/sp500.csv")
 
+# print(sp500["Date"].to_markdown(tablefmt="grid"))
 
-#
+sp500 = YahooFinance.get_data_source(ticker=ticker)
+
 # # Cleanup stock data
-sp500["Date"] = sp500["Date"].dt.date
+sp500["YearWeek"] = pd.to_datetime(sp500["Date"], utc=True).dt.strftime('%Y-%U')
 del sp500["Dividends"]
 del sp500["Stock Splits"]
 #
@@ -36,92 +36,16 @@ sp500["Target"] = (sp500["Tomorrow"] > sp500["Close"]).apply(int)
 sp500 = sp500.drop(sp500.index[-1])
 
 trends = get_google_trends_factor(keywords)
+trends["YearWeek"] = pd.to_datetime(trends["Date"], utc=True).dt.strftime('%Y-%U')
 
-print(trends.to_markdown(tablefmt="grid"))
-#
-sp500 = sp500.join(trends)
-# sp500["Google"] = sp500["Google"].fillna(0)
-#
+sp500 = pd.merge(sp500, trends, on=["YearWeek"], how="inner", )
+sp500.index = pd.to_datetime(sp500["Date_x"], utc=True)
+del sp500["Date_y"]
+del sp500["Date_x"]
+del sp500["YearWeek"]
+sp500["Google"] = sp500["Google"].fillna(0)
+predictors = ["Close", "Volume", "Open", "High", "Low"]
 
-print(sp500.to_markdown(tablefmt="grid"))
-# print(sp500.columns)
-# print(trends.columns)
-#
-#
-# model = RandomForestClassifier(n_estimators=200, min_samples_split=50, random_state=1)
-#
-# train = sp500.iloc[:-100]
-# test = sp500.iloc[-100:]
-#
-# predictors = ["Close", "Volume", "Open", "High", "Low"]
-#
-# model.fit(train[predictors], train["Target"])
-#
-# horizons = [2, 5, 60, 250, 1000]
-# new_predictors = ["Google"]
-#
-# for horizon in horizons:
-# 	rolling_averages = sp500.rolling(horizon).mean()
-#
-# 	ratio_column = f"Close_Ratio_{horizon}"
-# 	sp500[ratio_column] = sp500["Close"] / rolling_averages["Close"]
-#
-# 	trend_column = f"Trend_{horizon}"
-# 	sp500[trend_column] = sp500.shift(1).rolling(horizon).sum()["Target"]
-#
-# 	new_predictors += [ratio_column, trend_column]
-#
-# sp500 = sp500.dropna(subset=sp500.columns[sp500.columns != "Tomorrow"])
-# sp500.to_csv("sp500_rolling.csv")
-# print(sp500)
-#
-# print("Predicitors [][][]")
-# print(predictors)
-#
-#
-# def predict(train, test, predictors, model):
-# 	model.fit(train[predictors], train["Target"])
-# 	preds = model.predict_proba(test[predictors])[:,1]
-# 	preds[preds >= .6] = 1
-# 	preds[preds <= .6] = 0
-# 	preds = pd.Series(preds, index=test.index, name="Predictions")
-# 	combined = pd.concat([test["Target"], preds], axis=1)
-# 	return combined
-#
-#
-# def backtest(data, model, predictors, start=2500, step=250):
-# 	all_predictions = []
-# 	for i in range(start, data.shape[0], step):
-# 		train = data.iloc[0:i].copy()
-# 		test = data.iloc[i:(i+step)].copy()
-# 		predictions = predict(train, test, predictors, model)
-# 		all_predictions.append(predictions)
-# 	return pd.concat(all_predictions)
-#
-#
-# predictions = backtest(sp500, model, predictors)
-#
-# predictions["Predictions"].value_counts()
-#
-# score = precision_score(predictions["Target"], predictions["Predictions"])
-#
-# print("Precision score %::::")
-# print(score)
-#
-#
-# predictions["Target"].value_counts() / predictions.shape[0]
-#
-# print("Predictions::::")
-# print(predictions)
-#
-#
-# new_predictions = backtest(sp500, model, new_predictors)
-#
-# print("New predictions >>>>")
-# print(new_predictions)
-#
-#
-# score = precision_score(new_predictions["Target"], new_predictions["Predictions"])
-#
-# print("Precision score %::::")
-# print(score)
+
+model_training_service = ModelTrainingService(n_estimators=200, min_samples_split=50, random_state=1)
+model_training_service.train_model(sp500, predictors, 150)
