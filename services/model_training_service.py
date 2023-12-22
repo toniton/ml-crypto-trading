@@ -13,6 +13,7 @@ class ModelTrainingService:
     random_state = 1
 
     def __init__(self, n_estimators: int, min_samples_split: int, random_state: int):
+        print(n_estimators, min_samples_split)
         self.n_estimators = n_estimators
         self.min_samples_split = min_samples_split
         self.random_state = random_state
@@ -48,9 +49,9 @@ class ModelTrainingService:
         return combined
 
     @staticmethod
-    def _backtest(training_data, model, predictors, start=10, step=5):
+    def _backtest(training_data, model, predictors, start=10, step=15):
         all_predictions = []
-        print(start, training_data.shape, step)
+        # print(start, training_data.shape, step)
         for i in range(start, training_data.shape[0], step):
             train = training_data.iloc[0:i].copy()
             test = training_data.iloc[i:(i + step)].copy()
@@ -58,7 +59,12 @@ class ModelTrainingService:
             all_predictions.append(predictions)
         return pd.concat(all_predictions)
 
-    def train_model(self, training_data: DataFrame, predictors: List[str], limit: int = 100):
+    def train_model(
+            self,
+            training_data: DataFrame,
+            predictors: List[str],
+            limit: int = 100
+    ) -> tuple[RandomForestClassifier, int]:
         model = RandomForestClassifier(
             n_estimators=self.n_estimators,
             min_samples_split=self.min_samples_split,
@@ -73,11 +79,12 @@ class ModelTrainingService:
         training_data, predictors = ModelTrainingService._get_horizon(training_data, predictors)
         training_data = training_data.dropna()
 
-        # print(training_data.to_markdown(tablefmt="grid"))
+        print(training_data.to_markdown(tablefmt="grid"))
 
         predictions = ModelTrainingService._backtest(training_data, model, predictors)
         predictions["Predictions"].value_counts()
-        print(predictions.to_markdown(tablefmt="grid"))
+        # print(predictions.to_markdown(tablefmt="grid"))
 
         score = precision_score(predictions["Target"], predictions["Predictions"])
         print(f"Precision score: {score}")
+        return model, score

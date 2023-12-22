@@ -3,19 +3,22 @@
 import yfinance as yf
 import pandas as pd
 import os
-
-# ticker = "^GSPC"
-# keywords = ["sp500", "S&P 500"]
+from pathlib import Path
 
 
 class YahooFinance:
-	@staticmethod
-	def get_data_source(ticker: str, period: str = "5mo"):
-		if os.path.exists(f"../localstorage/{ticker}-{period}.csv"):
-			sp500 = pd.read_csv(f"../localstorage/{ticker}-{period}.csv", parse_dates=["Date"])
+	def __init__(self):
+		self.directory = Path(os.getcwd()).joinpath("./localstorage")
+		self.directory.mkdir(parents=True, exist_ok=True)
+
+	def get_data_source(self, ticker: str, period: str = "5y"):
+		file_path = f"{self.directory}/{ticker}-{period}.csv"
+		if os.path.exists(file_path):
+			asset_history = pd.read_csv(file_path)
 		else:
 			ticker_data = yf.Ticker(ticker)
-			sp500 = ticker_data.history(period=period)
-			sp500.to_csv(f"../localstorage/{ticker}-{period}.csv")
+			asset_history = ticker_data.history(period=period)
+			asset_history.to_csv(file_path)
 
-		return sp500
+		asset_history = asset_history.reset_index()
+		return asset_history
