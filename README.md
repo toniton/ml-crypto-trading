@@ -1,0 +1,6 @@
+- TODO: Improve precision score (Fix backtesting, Add more data history).
+- TODO: Create Job for state machine (Ready_to_buy, Ready_to_sell, Manual_hold).
+- TODO: Create buy/sell order (using provider API such as Etrade, Binance, Crypto.com).
+- TODO: Create policy config (E.g. Buy 15% < last sold price, Sell 35% > last buy price, Take 5% profit, risk 75% of pot).
+- TODO: Make event policy (E.g. Buy 15% < last sold price, Sell 35% > last buy price).
+- TODO: 
