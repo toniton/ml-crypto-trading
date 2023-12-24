@@ -1,13 +1,14 @@
 import abc
 import decimal
 from abc import ABC
+from uuid import UUID
 
 from entities.trade_action import TradeAction
 
 
 class ExchangeProvider(ABC):
     @abc.abstractmethod
-    def get_provider_name(self):
+    def get_provider_name(self) -> str:
         pass
 
     @abc.abstractmethod
@@ -15,5 +16,12 @@ class ExchangeProvider(ABC):
         pass
 
     @abc.abstractmethod
-    def place_order(self, ticker_symbol: str, quantity: int, trade_action: TradeAction):
+    def place_order(
+            self,
+            uuid: UUID,
+            ticker_symbol: str,
+            quantity: int,
+            price: float,
+            trade_action: TradeAction
+    ):
         pass

@@ -29,19 +29,13 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
             return None, "", False
         file = self.yaml_file
         encoding = self.yaml_file_encoding
-        path = Path(os.path.dirname(__file__), file)
+        path = Path(os.path.dirname(__file__), os.pardir, file)
         with open(path, 'r', encoding=encoding) as config_file:
             try:
                 configuration = yaml.safe_load(config_file)
                 return configuration[field_name], field_name, False
             except Exception as exc:
-                raise Exception(exc) from exc
-                # raise ValueError(f"Unsupported yaml file format! {path}") from exc
-
-    def prepare_field_value(
-            self, field_name: str, field: FieldInfo, value: Any, value_is_complex: bool
-    ) -> Any:
-        return value
+                raise ValueError(f"Unsupported yaml file format! {path}, {exc}") from exc
 
     def __call__(self) -> Dict[str, Any]:
         d: Dict[str, Any] = {}
@@ -49,9 +43,6 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
         for field_name, field in self.settings_cls.model_fields.items():
             field_value, field_key, value_is_complex = self.get_field_value(
                 field, field_name
-            )
-            field_value = self.prepare_field_value(
-                field_name, field, field_value, value_is_complex
             )
             if field_value is not None:
                 d[field_key] = field_value

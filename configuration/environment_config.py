@@ -1,21 +1,16 @@
-from typing import Optional
+from enum import Enum
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class AppEnvEnum(str, Enum):
+    staging = 'staging'
+    production = 'production'
 
 
 class EnvironmentConfig(BaseSettings):
-    CRYPTO_DOT_COM_EXCHANGE_API_KEY: str
-    CRYPTO_DOT_COM_EXCHANGE_SECRET_KEY: str
-    app_env: str
-    dynamodb_region: str
-    dynamodb_endpoint_url: Optional[str] = None
-    google_client_id: str
-    google_client_secret: str
-    jwt_secret_key: str
-    postgres_host: str
-    postgres_user: str
-    postgres_password: str
-    postgres_database: str
+    app_env: AppEnvEnum
+    crypto_dot_com_exchange_api_key: str
+    crypto_dot_com_exchange_secret_key: str
 
-    class Config:
-        env_file = ".env"
+    model_config = SettingsConfigDict(env_file=".env")
