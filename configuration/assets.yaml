@@ -1,0 +1,19 @@
+assets:
+  - name: "DOGE (Crypto.com)"
+    keywords: ["DOGE"]
+    ticker_symbol: "DOGE_USD"
+    asset_type: "DOGE_USD"
+    current_price: 300
+    exchange: "CRYPTO_DOT_COM"
+    market_cap: "13300824097"
+    sector: "Meme"
+    industry: "Crypto"
+  - name: "SHIBA INU (Crypto.com)"
+    keywords: ["SHIB", "SHIBA INU"]
+    ticker_symbol: "SHIB_USD"
+    asset_type: "DOGE_USD"
+    current_price: 400
+    exchange: "CRYPTO_DOT_COM"
+    market_cap: "13300824097"
+    sector: "Meme"
+    industry: "Crypto"

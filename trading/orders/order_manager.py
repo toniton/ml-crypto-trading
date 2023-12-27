@@ -7,6 +7,7 @@ from trading.orders.providers.exchange_provider import ExchangeProvider
 
 
 class OrderManager:
+    KAFKA_TOPIC: str = "ORDERS_TOPIC"
     providers: dict[str, ExchangeProvider] = {}
     cached_balance: dict[str, decimal]
 
@@ -28,13 +29,14 @@ class OrderManager:
         if provider is None:
             raise Exception(f"Provider $provider not supported.")
 
-        order = Order()
-        order.uuid = uuid4()
-        order.trade_action = TradeAction.BUY
-        order.price = price
-        order.quantity = quantity
-        order.provider_name = provider_name
-        order.ticker_symbol = ticker_symbol
+        order = Order(
+            uuid=uuid4(),
+            price=price,
+            quantity=quantity,
+            provider_name=provider_name,
+            trade_action=TradeAction.BUY,
+            ticker_symbol=ticker_symbol
+        )
 
         return order
 
@@ -56,12 +58,13 @@ class OrderManager:
         if provider is None:
             raise Exception(f"Provider $provider not supported.")
 
-        order = Order()
-        order.uuid = uuid4()
-        order.trade_action = TradeAction.SELL
-        order.price = price
-        order.quantity = quantity
-        order.provider_name = provider_name
-        order.ticker_symbol = ticker_symbol
+        order = Order(
+            uuid=uuid4(),
+            price=price,
+            quantity=quantity,
+            provider_name=provider_name,
+            trade_action=TradeAction.BUY,
+            ticker_symbol=ticker_symbol
+        )
 
         return order

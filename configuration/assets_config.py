@@ -2,34 +2,22 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-from pydantic import Field, BaseModel
 from pydantic._internal._utils import deep_update
 from pydantic_settings import BaseSettings, SettingsConfigDict, InitSettingsSource
 from pydantic_settings.sources import ENV_FILE_SENTINEL, DotenvType
 
-from configuration.environment_config import AppEnvEnum
 from configuration.pydantic_custom_sources.yaml_config_settings_source import YamlConfigSettingsSource
+from entities.asset import Asset
 
 
-class KafkaConfiguration(BaseModel):
-    auto_offset_reset: str
-    bootstrap_servers: list[str]
-    enable_auto_commit: bool
+class AssetsConfig(BaseSettings):
 
-
-class ApplicationConfig(BaseSettings):
-
-    crypto_dot_com_exchange_api_endpoint: str = Field()
-    kafka_configuration: KafkaConfiguration = Field()
+    assets: list[Asset]
 
     model_config = SettingsConfigDict(
-        env_file=(f"application-{AppEnvEnum.staging.value}.yaml", f"application-{AppEnvEnum.production.value}.yaml"),
+        env_file=f"assets.yaml",
         env_file_encoding="utf-8"
     )
-
-    @staticmethod
-    def get_env_path(app_env: AppEnvEnum) -> str:
-        return f"application-{app_env.value}.yaml"
 
     @classmethod
     def settings_customise_sources(

@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+from kafka import KafkaProducer, KafkaConsumer
 
 from configuration.application_config import ApplicationConfig
+from configuration.assets_config import AssetsConfig
 from configuration.environment_config import EnvironmentConfig
 from trading.orders.order_manager import OrderManager
 from trading.orders.providers.cryptodotcom_provider import CryptoDotComProvider
@@ -22,11 +24,24 @@ def main():
         environment_config.crypto_dot_com_exchange_secret_key
     )
 
+    assets_config = AssetsConfig()
+    assets = assets_config.assets
+
+    kafka_configuration = application_config.kafka_configuration
+    producer = KafkaProducer(
+        value_serializer=lambda v: v.encode('ascii'),
+        bootstrap_servers=kafka_configuration.bootstrap_servers
+    )
+    consumer = KafkaConsumer(
+        OrderManager.KAFKA_TOPIC,
+        bootstrap_servers=kafka_configuration.bootstrap_servers
+    )
+
     order_manager = OrderManager()
     order_manager.register_provider(cryptodotcom_provider)
 
     prediction_engine = PredictionEngine()
-    trading_engine = TradingEngine(order_manager, prediction_engine)
+    trading_engine = TradingEngine(assets, consumer, producer, order_manager, prediction_engine)
     trading_engine.init_application()
     pass
 
