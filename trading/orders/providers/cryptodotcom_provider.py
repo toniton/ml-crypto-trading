@@ -107,6 +107,6 @@ class CryptoDotComProvider(ExchangeProvider):
                 data = json.loads(body)
             return CryptoDotComResponseOrderCreatedDto(**data["result"])
         except HTTPError as exc:
-            print(exc.read().decode())
+            raise Exception(exc, exc.read().decode())
         except URLError as exc:
-            print(exc.reason)
+            raise Exception(exc, exc.reason)
