@@ -19,7 +19,8 @@ class KafkaConfiguration(BaseModel):
 
 class ApplicationConfig(BaseSettings):
 
-    crypto_dot_com_exchange_api_endpoint: str = Field()
+    crypto_dot_com_exchange_rest_endpoint: str = Field()
+    crypto_dot_com_exchange_websocket_endpoint: str = Field()
     kafka_configuration: KafkaConfiguration = Field()
 
     model_config = SettingsConfigDict(

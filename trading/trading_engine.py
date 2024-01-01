@@ -8,14 +8,16 @@ from kafka import KafkaProducer, KafkaConsumer
 
 from entities.asset import Asset
 from entities.order import Order
+from prediction.prediction_engine import PredictionEngine
+from trading.markets.market_data_manager import MarketDataManager
 from trading.orders.order_manager import OrderManager
-from trading.predictions.prediction_engine import PredictionEngine
 
 
 class TradingEngine:
     assets: list[Asset]
     consumer: KafkaConsumer
     order_manager: OrderManager
+    market_data_manager: MarketDataManager
     prediction_engine: PredictionEngine
 
     def __init__(
@@ -24,10 +26,12 @@ class TradingEngine:
         consumer: KafkaConsumer,
         producer: KafkaProducer,
         order_manager: OrderManager,
+        market_data_manager: MarketDataManager,
         prediction_engine: PredictionEngine
     ):
         self.assets = assets
         self.order_manager = order_manager
+        self.market_data_manager = market_data_manager
         self.prediction_engine = prediction_engine
         self.consumer = consumer
         self.producer = producer
@@ -41,11 +45,10 @@ class TradingEngine:
 
         schedule_thread = threading.Thread(target=self.run_pending_schedules)
         execute_thread = threading.Thread(target=self.execute_queued_orders)
+        market_data_thread = threading.Thread(target=self.start_listening_to_market_data)
         schedule_thread.start()
         execute_thread.start()
-        # schedule_thread.join()
-        # execute_thread.join()
-        pass
+        market_data_thread.start()
 
     @staticmethod
     def run_pending_schedules():
@@ -82,6 +85,8 @@ class TradingEngine:
 
             self.producer.send(OrderManager.KAFKA_TOPIC, order.model_dump_json())
 
+    def start_listening_to_market_data(self):
+        self.market_data_manager.init_websocket(self.assets)
         pass
 
     def check_unclosed_orders(self):

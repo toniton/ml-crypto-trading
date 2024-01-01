@@ -1,4 +1,5 @@
-crypto_dot_com_exchange_api_endpoint: https://uat-api.3ona.co/v2/
+crypto_dot_com_exchange_rest_endpoint: https://uat-api.3ona.co/v2/
+crypto_dot_com_exchange_websocket_endpoint: wss://uat-stream.3ona.co/v2/market
 kafka_configuration:
   auto_offset_reset: "earliest"
   bootstrap_servers:

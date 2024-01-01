@@ -3,7 +3,7 @@ from uuid import uuid4
 
 from entities.order import Order
 from entities.trade_action import TradeAction
-from trading.orders.providers.exchange_provider import ExchangeProvider
+from trading.providers.exchange_provider import ExchangeProvider
 
 
 class OrderManager:
@@ -11,7 +11,7 @@ class OrderManager:
     providers: dict[str, ExchangeProvider] = {}
     cached_balance: dict[str, decimal]
 
-    def register_provider(self, provider: ExchangeProvider) -> decimal:
+    def register_provider(self, provider: ExchangeProvider):
         if provider.get_provider_name() in self.providers:
             raise Exception(f"Provider ${provider.get_provider_name()} already registered.")
 

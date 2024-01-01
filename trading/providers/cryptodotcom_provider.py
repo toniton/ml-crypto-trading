@@ -3,24 +3,28 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from uuid import UUID
 
+import websocket
+
 from entities.exchange_provider import ExchangeProvidersEnum
 from entities.trade_action import TradeAction
-from trading.orders.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
-from trading.orders.providers.exchange_provider import ExchangeProvider
-from trading.orders.utils.helpers import params_to_str
+from trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
+from trading.providers.exchange_provider import ExchangeProvider
+from trading.providers.utils.helpers import params_to_str
 
 
 class CryptoDotComProvider(ExchangeProvider):
 
-    def __init__(self, _base_url: str, _api_key: str, _secret_key: str):
-        self.base_url = _base_url
-        self.api_key = _api_key
-        self.secret_key = _secret_key
+    def __init__(self, base_url: str, websocket_url: str, api_key: str, secret_key: str):
+        self.websocket_client = None
+        self.base_url = base_url
+        self.websocket_url = websocket_url
+        self.api_key = api_key
+        self.secret_key = secret_key
 
     def get_provider_name(self):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
@@ -34,9 +38,13 @@ class CryptoDotComProvider(ExchangeProvider):
         request = Request(url=self.base_url + path, method=method, headers=headers, data=data)
         return request
 
+    def get_instrument_name(self, ticker_symbol: str, currency: str = "USD", separator: str = "") -> str:
+        return f"{ticker_symbol}{separator}{currency}"
+
     def get_market_price(self, ticker_symbol: str) -> decimal:
+        instrument_name = self.get_instrument_name(ticker_symbol)
         request = self.init_http_connection(
-            f"public/get-ticker?instrument_name={ticker_symbol}&valuation_type=index_price&count=1"
+            f"public/get-ticker?instrument_name={instrument_name}-PERP&valuation_type=index_price&count=1"
         )
 
         with urlopen(request) as response:
@@ -53,6 +61,7 @@ class CryptoDotComProvider(ExchangeProvider):
             price: str,
             trade_action: TradeAction
     ) -> CryptoDotComRequestDto:
+        instrument_name = self.get_instrument_name(ticker_symbol, separator="_")
         nonce = int(time.time() * 1000)
         request_data = {
             "id": 1,
@@ -60,7 +69,7 @@ class CryptoDotComProvider(ExchangeProvider):
             "method": "private/create-order",
             "api_key": self.api_key,
             "params": {
-                "instrument_name": ticker_symbol,
+                "instrument_name": instrument_name,
                 "side": str(trade_action.value.upper()),
                 "type": "LIMIT",
                 "price": float(price),
@@ -110,3 +119,10 @@ class CryptoDotComProvider(ExchangeProvider):
             raise Exception(exc, exc.read().decode())
         except URLError as exc:
             raise Exception(exc, exc.reason)
+
+    def get_websocket_client(self, on_open: Callable, on_message: Callable, on_close: Callable):
+        self.websocket_client = websocket.WebSocketApp(
+            self.websocket_url, on_open=on_open,
+            on_message=on_message, on_close=on_close
+        )
+        return self.websocket_client
