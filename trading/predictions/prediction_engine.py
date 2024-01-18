@@ -1,2 +1,0 @@
-class PredictionEngine:
-    pass
