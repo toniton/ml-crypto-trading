@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 from kafka import KafkaProducer, KafkaConsumer
+from sqlalchemy.orm import Session
 
 from configuration.application_config import ApplicationConfig
 from configuration.assets_config import AssetsConfig
 from configuration.environment_config import EnvironmentConfig
-# from prediction.models.coinmarketcap_model import CoinMarketCapModel
+from dao.database_setup import DatabaseSetup
 from prediction.prediction_engine import PredictionEngine
 from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from trading.mappers.mapper_manager import MapperManager
@@ -12,6 +13,7 @@ from trading.markets.market_data_manager import MarketDataManager
 from trading.orders.order_manager import OrderManager
 from trading.providers.cryptodotcom_provider import CryptoDotComProvider
 from trading.trading_engine import TradingEngine
+from trading.unit_of_work import UnitOfWork
 
 
 def main():
@@ -19,6 +21,14 @@ def main():
     application_config = ApplicationConfig(
         _env_file=ApplicationConfig.get_env_path(environment_config.app_env)
     )
+
+    database_setup = DatabaseSetup(environment_config, application_config)
+    database_setup.create_tables()
+    database_engine = database_setup.create_engine()
+    database_session = Session(database_engine)
+
+    unit_of_work = UnitOfWork(database_session)
+
     print(["Crypto Dot Com API Key", environment_config.crypto_dot_com_exchange_api_key])
     print(["Application config", application_config.crypto_dot_com_exchange_rest_endpoint])
     print(["Application config", application_config.crypto_dot_com_exchange_websocket_endpoint])
@@ -33,9 +43,6 @@ def main():
     assets_config = AssetsConfig()
     assets = assets_config.assets
 
-    # model = CoinMarketCapModel(assets[0])
-    # model.train_model()
-
     kafka_configuration = application_config.kafka_configuration
     producer = KafkaProducer(
         value_serializer=lambda v: v.encode('ascii'),
@@ -46,17 +53,19 @@ def main():
         bootstrap_servers=kafka_configuration.bootstrap_servers
     )
 
-    order_manager = OrderManager()
+    order_manager = OrderManager(unit_of_work)
     order_manager.register_provider(cryptodotcom_provider)
 
     mapper_manager = MapperManager()
     mapper_manager.register_mapper(cryptodotcom_provider.get_provider_name(), CryptoDotComMarketDataMapper)
 
-    market_data_manager = MarketDataManager()
+    market_data_manager = MarketDataManager(assets)
     market_data_manager.register_provider(cryptodotcom_provider)
     market_data_manager.set_mapper_manager(mapper_manager)
 
-    prediction_engine = PredictionEngine()
+    prediction_engine = PredictionEngine(assets)
+    prediction_engine.load_assets_model()
+
     trading_engine = TradingEngine(assets, consumer, producer, order_manager, market_data_manager, prediction_engine)
     trading_engine.init_application()
     pass
