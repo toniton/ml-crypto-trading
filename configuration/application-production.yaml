@@ -1,5 +1,7 @@
 crypto_dot_com_exchange_rest_endpoint: https://api.crypto.com/v2/
 crypto_dot_com_exchange_websocket_endpoint: wss://stream.crypto.com/v2/market
+coin_market_cap_rest_endpoint: https://pro-api.coinmarketcap.com/
+database_connection_host: localhost:5432
 kafka_configuration:
   auto_offset_reset: "earliest"
   bootstrap_servers:

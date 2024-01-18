@@ -10,6 +10,6 @@ class Order(BaseModel):
     uuid: UUID
     provider_name: str
     ticker_symbol: str
-    price: float
-    quantity: int
+    price: str
+    quantity: str
     trade_action: TradeAction
