@@ -2,24 +2,27 @@ assets:
   - name: "Bitcoin (Crypto.com)"
     keywords: ["BTC"]
     ticker_symbol: "BTC"
-    current_price: 43444
     exchange: "CRYPTO_DOT_COM"
+    min_quantity: 0.00001
+    decimal_places: 8
     market_cap: "850765031729"
     sector: "Finance"
     industry: "Crypto"
-  - name: "DOGE (Crypto.com)"
-    keywords: ["DOGE"]
-    ticker_symbol: "DOGE"
-    current_price: 300
-    exchange: "CRYPTO_DOT_COM"
-    market_cap: "13300824097"
-    sector: "Meme"
-    industry: "Crypto"
+#  - name: "DOGE (Crypto.com)"
+#    keywords: ["DOGE"]
+#    ticker_symbol: "DOGE"
+#    min_quantity: 1
+#  decimal_places: 9
+#    exchange: "CRYPTO_DOT_COM"
+#    market_cap: "13300824097"
+#    sector: "Meme"
+#    industry: "Crypto"
   - name: "SHIBA INU (Crypto.com)"
     keywords: ["SHIB", "SHIBA INU"]
     ticker_symbol: "SHIB"
-    current_price: 400
     exchange: "CRYPTO_DOT_COM"
+    min_quantity: 10000
+    decimal_places: 9
     market_cap: "13300824097"
     sector: "Meme"
     industry: "Crypto"

@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 
 from pydantic import BaseModel, computed_field
+from pydantic.dataclasses import dataclass
 
 from entities.exchange_provider import ExchangeProvidersEnum
 
 
+@dataclass
 class Asset(BaseModel):
     keywords: list[str]
     ticker_symbol: str
+    decimal_places: int
     name: str
-    current_price: float
     market_cap: float
     exchange: ExchangeProvidersEnum
+    min_quantity: float
     sector: str
     industry: str
 
