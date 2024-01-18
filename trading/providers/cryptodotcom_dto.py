@@ -6,8 +6,8 @@ class CryptoDotComRequestOrderParamsDto(BaseModel):
     instrument_name: str
     side: str
     type: str
-    price: float
-    quantity: int
+    price: str
+    quantity: str
     client_oid: Optional[str] = None
     exec_inst: Optional[str] = None
     time_in_force: Optional[str] = None
@@ -55,13 +55,13 @@ class TickerData(BaseModel):
 
 
 class TickerResult(BaseModel):
-    channel: str = "ticker"
-    subscription: str
+    channel:  Optional[str] = None
+    subscription: Optional[str] = None
     data: list[TickerData]
-    instrument_name: str
+    instrument_name:  Optional[str] = None
 
 
-class CryptoDotComWebsocketMarketDataResponseDto(BaseModel):
+class CryptoDotComMarketDataResponseDto(BaseModel):
     id: int = -1
     method: str = "subscribe"
     code: int = 0

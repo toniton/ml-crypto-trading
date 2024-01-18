@@ -1,7 +1,8 @@
-import json
-from typing import Callable, Any
+from __future__ import annotations
 
-from entities.market_data import MarketData
+import json
+from typing import Callable
+
 from trading.providers.exchange_provider import ExchangeProvider
 
 
@@ -9,8 +10,8 @@ class MarketDataClient:
     def __init__(
             self, key: int, ticker_symbol: str,
             provider: ExchangeProvider,
-            on_update: Callable[[int, MarketData, str], None],
-            default_action_data: Callable[[str], Any] = None
+            on_update: Callable[[int, dict, str], None],
+            default_action_data: dict | None = None
     ):
         self.key: int = key
         self.ticker_symbol: str = ticker_symbol
@@ -21,8 +22,7 @@ class MarketDataClient:
     def on_open(self, ws):
         print('Connected')
         if self.default_action_data is not None:
-            data = self.default_action_data(self.provider.get_provider_name())
-            ws.send(json.dumps(data))
+            ws.send(json.dumps(self.default_action_data))
 
     @classmethod
     def on_close(cls, ws):

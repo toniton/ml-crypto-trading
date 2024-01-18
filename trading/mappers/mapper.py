@@ -8,7 +8,7 @@ class Mapper(Protocol):
 
     @staticmethod
     def map(data: Any) -> Any:
-        ...
+        raise NotImplementedError()
 
 
 class SingletonMapperMeta(type):

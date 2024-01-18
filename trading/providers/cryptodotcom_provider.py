@@ -1,4 +1,3 @@
-import decimal
 import hashlib
 import hmac
 import json
@@ -11,7 +10,10 @@ from uuid import UUID
 import websocket
 
 from entities.exchange_provider import ExchangeProvidersEnum
+from entities.market_data import MarketData
 from entities.trade_action import TradeAction
+from trading.helpers.trading_helper import TradingHelper
+from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
 from trading.providers.exchange_provider import ExchangeProvider
 from trading.providers.utils.helpers import params_to_str
@@ -38,11 +40,8 @@ class CryptoDotComProvider(ExchangeProvider):
         request = Request(url=self.base_url + path, method=method, headers=headers, data=data)
         return request
 
-    def get_instrument_name(self, ticker_symbol: str, currency: str = "USD", separator: str = "") -> str:
-        return f"{ticker_symbol}{separator}{currency}"
-
-    def get_market_price(self, ticker_symbol: str) -> decimal:
-        instrument_name = self.get_instrument_name(ticker_symbol)
+    def get_market_data(self, ticker_symbol: str) -> MarketData:
+        instrument_name = TradingHelper.get_instrument_name(ticker_symbol)
         request = self.init_http_connection(
             f"public/get-ticker?instrument_name={instrument_name}-PERP&valuation_type=index_price&count=1"
         )
@@ -51,17 +50,17 @@ class CryptoDotComProvider(ExchangeProvider):
             body = response.read()
             data = json.loads(body)
 
-        return data["result"]["data"][0]["a"]
+        return CryptoDotComMarketDataMapper.map(data)
 
     def _build_order_request(
             self,
             uuid: UUID,
             ticker_symbol: str,
-            quantity: int,
+            quantity: str,
             price: str,
             trade_action: TradeAction
     ) -> CryptoDotComRequestDto:
-        instrument_name = self.get_instrument_name(ticker_symbol, separator="_")
+        instrument_name = TradingHelper.get_instrument_name(ticker_symbol, separator="_")
         nonce = int(time.time() * 1000)
         request_data = {
             "id": 1,
@@ -70,10 +69,10 @@ class CryptoDotComProvider(ExchangeProvider):
             "api_key": self.api_key,
             "params": {
                 "instrument_name": instrument_name,
-                "side": str(trade_action.value.upper()),
+                "side": trade_action.value.upper(),
                 "type": "LIMIT",
-                "price": float(price),
-                "quantity": int(quantity),
+                "price": price,
+                "quantity": quantity,
                 "client_oid": str(uuid),
                 "exec_inst": "POST_ONLY",
                 "time_in_force": "FILL_OR_KILL"
@@ -97,7 +96,7 @@ class CryptoDotComProvider(ExchangeProvider):
             self,
             uuid: UUID,
             ticker_symbol: str,
-            quantity: int,
+            quantity: str,
             price: str,
             trade_action: TradeAction
     ) -> CryptoDotComResponseOrderCreatedDto:
