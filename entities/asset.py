@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 
 from pydantic import BaseModel, computed_field
-from pydantic.dataclasses import dataclass
 
 from entities.exchange_provider import ExchangeProvidersEnum
 
 
-@dataclass
 class Asset(BaseModel):
     keywords: list[str]
     ticker_symbol: str

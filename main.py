@@ -7,6 +7,13 @@ from configuration.assets_config import AssetsConfig
 from configuration.environment_config import EnvironmentConfig
 from dao.database_setup import DatabaseSetup
 from prediction.prediction_engine import PredictionEngine
+from trading.consensus.consensus_manager import ConsensusManager
+from trading.consensus.strategies.buy_strategies.false_buy_strategy import FalseBuyStrategy
+from trading.consensus.strategies.buy_strategies.prediction_buy_strategy import PredictionBuyStrategy
+from trading.consensus.strategies.sell_strategies.false_sell_strategy import FalseSellStrategy
+from trading.consensus.strategies.sell_strategies.prediction_sell_strategy import PredictionSellStrategy
+from trading.context.trading_context import TradingContext
+from trading.context.trading_context_manager import TradingContextManager
 from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from trading.mappers.mapper_manager import MapperManager
 from trading.markets.market_data_manager import MarketDataManager
@@ -66,7 +73,30 @@ def main():
     prediction_engine = PredictionEngine(assets)
     prediction_engine.load_assets_model()
 
-    trading_engine = TradingEngine(assets, consumer, producer, order_manager, market_data_manager, prediction_engine)
+    prediction_buy_strategy = PredictionBuyStrategy(prediction_engine)
+    prediction_sell_strategy = PredictionSellStrategy(prediction_engine)
+    false_buy_strategy = FalseBuyStrategy()
+    false_sell_strategy = FalseSellStrategy()
+
+    consensus_manager = ConsensusManager()
+    consensus_manager.register_strategy(prediction_buy_strategy)
+    consensus_manager.register_strategy(false_buy_strategy)
+    consensus_manager.register_strategy(prediction_sell_strategy)
+    consensus_manager.register_strategy(false_sell_strategy)
+
+    trading_context_manager = TradingContextManager()
+    for asset in assets:
+        name = asset.name
+        exchange = asset.exchange
+        ticker_symbol = asset.ticker_symbol
+        opening_balance = input(f"Set opening balance for {name} - {ticker_symbol} at {exchange.value}")
+        trading_context_manager.register_trading_context(ticker_symbol, TradingContext(float(opening_balance)))
+
+    trading_engine = TradingEngine(
+        assets, consumer, producer, order_manager,
+        market_data_manager, consensus_manager,
+        trading_context_manager
+    )
     trading_engine.init_application()
     pass
 
