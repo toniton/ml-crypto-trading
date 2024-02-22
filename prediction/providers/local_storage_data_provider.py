@@ -9,7 +9,8 @@ from prediction.providers.history_data_provider import HistoryDataProvider
 
 
 class LocalStorageDataProvider(HistoryDataProvider):
-    directory = Path(os.getcwd()).joinpath("./localstorage")
+    def __init__(self, directory: str):
+        self.directory = Path(os.getcwd()).joinpath(directory)
 
     def get_ticker_data(
         self, ticker_symbol: str,

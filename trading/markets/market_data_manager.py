@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import logging
-from time import time
 from typing import Any
 
 from entities.asset import Asset
 from entities.market_data import MarketData
-from trading.helpers.trading_helper import TradingHelper
 from trading.mappers.mapper_manager import MapperManager
 from trading.markets.market_data_client import MarketDataClient
 from trading.providers.exchange_provider import ExchangeProvider
@@ -30,18 +28,6 @@ class MarketDataManager:
     def set_mapper_manager(self, mapper_manager: MapperManager):
         self.mapper_manager = mapper_manager
 
-    def default_action_data(self, asset: Asset) -> Any:
-        channels = [f"ticker.{TradingHelper.get_instrument_name(asset.ticker_symbol)}-PERP"]
-        data = {
-            "id": 1,
-            "method": "subscribe",
-            "params": {
-                "channels": channels
-            },
-            "nonce": int(time())
-        }
-        return data
-
     def init_websocket(self):
         if not self.providers:
             logging.warning([
@@ -54,7 +40,6 @@ class MarketDataManager:
             provider = self.providers[exchange.value]
             self.market_data_clients[key] = MarketDataClient(
                 key, ticker_symbol, provider, self.on_marketdata_update,
-                self.default_action_data(asset)
             )
 
         for client in self.market_data_clients.values():
@@ -66,8 +51,7 @@ class MarketDataManager:
 
         logging.warning(["Market data for key:", key, ", updates received:", data])
 
-        if data["method"] == "subscribe":
-            self.market_data[key] = self.mapper_manager.map(data, provider_name)
+        self.market_data[key] = self.mapper_manager.map(data, provider_name)
 
     def get_latest_marketdata(self, asset: Asset) -> MarketData | None:
         key = asset.key

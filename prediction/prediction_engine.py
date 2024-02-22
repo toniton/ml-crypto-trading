@@ -17,19 +17,20 @@ from prediction.providers.local_storage_data_provider import LocalStorageDataPro
 
 
 class PredictionEngine:
-    def __init__(self, assets: list[Asset]):
+    def __init__(self, assets: list[Asset], data_provider: HistoryDataProvider, prediction_dir: str):
         self.history_cache: dict[str, DataFrame] = {}
         self.asset_lookup: dict[str, Asset] = {}
-        self.data_provider: HistoryDataProvider = LocalStorageDataProvider()
+        self.data_provider: HistoryDataProvider = data_provider
         self.models: dict[str, PredictionModel] = {}
         self.assets = assets
+        self.prediction_dir = prediction_dir
         self.init_application()
         self.preprocessor = CoinMarketCapPreProcessor()
 
     def init_application(self):
         for asset in self.assets:
             try:
-                self.models[asset.ticker_symbol] = RandomForestClassifierModel(asset)
+                self.models[asset.ticker_symbol] = RandomForestClassifierModel(asset, self.prediction_dir)
                 self.asset_lookup[asset.ticker_symbol] = asset
                 data = self.data_provider.get_ticker_data(asset.ticker_symbol)
                 self.history_cache[asset.ticker_symbol] = data.head(1200).copy()

@@ -1,11 +1,13 @@
+from __future__ import annotations
+
 import abc
-import decimal
 from abc import ABC
 from typing import Callable
 from uuid import UUID
 
 import websocket
 
+from entities.market_data import MarketData
 from entities.trade_action import TradeAction
 
 
@@ -15,7 +17,11 @@ class ExchangeProvider(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_market_data(self, ticker_symbol: str) -> decimal:
+    def get_market_subscription_data(self, ticker_symbol: str) -> dict | None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_market_data(self, ticker_symbol: str) -> MarketData:
         raise NotImplementedError()
 
     @abc.abstractmethod

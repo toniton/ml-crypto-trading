@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import hashlib
 import hmac
 import json
 import time
-from typing import Any, Callable
+from typing import Callable
 from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+from urllib.request import urlopen
 from uuid import UUID
 
 import websocket
@@ -12,6 +14,7 @@ import websocket
 from entities.exchange_provider import ExchangeProvidersEnum
 from entities.market_data import MarketData
 from entities.trade_action import TradeAction
+from trading.helpers.request_helper import RequestHelper
 from trading.helpers.trading_helper import TradingHelper
 from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
@@ -31,18 +34,22 @@ class CryptoDotComProvider(ExchangeProvider):
     def get_provider_name(self):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
 
-    def init_http_connection(self, path: str, method: str = "GET", data: Any = None, headers: dict = None) -> Request:
-        headers = {
-            "Content-Type": "application/json",
-            "User-Agent": "Mozilla/5.0",
-            **(headers or {})
+    def get_market_subscription_data(self, ticker_symbol: str) -> dict | None:
+        channels = [f"ticker.{TradingHelper.get_instrument_name(ticker_symbol)}-PERP"]
+        data = {
+            "id": 1,
+            "method": "subscribe",
+            "params": {
+                "channels": channels
+            },
+            "nonce": int(time.time())
         }
-        request = Request(url=self.base_url + path, method=method, headers=headers, data=data)
-        return request
+        return data
 
     def get_market_data(self, ticker_symbol: str) -> MarketData:
         instrument_name = TradingHelper.get_instrument_name(ticker_symbol)
-        request = self.init_http_connection(
+        request = RequestHelper.init_http_connection(
+            self.base_url,
             f"public/get-ticker?instrument_name={instrument_name}-PERP&valuation_type=index_price&count=1"
         )
 
@@ -80,10 +87,10 @@ class CryptoDotComProvider(ExchangeProvider):
         }
 
         payload_str = request_data['method'] \
-            + str(request_data.get('id')) \
-            + request_data['api_key'] \
-            + params_to_str(request_data['params'], 0, 2) \
-            + str(request_data['nonce'])
+                      + str(request_data.get('id')) \
+                      + request_data['api_key'] \
+                      + params_to_str(request_data['params'], 0, 2) \
+                      + str(request_data['nonce'])
 
         request_data['sig'] = hmac.new(
             bytes(str(self.secret_key), 'utf-8'),
@@ -103,7 +110,8 @@ class CryptoDotComProvider(ExchangeProvider):
         request_data = self._build_order_request(uuid, ticker_symbol, quantity, price, trade_action)
         serialized_json = request_data.model_dump_json()
 
-        request = self.init_http_connection(
+        request = RequestHelper.init_http_connection(
+            self.base_url,
             "private/create-order",
             method="POST",
             data=serialized_json.encode("utf-8")

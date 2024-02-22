@@ -10,19 +10,18 @@ class MarketDataClient:
     def __init__(
             self, key: int, ticker_symbol: str,
             provider: ExchangeProvider,
-            on_update: Callable[[int, dict, str], None],
-            default_action_data: dict | None = None
+            on_update: Callable[[int, dict, str], None]
     ):
         self.key: int = key
         self.ticker_symbol: str = ticker_symbol
         self.provider: ExchangeProvider = provider
-        self.default_action_data = default_action_data
         self.on_update = on_update
 
     def on_open(self, ws):
         print('Connected')
-        if self.default_action_data is not None:
-            ws.send(json.dumps(self.default_action_data))
+        subscription_data = self.provider.get_market_subscription_data(self.ticker_symbol)
+        if subscription_data is not None:
+            ws.send(json.dumps(subscription_data))
 
     @classmethod
     def on_close(cls, ws):

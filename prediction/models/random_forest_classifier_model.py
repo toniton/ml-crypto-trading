@@ -16,9 +16,9 @@ from prediction.models.prediction_model import PredictionModel
 
 class RandomForestClassifierModel(PredictionModel):
 
-    def __init__(self, asset: Asset):
+    def __init__(self, asset: Asset, prediction_dir: str):
         self.asset = asset
-        self.directory = Path(os.getcwd()).joinpath("./localstorage")
+        self.directory = Path(prediction_dir)
         self.directory.mkdir(parents=True, exist_ok=True)
         self.predictors = ["Open", "High", "Low", "Close", "Volume"]
         self.model: RandomForestClassifier | None = None
@@ -28,8 +28,7 @@ class RandomForestClassifierModel(PredictionModel):
         return data.model_dump().values()
 
     def get_filename(self) -> str:
-        parent_directory = Path(os.getcwd()).joinpath("./localstorage")
-        filename = f"{parent_directory}/models/{self.asset.ticker_symbol.lower()}-random-forest.joblib"
+        filename = f"{self.directory}/models/{self.asset.ticker_symbol.lower()}-random-forest.joblib"
         return filename
 
     def train_model(self, data: DataFrame, target: Series) -> None:
