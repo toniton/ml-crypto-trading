@@ -10,7 +10,6 @@ from trading.unit_of_work import UnitOfWork
 
 
 class OrderManager:
-    KAFKA_TOPIC: str = "ORDERS_TOPIC"
     providers: dict[str, ExchangeProvider] = {}
     cached_balance: dict[str, decimal]
 

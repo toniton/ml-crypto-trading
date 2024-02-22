@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-from kafka import KafkaProducer, KafkaConsumer
+import os.path
+
 from sqlalchemy.orm import Session
 
 from configuration.application_config import ApplicationConfig
@@ -7,6 +8,7 @@ from configuration.assets_config import AssetsConfig
 from configuration.environment_config import EnvironmentConfig
 from dao.database_setup import DatabaseSetup
 from prediction.prediction_engine import PredictionEngine
+from prediction.providers.local_storage_data_provider import LocalStorageDataProvider
 from trading.consensus.consensus_manager import ConsensusManager
 from trading.consensus.strategies.buy_strategies.false_buy_strategy import FalseBuyStrategy
 from trading.consensus.strategies.buy_strategies.prediction_buy_strategy import PredictionBuyStrategy
@@ -21,6 +23,8 @@ from trading.orders.order_manager import OrderManager
 from trading.providers.cryptodotcom_provider import CryptoDotComProvider
 from trading.trading_engine import TradingEngine
 from trading.unit_of_work import UnitOfWork
+
+PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
 
 
 def main():
@@ -50,16 +54,6 @@ def main():
     assets_config = AssetsConfig()
     assets = assets_config.assets
 
-    kafka_configuration = application_config.kafka_configuration
-    producer = KafkaProducer(
-        value_serializer=lambda v: v.encode('ascii'),
-        bootstrap_servers=kafka_configuration.bootstrap_servers
-    )
-    consumer = KafkaConsumer(
-        OrderManager.KAFKA_TOPIC,
-        bootstrap_servers=kafka_configuration.bootstrap_servers
-    )
-
     order_manager = OrderManager(unit_of_work)
     order_manager.register_provider(cryptodotcom_provider)
 
@@ -70,7 +64,8 @@ def main():
     market_data_manager.register_provider(cryptodotcom_provider)
     market_data_manager.set_mapper_manager(mapper_manager)
 
-    prediction_engine = PredictionEngine(assets)
+    localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)
+    prediction_engine = PredictionEngine(assets, localstorage_provider, PREDICTION_STORAGE_DIR)
     prediction_engine.load_assets_model()
 
     prediction_buy_strategy = PredictionBuyStrategy(prediction_engine)
@@ -93,7 +88,7 @@ def main():
         trading_context_manager.register_trading_context(ticker_symbol, TradingContext(float(opening_balance)))
 
     trading_engine = TradingEngine(
-        assets, consumer, producer, order_manager,
+        assets, order_manager,
         market_data_manager, consensus_manager,
         trading_context_manager
     )

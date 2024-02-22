@@ -2,9 +2,9 @@ import json
 import logging
 import threading
 import time
+from queue import Queue
 
 import schedule
-from kafka import KafkaProducer, KafkaConsumer
 
 from entities.asset import Asset
 from entities.order import Order
@@ -18,7 +18,6 @@ from trading.orders.order_manager import OrderManager
 
 class TradingEngine:
     assets: list[Asset]
-    consumer: KafkaConsumer
     order_manager: OrderManager
     market_data_manager: MarketDataManager
     consensus_manager: ConsensusManager
@@ -27,8 +26,6 @@ class TradingEngine:
     def __init__(
         self,
         assets: list[Asset],
-        consumer: KafkaConsumer,
-        producer: KafkaProducer,
         order_manager: OrderManager,
         market_data_manager: MarketDataManager,
         consensus_manager: ConsensusManager,
@@ -39,8 +36,7 @@ class TradingEngine:
         self.market_data_manager = market_data_manager
         self.consensus_manager = consensus_manager
         self.trading_context_manager = trading_context_manager
-        self.consumer = consumer
-        self.producer = producer
+        self.order_queue = Queue()
 
     @staticmethod
     def run_threaded_schedule(job_func):
@@ -49,7 +45,6 @@ class TradingEngine:
 
     def init_application(self):
         try:
-            self.consumer.subscribe([OrderManager.KAFKA_TOPIC])
             schedule.every().second.do(TradingEngine.run_threaded_schedule, self.create_new_order)
             schedule.every().second.do(TradingEngine.run_threaded_schedule, self.check_unclosed_orders)
         except Exception as exc:
@@ -69,16 +64,16 @@ class TradingEngine:
             time.sleep(1)
 
     def execute_queued_orders(self):
-        records = self.consumer.poll(timeout_ms=500)
-        for msg in self.consumer:
-            record = json.loads(msg.value.decode('utf-8'))
+        while True:
+            msg = self.order_queue.get()
+            record = json.loads(msg)
             order = Order(**record)
+
             try:
                 self.order_manager.execute_order(order)
             except Exception as exc:
                 logging.error([f"Executing order {order.uuid} for {order.ticker_symbol} failed. ->", exc, order])
             print(["msg", msg])
-        print(["records", records])
 
     def create_new_order(self):
         for asset in self.assets:
@@ -111,8 +106,7 @@ class TradingEngine:
                         price=str(price),
                         provider_name=asset.exchange.value
                     )
-
-                    self.producer.send(OrderManager.KAFKA_TOPIC, order.model_dump_json())
+                    self.order_queue.put(order.model_dump_json())
                     trading_context.record_buy(order)
             except Exception as exc:
                 logging.error([
@@ -171,7 +165,7 @@ class TradingEngine:
                     provider_name=asset.exchange.value
                 )
 
-                self.producer.send(OrderManager.KAFKA_TOPIC, order.model_dump_json())
+                self.order_queue.put(order.model_dump_json())
                 trading_context.record_sell(order)
             except Exception as exc:
                 logging.error([
@@ -183,5 +177,5 @@ class TradingEngine:
 
     def backfill_trading_context(self):
         # Check DB for unclosed orders and add it to trading context
-        closing_orders = self.order_manager.get_closing_orders(asset.ticker_symbol, price)
+        # closing_orders = self.order_manager.get_closing_orders(asset.ticker_symbol, price)
         ...
