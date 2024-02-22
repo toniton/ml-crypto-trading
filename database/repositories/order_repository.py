@@ -1,6 +1,6 @@
 import abc
 
-from repositories.base_repository import BaseRepository
+from database.repositories.base_repository import BaseRepository
 
 
 class OrderRepository(BaseRepository):

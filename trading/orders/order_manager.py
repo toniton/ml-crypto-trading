@@ -1,12 +1,12 @@
 import decimal
 from uuid import uuid4
 
+from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from entities.market_data import MarketData
 from entities.order import Order
 from entities.trade_action import TradeAction
-from repositories.providers.postgres_order_repository import PostgresOrderRepository
 from trading.providers.exchange_provider import ExchangeProvider
-from trading.unit_of_work import UnitOfWork
+from database.unit_of_work import UnitOfWork
 
 
 class OrderManager:

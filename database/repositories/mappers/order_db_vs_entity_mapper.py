@@ -1,4 +1,4 @@
-from dao.order_dao import OrderDao
+from database.dao.order_dao import OrderDao
 from entities.order import Order
 
 

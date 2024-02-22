@@ -1,7 +1,7 @@
 
 from sqlalchemy import Column, Integer, String, UUID
 
-from dao.database_setup import DatabaseSetup
+from database.database_setup import DatabaseSetup
 
 
 class OrderDao(DatabaseSetup.BaseTableModel):

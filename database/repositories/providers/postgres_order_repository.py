@@ -1,10 +1,10 @@
 from typing import cast
 from uuid import UUID
 
-from dao.order_dao import OrderDao
+from database.dao.order_dao import OrderDao
 from entities.order import Order
-from repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
-from repositories.order_repository import OrderRepository
+from database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
+from database.repositories.order_repository import OrderRepository
 
 
 class PostgresOrderRepository(OrderRepository):

@@ -1,7 +1,7 @@
 from typing import Generic, TypeVar, cast
 from sqlalchemy.orm import Session
 
-from repositories.base_repository import BaseRepository
+from database.repositories.base_repository import BaseRepository
 
 T = TypeVar("T", bound=BaseRepository)
 

@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from configuration.application_config import ApplicationConfig
 from configuration.assets_config import AssetsConfig
 from configuration.environment_config import EnvironmentConfig
-from dao.database_setup import DatabaseSetup
+from database.database_setup import DatabaseSetup
+
 from prediction.prediction_engine import PredictionEngine
 from prediction.providers.local_storage_data_provider import LocalStorageDataProvider
 from trading.consensus.consensus_manager import ConsensusManager
@@ -22,7 +23,7 @@ from trading.markets.market_data_manager import MarketDataManager
 from trading.orders.order_manager import OrderManager
 from trading.providers.cryptodotcom_provider import CryptoDotComProvider
 from trading.trading_engine import TradingEngine
-from trading.unit_of_work import UnitOfWork
+from database.unit_of_work import UnitOfWork
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
 
