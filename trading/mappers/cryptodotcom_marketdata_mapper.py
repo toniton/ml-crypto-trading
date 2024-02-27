@@ -1,11 +1,14 @@
 from typing import Optional, Any
 
+from entities.exchange_provider import ExchangeProvidersEnum
 from entities.market_data import MarketData
 from trading.mappers.mapper import Mapper
 from trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto
 
 
 class CryptoDotComMarketDataMapper(Mapper):
+    provider = ExchangeProvidersEnum.CRYPTO_DOT_COM
+
     @staticmethod
     def map(data: dict) -> Optional[MarketData]:
         if data["method"] == "subscribe":

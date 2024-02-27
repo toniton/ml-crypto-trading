@@ -1,10 +1,14 @@
 from typing import Protocol, Any, TypeVar, Type
 
+from entities.exchange_provider import ExchangeProvidersEnum
+
 _T = TypeVar('_T')
 
 
 class Mapper(Protocol):
     _instances = None
+
+    provider: ExchangeProvidersEnum = None
 
     @staticmethod
     def map(data: Any) -> Any:
