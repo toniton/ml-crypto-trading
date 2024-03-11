@@ -1,8 +1,8 @@
-from typing import Optional, Any
+from typing import Optional
 
-from entities.exchange_provider import ExchangeProvidersEnum
-from entities.market_data import MarketData
-from trading.mappers.mapper import Mapper
+from api.interfaces.exchange_provider import ExchangeProvidersEnum
+from api.interfaces.market_data import MarketData
+from api.interfaces.mapper import Mapper
 from trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto
 
 
@@ -11,7 +11,7 @@ class CryptoDotComMarketDataMapper(Mapper):
 
     @staticmethod
     def map(data: dict) -> Optional[MarketData]:
-        if data["method"] == "subscribe":
+        if data["method"] == "subscribe" or data["method"] == "public/get-tickers":
             data = CryptoDotComMarketDataResponseDto(**data)
             return MarketData(
                 close_price=data.result.data[0].a,

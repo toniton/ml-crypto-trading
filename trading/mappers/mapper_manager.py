@@ -1,6 +1,6 @@
 from typing import Type, Any
 
-from trading.mappers.mapper import Mapper
+from api.interfaces.mapper import Mapper
 
 
 class MapperManager:

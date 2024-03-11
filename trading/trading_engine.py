@@ -5,10 +5,11 @@ import time
 from queue import Queue
 
 import schedule
+from pydantic import RootModel
 
 from entities.asset import Asset
-from entities.order import Order
-from entities.trade_action import TradeAction
+from api.interfaces.order import Order
+from api.interfaces.trade_action import TradeAction
 from trading.consensus.consensus_manager import ConsensusManager
 from trading.context.trading_context_manager import TradingContextManager
 from trading.markets.market_data_manager import MarketDataManager
@@ -107,7 +108,7 @@ class TradingEngine:
                         provider_name=asset.exchange.value
                     )
                     self.order_queue.put(order.model_dump_json())
-                    trading_context.record_buy(order)
+                    self.trading_context_manager.record_buy(asset.ticker_symbol, order)
             except Exception as exc:
                 logging.error([
                     f"Error occurred processing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
@@ -166,7 +167,7 @@ class TradingEngine:
                 )
 
                 self.order_queue.put(order.model_dump_json())
-                trading_context.record_sell(order)
+                self.trading_context_manager.record_sell(asset.ticker_symbol, order)
             except Exception as exc:
                 logging.error([
                     f"Error occurred finalizing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",

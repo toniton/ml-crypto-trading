@@ -2,10 +2,10 @@ import decimal
 from uuid import uuid4
 
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
-from entities.market_data import MarketData
-from entities.order import Order
-from entities.trade_action import TradeAction
-from trading.providers.exchange_provider import ExchangeProvider
+from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
+from api.interfaces.trade_action import TradeAction
+from api.interfaces.exchange_provider import ExchangeProvider
 from database.unit_of_work import UnitOfWork
 
 

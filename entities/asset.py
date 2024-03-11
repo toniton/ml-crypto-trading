@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, computed_field
 
-from entities.exchange_provider import ExchangeProvidersEnum
+from api.interfaces.exchange_provider import ExchangeProvidersEnum
 
 
 class Asset(BaseModel):

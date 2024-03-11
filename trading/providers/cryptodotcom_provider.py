@@ -11,14 +11,13 @@ from uuid import UUID
 
 import websocket
 
-from entities.exchange_provider import ExchangeProvidersEnum
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
 from trading.helpers.request_helper import RequestHelper
 from trading.helpers.trading_helper import TradingHelper
 from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
-from trading.providers.exchange_provider import ExchangeProvider
+from api.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
 from trading.providers.utils.helpers import params_to_str
 
 

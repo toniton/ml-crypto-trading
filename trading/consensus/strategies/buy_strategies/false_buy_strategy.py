@@ -1,7 +1,7 @@
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
-from trading.consensus.strategies.trading_strategy import TradingStrategy
-from trading.context.trading_context import TradingContext
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
+from api.interfaces.trading_strategy import TradingStrategy
+from api.interfaces.trading_context import TradingContext
 
 
 class FalseBuyStrategy(TradingStrategy):
@@ -15,4 +15,5 @@ class FalseBuyStrategy(TradingStrategy):
             ticker_symbol: str, trading_context: TradingContext,
             market_data: MarketData
     ):
-        return False
+        return True
+        # return False

@@ -8,12 +8,11 @@ import schedule
 from pandas import DataFrame
 
 from entities.asset import Asset
-from entities.market_data import MarketData
+from api.interfaces.market_data import MarketData
 from prediction.models.random_forest_classifier_model import RandomForestClassifierModel
 from prediction.models.prediction_model import PredictionModel
 from prediction.preprocessors.coinmarketcap_preprocessor import CoinMarketCapPreProcessor
 from prediction.providers.history_data_provider import HistoryDataProvider
-from prediction.providers.local_storage_data_provider import LocalStorageDataProvider
 
 
 class PredictionEngine:

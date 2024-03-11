@@ -1,7 +1,7 @@
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
-from trading.consensus.strategies.trading_strategy import TradingStrategy
-from trading.context.trading_context import TradingContext
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
+from api.interfaces.trading_strategy import TradingStrategy
+from api.interfaces.trading_context import TradingContext
 
 
 class ConsensusManager:
@@ -36,6 +36,6 @@ class ConsensusManager:
                 strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data)
             )
 
-        if votes.count(True) > 2 * votes.count(False):
+        if votes.count(True) >= 2 * votes.count(False):
             return True
         return False

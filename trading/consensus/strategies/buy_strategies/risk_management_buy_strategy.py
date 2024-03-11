@@ -1,7 +1,7 @@
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
-from trading.consensus.strategies.trading_strategy import TradingStrategy
-from trading.context.trading_context import TradingContext
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
+from api.interfaces.trading_strategy import TradingStrategy
+from api.interfaces.trading_context import TradingContext
 
 
 class RiskManagementBuyStrategy(TradingStrategy):
@@ -18,6 +18,6 @@ class RiskManagementBuyStrategy(TradingStrategy):
     ):
         risk_per_trade = trading_context.available_balance * self.risk_tolerance
         quantity = 1
-        if (quantity * float(market_data.close_price)) > risk_per_trade:
-            return False
+        # if (quantity * float(market_data.close_price)) > risk_per_trade:
+        #     return False
         return True

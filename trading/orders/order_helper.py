@@ -1,6 +1,6 @@
 from typing import Callable
 
-from entities.order import Order
+from api.interfaces.order import Order
 
 
 class OrderHelper:

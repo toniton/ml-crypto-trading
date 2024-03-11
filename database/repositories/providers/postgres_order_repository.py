@@ -2,7 +2,7 @@ from typing import cast
 from uuid import UUID
 
 from database.dao.order_dao import OrderDao
-from entities.order import Order
+from api.interfaces.order import Order
 from database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
 from database.repositories.order_repository import OrderRepository
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import Callable
 
-from trading.providers.exchange_provider import ExchangeProvider
+from api.interfaces.exchange_provider import ExchangeProvider
 
 
 class MarketDataClient:

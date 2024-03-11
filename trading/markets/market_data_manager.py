@@ -4,10 +4,10 @@ import logging
 from typing import Any
 
 from entities.asset import Asset
-from entities.market_data import MarketData
+from api.interfaces.market_data import MarketData
 from trading.mappers.mapper_manager import MapperManager
 from trading.markets.market_data_client import MarketDataClient
-from trading.providers.exchange_provider import ExchangeProvider
+from api.interfaces.exchange_provider import ExchangeProvider
 
 
 class MarketDataManager:
@@ -31,7 +31,7 @@ class MarketDataManager:
     def init_websocket(self):
         if not self.providers:
             logging.warning([
-                "No providers registered yet for Marketdata functionality."
+                "No interfaces registered yet for Marketdata functionality."
             ])
             pass
 

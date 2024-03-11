@@ -1,5 +1,5 @@
 from database.dao.order_dao import OrderDao
-from entities.order import Order
+from api.interfaces.order import Order
 
 
 class OrderDBVSEntityMapper:

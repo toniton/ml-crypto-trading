@@ -7,8 +7,14 @@ from uuid import UUID
 
 import websocket
 
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
+from enum import Enum
+
+
+class ExchangeProvidersEnum(Enum):
+    CRYPTO_DOT_COM = "CRYPTO_DOT_COM"
+    BACKTEST = "BACKTEST"
 
 
 class ExchangeProvider(ABC):

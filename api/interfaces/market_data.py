@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
 
-class MarketData(BaseModel):
+@dataclass
+class MarketData:
     volume: str
     high_price: str
     low_price: str

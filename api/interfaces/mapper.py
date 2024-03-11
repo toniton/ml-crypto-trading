@@ -1,6 +1,6 @@
 from typing import Protocol, Any, TypeVar, Type
 
-from entities.exchange_provider import ExchangeProvidersEnum
+from api.interfaces.exchange_provider import ExchangeProvidersEnum
 
 _T = TypeVar('_T')
 

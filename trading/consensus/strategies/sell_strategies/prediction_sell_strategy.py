@@ -1,8 +1,8 @@
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
 from prediction.prediction_engine import PredictionEngine
-from trading.consensus.strategies.trading_strategy import TradingStrategy
-from trading.context.trading_context import TradingContext
+from api.interfaces.trading_strategy import TradingStrategy
+from api.interfaces.trading_context import TradingContext
 
 
 class PredictionSellStrategy(TradingStrategy):

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import abc
 
-from entities.market_data import MarketData
-from entities.trade_action import TradeAction
-from trading.context.trading_context import TradingContext
+from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
+from api.interfaces.trading_context import TradingContext
 
 
 class TradingStrategy(metaclass=abc.ABCMeta):
