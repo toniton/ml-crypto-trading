@@ -11,9 +11,11 @@ SIZE = 4000
 
 
 class AppServer:
-    def __init__(self):
+    def __init__(self, activity_queue: Queue):
         self.s = socket(AF_INET, SOCK_DGRAM)
-        self.app = Application()
+        self.app = Application(activity_queue)
+
+    def startup(self):
         self.app.startup()
 
     def enable_backtest(self):

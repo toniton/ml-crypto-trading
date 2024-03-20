@@ -30,7 +30,8 @@ class TradingEngine:
         order_manager: OrderManager,
         market_data_manager: MarketDataManager,
         consensus_manager: ConsensusManager,
-        trading_context_manager: TradingContextManager
+        trading_context_manager: TradingContextManager,
+        activity_queue: Queue
     ):
         self.assets = assets
         self.order_manager = order_manager
@@ -38,6 +39,7 @@ class TradingEngine:
         self.consensus_manager = consensus_manager
         self.trading_context_manager = trading_context_manager
         self.order_queue = Queue()
+        self.activity_queue = activity_queue
 
     @staticmethod
     def run_threaded_schedule(job_func):
@@ -52,7 +54,7 @@ class TradingEngine:
             logging.error(["Error occurred initializing application. ->", exc])
 
         schedule_thread = threading.Thread(target=self.run_pending_schedules)
-        execute_thread = threading.Thread(target=self.execute_queued_orders)
+        execute_thread = threading.Thread(target=self.execute_queued_orders, args=(self.activity_queue,))
         market_data_thread = threading.Thread(target=self.market_data_checker)
         schedule_thread.start()
         execute_thread.start()
@@ -64,9 +66,11 @@ class TradingEngine:
             schedule.run_pending()
             time.sleep(1)
 
-    def execute_queued_orders(self):
+    def execute_queued_orders(self, activity_queue: Queue):
         while True:
             msg = self.order_queue.get()
+            activity_queue.put_nowait(msg)
+
             record = json.loads(msg)
             order = Order(**record)
 

@@ -1,18 +1,29 @@
 #!/usr/bin/env python3
+import threading
 import webbrowser
 from queue import Queue
 
 from app_server import AppServer
+from server.web_server import WebServer
 
 
 def main():
-    signal_queue = Queue()
-    app = AppServer()
+
+    activity_queue = Queue()
+    web = WebServer(activity_queue)
+    web.run()
+    app = AppServer(activity_queue)
+
+    web_thread = threading.Thread(target=web.run, name="Webserver")
+    app_thread = threading.Thread(target=app.startup, name="TradingEngine")
+    web_thread.start()
+    app_thread.start()
+
     # app.enable_backtest()
     # if signal_queue.get():
     #     app.enable_backtest()
 
-    url = 'https://localhost:8000'
+    url = 'http://localhost:5555'
     webbrowser.open(url)
     pass
 
