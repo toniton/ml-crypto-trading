@@ -1,10 +1,10 @@
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
-from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
+from trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 
 
-class FalseSellStrategy(TradingStrategy):
+class FalseSellStrategy(RuleBasedTradingStrategy):
 
     def __init__(self):
         super().__init__()

@@ -1,23 +1,21 @@
+from trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
-from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
+from prediction.prediction_engine import PredictionEngine
 
 
-class RiskManagementBuyStrategy(TradingStrategy):
+class PredictionBuyTradingStrategy(MachineLearningTradingStrategy):
 
-    def __init__(self, risk_tolerance=0.02):
+    def __init__(self, engine: PredictionEngine):
         super().__init__()
-        self.risk_tolerance = risk_tolerance
         self.type = TradeAction.BUY
+        self.engine = engine
 
     def get_quorum(
         self, trade_action: TradeAction,
         ticker_symbol: str, trading_context: TradingContext,
         market_data: MarketData
     ):
-        risk_per_trade = trading_context.available_balance * self.risk_tolerance
-        quantity = 1
-        # if (quantity * float(market_data.close_price)) > risk_per_trade:
-        #     return False
         return True
+        # return True if self.engine.predict(ticker_symbol, market_data) == 1 else False

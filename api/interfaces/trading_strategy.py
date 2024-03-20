@@ -7,7 +7,7 @@ from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 
 
-class TradingStrategy(metaclass=abc.ABCMeta):
+class TradingStrategy(abc.ABC, metaclass=abc.ABCMeta):
     def __init__(self):
         self.type: TradeAction | None = None
 

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 import atexit
+import importlib
 import os.path
+import pkgutil
+from queue import Queue
 
 from sqlalchemy.orm import Session
 
@@ -12,12 +15,10 @@ from database.database_setup import DatabaseSetup
 from prediction.prediction_engine import PredictionEngine
 from prediction.providers.local_storage_data_provider import LocalStorageDataProvider
 from trading.consensus.consensus_manager import ConsensusManager
-from trading.consensus.strategies.buy_strategies.false_buy_strategy import FalseBuyStrategy
-from trading.consensus.strategies.buy_strategies.prediction_buy_strategy import PredictionBuyStrategy
-from trading.consensus.strategies.sell_strategies.false_sell_strategy import FalseSellStrategy
-from trading.consensus.strategies.sell_strategies.prediction_sell_strategy import PredictionSellStrategy
+from trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
+from trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from trading.context.trading_context_manager import TradingContextManager
 from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from api.interfaces.mapper import Mapper
@@ -30,10 +31,12 @@ from trading.trading_engine import TradingEngine
 from database.unit_of_work import UnitOfWork
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
+STRATEGY_DIR = "trading/consensus/strategies"
 
 
 class Application:
-    def __init__(self):
+    def __init__(self, activity_queue: Queue):
+        self.activity_queue = activity_queue
         self.unit_of_work = None
         self.environment_config = EnvironmentConfig()
         self.application_config = ApplicationConfig(
@@ -88,15 +91,16 @@ class Application:
         prediction_engine = PredictionEngine(self.assets, localstorage_provider, PREDICTION_STORAGE_DIR)
         prediction_engine.load_assets_model()
 
-        prediction_buy_strategy = PredictionBuyStrategy(prediction_engine)
-        prediction_sell_strategy = PredictionSellStrategy(prediction_engine)
-        false_buy_strategy = FalseBuyStrategy()
-        false_sell_strategy = FalseSellStrategy()
+        for (module_loader, name, ispkg) in pkgutil.iter_modules([STRATEGY_DIR]):
+            importlib.import_module("." + name, STRATEGY_DIR.replace("/", "."))
 
-        self.consensus_manager.register_strategy(prediction_buy_strategy)
-        self.consensus_manager.register_strategy(false_buy_strategy)
-        self.consensus_manager.register_strategy(prediction_sell_strategy)
-        self.consensus_manager.register_strategy(false_sell_strategy)
+        for cls in RuleBasedTradingStrategy.__subclasses__():
+            instance = cls()
+            self.consensus_manager.register_strategy(instance)
+
+        for cls in MachineLearningTradingStrategy.__subclasses__():
+            instance = cls(prediction_engine)
+            self.consensus_manager.register_strategy(instance)
 
     def _setup_trading_context(self):
         for asset in self.assets:
@@ -110,7 +114,8 @@ class Application:
         trading_engine = TradingEngine(
             self.assets, self.order_manager,
             self.market_data_manager, self.consensus_manager,
-            self.trading_context_manager
+            self.trading_context_manager,
+            self.activity_queue
         )
         trading_engine.init_application()
 

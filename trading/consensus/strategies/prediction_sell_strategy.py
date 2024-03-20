@@ -1,11 +1,11 @@
+from trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from prediction.prediction_engine import PredictionEngine
-from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
 
 
-class PredictionSellStrategy(TradingStrategy):
+class PredictionSellTradingStrategy(MachineLearningTradingStrategy):
 
     def __init__(self, engine: PredictionEngine):
         super().__init__()
