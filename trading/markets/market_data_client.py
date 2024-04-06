@@ -4,13 +4,14 @@ import json
 from typing import Callable
 
 from api.interfaces.exchange_provider import ExchangeProvider
+from api.interfaces.market_data import MarketData
 
 
 class MarketDataClient:
     def __init__(
             self, key: int, ticker_symbol: str,
             provider: ExchangeProvider,
-            on_update: Callable[[int, dict, str], None]
+            on_update: Callable[[int, MarketData], None]
     ):
         self.key: int = key
         self.ticker_symbol: str = ticker_symbol
@@ -27,9 +28,8 @@ class MarketDataClient:
     def on_close(cls, ws):
         print('Disconnected')
 
-    def on_message(self, ws, message):
-        json_msg = json.loads(message)
-        self.on_update(self.key, json_msg, self.provider.get_provider_name())
+    def on_message(self, data: MarketData):
+        self.on_update(self.key, data)
 
     def start(self):
         websocket_client = self.provider.get_websocket_client(

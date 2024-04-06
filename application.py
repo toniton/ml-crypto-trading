@@ -84,7 +84,6 @@ class Application:
         self.mapper_manager.register_mapper(CryptoDotComMarketDataMapper)
 
         self.market_data_manager.register_provider(cryptodotcom_provider)
-        self.market_data_manager.set_mapper_manager(self.mapper_manager)
 
     def _setup_strategies(self):
         localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)

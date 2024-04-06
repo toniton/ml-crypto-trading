@@ -127,8 +127,14 @@ class CryptoDotComProvider(ExchangeProvider):
             raise Exception(exc, exc.reason)
 
     def get_websocket_client(self, on_open: Callable, on_message: Callable, on_close: Callable):
+        def on_message_mapper(_on_message: Callable):
+            def map_data(ws, data):
+                _on_message(CryptoDotComMarketDataMapper.map(data))
+
+            return map_data
+
         self.websocket_client = websocket.WebSocketApp(
             self.websocket_url, on_open=on_open,
-            on_message=on_message, on_close=on_close
+            on_message=on_message_mapper(on_message), on_close=on_close
         )
         return self.websocket_client
