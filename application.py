@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from configuration.application_config import ApplicationConfig
 from configuration.assets_config import AssetsConfig
 from configuration.environment_config import EnvironmentConfig
+from configuration.providers.base_config import BaseConfig
 from database.database_setup import DatabaseSetup
 
 from prediction.prediction_engine import PredictionEngine
@@ -20,18 +21,18 @@ from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
 from trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from trading.context.trading_context_manager import TradingContextManager
-from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from api.interfaces.mapper import Mapper
 from trading.mappers.mapper_manager import MapperManager
 from trading.markets.market_data_manager import MarketDataManager
 from trading.orders.order_manager import OrderManager
-from trading.providers.cryptodotcom_provider import CryptoDotComProvider
 from api.interfaces.exchange_provider import ExchangeProvider
 from trading.trading_engine import TradingEngine
 from database.unit_of_work import UnitOfWork
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
 STRATEGY_DIR = "trading/consensus/strategies"
+CONFIG_PROVIDERS_DIR = "configuration/providers"
+TRADING_PROVIDERS_DIR = "trading/providers"
 
 
 class Application:
@@ -42,6 +43,8 @@ class Application:
         self.application_config = ApplicationConfig(
             _env_file=ApplicationConfig.get_env_path(self.environment_config.app_env)
         )
+
+        self._setup_configuration()
 
         self.assets_config = AssetsConfig()
         self.assets = self.assets_config.assets
@@ -56,7 +59,6 @@ class Application:
         self.market_data_manager = MarketDataManager(self.assets)
 
         self.consensus_manager = ConsensusManager()
-
         self._setup_providers()
         self._setup_strategies()
         self._setup_trading_context()
@@ -67,23 +69,27 @@ class Application:
         print(["Application config", self.application_config.crypto_dot_com_exchange_rest_endpoint])
         print(["Application config", self.application_config.crypto_dot_com_exchange_websocket_endpoint])
 
+    def _setup_configuration(self):
+        for (module_loader, name, ispkg) in pkgutil.iter_modules([CONFIG_PROVIDERS_DIR]):
+            importlib.import_module("." + name, CONFIG_PROVIDERS_DIR.replace("/", "."))
+
+        for cls in BaseConfig.__subclasses__():
+            cls(self.application_config, self.environment_config)
+
     def _setup_database(self):
-        database_setup = DatabaseSetup(self.environment_config, self.application_config)
+        database_setup = DatabaseSetup()
         database_setup.create_tables()
         database_engine = database_setup.create_engine()
         return Session(database_engine)
 
     def _setup_providers(self):
-        cryptodotcom_provider = CryptoDotComProvider(
-            self.application_config.crypto_dot_com_exchange_rest_endpoint,
-            self.application_config.crypto_dot_com_exchange_websocket_endpoint,
-            self.environment_config.crypto_dot_com_exchange_api_key,
-            self.environment_config.crypto_dot_com_exchange_secret_key
-        )
-        self.order_manager.register_provider(cryptodotcom_provider)
-        self.mapper_manager.register_mapper(CryptoDotComMarketDataMapper)
+        for (module_loader, name, ispkg) in pkgutil.iter_modules([TRADING_PROVIDERS_DIR]):
+            importlib.import_module("." + name, TRADING_PROVIDERS_DIR.replace("/", "."))
 
-        self.market_data_manager.register_provider(cryptodotcom_provider)
+        for cls in ExchangeProvider.__subclasses__():
+            instance = cls()
+            self.order_manager.register_provider(instance)
+            self.market_data_manager.register_provider(instance)
 
     def _setup_strategies(self):
         localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)

@@ -13,6 +13,7 @@ import websocket
 
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
+from configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from trading.helpers.request_helper import RequestHelper
 from trading.helpers.trading_helper import TradingHelper
 from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
@@ -23,12 +24,13 @@ from trading.providers.utils.helpers import params_to_str
 
 class CryptoDotComProvider(ExchangeProvider):
 
-    def __init__(self, base_url: str, websocket_url: str, api_key: str, secret_key: str):
+    def __init__(self):
+        config = CryptodotcomConfig.get_instance()
         self.websocket_client = None
-        self.base_url = base_url
-        self.websocket_url = websocket_url
-        self.api_key = api_key
-        self.secret_key = secret_key
+        self.base_url = config.base_url
+        self.websocket_url = config.websocket_url
+        self.api_key = config.api_key
+        self.secret_key = config.secret_key
 
     def get_provider_name(self):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
