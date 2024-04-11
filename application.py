@@ -21,8 +21,6 @@ from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
 from trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from trading.context.trading_context_manager import TradingContextManager
-from api.interfaces.mapper import Mapper
-from trading.mappers.mapper_manager import MapperManager
 from trading.markets.market_data_manager import MarketDataManager
 from trading.orders.order_manager import OrderManager
 from api.interfaces.exchange_provider import ExchangeProvider
@@ -55,7 +53,6 @@ class Application:
         self.unit_of_work = UnitOfWork(database_session)
 
         self.order_manager = OrderManager(self.unit_of_work)
-        self.mapper_manager = MapperManager()
         self.market_data_manager = MarketDataManager(self.assets)
 
         self.consensus_manager = ConsensusManager()
@@ -127,9 +124,6 @@ class Application:
     def register_provider(self, provider: ExchangeProvider):
         self.order_manager.register_provider(provider)
         self.market_data_manager.register_provider(provider)
-
-    def register_mapper(self, mapper: Mapper):
-        self.mapper_manager.register_mapper(mapper)
 
     def register_strategy(self, strategy: TradingStrategy):
         self.consensus_manager.register_strategy(strategy)

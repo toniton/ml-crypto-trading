@@ -16,7 +16,7 @@ from api.interfaces.trade_action import TradeAction
 from configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from trading.helpers.request_helper import RequestHelper
 from trading.helpers.trading_helper import TradingHelper
-from trading.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
+from trading.providers.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
 from trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
 from api.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
 from trading.providers.utils.helpers import params_to_str
@@ -128,10 +128,11 @@ class CryptoDotComProvider(ExchangeProvider):
         except URLError as exc:
             raise Exception(exc, exc.reason)
 
-    def get_websocket_client(self, on_open: Callable, on_message: Callable, on_close: Callable):
-        def on_message_mapper(_on_message: Callable):
+    def get_websocket_client(self, on_open: Callable, on_message: Callable[[MarketData], None], on_close: Callable):
+        def on_message_mapper(_on_message: Callable[[MarketData], None]):
             def map_data(ws, data):
-                _on_message(CryptoDotComMarketDataMapper.map(data))
+                json_data = json.loads(data)
+                _on_message(CryptoDotComMarketDataMapper.map(json_data))
 
             return map_data
 
