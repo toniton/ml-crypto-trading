@@ -1,4 +1,4 @@
-from configuration.assets_config import AssetsConfig
+from src.configuration.assets_config import AssetsConfig
 from prediction.prediction_engine import PredictionEngine
 
 

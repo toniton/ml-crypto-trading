@@ -15,6 +15,7 @@ class Order:
     price: str
     quantity: str
     trade_action: TradeAction
+    created_time: float
 
     def model_dump_json(self) -> str:
         return RootModel[Order](self).model_dump_json()

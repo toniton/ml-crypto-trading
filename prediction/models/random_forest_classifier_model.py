@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
@@ -8,8 +7,8 @@ import joblib
 from pandas import DataFrame, Series
 from sklearn.ensemble import RandomForestClassifier
 
-from entities.asset import Asset
-from entities.historical_data import HistoricalData
+from src.entities.asset import Asset
+from src.entities.historical_data import HistoricalData
 from prediction.helpers.random_forest_classifier_helper import RandomForestClassifierHelper
 from prediction.models.prediction_model import PredictionModel
 

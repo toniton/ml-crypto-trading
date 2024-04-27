@@ -3,7 +3,7 @@ from socket import socket, gethostbyname, AF_INET, SOCK_DGRAM
 
 import joblib
 
-from application import Application
+from src.application import Application
 from backtest_handler import BacktestHandler
 
 PORT_NUMBER = 6200

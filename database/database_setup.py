@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 
-from configuration.providers.database_config import DatabaseConfig
+from src.configuration.providers.database_config import DatabaseConfig
 
 
 class DatabaseSetup:

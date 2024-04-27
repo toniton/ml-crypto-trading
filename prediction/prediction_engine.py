@@ -7,7 +7,7 @@ import pandas as pd
 import schedule
 from pandas import DataFrame
 
-from entities.asset import Asset
+from src.entities.asset import Asset
 from api.interfaces.market_data import MarketData
 from prediction.models.random_forest_classifier_model import RandomForestClassifierModel
 from prediction.models.prediction_model import PredictionModel
