@@ -7,34 +7,38 @@ from queue import Queue
 
 from sqlalchemy.orm import Session
 
-from configuration.application_config import ApplicationConfig
-from configuration.assets_config import AssetsConfig
-from configuration.environment_config import EnvironmentConfig
-from configuration.providers.base_config import BaseConfig
+from src.configuration.application_config import ApplicationConfig
+from src.configuration.assets_config import AssetsConfig
+from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.providers.base_config import BaseConfig
 from database.database_setup import DatabaseSetup
 
 from prediction.prediction_engine import PredictionEngine
 from prediction.providers.local_storage_data_provider import LocalStorageDataProvider
-from trading.consensus.consensus_manager import ConsensusManager
-from trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
+from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
-from trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
-from trading.context.trading_context_manager import TradingContextManager
-from trading.markets.market_data_manager import MarketDataManager
-from trading.orders.order_manager import OrderManager
+from src.trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
+from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.markets.market_data_manager import MarketDataManager
+from src.trading.orders.order_manager import OrderManager
 from api.interfaces.exchange_provider import ExchangeProvider
-from trading.trading_engine import TradingEngine
+from src.trading.protection.guard import Guard
+from src.trading.protection.protection_manager import ProtectionManager
+from src.trading.trading_engine import TradingEngine
 from database.unit_of_work import UnitOfWork
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
-STRATEGY_DIR = "trading/consensus/strategies"
-CONFIG_PROVIDERS_DIR = "configuration/providers"
-TRADING_PROVIDERS_DIR = "trading/providers"
+STRATEGY_DIR = "src/trading/consensus/strategies"
+CONFIG_PROVIDERS_DIR = "src/configuration/providers"
+TRADING_PROVIDERS_DIR = "src/trading/providers"
+PROTECTION_GUARDS_DIR = "src/trading/protection/guards"
 
 
 class Application:
     def __init__(self, activity_queue: Queue):
+        self.trading_engine = None
         self.activity_queue = activity_queue
         self.unit_of_work = None
         self.environment_config = EnvironmentConfig()
@@ -56,8 +60,11 @@ class Application:
         self.market_data_manager = MarketDataManager(self.assets)
 
         self.consensus_manager = ConsensusManager()
+        self.protection_manager = ProtectionManager()
+
         self._setup_providers()
         self._setup_strategies()
+        self._setup_protectons()
         self._setup_trading_context()
 
         atexit.register(self.shutdown)
@@ -104,6 +111,16 @@ class Application:
             instance = cls(prediction_engine)
             self.consensus_manager.register_strategy(instance)
 
+    def _setup_protectons(self):
+        for (module_loader, name, ispkg) in pkgutil.iter_modules([PROTECTION_GUARDS_DIR]):
+            importlib.import_module("." + name, PROTECTION_GUARDS_DIR.replace("/", "."))
+
+        for asset in self.assets:
+            for cls in Guard.__subclasses__():
+                if cls.is_enabled(asset) is True:
+                    instance = cls(asset.guard_config)
+                    self.protection_manager.register_guard(asset.ticker_symbol, instance)
+
     def _setup_trading_context(self):
         for asset in self.assets:
             name = asset.name
@@ -113,13 +130,14 @@ class Application:
             self.trading_context_manager.register_trading_context(ticker_symbol, TradingContext(starting_balance=opening_balance))
 
     def startup(self):
-        trading_engine = TradingEngine(
+        self.trading_engine = TradingEngine(
             self.assets, self.order_manager,
             self.market_data_manager, self.consensus_manager,
             self.trading_context_manager,
+            self.protection_manager,
             self.activity_queue
         )
-        trading_engine.init_application()
+        self.trading_engine.init_application()
 
     def register_provider(self, provider: ExchangeProvider):
         self.order_manager.register_provider(provider)
@@ -129,6 +147,6 @@ class Application:
         self.consensus_manager.register_strategy(strategy)
 
     def shutdown(self):
-        self.trading_context_manager.print_context()
+        self.trading_engine.print_context()
 
     pass

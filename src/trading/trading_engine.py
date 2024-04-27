@@ -5,16 +5,17 @@ import time
 from queue import Queue
 
 import schedule
-from pydantic import RootModel
 
-from entities.asset import Asset
+from src.entities.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
-from trading.consensus.consensus_manager import ConsensusManager
-from trading.context.trading_context_manager import TradingContextManager
-from trading.markets.market_data_manager import MarketDataManager
-from trading.orders.order_helper import OrderHelper
-from trading.orders.order_manager import OrderManager
+from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.helpers.portfolio_helper import PortfolioHelper
+from src.trading.markets.market_data_manager import MarketDataManager
+from src.trading.orders.order_helper import OrderHelper
+from src.trading.orders.order_manager import OrderManager
+from src.trading.protection.protection_manager import ProtectionManager
 
 
 class TradingEngine:
@@ -23,6 +24,7 @@ class TradingEngine:
     market_data_manager: MarketDataManager
     consensus_manager: ConsensusManager
     trading_context_manager: TradingContextManager
+    protection_manager: ProtectionManager
 
     def __init__(
         self,
@@ -31,6 +33,7 @@ class TradingEngine:
         market_data_manager: MarketDataManager,
         consensus_manager: ConsensusManager,
         trading_context_manager: TradingContextManager,
+        protection_manager: ProtectionManager,
         activity_queue: Queue
     ):
         self.assets = assets
@@ -40,6 +43,7 @@ class TradingEngine:
         self.trading_context_manager = trading_context_manager
         self.order_queue = Queue()
         self.activity_queue = activity_queue
+        self.protection_manager = protection_manager
 
     @staticmethod
     def run_threaded_schedule(job_func):
@@ -96,23 +100,24 @@ class TradingEngine:
 
                 trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
 
-                consensus_result = self.consensus_manager.get_quorum(
-                    TradeAction.BUY, asset.ticker_symbol,
-                    trading_context, market_data
-                )
-
-                if consensus_result:
-                    price = float(price) + (float(price) * 0.0005)
-                    price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
-                    quantity = format(asset.min_quantity, "f")
-                    order = self.order_manager.open_order(
-                        ticker_symbol=asset.ticker_symbol,
-                        quantity=quantity,
-                        price=str(price),
-                        provider_name=asset.exchange.value
+                if self.protection_manager.can_trade(asset.ticker_symbol, trading_context):
+                    consensus_result = self.consensus_manager.get_quorum(
+                        TradeAction.BUY, asset.ticker_symbol,
+                        trading_context, market_data
                     )
-                    self.order_queue.put(order.model_dump_json())
-                    self.trading_context_manager.record_buy(asset.ticker_symbol, order)
+
+                    if consensus_result:
+                        price = float(price) + (float(price) * 0.0005)
+                        price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
+                        quantity = format(asset.min_quantity, "f")
+                        order = self.order_manager.open_order(
+                            ticker_symbol=asset.ticker_symbol,
+                            quantity=quantity,
+                            price=str(price),
+                            provider_name=asset.exchange.value
+                        )
+                        self.order_queue.put(order.model_dump_json())
+                        self.trading_context_manager.record_buy(asset.ticker_symbol, order)
             except Exception as exc:
                 logging.error([
                     f"Error occurred processing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
@@ -143,6 +148,7 @@ class TradingEngine:
                     price
                 ])
 
+                # if True:  # self.protection_manager.can_trade(asset.ticker_symbol, trading_context):
                 consensus_result = self.consensus_manager.get_quorum(
                     TradeAction.SELL, asset.ticker_symbol,
                     trading_context, market_data
@@ -163,15 +169,16 @@ class TradingEngine:
                     quantity += float(order.quantity)
                     trading_context.open_positions.remove(order)
 
-                order = self.order_manager.close_order(
-                    ticker_symbol=asset.ticker_symbol,
-                    quantity=str(quantity),
-                    price=str(price),
-                    provider_name=asset.exchange.value
-                )
+                if quantity > 0:
+                    order = self.order_manager.close_order(
+                        ticker_symbol=asset.ticker_symbol,
+                        quantity=str(quantity),
+                        price=str(price),
+                        provider_name=asset.exchange.value
+                    )
 
-                self.order_queue.put(order.model_dump_json())
-                self.trading_context_manager.record_sell(asset.ticker_symbol, order)
+                    self.order_queue.put(order.model_dump_json())
+                    self.trading_context_manager.record_sell(asset.ticker_symbol, order)
             except Exception as exc:
                 logging.error([
                     f"Error occurred finalizing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
@@ -184,3 +191,40 @@ class TradingEngine:
         # Check DB for unclosed orders and add it to trading context
         # closing_orders = self.order_manager.get_closing_orders(asset.ticker_symbol, price)
         ...
+
+    def print_context(self) -> None:
+        for asset in self.assets:
+            try:
+                trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
+                trading_context.end_time = time.time()
+                market_data = self.market_data_manager.get_latest_marketdata(asset)
+                if market_data is None:
+                    market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
+
+                print("Trading Context")
+                print(f"======= {asset.ticker_symbol} =======================")
+                print(["Portfolio value", PortfolioHelper.calculate_portfolio_value(
+                        trading_context.starting_balance, market_data.close_price,
+                        trading_context.open_positions, trading_context.close_positions
+                    )
+                ])
+                print(["Unrealized PNL value", PortfolioHelper.calculate_unrealized_pnl_value(
+                        trading_context.starting_balance, market_data.close_price,
+                        trading_context.open_positions, trading_context.close_positions
+                    )
+                ])
+                print(["self.start_time", trading_context.start_time])
+                print(["self.starting_balance", trading_context.starting_balance])
+                print(["self.available_balance", trading_context.available_balance])
+                print(["self.closing_balance", trading_context.closing_balance])
+                print(["self.buy_count", trading_context.buy_count])
+                print(["self.lowest_buy", trading_context.lowest_buy])
+                print(["self.highest_buy", trading_context.highest_buy])
+                print(["self.lowest_sell", trading_context.lowest_sell])
+                print(["self.highest_sell", trading_context.highest_sell])
+                print(["self.open_positions", trading_context.open_positions])
+                print(["self.close_positions", trading_context.close_positions])
+                print(["self.end_time", trading_context.end_time])
+                print(["self.last_activity_time", trading_context.last_activity_time])
+            except Exception as exc:
+                print(exc)

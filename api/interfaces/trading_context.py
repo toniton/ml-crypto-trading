@@ -20,6 +20,8 @@ class TradingContext:
     lowest_sell: float = inf
     highest_sell: float = -inf
     open_positions: list[Order] = dataclasses.field(default_factory=lambda: [])
+    close_positions: list[Order] = dataclasses.field(default_factory=lambda: [])
+    last_activity_time: float = time.time()
 
     def __post_init__(self):
         self.available_balance = self.starting_balance
