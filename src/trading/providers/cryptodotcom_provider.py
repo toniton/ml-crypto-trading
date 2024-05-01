@@ -11,13 +11,16 @@ from uuid import UUID
 
 import websocket
 
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
+from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from src.trading.helpers.request_helper import RequestHelper
 from src.trading.helpers.trading_helper import TradingHelper
-from src.trading.providers.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMarketDataMapper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto
+from src.trading.providers.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMapper
+from src.trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto, \
+    CryptoDotComCandleResponseDto
 from api.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
 from src.trading.providers.utils.helpers import params_to_str
 
@@ -58,7 +61,7 @@ class CryptoDotComProvider(ExchangeProvider):
             body = response.read()
             data = json.loads(body)
 
-        return CryptoDotComMarketDataMapper.map(data)
+        return CryptoDotComMapper.to_marketdata(data)
 
     def _build_order_request(
             self,
@@ -132,7 +135,7 @@ class CryptoDotComProvider(ExchangeProvider):
         def on_message_mapper(_on_message: Callable[[MarketData], None]):
             def map_data(ws, data):
                 json_data = json.loads(data)
-                _on_message(CryptoDotComMarketDataMapper.map(json_data))
+                _on_message(CryptoDotComMapper.to_marketdata(json_data))
 
             return map_data
 
@@ -141,3 +144,19 @@ class CryptoDotComProvider(ExchangeProvider):
             on_message=on_message_mapper(on_message), on_close=on_close
         )
         return self.websocket_client
+
+    def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
+        instrument_name = TradingHelper.get_instrument_name(ticker_symbol)
+        interval = CryptoDotComMapper.from_timeframe(timeframe)
+        request = RequestHelper.init_http_connection(
+            self.base_url,
+            f"public/get-candlestick?instrument_name={instrument_name}-PERP&timeframe={interval}"
+        )
+
+        with urlopen(request) as response:
+            body = response.read()
+            data = json.loads(body)
+
+        candle_response = CryptoDotComCandleResponseDto(**data)
+
+        return CryptoDotComMapper.to_candles(candle_response)

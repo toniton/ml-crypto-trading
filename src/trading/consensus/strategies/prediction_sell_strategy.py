@@ -1,3 +1,4 @@
+from api.interfaces.candle import Candle
 from src.trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
@@ -15,7 +16,8 @@ class PredictionSellTradingStrategy(MachineLearningTradingStrategy):
     def get_quorum(
         self, trade_action: TradeAction,
         ticker_symbol: str, trading_context: TradingContext,
-        market_data: MarketData
+        market_data: MarketData,
+        candles: list[Candle]
     ):
         # return True if self.engine.predict(ticker_symbol, market_data) == 0 else False
         return True

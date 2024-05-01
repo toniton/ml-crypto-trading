@@ -2,7 +2,6 @@ import time
 
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.order import Order
-from src.trading.helpers.portfolio_helper import PortfolioHelper
 
 
 class TradingContextManager:
@@ -17,7 +16,9 @@ class TradingContextManager:
 
     def record_buy(self, ticker_symbol: str, order: Order):
         price = float(order.price)
-        self.trading_contexts[ticker_symbol].available_balance -= price
+        quantity = float(order.quantity)
+        buy_price = price * quantity
+        self.trading_contexts[ticker_symbol].available_balance -= buy_price
         self.trading_contexts[ticker_symbol].lowest_buy = min(self.trading_contexts[ticker_symbol].lowest_buy, price)
         self.trading_contexts[ticker_symbol].highest_buy = max(self.trading_contexts[ticker_symbol].highest_buy, price)
         self.trading_contexts[ticker_symbol].buy_count += 1

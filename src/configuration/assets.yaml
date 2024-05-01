@@ -8,6 +8,7 @@ assets:
     market_cap: "850765031729"
     sector: "Finance"
     industry: "Crypto"
+    candles_timeframe: "MIN1"
     guard_config:
       max_drawdown_period: 8
       max_drawdown_percentage: 0.60

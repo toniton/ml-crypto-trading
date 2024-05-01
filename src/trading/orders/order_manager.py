@@ -2,6 +2,8 @@ import decimal
 import time
 from uuid import uuid4
 
+from api.interfaces.candle import Candle
+from api.interfaces.timeframe import Timeframe
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
@@ -29,6 +31,13 @@ class OrderManager:
             raise Exception(f"Provider $provider not supported.")
 
         return provider.get_market_data(ticker_symbol)
+
+    def get_candles(self, provider_name: str, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
+        provider = self.providers.get(provider_name)
+        if provider is None:
+            raise Exception(f"Provider $provider not supported.")
+
+        return provider.get_candle(ticker_symbol, timeframe)
 
     def open_order(self, ticker_symbol: str, provider_name: str, quantity: str, price: str):
         provider = self.providers.get(provider_name)

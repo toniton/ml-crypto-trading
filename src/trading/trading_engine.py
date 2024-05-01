@@ -101,9 +101,16 @@ class TradingEngine:
                 trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
 
                 if self.protection_manager.can_trade(asset.ticker_symbol, trading_context):
+                    candles = self.order_manager.get_candles(
+                        asset.exchange.value,
+                        asset.ticker_symbol,
+                        asset.candles_timeframe
+                    )
+
                     consensus_result = self.consensus_manager.get_quorum(
                         TradeAction.BUY, asset.ticker_symbol,
-                        trading_context, market_data
+                        trading_context, market_data,
+                        candles
                     )
 
                     if consensus_result:
@@ -148,10 +155,17 @@ class TradingEngine:
                     price
                 ])
 
+                candles = self.order_manager.get_candles(
+                    asset.exchange.value,
+                    asset.ticker_symbol,
+                    asset.candles_timeframe
+                )
+
                 # if True:  # self.protection_manager.can_trade(asset.ticker_symbol, trading_context):
                 consensus_result = self.consensus_manager.get_quorum(
                     TradeAction.SELL, asset.ticker_symbol,
-                    trading_context, market_data
+                    trading_context, market_data,
+                    candles
                 )
 
                 if not consensus_result:

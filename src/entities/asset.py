@@ -4,6 +4,7 @@ from typing import Optional
 from pydantic import BaseModel, computed_field
 
 from api.interfaces.exchange_provider import ExchangeProvidersEnum
+from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
 
 
@@ -17,6 +18,7 @@ class Asset(BaseModel):
     min_quantity: float
     sector: str
     industry: str
+    candles_timeframe: Timeframe
     guard_config: Optional[GuardConfig] = None
 
     @computed_field

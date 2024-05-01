@@ -7,7 +7,9 @@ from uuid import UUID
 
 import websocket
 
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
+from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from enum import Enum
 
@@ -46,4 +48,12 @@ class ExchangeProvider(ABC):
             self, on_open: Callable, on_message: Callable,
             on_close: Callable
     ) -> websocket.WebSocketApp:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_candle(
+            self,
+            ticker_symbol: str,
+            timeframe: Timeframe
+    ) -> list[Candle]:
         raise NotImplementedError()

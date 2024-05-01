@@ -1,3 +1,4 @@
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_strategy import TradingStrategy
@@ -25,7 +26,8 @@ class ConsensusManager:
         self,
         trade_action: TradeAction, ticker_symbol: str,
         trading_context: TradingContext,
-        market_data: MarketData
+        market_data: MarketData,
+        candles: list[Candle]
     ):
         if trade_action not in self.strategies:
             return False
@@ -33,7 +35,7 @@ class ConsensusManager:
         votes: list[bool] = []
         for strategy in self.strategies[trade_action]:
             votes.append(
-                strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data)
+                strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data, candles)
             )
 
         if votes.count(True) >= 2 * votes.count(False):

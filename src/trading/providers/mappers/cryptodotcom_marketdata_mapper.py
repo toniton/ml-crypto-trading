@@ -1,16 +1,18 @@
 from typing import Optional
 
+from api.interfaces.candle import Candle
 from api.interfaces.exchange_provider import ExchangeProvidersEnum
 from api.interfaces.market_data import MarketData
 from api.interfaces.mapper import Mapper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto
+from api.interfaces.timeframe import Timeframe
+from src.trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, CryptoDotComCandleResponseDto
 
 
-class CryptoDotComMarketDataMapper(Mapper):
+class CryptoDotComMapper(Mapper):
     provider = ExchangeProvidersEnum.CRYPTO_DOT_COM
 
     @staticmethod
-    def map(data: dict) -> Optional[MarketData]:
+    def to_marketdata(data: dict) -> Optional[MarketData]:
         if data["method"] == "subscribe" or data["method"] == "public/get-tickers":
             data = CryptoDotComMarketDataResponseDto(**data)
             return MarketData(
@@ -21,3 +23,38 @@ class CryptoDotComMarketDataMapper(Mapper):
                 timestamp=data.result.data[0].t
             )
         return None
+
+    @staticmethod
+    def from_timeframe(data: Timeframe) -> Optional[str]:
+        if data == Timeframe.MIN1:
+            return "1m"
+        elif data == Timeframe.MIN5:
+            return "5m"
+        elif data == Timeframe.MIN15:
+            return "15m"
+        elif data == Timeframe.MIN30:
+            return "30m"
+        elif data == Timeframe.HOUR1:
+            return "1h"
+        elif data == Timeframe.HOUR2:
+            return "2h"
+        elif data == Timeframe.HOUR4:
+            return "4h"
+        elif data == Timeframe.HOUR12:
+            return "12h"
+        elif data == Timeframe.DAY1:
+            return "1D"
+        elif data == Timeframe.DAY7:
+            return "7D"
+        elif data == Timeframe.MON1:
+            return "1M"
+        return None
+
+    @staticmethod
+    def to_candles(response: CryptoDotComCandleResponseDto) -> list[Candle]:
+        return list(
+            map(
+                lambda x: Candle(open=x.o, close=x.c, low=x.l, high=x.h, start_time=x.t),
+                response.result.data
+            )
+        )
