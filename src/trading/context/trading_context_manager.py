@@ -29,8 +29,8 @@ class TradingContextManager:
         price = float(order.price)
         quantity = float(order.quantity)
         sell_price = price * quantity
-        self.trading_contexts[ticker_symbol].close_positions.append(order)
         self.trading_contexts[ticker_symbol].closing_balance += sell_price
+        self.trading_contexts[ticker_symbol].close_positions.append(order)
         self.trading_contexts[ticker_symbol].lowest_sell = min(self.trading_contexts[ticker_symbol].lowest_sell, price)
         self.trading_contexts[ticker_symbol].highest_sell = max(self.trading_contexts[ticker_symbol].highest_sell, price)
         self.trading_contexts[ticker_symbol].last_activity_time = time.time()
