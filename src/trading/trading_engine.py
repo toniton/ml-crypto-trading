@@ -1,3 +1,4 @@
+import decimal
 import json
 import logging
 import threading
@@ -6,7 +7,7 @@ from queue import Queue
 
 import schedule
 
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.trading.consensus.consensus_manager import ConsensusManager
@@ -27,14 +28,14 @@ class TradingEngine:
     protection_manager: ProtectionManager
 
     def __init__(
-        self,
-        assets: list[Asset],
-        order_manager: OrderManager,
-        market_data_manager: MarketDataManager,
-        consensus_manager: ConsensusManager,
-        trading_context_manager: TradingContextManager,
-        protection_manager: ProtectionManager,
-        activity_queue: Queue
+            self,
+            assets: list[Asset],
+            order_manager: OrderManager,
+            market_data_manager: MarketDataManager,
+            consensus_manager: ConsensusManager,
+            trading_context_manager: TradingContextManager,
+            protection_manager: ProtectionManager,
+            activity_queue: Queue
     ):
         self.assets = assets
         self.order_manager = order_manager
@@ -100,7 +101,7 @@ class TradingEngine:
 
                 trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
 
-                if self.protection_manager.can_trade(asset.ticker_symbol, trading_context):
+                if self.protection_manager.can_trade(asset.ticker_symbol, TradeAction.BUY, trading_context):
                     candles = self.order_manager.get_candles(
                         asset.exchange.value,
                         asset.ticker_symbol,
@@ -138,6 +139,10 @@ class TradingEngine:
         for asset in self.assets:
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
+                if len(trading_context.close_positions) == 3:
+                    # exit(1)
+                    raise RuntimeError(f"Hit max close positions for {asset.ticker_symbol}, manual review needed.")
+
                 if not trading_context.open_positions:
                     logging.warning([
                         f"No open positions for asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}"
@@ -161,38 +166,31 @@ class TradingEngine:
                     asset.candles_timeframe
                 )
 
-                # if True:  # self.protection_manager.can_trade(asset.ticker_symbol, trading_context):
-                consensus_result = self.consensus_manager.get_quorum(
-                    TradeAction.SELL, asset.ticker_symbol,
-                    trading_context, market_data,
-                    candles
-                )
-
-                if not consensus_result:
-                    logging.warning([
-                        f"Could not reach consensus for asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}"
-                    ])
-                    return
-
-                closing_orders = filter(
-                    OrderHelper.less_than_price_filter(price), trading_context.open_positions
-                )
-
-                quantity = 0
-                for order in closing_orders:
-                    quantity += float(order.quantity)
-                    trading_context.open_positions.remove(order)
-
-                if quantity > 0:
-                    order = self.order_manager.close_order(
-                        ticker_symbol=asset.ticker_symbol,
-                        quantity=str(quantity),
-                        price=str(price),
-                        provider_name=asset.exchange.value
+                if self.protection_manager.can_trade(asset.ticker_symbol, TradeAction.SELL, trading_context):
+                    consensus_result = self.consensus_manager.get_quorum(
+                        TradeAction.SELL, asset.ticker_symbol,
+                        trading_context, market_data,
+                        candles
                     )
 
-                    self.order_queue.put(order.model_dump_json())
-                    self.trading_context_manager.record_sell(asset.ticker_symbol, order)
+                    if not consensus_result:
+                        logging.warning([
+                            f"Could not reach consensus for asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}"
+                        ])
+                        return
+
+                    open_orders = filter(
+                        OrderHelper.less_than_price_filter(price), trading_context.open_positions
+                    )
+
+                    # TODO: Remove this after testing.
+                    open_orders = trading_context.open_positions
+
+                    for open_order in list(open_orders):
+                        closed_order = self.order_manager.close_order(open_order, price)
+                        self.order_queue.put(closed_order.model_dump_json())
+                        self.trading_context_manager.record_sell(asset.ticker_symbol, closed_order)
+
             except Exception as exc:
                 logging.error([
                     f"Error occurred finalizing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
@@ -217,16 +215,15 @@ class TradingEngine:
 
                 print("Trading Context")
                 print(f"======= {asset.ticker_symbol} =======================")
-                print(["Portfolio value", PortfolioHelper.calculate_portfolio_value(
-                        trading_context.starting_balance, market_data.close_price,
-                        trading_context.open_positions, trading_context.close_positions
-                    )
-                ])
+                print(["Portfolio value", PortfolioHelper.calculate_portfolio_value(trading_context.available_balance,
+                                                                                    market_data.close_price,
+                                                                                    trading_context.open_positions)
+                       ])
                 print(["Unrealized PNL value", PortfolioHelper.calculate_unrealized_pnl_value(
-                        trading_context.starting_balance, market_data.close_price,
-                        trading_context.open_positions, trading_context.close_positions
-                    )
-                ])
+                    trading_context.starting_balance, market_data.close_price,
+                    trading_context.open_positions, trading_context.close_positions
+                )
+                       ])
                 print(["self.start_time", trading_context.start_time])
                 print(["self.starting_balance", trading_context.starting_balance])
                 print(["self.available_balance", trading_context.available_balance])

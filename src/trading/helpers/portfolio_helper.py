@@ -5,20 +5,14 @@ from api.interfaces.trade_action import TradeAction
 class PortfolioHelper:
     @staticmethod
     def calculate_portfolio_value(
-        starting_balance: float,
+        available_balance: float,
         current_price: str,
-        open_positions: list[Order],
-        close_positions: list[Order]
+        open_positions: list[Order]
     ) -> float:
-        portfolio_value = starting_balance
+        portfolio_value = available_balance
         for order in open_positions:
             if order.trade_action == TradeAction.BUY:
-                portfolio_value += ((float(current_price) - float(order.price)) * float(order.quantity))
-
-        for order in close_positions:
-            if order.trade_action == TradeAction.SELL:
-                portfolio_value += (float(order.price) * float(order.quantity))
-
+                portfolio_value += (float(current_price) * float(order.quantity))
         return portfolio_value
 
     @staticmethod
@@ -35,7 +29,7 @@ class PortfolioHelper:
 
         for order in close_positions:
             if order.trade_action == TradeAction.SELL:
-                portfolio_value += (float(order.price) * float(order.quantity))
+                portfolio_value += ((float(current_price) - float(order.price)) * float(order.quantity))
 
         return portfolio_value - starting_balance
 

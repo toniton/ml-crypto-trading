@@ -9,7 +9,7 @@ class CryptoDotComRequestOrderParamsDto(BaseModel):
     price: str
     quantity: str
     client_oid: Optional[str] = None
-    exec_inst: Optional[str] = None
+    exec_inst: Optional[list[str]] = None
     time_in_force: Optional[str] = None
 
 

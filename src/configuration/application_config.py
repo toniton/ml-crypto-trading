@@ -18,7 +18,6 @@ class KafkaConfiguration(BaseModel):
 
 
 class ApplicationConfig(BaseSettings):
-
     crypto_dot_com_exchange_rest_endpoint: str = Field()
     crypto_dot_com_exchange_websocket_endpoint: str = Field()
     coin_market_cap_rest_endpoint: str = Field()
@@ -57,6 +56,7 @@ class ApplicationConfig(BaseSettings):
             _env_file_encoding: str | None = None,
             _env_nested_delimiter: str | None = None,
             _secrets_dir: str | Path | None = None,
+            **kwargs
     ) -> dict[str, Any]:
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (

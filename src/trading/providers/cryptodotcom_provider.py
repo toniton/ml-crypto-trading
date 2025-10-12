@@ -71,7 +71,7 @@ class CryptoDotComProvider(ExchangeProvider):
             price: str,
             trade_action: TradeAction
     ) -> CryptoDotComRequestDto:
-        instrument_name = TradingHelper.get_instrument_name(ticker_symbol, separator="_")
+        instrument_name = TradingHelper.get_instrument_name(ticker_symbol, separator="", perp=True)
         nonce = int(time.time() * 1000)
         request_data = {
             "id": 1,
@@ -85,7 +85,7 @@ class CryptoDotComProvider(ExchangeProvider):
                 "price": price,
                 "quantity": quantity,
                 "client_oid": str(uuid),
-                "exec_inst": "POST_ONLY",
+                "exec_inst": ["POST_ONLY"],
                 "time_in_force": "FILL_OR_KILL"
             }
         }

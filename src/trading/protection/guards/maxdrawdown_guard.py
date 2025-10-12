@@ -1,7 +1,8 @@
 import logging
 
+from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.trading.protection.guard import Guard
 
@@ -13,7 +14,9 @@ class MaxDrawDownGuard(Guard):
         max_drawdown = (peak_value - trough_value) / peak_value * 100
         return max_drawdown
 
-    def can_trade(self, trading_context: TradingContext) -> bool:
+    def can_trade(self, trade_action: TradeAction, trading_context: TradingContext) -> bool:
+        if trade_action == TradeAction.SELL:
+            return True
         starting_balance = trading_context.starting_balance
         open_positions = trading_context.open_positions
         close_positions = trading_context.close_positions

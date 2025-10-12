@@ -25,13 +25,17 @@ class TradingContextManager:
         self.trading_contexts[ticker_symbol].open_positions.append(order)
         self.trading_contexts[ticker_symbol].last_activity_time = time.time()
 
-    def record_sell(self, ticker_symbol: str, order: Order):
-        price = float(order.price)
-        quantity = float(order.quantity)
+    def record_sell(self, ticker_symbol: str, closed_order: Order):
+        price = float(closed_order.price)
+        quantity = float(closed_order.quantity)
         sell_price = price * quantity
+        open_positions = self.trading_contexts[ticker_symbol].open_positions
+        self.trading_contexts[ticker_symbol].available_balance += sell_price
         self.trading_contexts[ticker_symbol].closing_balance += sell_price
-        self.trading_contexts[ticker_symbol].close_positions.append(order)
+        self.trading_contexts[ticker_symbol].close_positions.append(closed_order)
         self.trading_contexts[ticker_symbol].lowest_sell = min(self.trading_contexts[ticker_symbol].lowest_sell, price)
         self.trading_contexts[ticker_symbol].highest_sell = max(self.trading_contexts[ticker_symbol].highest_sell, price)
         self.trading_contexts[ticker_symbol].last_activity_time = time.time()
-    
+        self.trading_contexts[ticker_symbol].open_positions = [
+            open_order for open_order in open_positions if open_order.uuid != closed_order.uuid
+        ]

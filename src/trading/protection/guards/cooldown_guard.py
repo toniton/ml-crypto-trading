@@ -1,12 +1,13 @@
 import time
 
+from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 from src.trading.protection.guard import Guard
 
 
 class CooldownGuard(Guard):
-    def can_trade(self, trading_context: TradingContext) -> bool:
+    def can_trade(self,trade_action: TradeAction,  trading_context: TradingContext) -> bool:
         return (trading_context.last_activity_time + self.config.cooldown_timeout) < time.time()
 
     @staticmethod

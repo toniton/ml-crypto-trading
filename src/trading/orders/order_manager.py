@@ -76,18 +76,18 @@ class OrderManager:
         except Exception as exc:
             raise Exception(f"Error executing order:", order, exc)
 
-    def close_order(self, ticker_symbol: str, provider_name: str, quantity: str, price: str):
-        provider = self.providers.get(provider_name)
+    def close_order(self, open_order: Order, price: str):
+        provider = self.providers.get(open_order.provider_name)
         if provider is None:
             raise Exception(f"Provider $provider not supported.")
 
         order = Order(
-            uuid=uuid4(),
+            uuid=open_order.uuid,
             price=price,
-            quantity=quantity,
-            provider_name=provider_name,
+            quantity=open_order.quantity,
+            provider_name=open_order.provider_name,
             trade_action=TradeAction.SELL,
-            ticker_symbol=ticker_symbol,
+            ticker_symbol=open_order.ticker_symbol,
             created_time=time.time()
         )
 

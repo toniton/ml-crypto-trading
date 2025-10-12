@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 from api.interfaces.market_data import MarketData
 from src.trading.markets.market_data_client import MarketDataClient
 from api.interfaces.exchange_provider import ExchangeProvider

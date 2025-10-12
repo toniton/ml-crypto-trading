@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict, InitSettingsSour
 from pydantic_settings.sources import ENV_FILE_SENTINEL, DotenvType
 
 from src.configuration.pydantic_custom_sources.yaml_config_settings_source import YamlConfigSettingsSource
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 
 
 class AssetsConfig(BaseSettings):
@@ -42,6 +42,7 @@ class AssetsConfig(BaseSettings):
             _env_file_encoding: str | None = None,
             _env_nested_delimiter: str | None = None,
             _secrets_dir: str | Path | None = None,
+            **kwargs
     ) -> dict[str, Any]:
         env_file = _env_file if _env_file != ENV_FILE_SENTINEL else self.model_config.get('env_file')
         env_file_encoding = (

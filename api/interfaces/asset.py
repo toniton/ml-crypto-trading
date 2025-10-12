@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 from typing import Optional
 
-from pydantic import BaseModel, computed_field
+from pydantic import computed_field
+from pydantic.dataclasses import dataclass
 
 from api.interfaces.exchange_provider import ExchangeProvidersEnum
 from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
 
 
-class Asset(BaseModel):
+@dataclass
+class Asset:
     keywords: list[str]
     ticker_symbol: str
     decimal_places: int

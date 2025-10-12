@@ -3,7 +3,7 @@
 from pydantic import BaseModel
 from pydantic.dataclasses import dataclass
 
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 
 
 @dataclass

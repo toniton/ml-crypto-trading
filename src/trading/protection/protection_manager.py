@@ -1,3 +1,4 @@
+from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from src.trading.protection.guard import Guard
 
@@ -11,9 +12,9 @@ class ProtectionManager:
         else:
             self.guards[ticker_symbol] = [guard]
 
-    def can_trade(self, ticker_symbol: str, trading_context: TradingContext) -> bool:
+    def can_trade(self, ticker_symbol: str, trade_action: TradeAction, trading_context: TradingContext) -> bool:
         if ticker_symbol not in self.guards:
             return True
-        if bool(len(self.guards[ticker_symbol])) is False:
+        if not bool(len(self.guards[ticker_symbol])):
             return True
-        return all(guard.can_trade(trading_context) for guard in self.guards[ticker_symbol])
+        return all(guard.can_trade(trade_action, trading_context) for guard in self.guards[ticker_symbol])

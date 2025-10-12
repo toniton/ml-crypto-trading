@@ -1,9 +1,12 @@
-from pydantic.v1.dataclasses import dataclass
+from typing import Any
+
+from pydantic import ConfigDict
+from pydantic.dataclasses import dataclass
 
 from api.interfaces.mapper import Mapper
 
 
-@dataclass(config={"arbitrary_types_allowed": True})
+@dataclass(config=ConfigDict(arbitrary_types_allowed=True))
 class MapperSocketMessage:
     action: str
-    mapper: Mapper
+    mapper: Any
