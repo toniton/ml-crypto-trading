@@ -27,7 +27,7 @@ class MaxDrawDownGuard(Guard):
         peak_value, peak_time = PortfolioHelper.calculate_peak_value(starting_balance, positions)
 
         filtered_positions = filter(lambda x: x.created_time > peak_time, positions)
-        trough_value = PortfolioHelper.calculate_trough_value(peak_value, filtered_positions)
+        trough_value, _ = PortfolioHelper.calculate_trough_value(peak_value, filtered_positions)
 
         draw_down = (trough_value - peak_value) / peak_value
         logging.info([f"DrawDown: ${draw_down}."])

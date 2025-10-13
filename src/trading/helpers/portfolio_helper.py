@@ -34,7 +34,7 @@ class PortfolioHelper:
         return portfolio_value - starting_balance
 
     @staticmethod
-    def calculate_peak_value(starting_balance: float, positions: list[Order]) -> [float, float]:
+    def calculate_peak_value(starting_balance: float, positions: list[Order]) -> tuple[float, float]:
         portfolio_value = starting_balance
         peak_value = starting_balance
         peak_time = 0
@@ -45,16 +45,17 @@ class PortfolioHelper:
             elif order.trade_action == TradeAction.SELL:
                 portfolio_value += (float(order.price) * float(order.quantity))
 
-            if portfolio_value > peak_value > 0:
+            if portfolio_value > peak_value:
                 peak_value = portfolio_value
                 peak_time = order.created_time
 
         return peak_value, peak_time
 
     @staticmethod
-    def calculate_trough_value(starting_balance: float, positions: list[Order]) -> float:
+    def calculate_trough_value(starting_balance: float, positions: list[Order]) -> tuple[float, float]:
         portfolio_value = starting_balance
         trough_value = starting_balance
+        trough_time = 0
 
         for order in positions:
             if order.trade_action == TradeAction.BUY:
@@ -62,7 +63,8 @@ class PortfolioHelper:
             elif order.trade_action == TradeAction.SELL:
                 portfolio_value += (float(order.price) * float(order.quantity))
 
-            if 0 < portfolio_value < trough_value:
+            if portfolio_value < trough_value:
                 trough_value = portfolio_value
+                trough_time = order.created_time
 
-        return trough_value
+        return trough_value, trough_time

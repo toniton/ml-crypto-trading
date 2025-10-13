@@ -7,10 +7,11 @@ from src.trading.protection.guard import Guard
 
 
 class CooldownGuard(Guard):
-    def can_trade(self,trade_action: TradeAction,  trading_context: TradingContext) -> bool:
+    def can_trade(self, trade_action: TradeAction, trading_context: TradingContext) -> bool:
+        if trade_action == TradeAction.SELL:
+            return True
         return (trading_context.last_activity_time + self.config.cooldown_timeout) < time.time()
 
     @staticmethod
     def is_enabled(asset: Asset) -> bool:
         return asset.guard_config is not None and asset.guard_config.cooldown_timeout is not None
-
