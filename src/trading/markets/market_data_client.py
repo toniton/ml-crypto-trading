@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Callable
 
 from api.interfaces.exchange_provider import ExchangeProvider
@@ -11,7 +12,7 @@ class MarketDataClient:
     def __init__(
             self, key: int, ticker_symbol: str,
             provider: ExchangeProvider,
-            on_update: Callable[[int, MarketData], None]
+            on_update: Callable[[int, MarketData | None], None]
     ):
         self.key: int = key
         self.ticker_symbol: str = ticker_symbol
@@ -24,9 +25,9 @@ class MarketDataClient:
         if subscription_data is not None:
             ws.send(json.dumps(subscription_data))
 
-    @classmethod
-    def on_close(cls, ws):
-        print('Disconnected')
+    def on_close(self, ws, _0, _1):
+        self.on_update(self.key, None)
+        logging.error(["Socket disconnected!. ->", ws, _0, _1])
 
     def on_message(self, data: MarketData):
         self.on_update(self.key, data)
