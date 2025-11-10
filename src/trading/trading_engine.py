@@ -21,6 +21,7 @@ from src.trading.protection.protection_manager import ProtectionManager
 
 class TradingEngine:
     assets: list[Asset]
+    account_manager: AccountManager
     order_manager: OrderManager
     market_data_manager: MarketDataManager
     consensus_manager: ConsensusManager
