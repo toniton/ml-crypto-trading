@@ -1,5 +1,5 @@
-crypto_dot_com_exchange_rest_endpoint: https://uat-api.3ona.co/v2/
-crypto_dot_com_exchange_websocket_endpoint: wss://uat-stream.3ona.co/v2/market
+crypto_dot_com_exchange_rest_endpoint: https://uat-api.3ona.co/exchange/v1/
+crypto_dot_com_exchange_websocket_endpoint: wss://uat-stream.3ona.co/exchange/v1/market
 coin_market_cap_rest_endpoint: https://sandbox-api.coinmarketcap.com/
 database_connection_host: localhost:5432
 kafka_configuration:
