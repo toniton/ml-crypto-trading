@@ -58,6 +58,7 @@ class TradingEngine:
         job_thread.start()
 
     def init_application(self):
+        self.account_manager.init_account_balances(self.trading_context_manager)
         self.fees_manager.init_account_fees()
         try:
             every().second.do(TradingEngine.run_threaded_schedule, self.create_new_order)

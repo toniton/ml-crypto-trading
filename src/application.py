@@ -23,6 +23,7 @@ from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.fees.fees_manager import FeesManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from api.interfaces.exchange_provider import ExchangeProvider
@@ -55,6 +56,7 @@ class Application:
         self.unit_of_work = UnitOfWork(database_session)
 
         self.account_manager = AccountManager(self.assets)
+        self.fees_manager = FeesManager()
         self.order_manager = OrderManager(self.unit_of_work)
         self.market_data_manager = MarketDataManager(self.assets)
 
@@ -64,7 +66,6 @@ class Application:
         self._setup_providers()
         self._setup_strategies()
         self._setup_protections()
-        self._setup_trading_context()
 
         atexit.register(self.shutdown)
 
@@ -92,6 +93,7 @@ class Application:
         for cls in ExchangeProvider.__subclasses__():
             instance = cls()
             self.account_manager.register_provider(instance)
+            self.fees_manager.register_provider(instance)
             self.order_manager.register_provider(instance)
             self.market_data_manager.register_provider(instance)
 
@@ -121,19 +123,9 @@ class Application:
                     instance = cls(asset.guard_config)
                     self.protection_manager.register_guard(asset.key, instance)
 
-    def _setup_trading_context(self):
-        for asset in self.assets:
-            exchange = asset.exchange
-            ticker_symbol = asset.ticker_symbol
-            account_balance = self.account_manager.get_balance(ticker_symbol, exchange.value)
-            opening_balance = account_balance.available_balance
-            self.trading_context_manager.register_trading_context(
-                asset.key, TradingContext(starting_balance=opening_balance)
-            )
-
     def startup(self):
         self.trading_engine = TradingEngine(
-            self.assets, self.account_manager, self.order_manager,
+            self.assets, self.account_manager, self.fees_manager, self.order_manager,
             self.market_data_manager, self.consensus_manager,
             self.trading_context_manager,
             self.protection_manager,
