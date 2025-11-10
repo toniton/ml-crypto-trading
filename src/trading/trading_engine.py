@@ -12,6 +12,7 @@ from api.interfaces.trade_action import TradeAction
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.fees.fees_manager import FeesManager
 from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_helper import OrderHelper
@@ -32,6 +33,7 @@ class TradingEngine:
             self,
             assets: list[Asset],
             account_manager: AccountManager,
+            fees_manager: FeesManager,
             order_manager: OrderManager,
             market_data_manager: MarketDataManager,
             consensus_manager: ConsensusManager,
@@ -41,6 +43,7 @@ class TradingEngine:
     ):
         self.assets = assets
         self.account_manager = account_manager
+        self.fees_manager = fees_manager
         self.order_manager = order_manager
         self.market_data_manager = market_data_manager
         self.consensus_manager = consensus_manager
@@ -55,7 +58,7 @@ class TradingEngine:
         job_thread.start()
 
     def init_application(self):
-        # TODO: Fetch assets maker taker fees from exchange through order_manager and update TradingContext.
+        self.fees_manager.init_account_fees()
         try:
             every().second.do(TradingEngine.run_threaded_schedule, self.create_new_order)
             every().second.do(TradingEngine.run_threaded_schedule, self.check_unclosed_orders)
@@ -93,6 +96,7 @@ class TradingEngine:
         for asset in self.assets:
             try:
                 account_balance = self.account_manager.get_balance(asset.ticker_symbol, asset.exchange.value)
+                fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
                 if account_balance.available_balance <= 0:
                     raise ValueError(
                         f"Account balance too low to trade: ${account_balance.available_balance}. "
@@ -106,7 +110,9 @@ class TradingEngine:
 
                 logging.warning([
                     f"Fetched price for ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
-                    price
+                    price,
+                    f"Fees: ${fees}",
+                    f"Available balance: ${account_balance.available_balance}"
                 ])
 
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
@@ -164,10 +170,12 @@ class TradingEngine:
                     market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
 
                 price = market_data.close_price
+                fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
 
                 logging.warning([
                     f"Fetched price for ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
-                    price
+                    price,
+                    f"Fees: ${fees}"
                 ])
 
                 candles = self.order_manager.get_candles(

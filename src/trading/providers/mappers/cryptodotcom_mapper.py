@@ -3,11 +3,13 @@ from typing import Optional
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.exchange_provider import ExchangeProvidersEnum
+from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.mapper import Mapper
 from api.interfaces.timeframe import Timeframe
-from src.trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, CryptoDotComCandleResponseDto, \
-    CryptoDotComUserBalanceResponseDto
+from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
+    CryptoDotComMarketDataResponseDto, CryptoDotComCandleResponseDto, \
+    CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
 
 
 class CryptoDotComMapper(Mapper):
@@ -73,4 +75,22 @@ class CryptoDotComMapper(Mapper):
         return AccountBalance(
             available_balance=balances.get(quote_ticker_symbol, 0.0),
             position_balance=balances.get(base_ticker_symbol, 0.0),
+        )
+
+    @staticmethod
+    def to_fees(
+            response: CryptoDotComUserFeesResponseDto
+    ) -> Fees:
+        return Fees(
+            maker_fee_pct=float(response.result.effective_spot_maker_rate_bps) * 0.01,
+            taker_fee_pct=float(response.result.effective_spot_taker_rate_bps) * 0.01,
+        )
+
+    @staticmethod
+    def to_instrument_fees(
+            response: CryptoDotComInstrumentFeesResponseDto
+    ) -> Fees:
+        return Fees(
+            maker_fee_pct=float(response.result.effective_maker_rate_bps) * 0.01,
+            taker_fee_pct=float(response.result.effective_taker_rate_bps) * 0.01,
         )

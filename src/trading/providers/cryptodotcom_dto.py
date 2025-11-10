@@ -137,3 +137,26 @@ class UserBalanceResult(BaseModel):
 
 class CryptoDotComUserBalanceResponseDto(CryptoDotComResponseBaseModel):
     result: UserBalanceResult
+
+
+class UserFeesResult(BaseModel):
+    spot_tier: str
+    deriv_tier: str
+    effective_spot_maker_rate_bps: str
+    effective_spot_taker_rate_bps: str
+    effective_deriv_maker_rate_bps: str
+    effective_deriv_taker_rate_bps: str
+
+
+class CryptoDotComUserFeesResponseDto(CryptoDotComResponseBaseModel):
+    result: UserFeesResult
+
+
+class InstrumentFeesResult(BaseModel):
+    instrument_name: str
+    effective_maker_rate_bps: str
+    effective_taker_rate_bps: str
+
+
+class CryptoDotComInstrumentFeesResponseDto(CryptoDotComResponseBaseModel):
+    result: InstrumentFeesResult

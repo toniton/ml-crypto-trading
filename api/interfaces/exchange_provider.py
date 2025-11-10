@@ -9,6 +9,7 @@ import websocket
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
+from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
@@ -35,6 +36,14 @@ class ExchangeProvider(ABC):
 
     @abc.abstractmethod
     def get_account_balance(self, ticker_symbol: str) -> AccountBalance:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_account_fees(self) -> Fees:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_instrument_fees(self, ticker_symbol: str) -> Fees:
         raise NotImplementedError()
 
     @abc.abstractmethod

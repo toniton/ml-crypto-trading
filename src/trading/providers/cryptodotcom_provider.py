@@ -13,6 +13,7 @@ from cachetools import TTLCache, cached
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
+from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
@@ -20,13 +21,13 @@ from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from src.trading.helpers.trading_helper import TradingHelper
 from src.trading.providers.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
 from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComResponseOrderCreatedDto, \
-    CryptoDotComCandleResponseDto, CryptoDotComUserBalanceResponseDto
+from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
+    CryptoDotComResponseOrderCreatedDto, \
+    CryptoDotComCandleResponseDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
 from api.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
 
 
 class CryptoDotComProvider(ExchangeProvider):
-
     def __init__(self):
         config = CryptodotcomConfig.get_instance()
         self.websocket_client = None
@@ -79,6 +80,40 @@ class CryptoDotComProvider(ExchangeProvider):
                 data = json.loads(body)
             account_balance = CryptoDotComUserBalanceResponseDto(**data)
             return CryptoDotComMapper.to_account_balance(base_ticker_symbol, quote_ticker_symbol, account_balance)
+        except HTTPError as exc:
+            raise RuntimeError(exc, exc.read().decode()) from exc
+        except URLError as exc:
+            raise RuntimeError(exc, exc.reason) from exc
+
+    @cached(cache=TTLCache(maxsize=2024, ttl=6000))
+    def get_account_fees(self) -> Fees:
+        request = CryptoDotComRequestFactory.build_account_fees_request(
+            self.base_url, self.api_key, self.secret_key
+        )
+
+        try:
+            with urlopen(request) as response:
+                body = response.read()
+                data = json.loads(body)
+            account_fees = CryptoDotComUserFeesResponseDto(**data)
+            return CryptoDotComMapper.to_fees(account_fees)
+        except HTTPError as exc:
+            raise RuntimeError(exc, exc.read().decode()) from exc
+        except URLError as exc:
+            raise RuntimeError(exc, exc.reason) from exc
+
+    @cached(cache=TTLCache(maxsize=2024, ttl=6000))
+    def get_instrument_fees(self, ticker_symbol: str) -> Fees:
+        request = CryptoDotComRequestFactory.build_instrument_fees_request(
+            self.base_url, self.api_key, self.secret_key, ticker_symbol
+        )
+
+        try:
+            with urlopen(request) as response:
+                body = response.read()
+                data = json.loads(body)
+            account_balance = CryptoDotComInstrumentFeesResponseDto(**data)
+            return CryptoDotComMapper.to_instrument_fees(account_balance)
         except HTTPError as exc:
             raise RuntimeError(exc, exc.read().decode()) from exc
         except URLError as exc:
