@@ -1,15 +1,15 @@
-import decimal
 import json
 import logging
 import threading
 import time
 from queue import Queue
 
-import schedule
+from schedule import run_pending, every
 
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
+from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.helpers.portfolio_helper import PortfolioHelper
@@ -30,6 +30,7 @@ class TradingEngine:
     def __init__(
             self,
             assets: list[Asset],
+            account_manager: AccountManager,
             order_manager: OrderManager,
             market_data_manager: MarketDataManager,
             consensus_manager: ConsensusManager,
@@ -38,6 +39,7 @@ class TradingEngine:
             activity_queue: Queue
     ):
         self.assets = assets
+        self.account_manager = account_manager
         self.order_manager = order_manager
         self.market_data_manager = market_data_manager
         self.consensus_manager = consensus_manager
@@ -52,9 +54,10 @@ class TradingEngine:
         job_thread.start()
 
     def init_application(self):
+        # TODO: Fetch assets maker taker fees from exchange through order_manager and update TradingContext.
         try:
-            schedule.every().second.do(TradingEngine.run_threaded_schedule, self.create_new_order)
-            schedule.every().second.do(TradingEngine.run_threaded_schedule, self.check_unclosed_orders)
+            every().second.do(TradingEngine.run_threaded_schedule, self.create_new_order)
+            every().second.do(TradingEngine.run_threaded_schedule, self.check_unclosed_orders)
         except Exception as exc:
             logging.error(["Error occurred initializing application. ->", exc])
 
@@ -68,7 +71,7 @@ class TradingEngine:
     @staticmethod
     def run_pending_schedules():
         while True:
-            schedule.run_pending()
+            run_pending()
             time.sleep(1)
 
     def execute_queued_orders(self, activity_queue: Queue):
@@ -88,7 +91,13 @@ class TradingEngine:
     def create_new_order(self):
         for asset in self.assets:
             try:
-                market_data = self.market_data_manager.get_latest_marketdata(asset)
+                account_balance = self.account_manager.get_balance(asset.ticker_symbol, asset.exchange.value)
+                if account_balance.available_balance <= 0:
+                    raise ValueError(
+                        f"Account balance too low to trade: ${account_balance.available_balance}. "
+                        f"Position balance: ${account_balance.position_balance}"
+                    )
+                market_data = self.market_data_manager.get_latest_marketdata(asset.key)
                 if market_data is None:
                     market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
 
@@ -99,9 +108,9 @@ class TradingEngine:
                     price
                 ])
 
-                trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
+                trading_context = self.trading_context_manager.get_trading_context(asset.key)
 
-                if self.protection_manager.can_trade(asset.ticker_symbol, TradeAction.BUY, trading_context):
+                if self.protection_manager.can_trade(asset.key, TradeAction.BUY, trading_context):
                     candles = self.order_manager.get_candles(
                         asset.exchange.value,
                         asset.ticker_symbol,
@@ -125,7 +134,7 @@ class TradingEngine:
                             provider_name=asset.exchange.value
                         )
                         self.order_queue.put(order.model_dump_json())
-                        self.trading_context_manager.record_buy(asset.ticker_symbol, order)
+                        self.trading_context_manager.record_buy(asset.key, order)
             except Exception as exc:
                 logging.error([
                     f"Error occurred processing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
@@ -138,10 +147,10 @@ class TradingEngine:
     def check_unclosed_orders(self):
         for asset in self.assets:
             try:
-                trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
-                if len(trading_context.close_positions) == 3:
-                    # exit(1)
-                    raise RuntimeError(f"Hit max close positions for {asset.ticker_symbol}, manual review needed.")
+                trading_context = self.trading_context_manager.get_trading_context(asset.key)
+                # if len(trading_context.close_positions) == 3:
+                #     # exit(1)
+                #     raise RuntimeError(f"Hit max close positions for {asset.ticker_symbol}, manual review needed.")
 
                 if not trading_context.open_positions:
                     logging.warning([
@@ -149,7 +158,7 @@ class TradingEngine:
                     ])
                     return
 
-                market_data = self.market_data_manager.get_latest_marketdata(asset)
+                market_data = self.market_data_manager.get_latest_marketdata(asset.key)
                 if market_data is None:
                     market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
 
@@ -166,7 +175,7 @@ class TradingEngine:
                     asset.candles_timeframe
                 )
 
-                if self.protection_manager.can_trade(asset.ticker_symbol, TradeAction.SELL, trading_context):
+                if self.protection_manager.can_trade(asset.key, TradeAction.SELL, trading_context):
                     consensus_result = self.consensus_manager.get_quorum(
                         TradeAction.SELL, asset.ticker_symbol,
                         trading_context, market_data,
@@ -179,6 +188,7 @@ class TradingEngine:
                         ])
                         return
 
+                    # TODO: Prioritize selling at a profit or least break even.
                     open_orders = filter(
                         OrderHelper.less_than_price_filter(price), trading_context.open_positions
                     )
@@ -186,10 +196,12 @@ class TradingEngine:
                     # TODO: Remove this after testing.
                     open_orders = trading_context.open_positions
 
+                    # TODO: Trigger only one sell at a time based on priority.
+                    # TODO: Check quantity and loss for better risk management. Use protection rule for this.
                     for open_order in list(open_orders):
                         closed_order = self.order_manager.close_order(open_order, price)
                         self.order_queue.put(closed_order.model_dump_json())
-                        self.trading_context_manager.record_sell(asset.ticker_symbol, closed_order)
+                        self.trading_context_manager.record_sell(asset.key, closed_order)
 
             except Exception as exc:
                 logging.error([
@@ -197,7 +209,6 @@ class TradingEngine:
                     exc
                 ])
         print(["Threading..., sleeping...."])
-        pass
 
     def backfill_trading_context(self):
         # Check DB for unclosed orders and add it to trading context
@@ -207,9 +218,9 @@ class TradingEngine:
     def print_context(self) -> None:
         for asset in self.assets:
             try:
-                trading_context = self.trading_context_manager.get_trading_context(asset.ticker_symbol)
+                trading_context = self.trading_context_manager.get_trading_context(asset.key)
                 trading_context.end_time = time.time()
-                market_data = self.market_data_manager.get_latest_marketdata(asset)
+                market_data = self.market_data_manager.get_latest_marketdata(asset.key)
                 if market_data is None:
                     market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
 

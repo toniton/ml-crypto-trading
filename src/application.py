@@ -3,37 +3,35 @@ import atexit
 import importlib
 import os.path
 import pkgutil
-from queue import Queue
 
+from queue import Queue
 from sqlalchemy.orm import Session
+
+import src.trading.consensus.strategies
+import src.configuration.providers
+import src.trading.providers
+import src.trading.protection.guards
 
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
-from src.configuration.providers.base_config import BaseConfig
+from src.core.interfaces.base_config import BaseConfig
 from database.database_setup import DatabaseSetup
-
-from prediction.prediction_engine import PredictionEngine
-from prediction.providers.local_storage_data_provider import LocalStorageDataProvider
+from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
-from src.trading.consensus.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
-from src.trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
+from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from api.interfaces.exchange_provider import ExchangeProvider
-from src.trading.protection.guard import Guard
+from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
 from database.unit_of_work import UnitOfWork
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
-STRATEGY_DIR = "src/trading/consensus/strategies"
-CONFIG_PROVIDERS_DIR = "src/configuration/providers"
-TRADING_PROVIDERS_DIR = "src/trading/providers"
-PROTECTION_GUARDS_DIR = "src/trading/protection/guards"
 
 
 class Application:
@@ -56,6 +54,7 @@ class Application:
         database_session = self._setup_database()
         self.unit_of_work = UnitOfWork(database_session)
 
+        self.account_manager = AccountManager(self.assets)
         self.order_manager = OrderManager(self.unit_of_work)
         self.market_data_manager = MarketDataManager(self.assets)
 
@@ -64,7 +63,7 @@ class Application:
 
         self._setup_providers()
         self._setup_strategies()
-        self._setup_protectons()
+        self._setup_protections()
         self._setup_trading_context()
 
         atexit.register(self.shutdown)
@@ -74,8 +73,8 @@ class Application:
         print(["Application config", self.application_config.crypto_dot_com_exchange_websocket_endpoint])
 
     def _setup_configuration(self):
-        for (module_loader, name, ispkg) in pkgutil.iter_modules([CONFIG_PROVIDERS_DIR]):
-            importlib.import_module("." + name, CONFIG_PROVIDERS_DIR.replace("/", "."))
+        for (_, name, _) in pkgutil.iter_modules(src.configuration.providers.__path__):
+            importlib.import_module("." + name, src.configuration.providers.__name__)
 
         for cls in BaseConfig.__subclasses__():
             cls(self.application_config, self.environment_config)
@@ -87,51 +86,54 @@ class Application:
         return Session(database_engine)
 
     def _setup_providers(self):
-        for (module_loader, name, ispkg) in pkgutil.iter_modules([TRADING_PROVIDERS_DIR]):
-            importlib.import_module("." + name, TRADING_PROVIDERS_DIR.replace("/", "."))
+        for (_, name, _) in pkgutil.iter_modules(src.trading.providers.__path__):
+            importlib.import_module("." + name, src.trading.providers.__name__)
 
         for cls in ExchangeProvider.__subclasses__():
             instance = cls()
+            self.account_manager.register_provider(instance)
             self.order_manager.register_provider(instance)
             self.market_data_manager.register_provider(instance)
 
     def _setup_strategies(self):
-        localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)
-        prediction_engine = PredictionEngine(self.assets, localstorage_provider, PREDICTION_STORAGE_DIR)
-        prediction_engine.load_assets_model()
+        # localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)
+        # prediction_engine = PredictionEngine(self.assets, localstorage_provider, PREDICTION_STORAGE_DIR)
+        # prediction_engine.load_assets_model()
 
-        for (module_loader, name, ispkg) in pkgutil.iter_modules([STRATEGY_DIR]):
-            importlib.import_module("." + name, STRATEGY_DIR.replace("/", "."))
+        for (_, name, _) in pkgutil.iter_modules(src.trading.consensus.strategies.__path__):
+            importlib.import_module("." + name, src.trading.consensus.strategies.__name__)
 
         for cls in RuleBasedTradingStrategy.__subclasses__():
             instance = cls()
             self.consensus_manager.register_strategy(instance)
 
-        for cls in MachineLearningTradingStrategy.__subclasses__():
-            instance = cls(prediction_engine)
-            self.consensus_manager.register_strategy(instance)
+        # for cls in MachineLearningTradingStrategy.__subclasses__():
+        #     instance = cls(prediction_engine)
+        #     self.consensus_manager.register_strategy(instance)
 
-    def _setup_protectons(self):
-        for (module_loader, name, ispkg) in pkgutil.iter_modules([PROTECTION_GUARDS_DIR]):
-            importlib.import_module("." + name, PROTECTION_GUARDS_DIR.replace("/", "."))
+    def _setup_protections(self):
+        for (_, name, _) in pkgutil.iter_modules(src.trading.protection.guards.__path__):
+            importlib.import_module("." + name, src.trading.protection.guards.__name__)
 
         for asset in self.assets:
             for cls in Guard.__subclasses__():
                 if cls.is_enabled(asset) is True:
                     instance = cls(asset.guard_config)
-                    self.protection_manager.register_guard(asset.ticker_symbol, instance)
+                    self.protection_manager.register_guard(asset.key, instance)
 
     def _setup_trading_context(self):
         for asset in self.assets:
-            name = asset.name
             exchange = asset.exchange
             ticker_symbol = asset.ticker_symbol
-            opening_balance = float(input(f"Set opening balance for {name} - {ticker_symbol} at {exchange.value}"))
-            self.trading_context_manager.register_trading_context(ticker_symbol, TradingContext(starting_balance=opening_balance))
+            account_balance = self.account_manager.get_balance(ticker_symbol, exchange.value)
+            opening_balance = account_balance.available_balance
+            self.trading_context_manager.register_trading_context(
+                asset.key, TradingContext(starting_balance=opening_balance)
+            )
 
     def startup(self):
         self.trading_engine = TradingEngine(
-            self.assets, self.order_manager,
+            self.assets, self.account_manager, self.order_manager,
             self.market_data_manager, self.consensus_manager,
             self.trading_context_manager,
             self.protection_manager,
@@ -147,6 +149,5 @@ class Application:
         self.consensus_manager.register_strategy(strategy)
 
     def shutdown(self):
+        # TODO: Close all open trades as part of application shutdown procedures.
         self.trading_engine.print_context()
-
-    pass
