@@ -1,0 +1,97 @@
+name: 🐞 Bug Report / Feature Request
+description: Report a bug, request a feature, or suggest an improvement.
+title: "[Bug] <brief description>"
+labels: [ "needs-triage" ]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Thank you for contributing 🙌
+        Please help us process issues faster by filling in the details below.  
+        Issues missing key information may be closed without investigation.
+
+  - type: dropdown
+    id: issue_type
+    attributes:
+      label: I'm submitting a...
+      description: Select the type of issue you're reporting.
+      options:
+        - Regression
+        - Bug report
+        - Feature request
+        - Documentation issue
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation / Use Case
+      description: Why is this change needed? What problem does it solve?
+      placeholder: |
+        Example:
+        - The trading engine crashes when fetching BTC/USD prices.
+        - I’d like to add support for a new exchange API.
+    validations:
+      required: true
+
+  - type: textarea
+    id: current_behavior
+    attributes:
+      label: Current Behavior
+      description: Describe how the issue manifests.
+      placeholder: Describe what’s happening now...
+    validations:
+      required: false
+
+  - type: textarea
+    id: expected_behavior
+    attributes:
+      label: Expected Behavior
+      description: Describe what the desired behavior should be.
+      placeholder: What do you expect to happen instead?
+    validations:
+      required: false
+
+  - type: textarea
+    id: steps_to_reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Provide clear steps to reproduce the issue.
+      placeholder: |
+        1. Run `python bot.py`
+        2. Configure BTC_USD trading pair
+        3. Observe the crash when fetching price data
+      render: bash
+    validations:
+      required: false
+
+  - type: input
+    id: python_version
+    attributes:
+      label: Python Version
+      description: Run `python3 --version` to check.
+      placeholder: "e.g., 3.11.6"
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform / OS
+      placeholder: "e.g., macOS, Linux, Windows"
+    validations:
+      required: true
+
+  - type: textarea
+    id: other_info
+    attributes:
+      label: Additional Context
+      description: |
+        Add any other relevant information (logs, screenshots, IDE, package manager, etc.)
+      placeholder: Paste logs or additional notes here...
+      render: shell
+    validations:
+      required: false
