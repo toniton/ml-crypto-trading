@@ -1,4 +1,5 @@
 import decimal
+import logging
 import time
 from uuid import uuid4
 
@@ -8,42 +9,27 @@ from database.repositories.providers.postgres_order_repository import PostgresOr
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
-from api.interfaces.exchange_provider import ExchangeProvider
 from database.unit_of_work import UnitOfWork
+from src.core.registries.provider_registry import ProviderRegistry
 
 
-class OrderManager:
-    providers: dict[str, ExchangeProvider] = {}
+class OrderManager(ProviderRegistry):
     cached_balance: dict[str, decimal]
 
     def __init__(self, unit_of_work: UnitOfWork):
+        super().__init__()
         self.unit_of_work = unit_of_work
 
-    def register_provider(self, provider: ExchangeProvider):
-        if provider.get_provider_name() in self.providers:
-            raise Exception(f"Provider ${provider.get_provider_name()} already registered.")
-
-        self.providers[provider.get_provider_name()] = provider
-
     def get_market_data(self, ticker_symbol: str, provider_name: str) -> MarketData:
-        provider = self.providers.get(provider_name)
-        if provider is None:
-            raise Exception(f"Provider $provider not supported.")
-
+        provider = self.get_provider(provider_name)
         return provider.get_market_data(ticker_symbol)
 
     def get_candles(self, provider_name: str, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        provider = self.providers.get(provider_name)
-        if provider is None:
-            raise Exception(f"Provider $provider not supported.")
-
+        provider = self.get_provider(provider_name)
         return provider.get_candle(ticker_symbol, timeframe)
 
     def open_order(self, ticker_symbol: str, provider_name: str, quantity: str, price: str):
-        provider = self.providers.get(provider_name)
-        if provider is None:
-            raise Exception(f"Provider $provider not supported.")
-
+        provider = self.get_provider(provider_name)
         order = Order(
             uuid=uuid4(),
             price=price,
@@ -58,9 +44,7 @@ class OrderManager:
 
     def execute_order(self, order: Order):
         # Pass in exchange, so we can have proper db storage.
-        provider = self.providers.get(order.provider_name)
-        if provider is None:
-            raise Exception(f"Provider $provider not supported.")
+        provider = self.get_provider(order.provider_name)
 
         try:
             provider.place_order(
@@ -76,20 +60,23 @@ class OrderManager:
         except Exception as exc:
             raise Exception(f"Error executing order:", order, exc)
 
-    def close_order(self, open_order: Order, price: str):
-        provider = self.providers.get(open_order.provider_name)
-        if provider is None:
-            raise Exception(f"Provider $provider not supported.")
-
+    def close_order(self, open_order: Order, market_price: str) -> Order:
+        provider = self.get_provider(open_order.provider_name)
         order = Order(
             uuid=open_order.uuid,
-            price=price,
+            price=market_price,
             quantity=open_order.quantity,
             provider_name=open_order.provider_name,
             trade_action=TradeAction.SELL,
             ticker_symbol=open_order.ticker_symbol,
             created_time=time.time()
         )
+        try:
+            order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
+            order_repository.save(order)
+            self.unit_of_work.complete()
+        except Exception:
+            logging.warning(f"Error saving order to database on close order: %s", order)
 
         return order
 

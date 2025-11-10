@@ -1,20 +1,20 @@
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
-from src.trading.protection.guard import Guard
+from src.core.interfaces.guard import Guard
 
 
 class ProtectionManager:
-    guards: [str, list[Guard]] = {}
+    guards: [int, list[Guard]] = {}
 
-    def register_guard(self, ticker_symbol: str, guard: Guard):
-        if ticker_symbol in self.guards:
-            self.guards[ticker_symbol].append(guard)
+    def register_guard(self, asset_key: int, guard: Guard):
+        if asset_key in self.guards:
+            self.guards[asset_key].append(guard)
         else:
-            self.guards[ticker_symbol] = [guard]
+            self.guards[asset_key] = [guard]
 
-    def can_trade(self, ticker_symbol: str, trade_action: TradeAction, trading_context: TradingContext) -> bool:
-        if ticker_symbol not in self.guards:
+    def can_trade(self, asset_key: int, trade_action: TradeAction, trading_context: TradingContext) -> bool:
+        if asset_key not in self.guards:
             return True
-        if not bool(len(self.guards[ticker_symbol])):
+        if not bool(len(self.guards[asset_key])):
             return True
-        return all(guard.can_trade(trade_action, trading_context) for guard in self.guards[ticker_symbol])
+        return all(guard.can_trade(trade_action, trading_context, ) for guard in self.guards[asset_key])

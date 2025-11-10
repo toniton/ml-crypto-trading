@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
-from src.configuration.providers.base_config import BaseConfig
+from src.core.interfaces.base_config import BaseConfig
 
 
 @dataclass

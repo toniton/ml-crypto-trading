@@ -2,7 +2,7 @@ from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
-from src.trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
+from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 
 
 class RiskManagementBuyStrategy(RuleBasedTradingStrategy):
@@ -19,6 +19,7 @@ class RiskManagementBuyStrategy(RuleBasedTradingStrategy):
         candles: list[Candle]
     ):
         risk_per_trade = trading_context.available_balance * self.risk_tolerance
+        # TODO: Get quantity from min_quantity or max_quantity in TradeContext.
         quantity = 1
         # if (quantity * float(market_data.close_price)) > risk_per_trade:
         #     return False

@@ -3,7 +3,7 @@ import time
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.asset import Asset
-from src.trading.protection.guard import Guard
+from src.core.interfaces.guard import Guard
 
 
 class CooldownGuard(Guard):

@@ -2,7 +2,7 @@ from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
-from src.trading.consensus.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
+from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 
 
 class FalseSellStrategy(RuleBasedTradingStrategy):
