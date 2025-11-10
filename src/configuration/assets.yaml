@@ -1,7 +1,8 @@
 assets:
   - name: "Bitcoin (Crypto.com)"
     keywords: ["BTC"]
-    ticker_symbol: "BTC"
+    base_ticker_symbol: "BTC"
+    quote_ticker_symbol: "USD"
     exchange: "CRYPTO_DOT_COM"
     min_quantity: 0.00001
     decimal_places: 8
@@ -12,7 +13,7 @@ assets:
     guard_config:
       max_drawdown_period: 8
       max_drawdown_percentage: 0.60
-      cooldown_timeout: 2
+      cooldown_timeout: 5
 #  - name: "DOGE (Crypto.com)"
 #    keywords: ["DOGE"]
 #    ticker_symbol: "DOGE"

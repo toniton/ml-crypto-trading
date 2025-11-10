@@ -23,7 +23,7 @@ class CryptoDotComBaseModel(BaseModel):
     method: str
 
 
-class CryptoDotComResponseBaseModel(BaseModel):
+class CryptoDotComResponseBaseModel(CryptoDotComBaseModel):
     code: int = 0
     result: dict
 
@@ -34,7 +34,14 @@ class CryptoDotComRequestDto(BaseModel):
     method: str
     api_key: str
     sig: str
+
+
+class CryptoDotComRequestOrderDto(CryptoDotComRequestDto):
     params: CryptoDotComRequestOrderParamsDto
+
+
+class CryptoDotComRequestAccountBalanceDto(CryptoDotComRequestDto):
+    params: object
 
 
 class TickerRequestParams(BaseModel):
@@ -91,3 +98,42 @@ class CandleResult(BaseModel):
 
 class CryptoDotComCandleResponseDto(CryptoDotComResponseBaseModel):
     result: CandleResult
+
+
+class PositionBalanceDto(BaseModel):
+    instrument_name: str
+    quantity: str
+    market_value: str
+    collateral_eligible: bool
+    haircut: str
+    collateral_amount: str
+    max_withdrawal_balance: str
+    reserved_qty: str
+
+
+class UserBalanceDataDto(BaseModel):
+    total_available_balance: str
+    total_margin_balance: str
+    total_initial_margin: str
+    total_position_im: str
+    total_haircut: str
+    total_maintenance_margin: str
+    total_position_cost: str
+    total_cash_balance: str
+    total_collateral_value: str
+    total_session_unrealized_pnl: str
+    instrument_name: str
+    total_session_realized_pnl: str
+    is_liquidating: bool
+    total_effective_leverage: str
+    position_limit: str
+    used_position_limit: str
+    position_balances: list[PositionBalanceDto]
+
+
+class UserBalanceResult(BaseModel):
+    data: list[UserBalanceDataDto]
+
+
+class CryptoDotComUserBalanceResponseDto(CryptoDotComResponseBaseModel):
+    result: UserBalanceResult

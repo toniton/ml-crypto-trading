@@ -1,0 +1,122 @@
+import hashlib
+import hmac
+import time
+from urllib.request import Request
+from uuid import UUID
+
+from api.interfaces.timeframe import Timeframe
+from api.interfaces.trade_action import TradeAction
+from src.trading.helpers.request_helper import RequestHelper
+from src.trading.helpers.trading_helper import TradingHelper
+from src.trading.providers.cryptodotcom_dto import CryptoDotComRequestAccountBalanceDto, CryptoDotComRequestOrderDto
+from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
+from src.trading.providers.utils.helpers import params_to_str
+
+
+class CryptoDotComRequestFactory:
+    @staticmethod
+    def build_order_request(
+            base_url: str,
+            api_key: str,
+            secret_key: str,
+            uuid: UUID,
+            ticker_symbol: str,
+            quantity: str,
+            price: str,
+            trade_action: TradeAction
+    ) -> Request:
+        instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
+        nonce = int(time.time() * 1000)
+        request_data = {
+            "id": 1,
+            "nonce": nonce,
+            "method": "private/create-order",
+            "api_key": api_key,
+            "params": {
+                "instrument_name": instrument_name,
+                "side": trade_action.value.upper(),
+                "type": "LIMIT",
+                "price": price,
+                "quantity": quantity,
+                "client_oid": str(uuid),
+                "exec_inst": ["POST_ONLY"],
+                "time_in_force": "FILL_OR_KILL"
+            }
+        }
+
+        payload_str = request_data['method'] \
+                      + str(request_data.get('id')) \
+                      + request_data['api_key'] \
+                      + params_to_str(request_data['params'], 0, 2) \
+                      + str(request_data['nonce'])
+
+        request_data['sig'] = hmac.new(
+            bytes(str(secret_key), 'utf-8'),
+            msg=bytes(payload_str, 'utf-8'),
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        request_data_object = CryptoDotComRequestOrderDto(**request_data)
+
+        serialized_json = request_data_object.model_dump_json()
+
+        return RequestHelper.init_http_connection(
+            base_url,
+            "private/create-orderrt",
+            method="POST",
+            data=serialized_json.encode("utf-8")
+        )
+
+    @staticmethod
+    def build_account_balance_request(
+            base_url: str,
+            api_key: str,
+            secret_key: str
+    ) -> Request:
+        nonce = int(time.time() * 1000)
+        request_data = {
+            "id": 1,
+            "nonce": nonce,
+            "method": "private/user-balance",
+            "api_key": api_key,
+            "params": {}
+        }
+
+        payload_str = request_data['method'] \
+                      + str(request_data.get('id')) \
+                      + request_data['api_key'] \
+                      + params_to_str(request_data['params'], 0, 2) \
+                      + str(request_data['nonce'])
+
+        request_data['sig'] = hmac.new(
+            bytes(str(secret_key), 'utf-8'),
+            msg=bytes(payload_str, 'utf-8'),
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        request_data_object = CryptoDotComRequestAccountBalanceDto(**request_data)
+        serialized_json = request_data_object.model_dump_json()
+
+        return RequestHelper.init_http_connection(
+            base_url,
+            "private/user-balance",
+            method="POST",
+            data=serialized_json.encode("utf-8")
+        )
+
+    @staticmethod
+    def build_market_data_request(base_url: str, ticker_symbol: str):
+        instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
+        return RequestHelper.init_http_connection(
+            base_url,
+            f"public/get-tickers?instrument_name={instrument_name}&valuation_type=index_price&count=1"
+        )
+
+    @staticmethod
+    def build_get_candle_request(base_url: str, ticker_symbol: str, timeframe: Timeframe):
+        instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
+        interval = CryptoDotComMapper.from_timeframe(timeframe)
+        return RequestHelper.init_http_connection(
+            base_url,
+            f"public/get-candlestick?instrument_name={instrument_name}&timeframe={interval}"
+        )

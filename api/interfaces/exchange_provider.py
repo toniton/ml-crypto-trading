@@ -7,6 +7,7 @@ from uuid import UUID
 
 import websocket
 
+from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
@@ -30,6 +31,10 @@ class ExchangeProvider(ABC):
 
     @abc.abstractmethod
     def get_market_data(self, ticker_symbol: str) -> MarketData:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_account_balance(self, ticker_symbol: str) -> AccountBalance:
         raise NotImplementedError()
 
     @abc.abstractmethod

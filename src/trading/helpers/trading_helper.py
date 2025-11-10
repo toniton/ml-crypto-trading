@@ -1,8 +1,7 @@
 class TradingHelper:
     @staticmethod
-    def get_instrument_name(
-            ticker_symbol: str, currency: str = "USD", separator: str = "",
-            perp: bool = False
+    def format_ticker_symbol(
+            ticker_symbol: str, separator: str = "", suffix: str = None
     ) -> str:
-        base = f"{ticker_symbol}{separator}{currency}"
-        return f"{base}-PERP" if perp else base
+        base = f"{ticker_symbol.replace('_', separator)}"
+        return f"{base}{suffix}" if suffix else base

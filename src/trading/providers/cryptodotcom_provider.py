@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import json
+import logging
 import time
 from typing import Callable
 from urllib.error import HTTPError, URLError
@@ -10,19 +9,20 @@ from urllib.request import urlopen
 from uuid import UUID
 
 import websocket
+from cachetools import TTLCache, cached
 
+from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
-from src.trading.helpers.request_helper import RequestHelper
 from src.trading.helpers.trading_helper import TradingHelper
-from src.trading.providers.mappers.cryptodotcom_marketdata_mapper import CryptoDotComMapper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComRequestDto, CryptoDotComResponseOrderCreatedDto, \
-    CryptoDotComCandleResponseDto
+from src.trading.providers.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
+from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
+from src.trading.providers.cryptodotcom_dto import CryptoDotComResponseOrderCreatedDto, \
+    CryptoDotComCandleResponseDto, CryptoDotComUserBalanceResponseDto
 from api.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
-from src.trading.providers.utils.helpers import params_to_str
 
 
 class CryptoDotComProvider(ExchangeProvider):
@@ -39,7 +39,8 @@ class CryptoDotComProvider(ExchangeProvider):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
 
     def get_market_subscription_data(self, ticker_symbol: str) -> dict | None:
-        channels = [f"ticker.{TradingHelper.get_instrument_name(ticker_symbol)}-PERP"]
+        ticker_symbol = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
+        channels = [f"ticker.{ticker_symbol}"]
         data = {
             "id": 1,
             "method": "subscribe",
@@ -51,57 +52,37 @@ class CryptoDotComProvider(ExchangeProvider):
         return data
 
     def get_market_data(self, ticker_symbol: str) -> MarketData:
-        instrument_name = TradingHelper.get_instrument_name(ticker_symbol)
-        request = RequestHelper.init_http_connection(
-            self.base_url,
-            f"public/get-ticker?instrument_name={instrument_name}-PERP&valuation_type=index_price&count=1"
+        request = CryptoDotComRequestFactory.build_market_data_request(self.base_url, ticker_symbol)
+
+        try:
+            with urlopen(request) as response:
+                body = response.read()
+                data = json.loads(body)
+            return CryptoDotComMapper.to_marketdata(data)
+        except HTTPError as exc:
+            logging.warning(["Fetch marketdata api failure -> ", exc])
+            raise RuntimeError(exc, exc.read().decode()) from exc
+        except URLError as exc:
+            logging.warning(["Fetch marketdata api failure -> ", exc])
+            raise RuntimeError(exc, exc.reason) from exc
+
+    @cached(cache=TTLCache(maxsize=2024, ttl=600))
+    def get_account_balance(self, ticker_symbol: str) -> AccountBalance:
+        base_ticker_symbol, quote_ticker_symbol = ticker_symbol.split("_")
+        request = CryptoDotComRequestFactory.build_account_balance_request(
+            self.base_url, self.api_key, self.secret_key
         )
 
-        with urlopen(request) as response:
-            body = response.read()
-            data = json.loads(body)
-
-        return CryptoDotComMapper.to_marketdata(data)
-
-    def _build_order_request(
-            self,
-            uuid: UUID,
-            ticker_symbol: str,
-            quantity: str,
-            price: str,
-            trade_action: TradeAction
-    ) -> CryptoDotComRequestDto:
-        instrument_name = TradingHelper.get_instrument_name(ticker_symbol, separator="", perp=True)
-        nonce = int(time.time() * 1000)
-        request_data = {
-            "id": 1,
-            "nonce": nonce,
-            "method": "private/create-order",
-            "api_key": self.api_key,
-            "params": {
-                "instrument_name": instrument_name,
-                "side": trade_action.value.upper(),
-                "type": "LIMIT",
-                "price": price,
-                "quantity": quantity,
-                "client_oid": str(uuid),
-                "exec_inst": ["POST_ONLY"],
-                "time_in_force": "FILL_OR_KILL"
-            }
-        }
-
-        payload_str = request_data['method'] \
-                      + str(request_data.get('id')) \
-                      + request_data['api_key'] \
-                      + params_to_str(request_data['params'], 0, 2) \
-                      + str(request_data['nonce'])
-
-        request_data['sig'] = hmac.new(
-            bytes(str(self.secret_key), 'utf-8'),
-            msg=bytes(payload_str, 'utf-8'),
-            digestmod=hashlib.sha256
-        ).hexdigest()
-        return CryptoDotComRequestDto(**request_data)
+        try:
+            with urlopen(request) as response:
+                body = response.read()
+                data = json.loads(body)
+            account_balance = CryptoDotComUserBalanceResponseDto(**data)
+            return CryptoDotComMapper.to_account_balance(base_ticker_symbol, quote_ticker_symbol, account_balance)
+        except HTTPError as exc:
+            raise RuntimeError(exc, exc.read().decode()) from exc
+        except URLError as exc:
+            raise RuntimeError(exc, exc.reason) from exc
 
     def place_order(
             self,
@@ -111,14 +92,9 @@ class CryptoDotComProvider(ExchangeProvider):
             price: str,
             trade_action: TradeAction
     ) -> CryptoDotComResponseOrderCreatedDto:
-        request_data = self._build_order_request(uuid, ticker_symbol, quantity, price, trade_action)
-        serialized_json = request_data.model_dump_json()
-
-        request = RequestHelper.init_http_connection(
-            self.base_url,
-            "private/create-order",
-            method="POST",
-            data=serialized_json.encode("utf-8")
+        request = CryptoDotComRequestFactory.build_order_request(
+            self.base_url, self.api_key, self.secret_key, uuid,
+            ticker_symbol, quantity, price, trade_action
         )
 
         try:
@@ -127,14 +103,20 @@ class CryptoDotComProvider(ExchangeProvider):
                 data = json.loads(body)
             return CryptoDotComResponseOrderCreatedDto(**data["result"])
         except HTTPError as exc:
-            raise Exception(exc, exc.read().decode())
+            raise RuntimeError(exc, exc.read().decode()) from exc
         except URLError as exc:
-            raise Exception(exc, exc.reason)
+            raise RuntimeError(exc, exc.reason) from exc
 
     def get_websocket_client(self, on_open: Callable, on_message: Callable[[MarketData], None], on_close: Callable):
         def on_message_mapper(_on_message: Callable[[MarketData], None]):
             def map_data(ws, data):
                 json_data = json.loads(data)
+                if 'method' in json_data and json_data['method'] == 'public/heartbeat':
+                    ws.send(json.dumps({
+                        "id": json_data['id'],
+                        "method": "public/respond-heartbeat",
+                    }))
+                    return
                 _on_message(CryptoDotComMapper.to_marketdata(json_data))
 
             return map_data
@@ -146,17 +128,15 @@ class CryptoDotComProvider(ExchangeProvider):
         return self.websocket_client
 
     def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        instrument_name = TradingHelper.get_instrument_name(ticker_symbol)
-        interval = CryptoDotComMapper.from_timeframe(timeframe)
-        request = RequestHelper.init_http_connection(
-            self.base_url,
-            f"public/get-candlestick?instrument_name={instrument_name}-PERP&timeframe={interval}"
-        )
+        request = CryptoDotComRequestFactory.build_get_candle_request(self.base_url, ticker_symbol, timeframe)
 
-        with urlopen(request) as response:
-            body = response.read()
-            data = json.loads(body)
-
-        candle_response = CryptoDotComCandleResponseDto(**data)
-
-        return CryptoDotComMapper.to_candles(candle_response)
+        try:
+            with urlopen(request) as response:
+                body = response.read()
+                data = json.loads(body)
+            candle_response = CryptoDotComCandleResponseDto(**data)
+            return CryptoDotComMapper.to_candles(candle_response)
+        except HTTPError as exc:
+            raise RuntimeError(exc, exc.read().decode()) from exc
+        except URLError as exc:
+            raise RuntimeError(exc, exc.reason) from exc

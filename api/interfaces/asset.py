@@ -12,7 +12,8 @@ from src.configuration.guard_config import GuardConfig
 @dataclass
 class Asset:
     keywords: list[str]
-    ticker_symbol: str
+    base_ticker_symbol: str
+    quote_ticker_symbol: str
     decimal_places: int
     name: str
     market_cap: float
@@ -24,6 +25,10 @@ class Asset:
     guard_config: Optional[GuardConfig] = None
 
     @computed_field
+    @property
+    def ticker_symbol(self) -> str:
+        return f"{self.base_ticker_symbol}_{self.quote_ticker_symbol}"
+
     @property
     def key(self) -> int:
         return hash(f"{self.ticker_symbol}-{self.exchange.value}")
