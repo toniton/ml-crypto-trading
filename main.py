@@ -11,7 +11,6 @@ def main():
 
     activity_queue = Queue()
     web = WebServer(activity_queue)
-    web.run()
     app = AppServer(activity_queue)
 
     web_thread = threading.Thread(target=web.run, name="Webserver")
