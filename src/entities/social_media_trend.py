@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from src.entities.asset import Asset
+from api.interfaces.asset import Asset
 
 
 class SocialMediaTrend(BaseModel):
