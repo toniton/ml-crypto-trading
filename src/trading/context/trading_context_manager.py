@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import time
 
 from api.interfaces.trading_context import TradingContext
@@ -30,8 +32,11 @@ class TradingContextManager:
         quantity = float(closed_order.quantity)
         sell_price = price * quantity
         open_positions = self.trading_contexts[asset_key].open_positions
+        opened_order: Order | None = next(filter(lambda x: x.uuid == closed_order.uuid, open_positions), None)
+        opened_price = float(opened_order.price)
+        buy_price = opened_price * quantity
         self.trading_contexts[asset_key].available_balance += sell_price
-        self.trading_contexts[asset_key].closing_balance += sell_price
+        self.trading_contexts[asset_key].closing_balance += (sell_price - buy_price)
         self.trading_contexts[asset_key].close_positions.append(closed_order)
         self.trading_contexts[asset_key].lowest_sell = min(self.trading_contexts[asset_key].lowest_sell, price)
         self.trading_contexts[asset_key].highest_sell = max(self.trading_contexts[asset_key].highest_sell, price)

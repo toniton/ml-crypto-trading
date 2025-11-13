@@ -65,9 +65,9 @@ class CryptoDotComMapper(Mapper):
 
     @staticmethod
     def to_account_balance(
-            base_ticker_symbol: str, quote_ticker_symbol: str,
-            response: CryptoDotComUserBalanceResponseDto
+            ticker_symbol: str, response: CryptoDotComUserBalanceResponseDto
     ) -> AccountBalance:
+        base_ticker_symbol, quote_ticker_symbol = ticker_symbol.split("_")
         balances = {
             p.instrument_name: float(p.max_withdrawal_balance or 0.0)
             for p in response.result.data[0].position_balances

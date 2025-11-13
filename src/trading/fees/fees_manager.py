@@ -14,4 +14,9 @@ class FeesManager(ProviderRegistry):
 
     def get_instrument_fees(self, ticker_symbol: str, provider_name: str) -> Fees:
         provider = self.get_provider(provider_name)
-        return provider.get_instrument_fees(ticker_symbol)
+        account_fees = self.provider_fees.get(provider_name)
+        instrument_fees = provider.get_instrument_fees(ticker_symbol)
+        return Fees(
+            maker_fee_pct=min(account_fees.maker_fee_pct, instrument_fees.maker_fee_pct),
+            taker_fee_pct=min(account_fees.taker_fee_pct, instrument_fees.taker_fee_pct)
+        )

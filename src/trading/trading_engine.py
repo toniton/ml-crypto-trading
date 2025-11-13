@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import threading
@@ -6,7 +8,11 @@ from queue import Queue
 
 from schedule import run_pending, every
 
+from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
+from api.interfaces.candle import Candle
+from api.interfaces.fees import Fees
+from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.trading.accounts.account_manager import AccountManager
@@ -68,7 +74,7 @@ class TradingEngine:
 
         schedule_thread = threading.Thread(target=self.run_pending_schedules)
         execute_thread = threading.Thread(target=self.execute_queued_orders, args=(self.activity_queue,))
-        market_data_thread = threading.Thread(target=self.market_data_checker)
+        market_data_thread = threading.Thread(target=self.market_data_manager.init_websocket)
         schedule_thread.start()
         execute_thread.start()
         market_data_thread.start()
@@ -90,135 +96,103 @@ class TradingEngine:
             try:
                 self.order_manager.execute_order(order)
             except Exception as exc:
-                logging.error([f"Executing order {order.uuid} for {order.ticker_symbol} failed. ->", exc, order])
+                logging.error([f"Executing order failed. Order={order} . ->", exc])
             print(["msg", msg])
+
+    def _fetch_market_data(self, asset: Asset) -> MarketData:
+        market_data = self.market_data_manager.get_latest_marketdata(asset.key)
+        return market_data or self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
+
+    def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
+        trading_context = self.trading_context_manager.get_trading_context(asset.key)
+
+        if not self.protection_manager.can_trade(asset.key, action, trading_context):
+            return False
+
+        consensus_result = self.consensus_manager.get_quorum(
+            action, asset.ticker_symbol, trading_context, market_data, candles
+        )
+        logging.warning([
+            f"Consensus={consensus_result} for asset={asset}"
+        ])
+        return bool(consensus_result)
+
+    def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
+        account_balance = self.account_manager.get_balance(asset.ticker_symbol, asset.exchange.value)
+        if account_balance.available_balance <= 0:
+            raise ValueError(f"Insufficient balance for {asset.ticker_symbol}: ${account_balance.available_balance}")
+
+        market_data = self._fetch_market_data(asset)
+        fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
+        candles = self.order_manager.get_candles(asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe)
+
+        return account_balance, market_data, candles, fees
 
     def create_new_order(self):
         for asset in self.assets:
             try:
-                account_balance = self.account_manager.get_balance(asset.ticker_symbol, asset.exchange.value)
-                fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
+                account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
                 if account_balance.available_balance <= 0:
                     raise ValueError(
                         f"Account balance too low to trade: ${account_balance.available_balance}. "
                         f"Position balance: ${account_balance.position_balance}"
                     )
-                market_data = self.market_data_manager.get_latest_marketdata(asset.key)
-                if market_data is None:
-                    market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
-
                 price = market_data.close_price
 
                 logging.warning([
-                    f"Fetched price for ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
-                    price,
-                    f"Fees: ${fees}",
-                    f"Available balance: ${account_balance.available_balance}"
+                    f"Fetched price for Asset. Asset={asset} Price={price}",
+                    f"Fees={fees}",
+                    f"Available balance={account_balance.available_balance}"
                 ])
 
-                trading_context = self.trading_context_manager.get_trading_context(asset.key)
+                if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
+                    return
 
-                if self.protection_manager.can_trade(asset.key, TradeAction.BUY, trading_context):
-                    candles = self.order_manager.get_candles(
-                        asset.exchange.value,
-                        asset.ticker_symbol,
-                        asset.candles_timeframe
-                    )
-
-                    consensus_result = self.consensus_manager.get_quorum(
-                        TradeAction.BUY, asset.ticker_symbol,
-                        trading_context, market_data,
-                        candles
-                    )
-
-                    if consensus_result:
-                        price = float(price) + (float(price) * 0.0005)
-                        price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
-                        quantity = format(asset.min_quantity, "f")
-                        order = self.order_manager.open_order(
-                            ticker_symbol=asset.ticker_symbol,
-                            quantity=quantity,
-                            price=str(price),
-                            provider_name=asset.exchange.value
-                        )
-                        self.order_queue.put(order.model_dump_json())
-                        self.trading_context_manager.record_buy(asset.key, order)
+                price = float(price) + (float(price) * fees.maker_fee_pct * 0.01)
+                price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
+                quantity = format(asset.min_quantity, "f")
+                order = self.order_manager.open_order(
+                    ticker_symbol=asset.ticker_symbol,
+                    quantity=quantity,
+                    price=str(price),
+                    provider_name=asset.exchange.value
+                )
+                self.order_queue.put(order.model_dump_json())
+                self.trading_context_manager.record_buy(asset.key, order)
             except Exception as exc:
-                logging.error([
-                    f"Error occurred processing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
-                    exc
-                ])
-
-    def market_data_checker(self):
-        self.market_data_manager.init_websocket()
+                logging.error([f"Error occurred processing asset. Asset={asset}", exc])
 
     def check_unclosed_orders(self):
         for asset in self.assets:
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
-                # if len(trading_context.close_positions) == 3:
-                #     # exit(1)
-                #     raise RuntimeError(f"Hit max close positions for {asset.ticker_symbol}, manual review needed.")
-
                 if not trading_context.open_positions:
-                    logging.warning([
-                        f"No open positions for asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}"
-                    ])
+                    logging.info([f"No open positions for asset. Asset={asset}"])
+                    return
+                _, market_data, candles, fees = self._prepare_trade_context(asset)
+                current_price = market_data.close_price
+
+                logging.warning([f"Fetched current_price for {asset}. Price={current_price}", f"Fees={fees}"])
+
+                if not self._should_trade(asset, TradeAction.SELL, market_data, candles):
                     return
 
-                market_data = self.market_data_manager.get_latest_marketdata(asset.key)
-                if market_data is None:
-                    market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
-
-                price = market_data.close_price
-                fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
-
-                logging.warning([
-                    f"Fetched price for ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
-                    price,
-                    f"Fees: ${fees}"
-                ])
-
-                candles = self.order_manager.get_candles(
-                    asset.exchange.value,
-                    asset.ticker_symbol,
-                    asset.candles_timeframe
+                open_orders: list[Order] = sorted(
+                    filter(OrderHelper.less_than_price_filter(current_price), trading_context.open_positions),
+                    key=lambda o, _current_price=market_data.close_price: (
+                            (float(_current_price) - float(o.price)) / float(o.price)
+                    )
                 )
 
-                if self.protection_manager.can_trade(asset.key, TradeAction.SELL, trading_context):
-                    consensus_result = self.consensus_manager.get_quorum(
-                        TradeAction.SELL, asset.ticker_symbol,
-                        trading_context, market_data,
-                        candles
-                    )
-
-                    if not consensus_result:
-                        logging.warning([
-                            f"Could not reach consensus for asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}"
-                        ])
-                        return
-
-                    # TODO: Prioritize selling at a profit or least break even.
-                    open_orders = filter(
-                        OrderHelper.less_than_price_filter(price), trading_context.open_positions
-                    )
-
-                    # TODO: Remove this after testing.
-                    open_orders = trading_context.open_positions
-
-                    # TODO: Trigger only one sell at a time based on priority.
-                    # TODO: Check quantity and loss for better risk management. Use protection rule for this.
-                    for open_order in list(open_orders):
-                        closed_order = self.order_manager.close_order(open_order, price)
-                        self.order_queue.put(closed_order.model_dump_json())
-                        self.trading_context_manager.record_sell(asset.key, closed_order)
+                best_order: Order | None = next(iter(open_orders), None)
+                if best_order:
+                    closed_order = self.order_manager.close_order(best_order, current_price)
+                    self.order_queue.put(closed_order.model_dump_json())
+                    self.trading_context_manager.record_sell(asset.key, closed_order)
 
             except Exception as exc:
-                logging.error([
-                    f"Error occurred finalizing asset ${asset.name} with ticker: ${asset.ticker_symbol} -> at {asset.exchange.value}",
-                    exc
-                ])
-        print(["Threading..., sleeping...."])
+                logging.error([f"Error occurred finalizing asset. Asset={asset}", exc])
+        logging.info(["Threading..., sleeping...."])
 
     def backfill_trading_context(self):
         # Check DB for unclosed orders and add it to trading context
