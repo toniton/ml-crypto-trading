@@ -20,7 +20,6 @@ from database.database_setup import DatabaseSetup
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from api.interfaces.trading_strategy import TradingStrategy
-from api.interfaces.trading_context import TradingContext
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.fees.fees_manager import FeesManager

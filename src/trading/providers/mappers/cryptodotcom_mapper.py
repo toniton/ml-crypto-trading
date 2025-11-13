@@ -16,17 +16,14 @@ class CryptoDotComMapper(Mapper):
     provider = ExchangeProvidersEnum.CRYPTO_DOT_COM
 
     @staticmethod
-    def to_marketdata(data: dict) -> Optional[MarketData]:
-        if data["method"] == "subscribe" or data["method"] == "public/get-tickers":
-            data = CryptoDotComMarketDataResponseDto(**data)
-            return MarketData(
-                close_price=data.result.data[0].a,
-                low_price=data.result.data[0].l,
-                high_price=data.result.data[0].h,
-                volume=data.result.data[0].vv,
-                timestamp=data.result.data[0].t
-            )
-        return None
+    def to_marketdata(data: CryptoDotComMarketDataResponseDto) -> Optional[MarketData]:
+        return MarketData(
+            close_price=data.result.data[0].a,
+            low_price=data.result.data[0].l,
+            high_price=data.result.data[0].h,
+            volume=data.result.data[0].vv,
+            timestamp=data.result.data[0].t
+        )
 
     @staticmethod
     def from_timeframe(data: Timeframe) -> Optional[str]:

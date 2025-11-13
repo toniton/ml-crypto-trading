@@ -60,12 +60,8 @@ class CryptoDotComRequestFactory:
 
         serialized_json = request_data_object.model_dump_json()
 
-        return RequestHelper.init_http_connection(
-            base_url,
-            "private/create-orderrt",
-            method="POST",
-            data=serialized_json.encode("utf-8")
-        )
+        return RequestHelper.create_request(base_url, "private/create-orderrt", method="POST",
+                                            data=serialized_json.encode("utf-8"))
 
     @staticmethod
     def build_account_balance_request(
@@ -97,12 +93,8 @@ class CryptoDotComRequestFactory:
         request_data_object = CryptoDotComRequestAccountBalanceDto(**request_data)
         serialized_json = request_data_object.model_dump_json()
 
-        return RequestHelper.init_http_connection(
-            base_url,
-            "private/user-balance",
-            method="POST",
-            data=serialized_json.encode("utf-8")
-        )
+        return RequestHelper.create_request(base_url, "private/user-balance", method="POST",
+                                            data=serialized_json.encode("utf-8"))
 
     @staticmethod
     def build_account_fees_request(
@@ -135,12 +127,8 @@ class CryptoDotComRequestFactory:
         request_data_object = CryptoDotComRequestAccountBalanceDto(**request_data)
         serialized_json = request_data_object.model_dump_json()
 
-        return RequestHelper.init_http_connection(
-            base_url,
-            endpoint_path,
-            method="POST",
-            data=serialized_json.encode("utf-8")
-        )
+        return RequestHelper.create_request(base_url, endpoint_path, method="POST",
+                                            data=serialized_json.encode("utf-8"))
 
     @staticmethod
     def build_instrument_fees_request(
@@ -177,26 +165,18 @@ class CryptoDotComRequestFactory:
         request_data_object = CryptoDotComRequestAccountBalanceDto(**request_data)
         serialized_json = request_data_object.model_dump_json()
 
-        return RequestHelper.init_http_connection(
-            base_url,
-            endpoint_path,
-            method="POST",
-            data=serialized_json.encode("utf-8")
-        )
+        return RequestHelper.create_request(base_url, endpoint_path, method="POST",
+                                            data=serialized_json.encode("utf-8"))
 
     @staticmethod
     def build_market_data_request(base_url: str, ticker_symbol: str):
         instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
-        return RequestHelper.init_http_connection(
-            base_url,
-            f"public/get-tickers?instrument_name={instrument_name}&valuation_type=index_price&count=1"
-        )
+        return RequestHelper.create_request(base_url,
+                                            f"public/get-tickers?instrument_name={instrument_name}&valuation_type=index_price&count=1")
 
     @staticmethod
     def build_get_candle_request(base_url: str, ticker_symbol: str, timeframe: Timeframe):
         instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
         interval = CryptoDotComMapper.from_timeframe(timeframe)
-        return RequestHelper.init_http_connection(
-            base_url,
-            f"public/get-candlestick?instrument_name={instrument_name}&timeframe={interval}"
-        )
+        return RequestHelper.create_request(base_url,
+                                            f"public/get-candlestick?instrument_name={instrument_name}&timeframe={interval}")

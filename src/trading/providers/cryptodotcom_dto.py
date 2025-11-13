@@ -13,11 +13,6 @@ class CryptoDotComRequestOrderParamsDto(BaseModel):
     time_in_force: Optional[str] = None
 
 
-class CryptoDotComResponseOrderCreatedDto(BaseModel):
-    client_oid: str
-    order_id: int
-
-
 class CryptoDotComBaseModel(BaseModel):
     id: int
     method: str
@@ -25,7 +20,6 @@ class CryptoDotComBaseModel(BaseModel):
 
 class CryptoDotComResponseBaseModel(CryptoDotComBaseModel):
     code: int = 0
-    result: dict
 
 
 class CryptoDotComRequestDto(BaseModel):
@@ -53,6 +47,15 @@ class TickerRequest(BaseModel):
     method: str = "subscribe"
     params: TickerRequestParams
     nonce: int
+
+
+class OrderCreated(BaseModel):
+    client_oid: str
+    order_id: int
+
+
+class CryptoDotComResponseOrderCreatedDto(CryptoDotComResponseBaseModel):
+    result: OrderCreated
 
 
 class TickerData(BaseModel):
