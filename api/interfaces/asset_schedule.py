@@ -1,0 +1,8 @@
+from enum import Enum
+
+
+class AssetSchedule(Enum):
+    EVERY_SECOND = 0
+    EVERY_MINUTE = 1
+    EVERY_HOUR = 2
+    EVERY_DAY = 3

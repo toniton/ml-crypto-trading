@@ -30,6 +30,7 @@ from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
 from database.unit_of_work import UnitOfWork
+from src.trading.trading_scheduler import TradingScheduler
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
 
@@ -49,6 +50,8 @@ class Application:
         self.assets_config = AssetsConfig()
         self.assets = self.assets_config.assets
 
+        self.trading_scheduler = TradingScheduler()
+
         self.trading_context_manager = TradingContextManager()
 
         database_session = self._setup_database()
@@ -65,6 +68,7 @@ class Application:
         self._setup_providers()
         self._setup_strategies()
         self._setup_protections()
+        self._setup_asset_schedules()
 
         atexit.register(self.shutdown)
 
@@ -122,8 +126,13 @@ class Application:
                     instance = cls(asset.guard_config)
                     self.protection_manager.register_guard(asset.key, instance)
 
+    def _setup_asset_schedules(self):
+        for asset in self.assets:
+            self.trading_scheduler.register_asset(asset)
+
     def startup(self):
         self.trading_engine = TradingEngine(
+            self.trading_scheduler,
             self.assets, self.account_manager, self.fees_manager, self.order_manager,
             self.market_data_manager, self.consensus_manager,
             self.trading_context_manager,

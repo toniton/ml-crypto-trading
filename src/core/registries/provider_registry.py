@@ -16,5 +16,5 @@ class ProviderRegistry(ABC):
     def get_provider(self, provider_name: str) -> ExchangeProvider:
         provider = self.providers.get(provider_name)
         if provider is None:
-            raise Exception(f"Provider $provider not supported.")
+            raise ValueError(f"Provider {provider} not registered.")
         return provider

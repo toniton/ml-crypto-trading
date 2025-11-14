@@ -6,8 +6,6 @@ import threading
 import time
 from queue import Queue
 
-from schedule import run_pending, every
-
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
@@ -24,19 +22,13 @@ from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_helper import OrderHelper
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
+from src.trading.trading_scheduler import TradingScheduler
 
 
 class TradingEngine:
-    assets: list[Asset]
-    account_manager: AccountManager
-    order_manager: OrderManager
-    market_data_manager: MarketDataManager
-    consensus_manager: ConsensusManager
-    trading_context_manager: TradingContextManager
-    protection_manager: ProtectionManager
-
     def __init__(
             self,
+            trading_scheduler: TradingScheduler,
             assets: list[Asset],
             account_manager: AccountManager,
             fees_manager: FeesManager,
@@ -47,6 +39,7 @@ class TradingEngine:
             protection_manager: ProtectionManager,
             activity_queue: Queue
     ):
+        self.trading_scheduler = trading_scheduler
         self.assets = assets
         self.account_manager = account_manager
         self.fees_manager = fees_manager
@@ -58,32 +51,17 @@ class TradingEngine:
         self.activity_queue = activity_queue
         self.protection_manager = protection_manager
 
-    @staticmethod
-    def run_threaded_schedule(job_func):
-        job_thread = threading.Thread(target=job_func)
-        job_thread.start()
-
     def init_application(self):
         self.account_manager.init_account_balances(self.trading_context_manager)
         self.fees_manager.init_account_fees()
-        try:
-            every().second.do(TradingEngine.run_threaded_schedule, self.create_new_order)
-            every().second.do(TradingEngine.run_threaded_schedule, self.check_unclosed_orders)
-        except Exception as exc:
-            logging.error(["Error occurred initializing application. ->", exc])
 
-        schedule_thread = threading.Thread(target=self.run_pending_schedules)
-        execute_thread = threading.Thread(target=self.execute_queued_orders, args=(self.activity_queue,))
-        market_data_thread = threading.Thread(target=self.market_data_manager.init_websocket)
-        schedule_thread.start()
+        self.trading_scheduler.start(self.create_new_order)
+        self.trading_scheduler.start(self.check_unclosed_orders)
+
+        execute_thread = threading.Thread(target=self.execute_queued_orders, args=(self.activity_queue,), daemon=False)
+        market_data_thread = threading.Thread(target=self.market_data_manager.init_websocket, daemon=False)
         execute_thread.start()
         market_data_thread.start()
-
-    @staticmethod
-    def run_pending_schedules():
-        while True:
-            run_pending()
-            time.sleep(1)
 
     def execute_queued_orders(self, activity_queue: Queue):
         while True:
@@ -128,28 +106,24 @@ class TradingEngine:
 
         return account_balance, market_data, candles, fees
 
-    def create_new_order(self):
-        for asset in self.assets:
+    def create_new_order(self, assets: list[Asset]):
+        for asset in assets:
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-                if account_balance.available_balance <= 0:
-                    raise ValueError(
-                        f"Account balance too low to trade: ${account_balance.available_balance}. "
-                        f"Position balance: ${account_balance.position_balance}"
-                    )
+
+                if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
+                    logging.info(f"No consensus to buy {asset.ticker_symbol}")
+                    continue
+
                 price = market_data.close_price
+                price = float(price) + (float(price) * fees.maker_fee_pct * 0.01)
+                price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
 
                 logging.warning([
                     f"Fetched price for Asset. Asset={asset} Price={price}",
                     f"Fees={fees}",
                     f"Available balance={account_balance.available_balance}"
                 ])
-
-                if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
-                    return
-
-                price = float(price) + (float(price) * fees.maker_fee_pct * 0.01)
-                price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
                 quantity = format(asset.min_quantity, "f")
                 order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
@@ -162,20 +136,20 @@ class TradingEngine:
             except Exception as exc:
                 logging.error([f"Error occurred processing asset. Asset={asset}", exc])
 
-    def check_unclosed_orders(self):
-        for asset in self.assets:
+    def check_unclosed_orders(self, assets: list[Asset]):
+        for asset in assets:
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
                 if not trading_context.open_positions:
                     logging.info([f"No open positions for asset. Asset={asset}"])
-                    return
+                    continue
                 _, market_data, candles, fees = self._prepare_trade_context(asset)
                 current_price = market_data.close_price
 
                 logging.warning([f"Fetched current_price for {asset}. Price={current_price}", f"Fees={fees}"])
 
                 if not self._should_trade(asset, TradeAction.SELL, market_data, candles):
-                    return
+                    continue
 
                 open_orders: list[Order] = sorted(
                     filter(OrderHelper.less_than_price_filter(current_price), trading_context.open_positions),
