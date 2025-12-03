@@ -5,7 +5,7 @@ from pydantic import computed_field
 from pydantic.dataclasses import dataclass
 
 from api.interfaces.asset_schedule import AssetSchedule
-from api.interfaces.exchange_provider import ExchangeProvidersEnum
+from src.core.interfaces.exchange_provider import ExchangeProvidersEnum
 from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
 

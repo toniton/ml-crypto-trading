@@ -5,33 +5,25 @@ import logging
 from api.interfaces.asset import Asset
 from api.interfaces.market_data import MarketData
 from src.core.registries.provider_registry import ProviderRegistry
-from src.trading.markets.market_data_client import MarketDataClient
+from src.core.registries.websocket_registry import WebSocketRegistry
+from src.trading.helpers.trading_helper import TradingHelper
 
 
-class MarketDataManager(ProviderRegistry):
+class MarketDataManager(ProviderRegistry, WebSocketRegistry):
 
     def __init__(self, assets: list[Asset]):
         super().__init__()
         self.assets = assets
         self.market_data: dict[int, MarketData] = {}
-        self.market_data_clients = {}
 
     def init_websocket(self):
-        if not self.providers:
-            logging.warning([
-                "No interfaces registered yet for Marketdata functionality."
-            ])
-            pass
-
         for asset in self.assets:
             (key, ticker_symbol, exchange) = asset.key, asset.ticker_symbol, asset.exchange
-            provider = self.get_provider(exchange.value)
-            self.market_data_clients[key] = MarketDataClient(
-                key, ticker_symbol, provider, self.on_marketdata_update,
+            websocket_client = self.get_websocket(exchange.value)
+            ticker_symbol = TradingHelper.format_ticker_symbol(ticker_symbol)
+            websocket_client.subscribe_market_data(
+                ticker_symbol, callback=lambda conn_key, data, asset_key=key: self.on_marketdata_update(asset_key, data)
             )
-
-        for client in self.market_data_clients.values():
-            client.start()
 
     def on_marketdata_update(self, key: int, data: MarketData):
         logging.warning(["Market data for key:", key, ", updates received:", data])
@@ -40,5 +32,4 @@ class MarketDataManager(ProviderRegistry):
     def get_latest_marketdata(self, key: int) -> MarketData | None:
         if key in self.market_data:
             return self.market_data[key]
-
         return None

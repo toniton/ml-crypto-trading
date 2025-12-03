@@ -2,7 +2,7 @@ from typing import Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
-from api.interfaces.exchange_provider import ExchangeProvidersEnum
+from src.core.interfaces.exchange_provider import ExchangeProvidersEnum
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.mapper import Mapper
@@ -61,18 +61,14 @@ class CryptoDotComMapper(Mapper):
         )
 
     @staticmethod
-    def to_account_balance(
-            ticker_symbol: str, response: CryptoDotComUserBalanceResponseDto
-    ) -> AccountBalance:
-        base_ticker_symbol, quote_ticker_symbol = ticker_symbol.split("_")
-        balances = {
-            p.instrument_name: float(p.max_withdrawal_balance or 0.0)
-            for p in response.result.data[0].position_balances
-        }
-        return AccountBalance(
-            available_balance=balances.get(quote_ticker_symbol, 0.0),
-            position_balance=balances.get(base_ticker_symbol, 0.0),
-        )
+    def to_account_balance(response: CryptoDotComUserBalanceResponseDto) -> list[AccountBalance]:
+        return [
+            AccountBalance(
+                currency=balance.instrument_name,
+                available_balance=float(balance.max_withdrawal_balance or 0.0)
+            )
+            for balance in response.result.data[0].position_balances
+        ]
 
     @staticmethod
     def to_fees(

@@ -1,11 +1,12 @@
 from abc import ABC
 
-from api.interfaces.exchange_provider import ExchangeProvider
+from src.core.interfaces.exchange_provider import ExchangeProvider
 
 
-class ProviderRegistry(ABC):
+class  ProviderRegistry(ABC):
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.providers: dict[str, ExchangeProvider] = {}
 
     def register_provider(self, provider: ExchangeProvider):

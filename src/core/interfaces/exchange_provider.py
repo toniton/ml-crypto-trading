@@ -35,7 +35,7 @@ class ExchangeProvider(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_account_balance(self, ticker_symbol: str) -> AccountBalance:
+    def get_account_balance(self) -> list[AccountBalance]:
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -60,6 +60,7 @@ class ExchangeProvider(ABC):
     @abc.abstractmethod
     def get_websocket_client(
             self, on_open: Callable, on_message: Callable,
+            on_error: Callable,
             on_close: Callable
     ) -> websocket.WebSocketApp:
         raise NotImplementedError()

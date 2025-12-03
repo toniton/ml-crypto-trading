@@ -123,14 +123,20 @@ class UserBalanceDataDto(BaseModel):
     total_maintenance_margin: str
     total_position_cost: str
     total_cash_balance: str
-    total_collateral_value: str
-    total_session_unrealized_pnl: str
+    total_collateral_value: Optional[str] = None
     instrument_name: str
     total_session_realized_pnl: str
+    total_session_unrealized_pnl: str
     is_liquidating: bool
     total_effective_leverage: str
     position_limit: str
     used_position_limit: str
+    has_risk: Optional[bool] = None
+    margin_score: Optional[str] = None
+    credit_limits: Optional[list] = None
+    terminatable: Optional[bool] = None
+    total_borrow: Optional[str] = None
+    total_risk_exposure: Optional[str] = None
     position_balances: list[PositionBalanceDto]
 
 

@@ -11,9 +11,10 @@ from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from database.unit_of_work import UnitOfWork
 from src.core.registries.provider_registry import ProviderRegistry
+from src.core.registries.websocket_registry import WebSocketRegistry
 
 
-class OrderManager(ProviderRegistry):
+class OrderManager(ProviderRegistry, WebSocketRegistry):
     cached_balance: dict[str, decimal]
 
     def __init__(self, unit_of_work: UnitOfWork):

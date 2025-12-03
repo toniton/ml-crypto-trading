@@ -69,11 +69,12 @@ class CryptoDotComRequestFactory:
             api_key: str,
             secret_key: str
     ) -> Request:
+        endpoint_path = "private/user-balance"
         nonce = int(time.time() * 1000)
         request_data = {
             "id": 1,
             "nonce": nonce,
-            "method": "private/user-balance",
+            "method": endpoint_path,
             "api_key": api_key,
             "params": {}
         }
@@ -93,7 +94,7 @@ class CryptoDotComRequestFactory:
         request_data_object = CryptoDotComRequestAccountBalanceDto(**request_data)
         serialized_json = request_data_object.model_dump_json()
 
-        return RequestHelper.create_request(base_url, "private/user-balance", method="POST",
+        return RequestHelper.create_request(base_url, endpoint_path, method="POST",
                                             data=serialized_json.encode("utf-8"))
 
     @staticmethod

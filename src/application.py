@@ -17,6 +17,8 @@ from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.core.interfaces.base_config import BaseConfig
 from database.database_setup import DatabaseSetup
+from src.subscriptions.cryptodotcom_websocket_client import CryptoDotComWebSocketClient
+from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from api.interfaces.trading_strategy import TradingStrategy
@@ -25,7 +27,7 @@ from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
-from api.interfaces.exchange_provider import ExchangeProvider
+from src.core.interfaces.exchange_provider import ExchangeProvider
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
@@ -66,6 +68,7 @@ class Application:
         self.protection_manager = ProtectionManager()
 
         self._setup_providers()
+        self._setup_websockets()
         self._setup_strategies()
         self._setup_protections()
         self._setup_asset_schedules()
@@ -99,6 +102,16 @@ class Application:
             self.fees_manager.register_provider(instance)
             self.order_manager.register_provider(instance)
             self.market_data_manager.register_provider(instance)
+
+    def _setup_websockets(self):
+        for (_, name, _) in pkgutil.iter_modules(src.subscriptions.__path__):
+            importlib.import_module("." + name, src.subscriptions.__name__)
+
+        for cls in ExchangeWebSocketClient.__subclasses__():
+            instance = cls()
+            self.account_manager.register_websocket(instance)
+            self.order_manager.register_websocket(instance)
+            self.market_data_manager.register_websocket(instance)
 
     def _setup_strategies(self):
         # localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)

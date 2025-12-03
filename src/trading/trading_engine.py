@@ -52,6 +52,7 @@ class TradingEngine:
         self.protection_manager = protection_manager
 
     def init_application(self):
+        self.account_manager.init_websocket()
         self.account_manager.init_account_balances(self.trading_context_manager)
         self.fees_manager.init_account_fees()
 

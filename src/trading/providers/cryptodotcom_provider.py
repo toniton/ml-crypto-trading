@@ -24,7 +24,7 @@ from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
 from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
     CryptoDotComMarketDataResponseDto, CryptoDotComResponseOrderCreatedDto, \
     CryptoDotComCandleResponseDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
-from api.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
+from src.core.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
 
 
 class CryptoDotComProvider(ExchangeProvider):
@@ -61,13 +61,13 @@ class CryptoDotComProvider(ExchangeProvider):
 
     @cached(cache=TTLCache(maxsize=2024, ttl=600))
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
-    def get_account_balance(self, ticker_symbol: str) -> AccountBalance:
+    def get_account_balance(self) -> list[AccountBalance]:
         request = CryptoDotComRequestFactory.build_account_balance_request(
             self.base_url, self.api_key, self.secret_key
         )
         response_data = RequestHelper.execute_request(request)
         account_balance = CryptoDotComUserBalanceResponseDto(**response_data)
-        return CryptoDotComMapper.to_account_balance(ticker_symbol, account_balance)
+        return CryptoDotComMapper.to_account_balance(account_balance)
 
     @cached(cache=TTLCache(maxsize=2024, ttl=6000))
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)

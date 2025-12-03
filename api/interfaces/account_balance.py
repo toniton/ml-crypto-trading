@@ -4,5 +4,5 @@ from pydantic.dataclasses import dataclass
 
 @dataclass
 class AccountBalance:
+    currency: str
     available_balance: float
-    position_balance: float
