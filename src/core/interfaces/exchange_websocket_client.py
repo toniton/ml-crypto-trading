@@ -3,10 +3,11 @@ from typing import Callable, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 from src.core.interfaces.auth_handler import AuthHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import BalanceSubscriptionData, \
-    MarketDataSubscriptionData, OrderCreatedSubscriptionData, \
+    MarketDataSubscriptionData, \
     OrderUpdateSubscriptionData, SubscriptionData, SubscriptionVisibility
 from src.core.managers.websocket_manager import WebSocketManager
 
@@ -37,10 +38,6 @@ class ExchangeWebSocketClient(ABC):
         pass
 
     @abstractmethod
-    def _get_order_created_subscription(self) -> OrderCreatedSubscriptionData:
-        pass
-
-    @abstractmethod
     def _get_market_data_subscription(self, ticker_symbol: str) -> MarketDataSubscriptionData:
         pass
 
@@ -56,20 +53,12 @@ class ExchangeWebSocketClient(ABC):
             callback=lambda key, data: callback(sub_data.parse(data))
         )
 
-    def subscribe_order_created(self, callback: Callable) -> str:
-        sub_data = self._get_order_created_subscription()
+    def subscribe_order_update(self, instrument_name: str, callback: Callable[[Order], None]) -> str:
+        sub_data = self._get_order_update_subscription(instrument_name)
         return self._subscribe(
-            connection_key=f"{self.get_provider_name()}-ORDER_CREATED",
+            connection_key=f"{self.get_provider_name()}-ORDER_{instrument_name}",
             subscription_data=sub_data,
-            callback=callback
-        )
-
-    def subscribe_order_update(self, order_id: str, callback: Callable) -> str:
-        sub_data = self._get_order_update_subscription(order_id)
-        return self._subscribe(
-            connection_key=f"{self.get_provider_name()}-ORDER_{order_id}",
-            subscription_data=sub_data,
-            callback=callback
+            callback=lambda key, data: callback(sub_data.parse(data))
         )
 
     def subscribe_market_data(self, ticker_symbol: str, callback: Callable[[str, MarketData], None]) -> str:

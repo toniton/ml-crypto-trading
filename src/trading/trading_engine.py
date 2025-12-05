@@ -55,14 +55,14 @@ class TradingEngine:
         self.account_manager.init_websocket()
         self.account_manager.init_account_balances(self.trading_context_manager)
         self.fees_manager.init_account_fees()
+        self.order_manager.init_websocket(self.assets)
 
         self.trading_scheduler.start(self.create_new_order)
         self.trading_scheduler.start(self.check_unclosed_orders)
 
+        self.market_data_manager.init_websocket()
         execute_thread = threading.Thread(target=self.execute_queued_orders, args=(self.activity_queue,), daemon=False)
-        market_data_thread = threading.Thread(target=self.market_data_manager.init_websocket, daemon=False)
         execute_thread.start()
-        market_data_thread.start()
 
     def execute_queued_orders(self, activity_queue: Queue):
         while True:

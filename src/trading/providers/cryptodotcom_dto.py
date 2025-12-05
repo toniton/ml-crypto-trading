@@ -50,12 +50,49 @@ class TickerRequest(BaseModel):
 
 
 class OrderCreated(BaseModel):
-    client_oid: str
-    order_id: int
+    order_id: str
+    client_oid: Optional[str] = None
 
 
 class CryptoDotComResponseOrderCreatedDto(CryptoDotComResponseBaseModel):
     result: OrderCreated
+
+
+class OrderUpdate(OrderCreated):
+    account_id: str
+    order_type: Optional[str] = None
+    time_in_force: Optional[str] = None
+    side: Optional[str] = None
+    exec_inst: list[str] = []
+    quantity: Optional[str] = None
+    limit_price: Optional[str] = None
+    order_value: Optional[float] = None
+    maker_fee_rate: Optional[float] = None
+    taker_fee_rate: Optional[float] = None
+    avg_price: Optional[float] = None
+    cumulative_quantity: Optional[float] = None
+    cumulative_value: Optional[float] = None
+    cumulative_fee: Optional[float] = None
+    status: Optional[str] = None
+    update_user_id: Optional[str] = None
+    order_date: Optional[str] = None
+    instrument_name: Optional[str] = None
+    fee_instrument_name: Optional[str] = None
+    create_time: Optional[int] = None
+    create_time_ns: Optional[int] = None
+    update_time: Optional[int] = None
+    transaction_time_ns: Optional[int] = None
+
+
+class OrderUpdateResult(BaseModel):
+    channel: Optional[str] = None
+    subscription: Optional[str] = None
+    data: list[OrderUpdate]
+    instrument_name: Optional[str] = None
+
+
+class CryptoDotComResponseOrderUpdateDto(CryptoDotComResponseBaseModel):
+    result: Optional[OrderUpdateResult] = None
 
 
 class TickerData(BaseModel):
@@ -145,7 +182,7 @@ class UserBalanceResult(BaseModel):
 
 
 class CryptoDotComUserBalanceResponseDto(CryptoDotComResponseBaseModel):
-    result: UserBalanceResult
+    result: Optional[UserBalanceResult] = None
 
 
 class UserFeesResult(BaseModel):

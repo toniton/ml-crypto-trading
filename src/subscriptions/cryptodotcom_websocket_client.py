@@ -6,11 +6,12 @@ from src.subscriptions.handlers.auths.cryptodotcom_auth_handler import CryptoDot
 from src.subscriptions.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import BalanceSubscriptionData, \
-    MarketDataSubscriptionData, OrderCreatedSubscriptionData, \
+    MarketDataSubscriptionData, \
     OrderUpdateSubscriptionData, SubscriptionVisibility
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.trading.helpers.trading_helper import TradingHelper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, CryptoDotComUserBalanceResponseDto
+from src.trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, \
+    CryptoDotComResponseOrderUpdateDto, CryptoDotComUserBalanceResponseDto
 from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
 
 
@@ -47,35 +48,19 @@ class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
             parser=lambda data: CryptoDotComMapper.to_account_balance(CryptoDotComUserBalanceResponseDto(**data))
         )
 
-    def _get_order_created_subscription(self) -> OrderCreatedSubscriptionData:
-        """Order created subscription includes auth payload."""
-        return OrderCreatedSubscriptionData(
-            subscribe_payload={
-                "id": 1,
-                "method": "subscribe",
-                "params": {"channels": ["order"]}
-            },
-            unsubscribe_payload={
-                "id": 1,
-                "method": "unsubscribe",
-                "params": {"channels": ["order"]}
-            }
-        )
-
-    def _get_order_update_subscription(self, order_id: str) -> OrderUpdateSubscriptionData:
-        """Order update subscription includes auth payload."""
+    def _get_order_update_subscription(self, instrument_name: str) -> OrderUpdateSubscriptionData:
         return OrderUpdateSubscriptionData(
             subscribe_payload={
                 "id": 1,
                 "method": "subscribe",
-                "params": {"channels": [f"order.{order_id}"]}
+                "params": {"channels": [f"user.order.{instrument_name}"]}
             },
             unsubscribe_payload={
                 "id": 1,
                 "method": "unsubscribe",
-                "params": {"channels": [f"order.{order_id}"]}
+                "params": {"channels": [f"user.order.{instrument_name}"]}
             },
-            parser=lambda data: data
+            parser=lambda data: CryptoDotComMapper.to_orders(CryptoDotComResponseOrderUpdateDto(**data))
         )
 
     def _get_market_data_subscription(self, ticker_symbol: str) -> MarketDataSubscriptionData:

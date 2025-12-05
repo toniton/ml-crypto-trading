@@ -18,7 +18,6 @@ from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from src.trading.helpers.request_helper import RequestHelper
-from src.trading.helpers.trading_helper import TradingHelper
 from src.trading.providers.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
 from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
 from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
@@ -38,19 +37,6 @@ class CryptoDotComProvider(ExchangeProvider):
 
     def get_provider_name(self):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
-
-    def get_market_subscription_data(self, ticker_symbol: str) -> dict | None:
-        ticker_symbol = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
-        channels = [f"ticker.{ticker_symbol}"]
-        data = {
-            "id": 1,
-            "method": "subscribe",
-            "params": {
-                "channels": channels
-            },
-            "nonce": int(time.time())
-        }
-        return data
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_market_data(self, ticker_symbol: str) -> MarketData:

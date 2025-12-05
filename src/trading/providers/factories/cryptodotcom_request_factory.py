@@ -25,7 +25,6 @@ class CryptoDotComRequestFactory:
             price: str,
             trade_action: TradeAction
     ) -> Request:
-        instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
         nonce = int(time.time() * 1000)
         request_data = {
             "id": 1,
@@ -33,7 +32,7 @@ class CryptoDotComRequestFactory:
             "method": "private/create-order",
             "api_key": api_key,
             "params": {
-                "instrument_name": instrument_name,
+                "instrument_name": ticker_symbol,
                 "side": trade_action.value.upper(),
                 "type": "LIMIT",
                 "price": price,
@@ -171,9 +170,10 @@ class CryptoDotComRequestFactory:
 
     @staticmethod
     def build_market_data_request(base_url: str, ticker_symbol: str):
-        instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
-        return RequestHelper.create_request(base_url,
-                                            f"public/get-tickers?instrument_name={instrument_name}&valuation_type=index_price&count=1")
+        return RequestHelper.create_request(
+            base_url,
+            f"public/get-tickers?instrument_name={ticker_symbol}&valuation_type=index_price&count=1"
+        )
 
     @staticmethod
     def build_get_candle_request(base_url: str, ticker_symbol: str, timeframe: Timeframe):

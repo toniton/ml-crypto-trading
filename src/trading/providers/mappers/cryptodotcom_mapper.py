@@ -2,6 +2,8 @@ from typing import Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
+from api.interfaces.order import Order
+from api.interfaces.trade_action import TradeAction
 from src.core.interfaces.exchange_provider import ExchangeProvidersEnum
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
@@ -9,7 +11,7 @@ from api.interfaces.mapper import Mapper
 from api.interfaces.timeframe import Timeframe
 from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
     CryptoDotComMarketDataResponseDto, CryptoDotComCandleResponseDto, \
-    CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
+    CryptoDotComResponseOrderUpdateDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
 
 
 class CryptoDotComMapper(Mapper):
@@ -68,7 +70,7 @@ class CryptoDotComMapper(Mapper):
                 available_balance=float(balance.max_withdrawal_balance or 0.0)
             )
             for balance in response.result.data[0].position_balances
-        ]
+        ] if response.result else []
 
     @staticmethod
     def to_fees(
@@ -87,3 +89,20 @@ class CryptoDotComMapper(Mapper):
             maker_fee_pct=float(response.result.effective_maker_rate_bps) * 0.01,
             taker_fee_pct=float(response.result.effective_taker_rate_bps) * 0.01,
         )
+
+    @staticmethod
+    def to_orders(
+            response: CryptoDotComResponseOrderUpdateDto
+    ) -> list[Order]:
+        return [
+            Order(
+                uuid=order.order_id,
+                trade_action=TradeAction.BUY if order.side == "BUY" else TradeAction.SELL,
+                quantity=order.quantity,
+                provider_name=CryptoDotComMapper.provider.value,
+                ticker_symbol=order.instrument_name,
+                price=order.limit_price,
+                created_time=order.create_time
+            )
+            for order in response.result.data
+        ] if response.result else []

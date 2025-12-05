@@ -7,6 +7,7 @@ from pydantic.dataclasses import dataclass
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 
 
 class SubscriptionVisibility(Enum):
@@ -37,13 +38,7 @@ class BalanceSubscriptionData(SubscriptionData[list[AccountBalance]]):
 
 
 @dataclass
-class OrderCreatedSubscriptionData(SubscriptionData[Any]):
-    def __post_init__(self):
-        self.visibility = SubscriptionVisibility.PRIVATE
-
-
-@dataclass
-class OrderUpdateSubscriptionData(SubscriptionData[Any]):
+class OrderUpdateSubscriptionData(SubscriptionData[list[Order]]):
     def __post_init__(self):
         self.visibility = SubscriptionVisibility.PRIVATE
 

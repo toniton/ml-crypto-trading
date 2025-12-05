@@ -9,7 +9,7 @@ from api.interfaces.trade_action import TradeAction
 
 @dataclass
 class Order:
-    uuid: UUID
+    uuid: str
     provider_name: str
     ticker_symbol: str
     price: str

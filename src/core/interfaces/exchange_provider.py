@@ -27,10 +27,6 @@ class ExchangeProvider(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_market_subscription_data(self, ticker_symbol: str) -> dict | None:
-        raise NotImplementedError()
-
-    @abc.abstractmethod
     def get_market_data(self, ticker_symbol: str) -> MarketData:
         raise NotImplementedError()
 

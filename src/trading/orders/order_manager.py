@@ -3,6 +3,7 @@ import logging
 import time
 from uuid import uuid4
 
+from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.timeframe import Timeframe
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
@@ -12,6 +13,7 @@ from api.interfaces.trade_action import TradeAction
 from database.unit_of_work import UnitOfWork
 from src.core.registries.provider_registry import ProviderRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
+from src.trading.helpers.trading_helper import TradingHelper
 
 
 class OrderManager(ProviderRegistry, WebSocketRegistry):
@@ -20,6 +22,12 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
     def __init__(self, unit_of_work: UnitOfWork):
         super().__init__()
         self.unit_of_work = unit_of_work
+
+    def init_websocket(self, assets: list[Asset]):
+        for asset in assets:
+            websocket_client = self.get_websocket(asset.exchange.name)
+            instrument_name = TradingHelper.format_ticker_symbol(asset.ticker_symbol, separator="_")
+            websocket_client.subscribe_order_update(instrument_name, callback=lambda data: logging.warning([f"Order update received", data]))
 
     def get_market_data(self, ticker_symbol: str, provider_name: str) -> MarketData:
         provider = self.get_provider(provider_name)
