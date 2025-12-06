@@ -1,5 +1,5 @@
 
-from sqlalchemy import Column, Integer, String, TIMESTAMP, UUID, func
+from sqlalchemy import Column, Integer, String, TIMESTAMP, func
 
 from database.database_setup import DatabaseSetup
 
@@ -7,7 +7,7 @@ from database.database_setup import DatabaseSetup
 class OrderDao(DatabaseSetup.BaseTableModel):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True)
-    uuid = Column(UUID(as_uuid=True), index=True, unique=True)
+    uuid = Column(String, index=True, unique=True)
     provider_name = Column(String)
     ticker_symbol = Column(String)
     price = Column(String)

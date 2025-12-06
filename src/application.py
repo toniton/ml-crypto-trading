@@ -88,6 +88,7 @@ class Application:
 
     def _setup_database(self):
         database_setup = DatabaseSetup()
+        DatabaseSetup.run_migrations()
         database_setup.create_tables()
         database_engine = database_setup.create_engine()
         return Session(database_engine)
