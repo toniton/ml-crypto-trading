@@ -2,6 +2,7 @@ from typing import cast
 
 from sqlalchemy.dialects.postgresql import insert
 
+from api.interfaces.trade_action import OrderStatus
 from database.dao.order_dao import OrderDao
 from api.interfaces.order import Order
 from database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
@@ -34,6 +35,7 @@ class PostgresOrderRepository(OrderRepository):
         )
         upsert_statement = insert_statement.on_conflict_do_update(
             index_elements=["uuid"],
+            where=OrderDao.status.notin_([OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value]),
             set_={
                 OrderDao.price: order.price,
                 OrderDao.ticker_symbol: order.ticker_symbol,
