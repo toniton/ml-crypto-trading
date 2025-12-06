@@ -1,6 +1,9 @@
 import decimal
+import json
 import logging
+import threading
 import time
+from queue import Queue
 from uuid import uuid4
 
 from api.interfaces.asset import Asset
@@ -22,6 +25,20 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
     def __init__(self, unit_of_work: UnitOfWork):
         super().__init__()
         self.unit_of_work = unit_of_work
+        self.order_queue = Queue()
+        execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
+        execute_thread.start()
+
+    def process_order_queue(self):
+        while True:
+            msg = self.order_queue.get()
+            logging.debug(["Order queue msg", msg])
+            record = json.loads(msg)
+            order = Order(**record)
+            try:
+                self.execute_order(order)
+            except RuntimeError as exc:
+                logging.error([f"Executing order failed. Order={order} . ->", exc])
 
     def _save_orders_to_database(self, orders: list[Order]) -> None:
         for order in orders:
@@ -47,7 +64,6 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
         return provider.get_candle(ticker_symbol, timeframe)
 
     def open_order(self, ticker_symbol: str, provider_name: str, quantity: str, price: str):
-        provider = self.get_provider(provider_name)
         order = Order(
             uuid=str(uuid4()),
             price=price,
@@ -57,13 +73,11 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
             ticker_symbol=ticker_symbol,
             created_time=time.time()
         )
-
+        self.order_queue.put(order)
         return order
 
     def execute_order(self, order: Order):
-        # Pass in exchange, so we can have proper db storage.
         provider = self.get_provider(order.provider_name)
-
         try:
             provider.place_order(
                 order.uuid,
@@ -76,10 +90,10 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
             order_repository.save(order)
             self.unit_of_work.complete()
         except Exception as exc:
-            raise Exception(f"Error executing order:", order, exc)
+            raise RuntimeError(f"Error executing order:", order, exc)
 
+    # TODO: Consolidate with open_order method, and change this to cancel_order functionality.
     def close_order(self, open_order: Order, market_price: str) -> Order:
-        provider = self.get_provider(open_order.provider_name)
         order = Order(
             uuid=open_order.uuid,
             price=market_price,
@@ -89,13 +103,7 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
             ticker_symbol=open_order.ticker_symbol,
             created_time=time.time()
         )
-        try:
-            order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
-            order_repository.save(order)
-            self.unit_of_work.complete()
-        except Exception:
-            logging.warning(f"Error saving order to database on close order: %s", order)
-
+        self.order_queue.put(order)
         return order
 
     def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:

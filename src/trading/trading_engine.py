@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 import logging
-import threading
 import time
 from queue import Queue
 
@@ -47,7 +45,6 @@ class TradingEngine:
         self.market_data_manager = market_data_manager
         self.consensus_manager = consensus_manager
         self.trading_context_manager = trading_context_manager
-        self.order_queue = Queue()
         self.activity_queue = activity_queue
         self.protection_manager = protection_manager
 
@@ -61,22 +58,6 @@ class TradingEngine:
         self.trading_scheduler.start(self.check_unclosed_orders)
 
         self.market_data_manager.init_websocket()
-        execute_thread = threading.Thread(target=self.execute_queued_orders, args=(self.activity_queue,), daemon=False)
-        execute_thread.start()
-
-    def execute_queued_orders(self, activity_queue: Queue):
-        while True:
-            msg = self.order_queue.get()
-            activity_queue.put_nowait(msg)
-
-            record = json.loads(msg)
-            order = Order(**record)
-
-            try:
-                self.order_manager.execute_order(order)
-            except Exception as exc:
-                logging.error([f"Executing order failed. Order={order} . ->", exc])
-            print(["msg", msg])
 
     def _fetch_market_data(self, asset: Asset) -> MarketData:
         market_data = self.market_data_manager.get_latest_marketdata(asset.key)
@@ -97,9 +78,10 @@ class TradingEngine:
         return bool(consensus_result)
 
     def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
-        account_balance = self.account_manager.get_balance(asset.ticker_symbol, asset.exchange.value)
+        currency_symbol = asset.quote_ticker_symbol
+        account_balance = self.account_manager.get_balance(currency_symbol, asset.exchange.value)
         if account_balance.available_balance <= 0:
-            raise ValueError(f"Insufficient balance for {asset.ticker_symbol}: ${account_balance.available_balance}")
+            raise ValueError(f"Insufficient balance for {currency_symbol}: ${account_balance.available_balance}")
 
         market_data = self._fetch_market_data(asset)
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
@@ -132,7 +114,7 @@ class TradingEngine:
                     price=str(price),
                     provider_name=asset.exchange.value
                 )
-                self.order_queue.put(order.model_dump_json())
+                self.activity_queue.put_nowait(order.model_dump_json())
                 self.trading_context_manager.record_buy(asset.key, order)
             except Exception as exc:
                 logging.error([f"Error occurred processing asset. Asset={asset}", exc])
@@ -162,7 +144,7 @@ class TradingEngine:
                 best_order: Order | None = next(iter(open_orders), None)
                 if best_order:
                     closed_order = self.order_manager.close_order(best_order, current_price)
-                    self.order_queue.put(closed_order.model_dump_json())
+                    self.activity_queue.put_nowait(closed_order.model_dump_json())
                     self.trading_context_manager.record_sell(asset.key, closed_order)
 
             except Exception as exc:
