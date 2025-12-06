@@ -18,6 +18,8 @@ class MaxDrawDownGuard(Guard):
         if trade_action == TradeAction.SELL:
             return True
         starting_balance = trading_context.starting_balance
+        if starting_balance <= 0:
+            return False
         open_positions = trading_context.open_positions
         close_positions = trading_context.close_positions
 
