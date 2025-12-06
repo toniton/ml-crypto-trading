@@ -31,10 +31,8 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
 
     def process_order_queue(self):
         while True:
-            msg = self.order_queue.get()
-            logging.debug(["Order queue msg", msg])
-            record = json.loads(msg)
-            order = Order(**record)
+            order = self.order_queue.get()
+            logging.debug(["Order queue msg", order])
             try:
                 self.execute_order(order)
             except RuntimeError as exc:
