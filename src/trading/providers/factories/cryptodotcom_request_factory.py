@@ -19,7 +19,7 @@ class CryptoDotComRequestFactory:
             base_url: str,
             api_key: str,
             secret_key: str,
-            uuid: UUID,
+            uuid: str,
             ticker_symbol: str,
             quantity: str,
             price: str,
@@ -37,7 +37,7 @@ class CryptoDotComRequestFactory:
                 "type": "LIMIT",
                 "price": price,
                 "quantity": quantity,
-                "client_oid": str(uuid),
+                "client_oid": uuid,
                 "exec_inst": ["POST_ONLY"],
                 "time_in_force": "FILL_OR_KILL"
             }

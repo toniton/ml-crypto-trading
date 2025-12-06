@@ -1,5 +1,6 @@
 from typing import cast
-from uuid import UUID
+
+from sqlalchemy.dialects.postgresql import insert
 
 from database.dao.order_dao import OrderDao
 from api.interfaces.order import Order
@@ -12,14 +13,34 @@ class PostgresOrderRepository(OrderRepository):
         order_dao = OrderDBVSEntityMapper.map_to_db(order)
         self.database_session.add(order_dao)
 
-    def get(self, order_id: UUID):
-        self.database_session.query(OrderDao).filter(OrderDao.uuid == str(order_id))
+    def get(self, order_id: str):
+        self.database_session.query(OrderDao).filter(OrderDao.uuid == order_id)
 
     def get_all(self):
         pass
 
     def update(self, order_id, order):
         pass
+
+    def upsert(self, order: Order) -> None:
+        insert_statement = insert(OrderDao).values(
+            uuid=order.uuid,
+            provider_name=order.provider_name,
+            ticker_symbol=order.ticker_symbol,
+            price=order.price,
+            quantity=order.quantity,
+            trade_action=str(order.trade_action.value),
+            status=str(order.status.value),
+        )
+        upsert_statement = insert_statement.on_conflict_do_update(
+            index_elements=["uuid"],
+            set_={
+                OrderDao.price: order.price,
+                OrderDao.ticker_symbol: order.ticker_symbol,
+                OrderDao.status: str(order.status.value),
+            },
+        )
+        self.database_session.execute(upsert_statement)
 
     def get_by_exchange(self, customer_id):
         return 5

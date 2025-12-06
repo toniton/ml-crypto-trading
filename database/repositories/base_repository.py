@@ -23,3 +23,7 @@ class BaseRepository(metaclass=abc.ABCMeta):
     @abc.abstractmethod
     def update(self, entity_id: str, entity: BaseModel):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def upsert(self, entity: BaseModel) -> None:
+        raise NotImplementedError()

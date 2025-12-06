@@ -23,11 +23,20 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
         super().__init__()
         self.unit_of_work = unit_of_work
 
+    def _save_orders_to_database(self, orders: list[Order]) -> None:
+        for order in orders:
+            logging.warning([f"Order update received, saving to DB", order])
+            order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
+            order_repository.upsert(order)
+        self.unit_of_work.complete()
+
     def init_websocket(self, assets: list[Asset]):
         for asset in assets:
             websocket_client = self.get_websocket(asset.exchange.name)
             instrument_name = TradingHelper.format_ticker_symbol(asset.ticker_symbol, separator="_")
-            websocket_client.subscribe_order_update(instrument_name, callback=lambda data: logging.warning([f"Order update received", data]))
+            websocket_client.subscribe_order_update(
+                instrument_name, callback=lambda data: self._save_orders_to_database(data)
+            )
 
     def get_market_data(self, ticker_symbol: str, provider_name: str) -> MarketData:
         provider = self.get_provider(provider_name)
@@ -40,7 +49,7 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
     def open_order(self, ticker_symbol: str, provider_name: str, quantity: str, price: str):
         provider = self.get_provider(provider_name)
         order = Order(
-            uuid=uuid4(),
+            uuid=str(uuid4()),
             price=price,
             quantity=quantity,
             provider_name=provider_name,

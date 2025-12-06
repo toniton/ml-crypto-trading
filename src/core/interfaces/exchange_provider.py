@@ -45,7 +45,7 @@ class ExchangeProvider(ABC):
     @abc.abstractmethod
     def place_order(
             self,
-            uuid: UUID,
+            uuid: str,
             ticker_symbol: str,
             quantity: str,
             price: str,

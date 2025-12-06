@@ -53,7 +53,7 @@ class ExchangeWebSocketClient(ABC):
             callback=lambda key, data: callback(sub_data.parse(data))
         )
 
-    def subscribe_order_update(self, instrument_name: str, callback: Callable[[Order], None]) -> str:
+    def subscribe_order_update(self, instrument_name: str, callback: Callable[[list[Order]], None]) -> str:
         sub_data = self._get_order_update_subscription(instrument_name)
         return self._subscribe(
             connection_key=f"{self.get_provider_name()}-ORDER_{instrument_name}",

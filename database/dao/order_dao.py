@@ -1,5 +1,5 @@
 
-from sqlalchemy import Column, Integer, String, UUID
+from sqlalchemy import Column, Integer, String, TIMESTAMP, UUID, func
 
 from database.database_setup import DatabaseSetup
 
@@ -12,4 +12,7 @@ class OrderDao(DatabaseSetup.BaseTableModel):
     ticker_symbol = Column(String)
     price = Column(String)
     quantity = Column(String)
+    status = Column(String)
     trade_action = Column(String(4))
+    last_updated_time = Column(TIMESTAMP, default=None)
+    created_time = Column(TIMESTAMP, default=func.current_timestamp())
