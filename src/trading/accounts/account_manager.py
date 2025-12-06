@@ -33,14 +33,14 @@ class AccountManager(ProviderRegistry, WebSocketRegistry):
     def init_account_balances(self, trading_context_manager: TradingContextManager):
         for asset in self.assets:
             exchange = asset.exchange
-            quote_ticker_symbol = asset.ticker_symbol
+            quote_ticker_symbol = asset.quote_ticker_symbol
             try:
                 opening_balance = self.get_balance(quote_ticker_symbol, exchange.value)
                 trading_context_manager.register_trading_context(
                     asset.key, TradingContext(starting_balance=opening_balance.available_balance)
                 )
-            except Exception:
-                logging.error(f"Unable to initialize account balance for {asset} from {exchange}")
+            except Exception as exc:
+                logging.error(f"Unable to initialize account balance for {asset} from {exchange}", exc)
 
     def get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
         if provider_name in self.balances and currency_symbol in self.balances[provider_name]:
