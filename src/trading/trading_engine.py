@@ -93,7 +93,7 @@ class TradingEngine:
         for asset in assets:
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-
+                self.trading_context_manager.update_trading_context(asset.key, account_balance.available_balance)
                 if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
                     logging.info(f"No consensus to buy {asset.ticker_symbol}")
                     continue

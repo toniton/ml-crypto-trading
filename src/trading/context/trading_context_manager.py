@@ -16,6 +16,9 @@ class TradingContextManager:
     def get_trading_context(self, asset_key: int) -> TradingContext:
         return self.trading_contexts[asset_key]
 
+    def update_trading_context(self, asset_key: int, available_balance: float) -> None:
+        self.trading_contexts[asset_key].available_balance = available_balance
+
     def record_buy(self, asset_key: int, order: Order):
         price = float(order.price)
         quantity = float(order.quantity)
