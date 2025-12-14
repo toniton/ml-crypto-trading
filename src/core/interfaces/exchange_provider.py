@@ -2,10 +2,8 @@ from __future__ import annotations
 
 import abc
 from abc import ABC
-from typing import Callable
-from uuid import UUID
 
-import websocket
+from enum import Enum
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
@@ -13,7 +11,6 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
-from enum import Enum
 
 
 class ExchangeProvidersEnum(Enum):
@@ -51,14 +48,6 @@ class ExchangeProvider(ABC):
             price: str,
             trade_action: TradeAction
     ):
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def get_websocket_client(
-            self, on_open: Callable, on_message: Callable,
-            on_error: Callable,
-            on_close: Callable
-    ) -> websocket.WebSocketApp:
         raise NotImplementedError()
 
     @abc.abstractmethod

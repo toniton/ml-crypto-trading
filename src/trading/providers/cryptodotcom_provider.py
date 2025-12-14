@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import json
-import time
-from typing import Callable
 from urllib.error import HTTPError
-from uuid import UUID
 
-import websocket
+
 from cachetools import TTLCache, cached
 from circuitbreaker import circuit
 
@@ -89,28 +85,6 @@ class CryptoDotComProvider(ExchangeProvider):
         )
         response_data = RequestHelper.execute_request(request)
         return CryptoDotComResponseOrderCreatedDto(**response_data)
-
-    def get_websocket_client(self, on_open: Callable, on_message: Callable[[MarketData], None], on_close: Callable):
-        def on_message_mapper(_on_message: Callable[[MarketData], None]):
-            def map_data(ws, data):
-                json_data = json.loads(data)
-                if 'method' in json_data and json_data['method'] == 'public/heartbeat':
-                    ws.send(json.dumps({
-                        "id": json_data['id'],
-                        "method": "public/respond-heartbeat",
-                    }))
-                    return
-
-                response_data = CryptoDotComMarketDataResponseDto(**json_data)
-                _on_message(CryptoDotComMapper.to_marketdata(response_data))
-
-            return map_data
-
-        self.websocket_client = websocket.WebSocketApp(
-            self.websocket_url, on_open=on_open,
-            on_message=on_message_mapper(on_message), on_close=on_close
-        )
-        return self.websocket_client
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
