@@ -40,7 +40,7 @@ class AccountManager(ProviderRegistry, WebSocketRegistry):
                     asset.key, TradingContext(starting_balance=opening_balance.available_balance)
                 )
             except Exception as exc:
-                logging.error(f"Unable to initialize account balance for {asset} from {exchange}", exc)
+                logging.error(f"Unable to initialize account balance for {asset} from {exchange}", exc_info=True)
 
     def get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
         if provider_name in self.balances and currency_symbol in self.balances[provider_name]:
@@ -48,4 +48,4 @@ class AccountManager(ProviderRegistry, WebSocketRegistry):
         provider = self.get_provider(provider_name)
         data = provider.get_account_balance()
         self._cache_balances(provider_name, data)
-        return self.balances[provider_name][currency_symbol] or AccountBalance(currency_symbol, 0)
+        return self.balances.get(provider_name, {}).get(currency_symbol) or AccountBalance(currency_symbol, 0)
