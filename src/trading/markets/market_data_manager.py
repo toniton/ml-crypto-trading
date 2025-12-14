@@ -3,7 +3,9 @@ from __future__ import annotations
 import logging
 
 from api.interfaces.asset import Asset
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
+from api.interfaces.timeframe import Timeframe
 from src.core.registries.provider_registry import ProviderRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 
@@ -31,3 +33,11 @@ class MarketDataManager(ProviderRegistry, WebSocketRegistry):
         if key in self.market_data:
             return self.market_data[key]
         return None
+
+    def get_market_data(self, ticker_symbol: str, provider_name: str) -> MarketData:
+        provider = self.get_provider(provider_name)
+        return provider.get_market_data(ticker_symbol)
+
+    def get_candles(self, provider_name: str, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
+        provider = self.get_provider(provider_name)
+        return provider.get_candle(ticker_symbol, timeframe)

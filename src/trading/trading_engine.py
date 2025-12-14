@@ -54,14 +54,14 @@ class TradingEngine:
         self.fees_manager.init_account_fees()
         self.order_manager.init_websocket(self.assets)
 
-        self.trading_scheduler.start(self.create_new_order)
+        self.trading_scheduler.start(self.create_buy_order)
         self.trading_scheduler.start(self.check_unclosed_orders)
 
         self.market_data_manager.init_websocket()
 
     def _fetch_market_data(self, asset: Asset) -> MarketData:
         market_data = self.market_data_manager.get_latest_marketdata(asset.key)
-        return market_data or self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
+        return market_data or self.market_data_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
 
     def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
         trading_context = self.trading_context_manager.get_trading_context(asset.key)
@@ -85,11 +85,11 @@ class TradingEngine:
 
         market_data = self._fetch_market_data(asset)
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
-        candles = self.order_manager.get_candles(asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe)
+        candles = self.market_data_manager.get_candles(asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe)
 
         return account_balance, market_data, candles, fees
 
-    def create_new_order(self, assets: list[Asset]):
+    def create_buy_order(self, assets: list[Asset]):
         for asset in assets:
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
@@ -108,14 +108,15 @@ class TradingEngine:
                     f"Available balance={account_balance.available_balance}"
                 ])
                 quantity = format(asset.min_quantity, "f")
-                order = self.order_manager.open_order(
+                buy_order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
                     quantity=quantity,
                     price=str(price),
-                    provider_name=asset.exchange.value
+                    provider_name=asset.exchange.value,
+                    trade_action=TradeAction.BUY
                 )
-                self.activity_queue.put_nowait(order.model_dump_json())
-                self.trading_context_manager.record_buy(asset.key, order)
+                self.activity_queue.put_nowait(buy_order.model_dump_json())
+                self.trading_context_manager.record_buy(asset.key, buy_order)
             except Exception as exc:
                 logging.error([f"Error occurred processing asset. Asset={asset}", exc])
 
@@ -143,9 +144,13 @@ class TradingEngine:
 
                 best_order: Order | None = next(iter(open_orders), None)
                 if best_order:
-                    closed_order = self.order_manager.close_order(best_order, current_price)
-                    self.activity_queue.put_nowait(closed_order.model_dump_json())
-                    self.trading_context_manager.record_sell(asset.key, closed_order)
+                    sell_order = self.order_manager.open_order(
+                        uuid=best_order.uuid, price=current_price, trade_action=TradeAction.SELL,
+                        quantity=best_order.quantity, provider_name=best_order.provider_name,
+                        ticker_symbol=best_order.ticker_symbol,
+                    )
+                    self.activity_queue.put_nowait(sell_order.model_dump_json())
+                    self.trading_context_manager.record_sell(asset.key, sell_order)
 
             except Exception as exc:
                 logging.error([f"Error occurred finalizing asset. Asset={asset}", exc])
@@ -161,9 +166,7 @@ class TradingEngine:
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
                 trading_context.end_time = time.time()
-                market_data = self.market_data_manager.get_latest_marketdata(asset.key)
-                if market_data is None:
-                    market_data = self.order_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
+                market_data = self._fetch_market_data(asset)
 
                 print("Trading Context")
                 print(f"======= {asset.ticker_symbol} =======================")

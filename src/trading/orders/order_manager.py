@@ -1,5 +1,3 @@
-import decimal
-import json
 import logging
 import threading
 import time
@@ -7,10 +5,7 @@ from queue import Queue
 from uuid import uuid4
 
 from api.interfaces.asset import Asset
-from api.interfaces.candle import Candle
-from api.interfaces.timeframe import Timeframe
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
-from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from database.unit_of_work import UnitOfWork
@@ -20,8 +15,6 @@ from src.trading.helpers.trading_helper import TradingHelper
 
 
 class OrderManager(ProviderRegistry, WebSocketRegistry):
-    cached_balance: dict[str, decimal]
-
     def __init__(self, unit_of_work: UnitOfWork):
         super().__init__()
         self.unit_of_work = unit_of_work
@@ -53,21 +46,16 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
                 instrument_name, callback=lambda data: self._save_orders_to_database(data)
             )
 
-    def get_market_data(self, ticker_symbol: str, provider_name: str) -> MarketData:
-        provider = self.get_provider(provider_name)
-        return provider.get_market_data(ticker_symbol)
-
-    def get_candles(self, provider_name: str, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        provider = self.get_provider(provider_name)
-        return provider.get_candle(ticker_symbol, timeframe)
-
-    def open_order(self, ticker_symbol: str, provider_name: str, quantity: str, price: str):
+    def open_order(
+            self, ticker_symbol: str, provider_name: str, quantity: str,
+            price: str, trade_action: TradeAction, uuid: str = str(uuid4())
+    ):
         order = Order(
-            uuid=str(uuid4()),
+            uuid=uuid,
             price=price,
             quantity=quantity,
             provider_name=provider_name,
-            trade_action=TradeAction.BUY,
+            trade_action=trade_action,
             ticker_symbol=ticker_symbol,
             created_time=time.time()
         )
@@ -90,19 +78,8 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
         except Exception as exc:
             raise RuntimeError(f"Error executing order:", order, exc)
 
-    # TODO: Consolidate with open_order method, and change this to cancel_order functionality.
-    def close_order(self, open_order: Order, market_price: str) -> Order:
-        order = Order(
-            uuid=open_order.uuid,
-            price=market_price,
-            quantity=open_order.quantity,
-            provider_name=open_order.provider_name,
-            trade_action=TradeAction.SELL,
-            ticker_symbol=open_order.ticker_symbol,
-            created_time=time.time()
-        )
-        self.order_queue.put(order)
-        return order
+    def cancel_order(self, open_order: Order, market_price: str) -> Order:
+        raise NotImplementedError(f"Unable to cancel order:", open_order)
 
     def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:
         order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
