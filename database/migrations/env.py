@@ -8,8 +8,6 @@ from alembic import context
 
 from database.database_setup import DatabaseSetup
 from database.helpers.dao_helper import DaoHelper
-from src.configuration.application_config import ApplicationConfig
-from src.configuration.environment_config import EnvironmentConfig
 
 from src.configuration.providers.database_config import DatabaseConfig
 
@@ -47,11 +45,7 @@ def run_migrations_online() -> None:
     """
 
     config_section = config.get_section(config.config_ini_section, {})
-    environment_config = EnvironmentConfig()
-    application_config = ApplicationConfig(
-        _env_file=ApplicationConfig.get_env_path(environment_config.app_env)
-    )
-    database_url = DatabaseConfig(application_config, environment_config).get_instance().get_connection_endpoint()
+    database_url = DatabaseConfig.get_instance().get_connection_endpoint()
     config_section["sqlalchemy.url"] = database_url
 
     connectable = engine_from_config(
