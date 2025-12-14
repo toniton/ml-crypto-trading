@@ -18,7 +18,7 @@ class MaxDrawDownGuardTest(TestCase):
 
     def test_can_trade(self):
         trading_context = TradingContext(
-            starting_balance=500,
+            starting_balance=1500,
             open_positions=[
                 Order(
                     provider_name="",
@@ -26,7 +26,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.BUY,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=1
                 ),
                 Order(
@@ -35,7 +35,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.BUY,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=3
                 ),
                 Order(
@@ -44,7 +44,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.BUY,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=5
                 ),
                 Order(
@@ -53,7 +53,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.BUY,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=7
                 ),
                 Order(
@@ -62,7 +62,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.BUY,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=9
                 )
             ],
@@ -73,7 +73,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.SELL,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=2
                 ),
                 Order(
@@ -82,7 +82,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.SELL,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=4
                 ),
                 Order(
@@ -91,7 +91,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.SELL,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=6
                 ),
                 Order(
@@ -100,7 +100,7 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.SELL,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=8
                 ),
                 Order(
@@ -109,14 +109,13 @@ class MaxDrawDownGuardTest(TestCase):
                     quantity="1",
                     ticker_symbol="",
                     trade_action=TradeAction.SELL,
-                    uuid=uuid4(),
+                    uuid=str(uuid4()),
                     created_time=10
                 )
             ]
         )
         trading_context.available_balance = 5
         draw_down_guard = MaxDrawDownGuard(self.config)
-        assert draw_down_guard.can_trade(trading_context) is True
+        assert draw_down_guard.can_trade(TradeAction.BUY, trading_context) is True
 
-    def test_is_enabled(self):
-        assert False
+

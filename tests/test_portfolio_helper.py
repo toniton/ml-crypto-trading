@@ -18,7 +18,7 @@ class TestPortfolioHelper(TestCase):
     def test_portfolio_value_with_open_buy_positions(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -27,7 +27,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="90.0",
@@ -46,7 +46,7 @@ class TestPortfolioHelper(TestCase):
     def test_portfolio_value_with_closed_sell_positions(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="120.0",
@@ -55,7 +55,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="115.0",
@@ -85,7 +85,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_profit_on_open_buy(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -105,7 +105,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_loss_on_open_buy(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -125,7 +125,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_with_closed_sell_positions_profit(self):
         close_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -145,7 +145,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_with_closed_sell_positions_loss(self):
         close_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -165,7 +165,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_mixed_positions(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -176,7 +176,7 @@ class TestPortfolioHelper(TestCase):
         ]
         close_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="90.0",
@@ -196,7 +196,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_ignores_open_sell(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -205,7 +205,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="110.0",
@@ -225,7 +225,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_ignores_closed_buy(self):
         close_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -234,7 +234,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="90.0",
@@ -254,7 +254,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_multiple_positions(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -263,7 +263,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="110.0",
@@ -283,7 +283,7 @@ class TestPortfolioHelper(TestCase):
     def test_unrealized_pnl_zero_starting_balance(self):
         open_positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -310,7 +310,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_single_position(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -328,7 +328,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_increasing_portfolio(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -337,7 +337,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=100.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -346,7 +346,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=200.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -364,7 +364,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_decreasing_then_increasing(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -373,7 +373,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=100.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="150.0",
@@ -382,7 +382,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=200.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="50.0",
@@ -400,7 +400,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_excludes_last_position(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -409,7 +409,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=100.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="1000.0",
@@ -427,7 +427,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_with_negative_balance(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="2000.0",
@@ -436,7 +436,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=100.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -445,7 +445,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=200.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="50.0",
@@ -463,7 +463,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_stays_at_starting(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -472,7 +472,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=100.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -481,7 +481,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=200.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -499,7 +499,7 @@ class TestPortfolioHelper(TestCase):
     def test_peak_value_with_zero_starting_balance(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -508,7 +508,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=100.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="50.0",
@@ -533,7 +533,7 @@ class TestPortfolioHelper(TestCase):
     def test_trough_value_decreasing_portfolio(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -542,7 +542,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -551,7 +551,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=1.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -569,7 +569,7 @@ class TestPortfolioHelper(TestCase):
     def test_trough_value_increasing_portfolio(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -578,7 +578,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -596,7 +596,7 @@ class TestPortfolioHelper(TestCase):
     def test_trough_value_with_recovery(self):
         positions = [
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="100.0",
@@ -605,7 +605,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="150.0",
@@ -614,7 +614,7 @@ class TestPortfolioHelper(TestCase):
                 created_time=0.0,
             ),
             Order(
-                uuid=uuid4(),
+                uuid=str(uuid4()),
                 provider_name="TEST",
                 ticker_symbol="XYZ",
                 price="150.0",

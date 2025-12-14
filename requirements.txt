@@ -21,3 +21,4 @@ mock-alchemy~=0.2.6
 pywebview~=3.7
 pytest~=7.3.2
 pytest-mock~=3.11.1
+pylint~=4.0.4

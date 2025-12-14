@@ -7,6 +7,11 @@ import pkgutil
 from queue import Queue
 from sqlalchemy.orm import Session
 
+from database.database_setup import DatabaseSetup
+from database.unit_of_work import UnitOfWork
+
+from api.interfaces.trading_strategy import TradingStrategy
+
 import src.trading.consensus.strategies
 import src.configuration.providers
 import src.trading.providers
@@ -16,12 +21,10 @@ from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.core.interfaces.base_config import BaseConfig
-from database.database_setup import DatabaseSetup
-from src.subscriptions.cryptodotcom_websocket_client import CryptoDotComWebSocketClient
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
-from api.interfaces.trading_strategy import TradingStrategy
+
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.fees.fees_manager import FeesManager
@@ -31,7 +34,6 @@ from src.core.interfaces.exchange_provider import ExchangeProvider
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
-from database.unit_of_work import UnitOfWork
 from src.trading.trading_scheduler import TradingScheduler
 
 PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
