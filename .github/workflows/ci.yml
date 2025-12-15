@@ -22,7 +22,7 @@ jobs:
     - name: Run Pylint
       run: |
         # Targeting specific directories to exclude vendored code in api/
-        pylint src tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=5.0
+        pylint src tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
 
   test:
     runs-on: ubuntu-latest

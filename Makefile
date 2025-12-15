@@ -29,7 +29,7 @@ format:
 	pre-commit
 
 lint: .pylintrc
-	$(PYLINT) src api tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=5.0
+	$(PYLINT) src tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
 
 test:
 	export PYTHONPATH=$$PYTHONPATH:. && $(VENV_DIR)/bin/pytest tests/
