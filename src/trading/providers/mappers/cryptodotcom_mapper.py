@@ -29,29 +29,20 @@ class CryptoDotComMapper(Mapper):
 
     @staticmethod
     def from_timeframe(data: Timeframe) -> Optional[str]:
-        if data == Timeframe.MIN1:
-            return "1m"
-        elif data == Timeframe.MIN5:
-            return "5m"
-        elif data == Timeframe.MIN15:
-            return "15m"
-        elif data == Timeframe.MIN30:
-            return "30m"
-        elif data == Timeframe.HOUR1:
-            return "1h"
-        elif data == Timeframe.HOUR2:
-            return "2h"
-        elif data == Timeframe.HOUR4:
-            return "4h"
-        elif data == Timeframe.HOUR12:
-            return "12h"
-        elif data == Timeframe.DAY1:
-            return "1D"
-        elif data == Timeframe.DAY7:
-            return "7D"
-        elif data == Timeframe.MON1:
-            return "1M"
-        return None
+        timeframe_map = {
+            Timeframe.MIN1: "1m",
+            Timeframe.MIN5: "5m",
+            Timeframe.MIN15: "15m",
+            Timeframe.MIN30: "30m",
+            Timeframe.HOUR1: "1h",
+            Timeframe.HOUR2: "2h",
+            Timeframe.HOUR4: "4h",
+            Timeframe.HOUR12: "12h",
+            Timeframe.DAY1: "1D",
+            Timeframe.DAY7: "7D",
+            Timeframe.MON1: "1M",
+        }
+        return timeframe_map.get(data)
 
     @staticmethod
     def to_candles(response: CryptoDotComCandleResponseDto) -> list[Candle]:

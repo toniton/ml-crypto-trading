@@ -1,4 +1,4 @@
-from typing import Protocol, Any, TypeVar, Type
+from typing import Protocol, TypeVar, Type
 
 from src.core.interfaces.exchange_provider import ExchangeProvidersEnum
 
@@ -9,10 +9,6 @@ class Mapper(Protocol):
     _instances = None
 
     provider: ExchangeProvidersEnum = None
-
-    @staticmethod
-    def map(data: Any) -> Any:
-        raise NotImplementedError()
 
 
 class SingletonMapperMeta(type):

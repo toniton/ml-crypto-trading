@@ -15,4 +15,4 @@ class OrderDao(DatabaseSetup.BaseTableModel):
     status = Column(String)
     trade_action = Column(String(4))
     last_updated_time = Column(TIMESTAMP, default=None)
-    created_time = Column(TIMESTAMP, default=func.current_timestamp())
+    created_time = Column(TIMESTAMP, default=func.current_timestamp)

@@ -2,7 +2,6 @@ import hashlib
 import hmac
 import time
 from urllib.request import Request
-from uuid import UUID
 
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
