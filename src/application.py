@@ -166,5 +166,6 @@ class Application:
         self.consensus_manager.register_strategy(strategy)
 
     def shutdown(self):
-        # TODO: Close all open trades as part of application shutdown procedures.
-        self.trading_engine.print_context()
+        # FIXME: Cancel all pending/open trades as part of application shutdown procedures.
+        if self.trading_engine:
+            self.trading_engine.print_context()

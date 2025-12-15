@@ -34,4 +34,3 @@ class CryptoDotComAuthHandler(AuthHandler):
 
     def handle_auth_response(self, message: dict) -> int:
         logging.info("Auth response got back, IJGB!")
-        pass

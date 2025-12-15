@@ -66,7 +66,4 @@ class AssetsConfig(BaseSettings):
 
         if sources:
             return deep_update(*reversed([source() for source in sources]))
-        else:
-            # no one should mean to do this, but I think returning an empty dict is marginally preferable
-            # to an informative error and much better than a confusing error
-            return {}
+        return {}
