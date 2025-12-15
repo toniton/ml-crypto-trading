@@ -25,7 +25,7 @@ class ApplicationConfig(BaseSettings):
     kafka_configuration: KafkaConfiguration = Field()
 
     model_config = SettingsConfigDict(
-        env_file=(f"application-{AppEnvEnum.staging.value}.yaml", f"application-{AppEnvEnum.production.value}.yaml"),
+        env_file=(f"application-{AppEnvEnum.STAGING.value}.yaml", f"application-{AppEnvEnum.PRODUCTION.value}.yaml"),
         env_file_encoding="utf-8"
     )
 

@@ -22,7 +22,7 @@ class TestDatabaseConfig(unittest.TestCase):
             mock_env_instance.postgres_user = 'test_user'
             mock_env_instance.postgres_password.get_secret_value.return_value = 'test_pass'
             mock_env_instance.postgres_database = 'test_db'
-            mock_env_instance.app_env = AppEnvEnum.staging
+            mock_env_instance.app_env = AppEnvEnum.STAGING
 
             mock_app_instance = MockAppConfig.return_value
             mock_app_instance.database_connection_host = 'localhost:5432'

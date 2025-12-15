@@ -5,8 +5,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppEnvEnum(str, Enum):
-    staging = 'staging'
-    production = 'production'
+    STAGING = 'staging'
+    PRODUCTION = 'production'
 
 
 class EnvironmentConfig(BaseSettings):
