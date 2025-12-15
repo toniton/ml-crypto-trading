@@ -1,4 +1,5 @@
-import threading, time
+import threading
+import time
 from typing import Callable
 
 from schedule import Job, run_pending

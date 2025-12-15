@@ -12,7 +12,8 @@ class OrderDBVSEntityMapper:
             ticker_symbol=order_dao.ticker_symbol,
             price=order_dao.price,
             quantity=order_dao.quantity,
-            trade_action=order_dao.trade_action
+            trade_action=order_dao.trade_action,
+            created_time=order_dao.created_time.timestamp()
         )
 
     @staticmethod

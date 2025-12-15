@@ -13,6 +13,7 @@ from database.unit_of_work import UnitOfWork
 from api.interfaces.trading_strategy import TradingStrategy
 
 import src.trading.consensus.strategies
+import src.subscriptions
 import src.configuration.providers
 import src.trading.providers
 import src.trading.protection.guards

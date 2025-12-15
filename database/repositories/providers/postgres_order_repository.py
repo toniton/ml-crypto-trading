@@ -2,9 +2,9 @@ from typing import cast
 
 from sqlalchemy.dialects.postgresql import insert
 
+from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus
 from database.dao.order_dao import OrderDao
-from api.interfaces.order import Order
 from database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
 from database.repositories.order_repository import OrderRepository
 
@@ -63,6 +63,6 @@ class PostgresOrderRepository(OrderRepository):
             OrderDao.price > price,
             OrderDao.ticker_symbol == ticker_symbol
         )
-        for orderDao in filtered_query:
-            result.append(OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, orderDao)))
+        for order_dao in filtered_query:
+            result.append(OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, order_dao)))
         return result

@@ -1,9 +1,9 @@
 from api.interfaces.candle import Candle
-from src.core.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
-# from prediction.prediction_engine import PredictionEngine
 from api.interfaces.trading_context import TradingContext
+from src.core.interfaces.machine_learning_trading_strategy import MachineLearningTradingStrategy
+# from prediction.prediction_engine import PredictionEngine
 
 
 class PredictionSellTradingStrategy(MachineLearningTradingStrategy):

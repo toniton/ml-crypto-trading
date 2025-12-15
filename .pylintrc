@@ -68,7 +68,7 @@ ignored-modules=
 
 # Python code to execute, usually for sys.path manipulation such as
 # pygtk.require().
-#init-hook=
+init-hook='import sys; sys.path.append(".")'
 
 # Use multiple processes to speed up Pylint. Specifying 0 will auto-detect the
 # number of processors available to use, and will cap the count on Windows to
@@ -295,10 +295,10 @@ exclude-too-few-public-methods=
 ignored-parents=
 
 # Maximum number of arguments for function / method.
-max-args=5
+max-args=8
 
 # Maximum number of attributes for a class (see R0902).
-max-attributes=7
+max-attributes=12
 
 # Maximum number of boolean expressions in an if statement (see R0916).
 max-bool-expr=5
@@ -313,7 +313,7 @@ max-locals=15
 max-parents=7
 
 # Maximum number of positional arguments for function / method.
-max-positional-arguments=5
+max-positional-arguments=8
 
 # Maximum number of public methods for a class (see R0904).
 max-public-methods=20
@@ -445,7 +445,13 @@ disable=raw-checker-failed,
         deprecated-pragma,
         use-symbolic-message-instead,
         use-implicit-booleaness-not-comparison-to-string,
-        use-implicit-booleaness-not-comparison-to-zero
+        missing-module-docstring,
+        missing-class-docstring,
+        missing-function-docstring,
+        missing-function-docstring,
+        too-few-public-methods,
+        logging-fstring-interpolation,
+        broad-exception-caught
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
@@ -495,21 +501,21 @@ suggest-join-with-non-empty-separator=yes
 [REPORTS]
 
 # Python expression which should return a score less than or equal to 10. You
-# have access to the variables 'fatal', 'error', 'warning', 'refactor',
-# 'convention', and 'info' which contain the number of messages in each
-# category, as well as 'statement' which is the total number of statements
-# analyzed. This score is used by the global evaluation report (RP0004).
-evaluation=max(0, 0 if fatal else 10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10))
+# have access to the variables 'error', 'warning', 'refactor', and 'convention'
+# which contain the number of messages in each category, as well as 'statement'
+# which is the total number of statements analyzed. This score is used by the
+# global evaluation report (RP0004).
+evaluation=10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)
 
 # Template used to display messages. This is a python new-style format string
 # used to format the message information. See doc for all details.
-msg-template=
+#msg-template=
 
 # Set the output format. Available formats are: 'text', 'parseable',
 # 'colorized', 'json2' (improved json format), 'json' (old json format), msvs
 # (visual studio) and 'github' (GitHub actions). You can also give a reporter
 # class, e.g. mypackage.mymodule.MyReporterClass.
-#output-format=
+output-format=text
 
 # Tells whether to display a full report or only the messages.
 reports=no
@@ -526,8 +532,8 @@ ignore-comments=yes
 # Docstrings are removed from the similarity computation
 ignore-docstrings=yes
 
-# Imports are removed from the similarity computation
-ignore-imports=yes
+# Ignore imports when computing similarities.
+ignore-imports=no
 
 # Signatures are removed from the similarity computation
 ignore-signatures=yes
@@ -570,6 +576,10 @@ check-quote-consistency=no
 # on implicit string concatenation in sequences defined over several lines.
 check-str-concat-over-line-jumps=no
 
+# This flag controls whether the quote delimiter to use is chosen automatically
+# based on the content of the string.
+
+
 
 [TYPECHECK]
 
@@ -583,9 +593,9 @@ contextmanager-decorators=contextlib.contextmanager
 # expressions are accepted.
 generated-members=
 
-# Tells whether to warn about missing members when the owner of the attribute
-# is inferred to be None.
-ignore-none=yes
+# Tells whether missing members accessed in mixin class should be ignored. A
+# mixin class is detected if its name ends with "mixin" (case insensitive).
+ignore-mixin-members=yes
 
 # This flag controls whether pylint should warn about no-member and similar
 # checks whenever an opaque object is returned when inferring. The inference
@@ -595,47 +605,39 @@ ignore-none=yes
 # the rest of the inferred objects.
 ignore-on-opaque-inference=yes
 
-# List of symbolic message names to ignore for Mixin members.
-ignored-checks-for-mixins=no-member,
-                          not-async-context-manager,
-                          not-context-manager,
-                          attribute-defined-outside-init
-
 # List of class names for which member attributes should not be checked (useful
 # for classes with dynamically set attributes). This supports the use of
 # qualified names.
-ignored-classes=optparse.Values,thread._local,_thread._local,argparse.Namespace
+ignored-classes=optparse.Values,thread._local,_thread._local
+
+# List of module names for which member attributes should not be checked
+# (useful for modules/projects where namespaces are manipulated during runtime
+# and thus existing member attributes cannot be deduced by static analysis. It
+# supports qualified module names, as well as Unix pattern matching.
+ignored-modules=alembic.context
 
 # Show a hint with possible names when a member name was not found. The aspect
 # of finding the hint is based on edit distance.
 missing-member-hint=yes
 
-# The maximum edit distance a name should have in order to be considered a
+# The minimum edit distance a name should have in order to be considered a
 # similar match for a missing member name.
 missing-member-hint-distance=1
 
 # The total number of similar names that should be taken in consideration when
 # showing a hint for a missing member.
-missing-member-max-choices=1
 
-# Regex pattern to define which classes are considered mixins.
-mixin-class-rgx=.*[Mm]ixin
-
-# List of decorators that change the signature of a decorated function.
-signature-mutators=
 
 
 [VARIABLES]
 
 # List of additional names supposed to be defined in builtins. Remember that
-# you should avoid defining new builtins when possible.
+# you should add _ to your good-names list if you prefer strings to be
+# localized.
 additional-builtins=
 
 # Tells whether unused global variables should be treated as a violation.
 allow-global-unused-variables=yes
-
-# List of names allowed to shadow builtins
-allowed-redefined-builtins=
 
 # List of strings which can identify a callback function by name. A callback
 # name must start or end with one of those strings.
@@ -646,7 +648,8 @@ callbacks=cb_,
 # not be used).
 dummy-variables-rgx=_+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+?$)|dummy|^ignored_|^unused_
 
-# Argument names that match this expression will be ignored.
+# Argument names that match this expression will be ignored. Default to name
+# with leading underscore.
 ignored-argument-names=_.*|^ignored_|^unused_
 
 # Tells whether we should check for unused import in __init__ files.
@@ -655,3 +658,6 @@ init-import=no
 # List of qualified module names which can have objects that can redefine
 # builtins.
 redefining-builtins-modules=six.moves,past.builtins,future.builtins,builtins,io
+
+
+

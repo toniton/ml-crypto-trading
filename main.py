@@ -24,7 +24,7 @@ def main():
 
     url = 'http://localhost:5555'
     webbrowser.open(url)
-    pass
+
 
 
 if __name__ == "__main__":

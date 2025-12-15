@@ -18,9 +18,9 @@ class RiskManagementBuyStrategy(RuleBasedTradingStrategy):
         market_data: MarketData,
         candles: list[Candle]
     ):
-        risk_per_trade = trading_context.available_balance * self.risk_tolerance
+        _risk_per_trade = trading_context.available_balance * self.risk_tolerance
         # TODO: Get quantity from min_quantity or max_quantity in TradeContext.
-        quantity = 1
+        _quantity = 1
         # if (quantity * float(market_data.close_price)) > risk_per_trade:
         #     return False
         return True

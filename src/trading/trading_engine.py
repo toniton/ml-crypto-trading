@@ -85,7 +85,9 @@ class TradingEngine:
 
         market_data = self._fetch_market_data(asset)
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
-        candles = self.market_data_manager.get_candles(asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe)
+        candles = self.market_data_manager.get_candles(
+            asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe
+        )
 
         return account_balance, market_data, candles, fees
 
