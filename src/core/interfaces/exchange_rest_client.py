@@ -18,7 +18,7 @@ class ExchangeProvidersEnum(Enum):
     BACKTEST = "BACKTEST"
 
 
-class ExchangeProvider(ABC):
+class ExchangeRestClient(ABC):
     @abc.abstractmethod
     def get_provider_name(self) -> str:
         raise NotImplementedError()

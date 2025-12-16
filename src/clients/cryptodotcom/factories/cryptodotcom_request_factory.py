@@ -7,9 +7,9 @@ from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.trading.helpers.request_helper import RequestHelper
 from src.trading.helpers.trading_helper import TradingHelper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComRequestAccountBalanceDto, CryptoDotComRequestOrderDto
-from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
-from src.trading.providers.utils.helpers import params_to_str
+from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComRequestAccountBalanceDto, CryptoDotComRequestOrderDto
+from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
+from src.clients.cryptodotcom.utils.helpers import params_to_str
 
 
 class CryptoDotComRequestFactory:

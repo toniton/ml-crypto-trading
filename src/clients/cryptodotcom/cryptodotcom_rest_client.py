@@ -14,15 +14,15 @@ from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from src.trading.helpers.request_helper import RequestHelper
-from src.trading.providers.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
-from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
+from src.clients.cryptodotcom.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
+from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
+from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
     CryptoDotComMarketDataResponseDto, CryptoDotComResponseOrderCreatedDto, \
     CryptoDotComCandleResponseDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
-from src.core.interfaces.exchange_provider import ExchangeProvider, ExchangeProvidersEnum
+from src.core.interfaces.exchange_rest_client import ExchangeRestClient, ExchangeProvidersEnum
 
 
-class CryptoDotComProvider(ExchangeProvider):
+class CryptoDotComRestClient(ExchangeRestClient):
     def __init__(self):
         config = CryptodotcomConfig.get_instance()
         self.websocket_client = None

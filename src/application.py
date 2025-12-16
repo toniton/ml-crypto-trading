@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import atexit
 import importlib
 import os.path
@@ -15,7 +14,7 @@ from api.interfaces.trading_strategy import TradingStrategy
 import src.trading.consensus.strategies
 import src.subscriptions
 import src.configuration.providers
-import src.trading.providers
+import src.clients
 import src.trading.protection.guards
 
 from src.configuration.application_config import ApplicationConfig
@@ -31,7 +30,7 @@ from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
-from src.core.interfaces.exchange_provider import ExchangeProvider
+from src.core.interfaces.exchange_rest_client import ExchangeRestClient
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
@@ -97,10 +96,10 @@ class Application:
         return Session(database_engine)
 
     def _setup_providers(self):
-        for (_, name, _) in pkgutil.iter_modules(src.trading.providers.__path__):
-            importlib.import_module("." + name, src.trading.providers.__name__)
+        for (_, name, _) in pkgutil.iter_modules(src.clients.__path__):
+            importlib.import_module("." + name, src.clients.__name__)
 
-        for cls in ExchangeProvider.__subclasses__():
+        for cls in ExchangeRestClient.__subclasses__():
             instance = cls()
             self.account_manager.register_provider(instance)
             self.fees_manager.register_provider(instance)
@@ -158,7 +157,7 @@ class Application:
         )
         self.trading_engine.init_application()
 
-    def register_provider(self, provider: ExchangeProvider):
+    def register_provider(self, provider: ExchangeRestClient):
         self.order_manager.register_provider(provider)
         self.market_data_manager.register_provider(provider)
 

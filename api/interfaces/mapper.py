@@ -1,6 +1,6 @@
 from typing import Protocol, TypeVar, Type
 
-from src.core.interfaces.exchange_provider import ExchangeProvidersEnum
+from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
 
 _T = TypeVar('_T')
 

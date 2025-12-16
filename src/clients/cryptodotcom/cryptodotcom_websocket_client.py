@@ -2,17 +2,17 @@ from typing import Optional
 
 from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
 from src.core.interfaces.auth_handler import AuthHandler
-from src.subscriptions.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
-from src.subscriptions.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
+from src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
+from src.clients.cryptodotcom.handlers.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import BalanceSubscriptionData, \
     MarketDataSubscriptionData, \
     OrderUpdateSubscriptionData, SubscriptionVisibility
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.trading.helpers.trading_helper import TradingHelper
-from src.trading.providers.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, \
+from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, \
     CryptoDotComResponseOrderUpdateDto, CryptoDotComUserBalanceResponseDto
-from src.trading.providers.mappers.cryptodotcom_mapper import CryptoDotComMapper
+from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
 
 
 class CryptoDotComWebSocketClient(ExchangeWebSocketClient):

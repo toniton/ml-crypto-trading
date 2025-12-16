@@ -4,12 +4,12 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
-from src.core.interfaces.exchange_provider import ExchangeProvidersEnum
+from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.mapper import Mapper
 from api.interfaces.timeframe import Timeframe
-from src.trading.providers.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
+from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
     CryptoDotComMarketDataResponseDto, CryptoDotComCandleResponseDto, \
     CryptoDotComResponseOrderUpdateDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
 
