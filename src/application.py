@@ -38,21 +38,26 @@ from src.trading.trading_scheduler import TradingScheduler
 
 
 class Application:
-    def __init__(self, activity_queue: Queue = Queue(), is_backtest_mode: bool = False):
+    def __init__(
+            self, activity_queue: Queue = Queue(),
+            is_backtest_mode: bool = False, application_config_path: str = None,
+            asset_config_path: str = None
+    ):
         self.trading_engine = None
         self.activity_queue = activity_queue
         self.is_backtest_mode = is_backtest_mode
         self.unit_of_work = None
         self.environment_config = EnvironmentConfig()
-        self.application_config = ApplicationConfig(
-            _env_file=ApplicationConfig.get_env_path(self.environment_config.app_env)
-        )
+
+        application_yaml = application_config_path if is_backtest_mode else None
+        self.application_config = ApplicationConfig(_yaml_file=application_yaml)
 
         self._setup_configuration()
         database_session = self._setup_database()
         self.unit_of_work = UnitOfWork(database_session)
 
-        assets_config = AssetsConfig()
+        asset_yaml = asset_config_path if is_backtest_mode else None
+        assets_config = AssetsConfig(_yaml_file=asset_yaml)
         self.assets = assets_config.assets
 
         trading_context_manager = TradingContextManager()
@@ -86,7 +91,10 @@ class Application:
 
     def _setup_configuration(self):
         for (_, name, _) in pkgutil.iter_modules(src.configuration.providers.__path__):
-            importlib.import_module("." + name, src.configuration.providers.__name__)
+            try:
+                importlib.import_module("." + name, src.configuration.providers.__name__)
+            except ImportError as exc:
+                logging.warning(f"Skipping configuration {name}: {exc}")
 
         for cls in BaseConfig.__subclasses__():
             cls(self.application_config, self.environment_config)
