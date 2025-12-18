@@ -1,6 +1,6 @@
 import atexit
 import importlib
-import os.path
+import logging
 import pkgutil
 
 from queue import Queue
@@ -12,7 +12,6 @@ from database.unit_of_work import UnitOfWork
 from api.interfaces.trading_strategy import TradingStrategy
 
 import src.trading.consensus.strategies
-import src.subscriptions
 import src.configuration.providers
 import src.clients
 import src.trading.protection.guards
@@ -34,15 +33,15 @@ from src.core.interfaces.exchange_rest_client import ExchangeRestClient
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
+from src.trading.trading_executor import TradingExecutor
 from src.trading.trading_scheduler import TradingScheduler
-
-PREDICTION_STORAGE_DIR = os.path.join(os.path.abspath(os.getcwd()), "./localstorage")
 
 
 class Application:
-    def __init__(self, activity_queue: Queue):
+    def __init__(self, activity_queue: Queue = Queue(), is_backtest_mode: bool = False):
         self.trading_engine = None
         self.activity_queue = activity_queue
+        self.is_backtest_mode = is_backtest_mode
         self.unit_of_work = None
         self.environment_config = EnvironmentConfig()
         self.application_config = ApplicationConfig(
@@ -50,17 +49,13 @@ class Application:
         )
 
         self._setup_configuration()
-
-        self.assets_config = AssetsConfig()
-        self.assets = self.assets_config.assets
-
-        self.trading_scheduler = TradingScheduler()
-
-        self.trading_context_manager = TradingContextManager()
-
         database_session = self._setup_database()
         self.unit_of_work = UnitOfWork(database_session)
 
+        assets_config = AssetsConfig()
+        self.assets = assets_config.assets
+
+        trading_context_manager = TradingContextManager()
         self.account_manager = AccountManager(self.assets)
         self.fees_manager = FeesManager()
         self.order_manager = OrderManager(self.unit_of_work)
@@ -69,8 +64,16 @@ class Application:
         self.consensus_manager = ConsensusManager()
         self.protection_manager = ProtectionManager()
 
-        self._setup_providers()
-        self._setup_websockets()
+        self.trading_scheduler = TradingScheduler()
+        self.trading_executor = TradingExecutor(
+            self.assets, self.account_manager, self.fees_manager, self.order_manager,
+            self.market_data_manager, self.consensus_manager,
+            trading_context_manager, self.protection_manager, self.activity_queue
+        )
+
+        if not self.is_backtest_mode:
+            self._setup_clients()
+
         self._setup_strategies()
         self._setup_protections()
         self._setup_asset_schedules()
@@ -95,9 +98,12 @@ class Application:
         database_engine = database_setup.create_engine()
         return Session(database_engine)
 
-    def _setup_providers(self):
+    def _setup_clients(self):
         for (_, name, _) in pkgutil.iter_modules(src.clients.__path__):
-            importlib.import_module("." + name, src.clients.__name__)
+            try:
+                importlib.import_module("." + name, src.clients.__name__)
+            except ImportError as exc:
+                logging.warning(f"Skipping client {name}: {exc}")
 
         for cls in ExchangeRestClient.__subclasses__():
             instance = cls()
@@ -106,10 +112,6 @@ class Application:
             self.order_manager.register_provider(instance)
             self.market_data_manager.register_provider(instance)
 
-    def _setup_websockets(self):
-        for (_, name, _) in pkgutil.iter_modules(src.subscriptions.__path__):
-            importlib.import_module("." + name, src.subscriptions.__name__)
-
         for cls in ExchangeWebSocketClient.__subclasses__():
             instance = cls()
             self.account_manager.register_websocket(instance)
@@ -117,12 +119,11 @@ class Application:
             self.market_data_manager.register_websocket(instance)
 
     def _setup_strategies(self):
-        # localstorage_provider = LocalStorageDataProvider(PREDICTION_STORAGE_DIR)
-        # prediction_engine = PredictionEngine(self.assets, localstorage_provider, PREDICTION_STORAGE_DIR)
-        # prediction_engine.load_assets_model()
-
         for (_, name, _) in pkgutil.iter_modules(src.trading.consensus.strategies.__path__):
-            importlib.import_module("." + name, src.trading.consensus.strategies.__name__)
+            try:
+                importlib.import_module("." + name, src.trading.consensus.strategies.__name__)
+            except ImportError as exc:
+                logging.warning(f"Skipping strategy {name}: {exc}")
 
         for cls in RuleBasedTradingStrategy.__subclasses__():
             instance = cls()
@@ -149,11 +150,7 @@ class Application:
     def startup(self):
         self.trading_engine = TradingEngine(
             self.trading_scheduler,
-            self.assets, self.account_manager, self.fees_manager, self.order_manager,
-            self.market_data_manager, self.consensus_manager,
-            self.trading_context_manager,
-            self.protection_manager,
-            self.activity_queue
+            self.trading_executor
         )
         self.trading_engine.init_application()
 
