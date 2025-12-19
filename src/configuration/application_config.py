@@ -5,8 +5,6 @@ from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict, YamlConfigSettingsSource
 
-from src.configuration.environment_config import AppEnvEnum
-from src.configuration.helpers.application_helper import ApplicationHelper
 from src.configuration.helpers.yaml_config_settings_source import CustomYamlConfigSettingsSource
 
 
@@ -16,10 +14,7 @@ class ApplicationConfig(BaseSettings):
     coin_market_cap_rest_endpoint: Optional[str] = Field(default=None)
     database_connection_host: str = Field()
 
-    _yaml_file: Optional[str] = (
-        ApplicationHelper.get_env_path(AppEnvEnum.STAGING),
-        ApplicationHelper.get_env_path(AppEnvEnum.PRODUCTION)
-    )
+    _yaml_file: Optional[str | tuple[str, str]] = ""
     model_config = SettingsConfigDict(
         yaml_file=_yaml_file,
         yaml_file_encoding="utf-8"

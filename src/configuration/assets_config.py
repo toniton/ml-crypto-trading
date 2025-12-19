@@ -12,7 +12,7 @@ from api.interfaces.asset import Asset
 class AssetsConfig(BaseSettings):
     assets: list[Asset]
 
-    _yaml_file: Optional[str] = "src/configuration/assets.yaml"
+    _yaml_file: Optional[str] = ""
     model_config = SettingsConfigDict(
         yaml_file=_yaml_file,
         yaml_file_encoding="utf-8"

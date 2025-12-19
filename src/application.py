@@ -9,8 +9,6 @@ from sqlalchemy.orm import Session
 from database.database_setup import DatabaseSetup
 from database.unit_of_work import UnitOfWork
 
-from api.interfaces.trading_strategy import TradingStrategy
-
 import src.trading.consensus.strategies
 import src.configuration.providers
 import src.clients
@@ -39,25 +37,21 @@ from src.trading.trading_scheduler import TradingScheduler
 
 class Application:
     def __init__(
-            self, activity_queue: Queue = Queue(),
-            is_backtest_mode: bool = False, application_config_path: str = None,
-            asset_config_path: str = None
+            self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
+            assets_config: AssetsConfig, activity_queue: Queue = Queue(),
+            is_backtest_mode: bool = False,
     ):
         self.trading_engine = None
         self.activity_queue = activity_queue
         self.is_backtest_mode = is_backtest_mode
         self.unit_of_work = None
-        self.environment_config = EnvironmentConfig()
-
-        application_yaml = application_config_path if is_backtest_mode else None
-        self.application_config = ApplicationConfig(_yaml_file=application_yaml)
+        self.environment_config = environment_config
+        self.application_config = application_config
+        self.assets_config = assets_config
 
         self._setup_configuration()
         database_session = self._setup_database()
         self.unit_of_work = UnitOfWork(database_session)
-
-        asset_yaml = asset_config_path if is_backtest_mode else None
-        assets_config = AssetsConfig(_yaml_file=asset_yaml)
         self.assets = assets_config.assets
 
         trading_context_manager = TradingContextManager()
@@ -106,6 +100,17 @@ class Application:
         database_engine = database_setup.create_engine()
         return Session(database_engine)
 
+    def __register_rest_client(self, instance: ExchangeRestClient):
+        self.account_manager.register_provider(instance)
+        self.fees_manager.register_provider(instance)
+        self.order_manager.register_provider(instance)
+        self.market_data_manager.register_provider(instance)
+
+    def __register_websocket_client(self, instance: ExchangeWebSocketClient):
+        self.account_manager.register_websocket(instance)
+        self.order_manager.register_websocket(instance)
+        self.market_data_manager.register_websocket(instance)
+
     def _setup_clients(self):
         for (_, name, _) in pkgutil.iter_modules(src.clients.__path__):
             try:
@@ -114,17 +119,12 @@ class Application:
                 logging.warning(f"Skipping client {name}: {exc}")
 
         for cls in ExchangeRestClient.__subclasses__():
-            instance = cls()
-            self.account_manager.register_provider(instance)
-            self.fees_manager.register_provider(instance)
-            self.order_manager.register_provider(instance)
-            self.market_data_manager.register_provider(instance)
+            if cls.__module__.startswith(src.clients.__name__):
+                self.__register_rest_client(cls())
 
         for cls in ExchangeWebSocketClient.__subclasses__():
-            instance = cls()
-            self.account_manager.register_websocket(instance)
-            self.order_manager.register_websocket(instance)
-            self.market_data_manager.register_websocket(instance)
+            if cls.__module__.startswith(src.clients.__name__):
+                self.__register_websocket_client(cls())
 
     def _setup_strategies(self):
         for (_, name, _) in pkgutil.iter_modules(src.trading.consensus.strategies.__path__):
@@ -162,12 +162,9 @@ class Application:
         )
         self.trading_engine.init_application()
 
-    def register_provider(self, provider: ExchangeRestClient):
-        self.order_manager.register_provider(provider)
-        self.market_data_manager.register_provider(provider)
-
-    def register_strategy(self, strategy: TradingStrategy):
-        self.consensus_manager.register_strategy(strategy)
+    def register_client(self, rest_client: ExchangeRestClient, websocket_client: ExchangeWebSocketClient):
+        self.__register_rest_client(rest_client)
+        self.__register_websocket_client(websocket_client)
 
     def shutdown(self):
         # FIXME: Cancel all pending/open trades as part of application shutdown procedures.

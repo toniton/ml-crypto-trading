@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.helpers.application_helper import ApplicationHelper
 from src.core.interfaces.base_config import BaseConfig
 
 
@@ -13,7 +14,7 @@ class DatabaseConfig(BaseConfig):
 
         if application_config is None:
             application_config = ApplicationConfig(
-                _env_file=ApplicationConfig.get_env_path(environment_config.app_env)
+                _yaml_file=ApplicationHelper.get_application_config_path(environment_config.app_env)
             )
 
         self.postgres_user = environment_config.postgres_user
