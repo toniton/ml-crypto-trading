@@ -11,7 +11,7 @@ from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
 class TradingScheduler(AssetScheduleRegistry):
     def __init__(self):
         super().__init__()
-        self.stop_event = threading.Event()
+        self._stop_event = threading.Event()
 
     def _create_tick_func(self, callback: Callable, assets: list[Asset]) -> Callable:
         return lambda: callback(assets)
@@ -28,11 +28,13 @@ class TradingScheduler(AssetScheduleRegistry):
             schedule_job = schedule_factory()
             schedule_job.do(tick_fn)
             sleep_interval = self.UNIT_SECONDS.get(asset_schedule)
-            while not self.stop_event.is_set():
+            while not self._stop_event.is_set():
                 run_pending()
                 time.sleep(sleep_interval)
 
-        threading.Thread(target=loop, daemon=False).start()
+        schedule_thread = threading.Thread(target=loop)
+        schedule_thread.start()
+        # schedule_thread.join()
 
     def stop(self):
-        self.stop_event.set()
+        self._stop_event.set()

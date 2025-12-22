@@ -11,38 +11,26 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
-from src.trading.accounts.account_manager import AccountManager
-from src.trading.consensus.consensus_manager import ConsensusManager
-from src.trading.context.trading_context_manager import TradingContextManager
-from src.trading.fees.fees_manager import FeesManager
 from src.trading.helpers.portfolio_helper import PortfolioHelper
-from src.trading.markets.market_data_manager import MarketDataManager
+from src.core.managers.manager_container import ManagerContainer
 from src.trading.orders.order_helper import OrderHelper
-from src.trading.orders.order_manager import OrderManager
-from src.trading.protection.protection_manager import ProtectionManager
 
 
 class TradingExecutor:
     def __init__(
             self,
             assets: list[Asset],
-            account_manager: AccountManager,
-            fees_manager: FeesManager,
-            order_manager: OrderManager,
-            market_data_manager: MarketDataManager,
-            consensus_manager: ConsensusManager,
-            trading_context_manager: TradingContextManager,
-            protection_manager: ProtectionManager,
+            manager_container: ManagerContainer,
             activity_queue: Queue
     ):
         self.assets = assets
-        self.account_manager = account_manager
-        self.fees_manager = fees_manager
-        self.order_manager = order_manager
-        self.market_data_manager = market_data_manager
-        self.consensus_manager = consensus_manager
-        self.trading_context_manager = trading_context_manager
-        self.protection_manager = protection_manager
+        self.account_manager = manager_container.account_manager
+        self.fees_manager = manager_container.fees_manager
+        self.order_manager = manager_container.order_manager
+        self.market_data_manager = manager_container.market_data_manager
+        self.consensus_manager = manager_container.consensus_manager
+        self.trading_context_manager = manager_container.trading_context_manager
+        self.protection_manager = manager_container.protection_manager
         self.activity_queue = activity_queue
 
     def init_application(self):
@@ -77,6 +65,9 @@ class TradingExecutor:
             raise ValueError(f"Insufficient balance for {currency_symbol}: ${account_balance.available_balance}")
 
         market_data = self._fetch_market_data(asset)
+        logging.warning([
+            f"Fetched market data for Asset. Asset={asset} MarketData={market_data}"
+        ])
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
         candles = self.market_data_manager.get_candles(
             asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe

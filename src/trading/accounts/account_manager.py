@@ -3,12 +3,12 @@ import logging
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.trading_context import TradingContext
-from src.core.registries.provider_registry import ProviderRegistry
+from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 from src.trading.context.trading_context_manager import TradingContextManager
 
 
-class AccountManager(ProviderRegistry, WebSocketRegistry):
+class AccountManager(RestClientRegistry, WebSocketRegistry):
 
     def __init__(self, assets: list[Asset]):
         super().__init__()
@@ -45,7 +45,7 @@ class AccountManager(ProviderRegistry, WebSocketRegistry):
     def get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
         if provider_name in self.balances and currency_symbol in self.balances[provider_name]:
             return self.balances[provider_name][currency_symbol]
-        provider = self.get_provider(provider_name)
+        provider = self.get_client(provider_name)
         data = provider.get_account_balance()
         self._cache_balances(provider_name, data)
         return self.balances.get(provider_name, {}).get(currency_symbol) or AccountBalance(currency_symbol, 0)

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from threading import Event
+
 from src.trading.trading_executor import TradingExecutor
 from src.trading.trading_scheduler import TradingScheduler
 
@@ -10,13 +12,19 @@ class TradingEngine:
             trading_scheduler: TradingScheduler,
             trading_executor: TradingExecutor
     ):
-        self.trading_scheduler = trading_scheduler
-        self.trading_executor = trading_executor
+        self._trading_scheduler = trading_scheduler
+        self._trading_executor = trading_executor
+        self._is_running = Event()
 
-    def init_application(self):
-        self.trading_executor.init_application()
-        self.trading_scheduler.start(self.trading_executor.create_buy_order)
-        self.trading_scheduler.start(self.trading_executor.check_unclosed_orders)
+    def start_application(self):
+        self._trading_executor.init_application()
+        self._trading_scheduler.start(self._trading_executor.create_buy_order)
+        self._trading_scheduler.start(self._trading_executor.check_unclosed_orders)
+        self._is_running.set()
 
-    def print_context(self) -> None:
-        self.trading_executor.print_context()
+    def stop_application(self):
+        # FIXME: Consider cancelling all pending/open trades as part of application shutdown procedures.
+        if self._is_running.is_set():
+            self._trading_scheduler.stop()
+            self._trading_executor.print_context()
+        self._is_running.clear()

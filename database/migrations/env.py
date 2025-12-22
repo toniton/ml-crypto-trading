@@ -6,7 +6,7 @@ from sqlalchemy import pool
 from alembic import context
 
 
-from database.database_setup import DatabaseSetup
+from database.database_manager import DatabaseManager
 from database.helpers.dao_helper import DaoHelper
 
 from src.configuration.providers.database_config import DatabaseConfig
@@ -28,7 +28,7 @@ if config.config_file_name is not None:
 
 DaoHelper.load_classes()
 
-target_metadata = DatabaseSetup.BaseTableModel.metadata
+target_metadata = DatabaseManager.BaseTableModel.metadata
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:

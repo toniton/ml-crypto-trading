@@ -1,7 +1,7 @@
 import importlib
 import pkgutil
 
-from database.database_setup import DatabaseSetup
+from database.database_manager import DatabaseManager
 
 
 class DaoHelper:
@@ -14,5 +14,5 @@ class DaoHelper:
                 "." + name, DaoHelper.DATABASE_DAO_DIR.replace("/", ".")
             )
 
-        for cls in DatabaseSetup.BaseTableModel.__subclasses__():
+        for cls in DatabaseManager.BaseTableModel.__subclasses__():
             cls()

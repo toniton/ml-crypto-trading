@@ -23,13 +23,14 @@ class AssetScheduleRegistry(ABC):
     def __init__(self):
         self.schedules: dict[AssetSchedule, list[Asset]] = {}
 
-    def register_asset(self, asset: Asset):
-        asset_schedule = asset.schedule
-        if asset_schedule not in self.schedules:
-            self.schedules[asset_schedule] = []
-        if asset in self.schedules[asset_schedule]:
-            raise ValueError(f"Asset {asset.name} already registered.")
-        self.schedules[asset_schedule].append(asset)
+    def register_assets(self, assets: list[Asset]):
+        for asset in assets:
+            asset_schedule = asset.schedule
+            if asset_schedule not in self.schedules:
+                self.schedules[asset_schedule] = []
+            if asset in self.schedules[asset_schedule]:
+                raise ValueError(f"Asset {asset.name} already registered.")
+            self.schedules[asset_schedule].append(asset)
 
     def get_assets(self, schedule: AssetSchedule) -> list[Asset]:
         assets = self.schedules.get(schedule)

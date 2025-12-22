@@ -12,19 +12,19 @@ from src.configuration.guard_config import GuardConfig
 
 @dataclass
 class Asset:
-    keywords: list[str]
     base_ticker_symbol: str
     quote_ticker_symbol: str
     decimal_places: int
     name: str
-    market_cap: float
     exchange: ExchangeProvidersEnum
     min_quantity: float
-    sector: str
-    industry: str
     schedule: AssetSchedule
     candles_timeframe: Timeframe
     guard_config: Optional[GuardConfig] = None
+    keywords: Optional[list[str]] = None
+    market_cap: Optional[float] = None
+    sector: Optional[str] = None
+    industry: Optional[str] = None
 
     @computed_field
     @property

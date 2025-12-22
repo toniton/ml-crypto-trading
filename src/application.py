@@ -1,30 +1,34 @@
+from __future__ import annotations
+
 import atexit
-import importlib
 import logging
-import pkgutil
 
 from queue import Queue
-from sqlalchemy.orm import Session
+from threading import Event
 
-from database.database_setup import DatabaseSetup
-from database.unit_of_work import UnitOfWork
+from database.database_manager import DatabaseManager
 
 import src.trading.consensus.strategies
 import src.configuration.providers
 import src.clients
 import src.trading.protection.guards
+from database.unit_of_work import UnitOfWork
 
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.helpers.application_helper import ApplicationHelper
 from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
+from src.core.registries.rest_client_registry import RestClientRegistry
+from src.core.registries.websocket_registry import WebSocketRegistry
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.fees.fees_manager import FeesManager
+from src.core.managers.manager_container import ManagerContainer
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.core.interfaces.exchange_rest_client import ExchangeRestClient
@@ -41,132 +45,100 @@ class Application:
             assets_config: AssetsConfig, activity_queue: Queue = Queue(),
             is_backtest_mode: bool = False,
     ):
-        self.trading_engine = None
-        self.activity_queue = activity_queue
-        self.is_backtest_mode = is_backtest_mode
-        self.unit_of_work = None
-        self.environment_config = environment_config
-        self.application_config = application_config
-        self.assets_config = assets_config
-
+        self.is_running = Event()
+        self._trading_engine = None
+        self._is_backtest_mode = is_backtest_mode
+        self._environment_config = environment_config
+        self._application_config = application_config
+        self._activity_queue = activity_queue
         self._setup_configuration()
-        database_session = self._setup_database()
-        self.unit_of_work = UnitOfWork(database_session)
-        self.assets = assets_config.assets
 
-        trading_context_manager = TradingContextManager()
-        self.account_manager = AccountManager(self.assets)
-        self.fees_manager = FeesManager()
-        self.order_manager = OrderManager(self.unit_of_work)
-        self.market_data_manager = MarketDataManager(self.assets)
+        db_manager = DatabaseManager()
+        unit_of_work = db_manager.initialize()
+        self._assets = assets_config.assets
 
-        self.consensus_manager = ConsensusManager()
-        self.protection_manager = ProtectionManager()
+        self._managers = self._create_managers(unit_of_work)
 
-        self.trading_scheduler = TradingScheduler()
-        self.trading_executor = TradingExecutor(
-            self.assets, self.account_manager, self.fees_manager, self.order_manager,
-            self.market_data_manager, self.consensus_manager,
-            trading_context_manager, self.protection_manager, self.activity_queue
-        )
-
-        if not self.is_backtest_mode:
+        if not self._is_backtest_mode:
             self._setup_clients()
 
         self._setup_strategies()
         self._setup_protections()
-        self._setup_asset_schedules()
 
         atexit.register(self.shutdown)
 
-        print(["Crypto Dot Com API Key", self.environment_config.crypto_dot_com_exchange_api_key])
-        print(["Application config", self.application_config.crypto_dot_com_exchange_rest_endpoint])
-        print(["Application config", self.application_config.crypto_dot_com_exchange_websocket_endpoint])
-
     def _setup_configuration(self):
-        for (_, name, _) in pkgutil.iter_modules(src.configuration.providers.__path__):
-            try:
-                importlib.import_module("." + name, src.configuration.providers.__name__)
-            except ImportError as exc:
-                logging.warning(f"Skipping configuration {name}: {exc}")
-
+        ApplicationHelper.import_modules(src.configuration.providers)
         for cls in BaseConfig.__subclasses__():
-            cls(self.application_config, self.environment_config)
+            cls(self._application_config, self._environment_config)
 
-    def _setup_database(self):
-        database_setup = DatabaseSetup()
-        DatabaseSetup.run_migrations()
-        database_setup.create_tables()
-        database_engine = database_setup.create_engine()
-        return Session(database_engine)
+    def _create_managers(self,unit_of_work: UnitOfWork) -> ManagerContainer:
+        return ManagerContainer(
+            account_manager=AccountManager(self._assets),
+            fees_manager=FeesManager(),
+            order_manager=OrderManager(unit_of_work),
+            market_data_manager=MarketDataManager(self._assets),
+            consensus_manager=ConsensusManager(),
+            protection_manager=ProtectionManager(),
+            trading_context_manager=TradingContextManager(),
+        )
 
-    def __register_rest_client(self, instance: ExchangeRestClient):
-        self.account_manager.register_provider(instance)
-        self.fees_manager.register_provider(instance)
-        self.order_manager.register_provider(instance)
-        self.market_data_manager.register_provider(instance)
-
-    def __register_websocket_client(self, instance: ExchangeWebSocketClient):
-        self.account_manager.register_websocket(instance)
-        self.order_manager.register_websocket(instance)
-        self.market_data_manager.register_websocket(instance)
+    def _register_with_managers(self, instance: ExchangeRestClient | ExchangeWebSocketClient):
+        if not isinstance(instance, (ExchangeRestClient, ExchangeWebSocketClient)):
+            raise RuntimeError(f"Instance of type {type(instance)} not allowed!")
+        for manager in vars(self._managers).values():
+            if isinstance(instance, ExchangeRestClient) and hasattr(manager, RestClientRegistry.register_client.__name__):
+                getattr(manager, RestClientRegistry.register_client.__name__)(instance)
+            if isinstance(instance, ExchangeWebSocketClient) and hasattr(manager, WebSocketRegistry.register_websocket.__name__):
+                getattr(manager, WebSocketRegistry.register_websocket.__name__)(instance)
 
     def _setup_clients(self):
-        for (_, name, _) in pkgutil.iter_modules(src.clients.__path__):
-            try:
-                importlib.import_module("." + name, src.clients.__name__)
-            except ImportError as exc:
-                logging.warning(f"Skipping client {name}: {exc}")
-
+        ApplicationHelper.import_modules(src.clients)
         for cls in ExchangeRestClient.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
-                self.__register_rest_client(cls())
+                self._register_with_managers(cls())
 
         for cls in ExchangeWebSocketClient.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
-                self.__register_websocket_client(cls())
+                self._register_with_managers(cls())
 
     def _setup_strategies(self):
-        for (_, name, _) in pkgutil.iter_modules(src.trading.consensus.strategies.__path__):
-            try:
-                importlib.import_module("." + name, src.trading.consensus.strategies.__name__)
-            except ImportError as exc:
-                logging.warning(f"Skipping strategy {name}: {exc}")
-
+        ApplicationHelper.import_modules(src.trading.consensus.strategies)
         for cls in RuleBasedTradingStrategy.__subclasses__():
             instance = cls()
-            self.consensus_manager.register_strategy(instance)
+            self._managers.consensus_manager.register_strategy(instance)
 
         # for cls in MachineLearningTradingStrategy.__subclasses__():
         #     instance = cls(prediction_engine)
         #     self.consensus_manager.register_strategy(instance)
 
     def _setup_protections(self):
-        for (_, name, _) in pkgutil.iter_modules(src.trading.protection.guards.__path__):
-            importlib.import_module("." + name, src.trading.protection.guards.__name__)
-
-        for asset in self.assets:
+        ApplicationHelper.import_modules(src.trading.protection.guards)
+        for asset in self._assets:
             for cls in Guard.__subclasses__():
                 if cls.is_enabled(asset) is True:
                     instance = cls(asset.guard_config)
-                    self.protection_manager.register_guard(asset.key, instance)
-
-    def _setup_asset_schedules(self):
-        for asset in self.assets:
-            self.trading_scheduler.register_asset(asset)
+                    self._managers.protection_manager.register_guard(asset.key, instance)
 
     def startup(self):
-        self.trading_engine = TradingEngine(
-            self.trading_scheduler,
-            self.trading_executor
-        )
-        self.trading_engine.init_application()
+        if self.is_running.is_set():
+            return
+        logging.warning("Starting Application...")
+        self.is_running.set()
+        trading_scheduler = TradingScheduler()
+        trading_scheduler.register_assets(self._assets)
+        trading_executor = TradingExecutor(self._assets, self._managers, self._activity_queue)
+        self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
+        self._trading_engine.start_application()
 
     def register_client(self, rest_client: ExchangeRestClient, websocket_client: ExchangeWebSocketClient):
-        self.__register_rest_client(rest_client)
-        self.__register_websocket_client(websocket_client)
+        self._register_with_managers(rest_client)
+        self._register_with_managers(websocket_client)
 
     def shutdown(self):
-        # FIXME: Cancel all pending/open trades as part of application shutdown procedures.
-        if self.trading_engine:
-            self.trading_engine.print_context()
+        if not self.is_running.is_set():
+            return
+        if self._trading_engine:
+            self._trading_engine.stop_application()
+        self.is_running.clear()
+        logging.warning("Stopping Application...")

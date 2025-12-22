@@ -6,11 +6,11 @@ from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
-from src.core.registries.provider_registry import ProviderRegistry
+from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 
 
-class MarketDataManager(ProviderRegistry, WebSocketRegistry):
+class MarketDataManager(RestClientRegistry, WebSocketRegistry):
 
     def __init__(self, assets: list[Asset]):
         super().__init__()
@@ -35,9 +35,9 @@ class MarketDataManager(ProviderRegistry, WebSocketRegistry):
         return None
 
     def get_market_data(self, ticker_symbol: str, provider_name: str) -> MarketData:
-        provider = self.get_provider(provider_name)
+        provider = self.get_client(provider_name)
         return provider.get_market_data(ticker_symbol)
 
     def get_candles(self, provider_name: str, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        provider = self.get_provider(provider_name)
+        provider = self.get_client(provider_name)
         return provider.get_candle(ticker_symbol, timeframe)

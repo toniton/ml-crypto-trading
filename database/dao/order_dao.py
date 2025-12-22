@@ -1,10 +1,10 @@
 
 from sqlalchemy import Column, Integer, String, TIMESTAMP, func
 
-from database.database_setup import DatabaseSetup
+from database.database_manager import DatabaseManager
 
 
-class OrderDao(DatabaseSetup.BaseTableModel):
+class OrderDao(DatabaseManager.BaseTableModel):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True)
     uuid = Column(String, index=True, unique=True)

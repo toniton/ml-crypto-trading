@@ -9,12 +9,12 @@ from database.repositories.providers.postgres_order_repository import PostgresOr
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from database.unit_of_work import UnitOfWork
-from src.core.registries.provider_registry import ProviderRegistry
+from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 from src.trading.helpers.trading_helper import TradingHelper
 
 
-class OrderManager(ProviderRegistry, WebSocketRegistry):
+class OrderManager(RestClientRegistry, WebSocketRegistry):
     def __init__(self, unit_of_work: UnitOfWork):
         super().__init__()
         self.unit_of_work = unit_of_work
@@ -63,7 +63,7 @@ class OrderManager(ProviderRegistry, WebSocketRegistry):
         return order
 
     def execute_order(self, order: Order):
-        provider = self.get_provider(order.provider_name)
+        provider = self.get_client(order.provider_name)
         try:
             provider.place_order(
                 order.uuid,
