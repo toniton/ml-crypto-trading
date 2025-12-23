@@ -44,11 +44,11 @@ class Application:
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
             assets_config: AssetsConfig, activity_queue: Queue = Queue(),
             is_backtest_mode: bool = False,
-            trading_scheduler: TradingScheduler = None,
+            backtest_scheduler: TradingScheduler = None,
     ):
         self.is_running = Event()
         self._trading_engine = None
-        self._trading_scheduler = trading_scheduler
+        self._backtest_scheduler = backtest_scheduler
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -129,7 +129,7 @@ class Application:
             return
         logging.warning("Starting Application...")
         self.is_running.set()
-        trading_scheduler = self._trading_scheduler or LiveTradingScheduler()
+        trading_scheduler = self._backtest_scheduler if self._is_backtest_mode else LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
         trading_executor = TradingExecutor(self._assets, self._managers, self._activity_queue)
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
