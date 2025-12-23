@@ -34,7 +34,9 @@ from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
-from src.trading.trading_scheduler import TradingScheduler
+
+from src.trading.live_trading_scheduler import LiveTradingScheduler
+from src.core.interfaces.trading_scheduler import TradingScheduler
 
 
 class Application:
@@ -42,9 +44,11 @@ class Application:
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
             assets_config: AssetsConfig, activity_queue: Queue = Queue(),
             is_backtest_mode: bool = False,
+            trading_scheduler: TradingScheduler = None,
     ):
         self.is_running = Event()
         self._trading_engine = None
+        self._trading_scheduler = trading_scheduler
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -125,7 +129,7 @@ class Application:
             return
         logging.warning("Starting Application...")
         self.is_running.set()
-        trading_scheduler = TradingScheduler()
+        trading_scheduler = self._trading_scheduler or LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
         trading_executor = TradingExecutor(self._assets, self._managers, self._activity_queue)
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)

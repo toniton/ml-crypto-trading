@@ -67,7 +67,7 @@ class TestAccountManager(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.get_account_balance.return_value = [expected_balance]
 
-        with patch.object(self.account_manager, 'get_provider', return_value=mock_provider):
+        with patch.object(self.account_manager, 'get_client', return_value=mock_provider):
             balance = self.account_manager.get_balance(currency, provider_name)
 
             self.assertEqual(balance, expected_balance)
@@ -82,7 +82,7 @@ class TestAccountManager(unittest.TestCase):
         mock_provider = MagicMock()
         mock_provider.get_account_balance.return_value = []
 
-        with patch.object(self.account_manager, 'get_provider', return_value=mock_provider):
+        with patch.object(self.account_manager, 'get_client', return_value=mock_provider):
             balance = self.account_manager.get_balance(currency, provider_name)
 
             self.assertEqual(balance.currency, "USDT")

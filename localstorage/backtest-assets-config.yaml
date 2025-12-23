@@ -1,0 +1,13 @@
+assets:
+  - name: "Bitcoin (Crypto.com)"
+    base_ticker_symbol: "BTC"
+    quote_ticker_symbol: "USD"
+    exchange: "CRYPTO_DOT_COM"
+    min_quantity: 0.00001
+    decimal_places: 8
+    candles_timeframe: "MIN1"
+    schedule: 0
+    guard_config:
+      max_drawdown_period: 8
+      max_drawdown_percentage: 0.60
+      cooldown_timeout: 5

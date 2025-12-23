@@ -1,30 +1,45 @@
 #!/usr/bin/env python3
+import os
 import threading
-import webbrowser
-from queue import Queue
 
-from app_server import AppServer
-from server.web_server import WebServer
+from backtest.backtest_config import BacktestConfig
+from backtest.backtest_application import BacktestApplication
+from src.application import Application
+from src.configuration.application_config import ApplicationConfig
+from src.configuration.assets_config import AssetsConfig
+from src.configuration.environment_config import AppEnvEnum, EnvironmentConfig
+from src.configuration.helpers.application_helper import ApplicationHelper
 
 
 def main():
+    backtest_config = None
+    is_backtest_mode = True if os.environ.get("BACKTEST_MODE") is not None else False
+    environment_config = EnvironmentConfig()
 
-    activity_queue = Queue()
-    web = WebServer(activity_queue)
-    app = AppServer(activity_queue)
+    if is_backtest_mode:
+        backtest_config = BacktestConfig()
 
-    web_thread = threading.Thread(target=web.run, name="Webserver")
-    app_thread = threading.Thread(target=app.startup, name="TradingEngine")
-    web_thread.start()
-    app_thread.start()
+    application_yaml = backtest_config.application_config_filepath if is_backtest_mode else (
+        ApplicationHelper.get_application_config_path(AppEnvEnum.STAGING),
+        ApplicationHelper.get_application_config_path(environment_config.app_env),
+    )
+    application_config = ApplicationConfig(_yaml_file=application_yaml)
 
-    # app.enable_backtest()
-    # if signal_queue.get():
-    #     app.enable_backtest()
+    asset_yaml = backtest_config.assets_config_filepath if is_backtest_mode else ApplicationHelper.ASSETS_CONFIG_PATH
+    assets_config = AssetsConfig(_yaml_file=asset_yaml)
 
-    url = 'http://localhost:5555'
-    webbrowser.open(url)
-
+    if is_backtest_mode:
+        runner = BacktestApplication(
+            application_config=application_config, environment_config=environment_config,
+            assets_config=assets_config, is_backtest_mode=is_backtest_mode)
+        runner.startup()
+    else:
+        app = Application(
+            application_config=application_config, environment_config=environment_config,
+            assets_config=assets_config
+        )
+        app_thread = threading.Thread(target=app.startup, name="TradingEngine")
+        app_thread.start()
 
 
 if __name__ == "__main__":

@@ -5,10 +5,10 @@ from typing import Callable
 from schedule import Job, run_pending
 
 from api.interfaces.asset import Asset
-from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
+from src.core.interfaces.trading_scheduler import TradingScheduler
 
 
-class TradingScheduler(AssetScheduleRegistry):
+class LiveTradingScheduler(TradingScheduler):
     def __init__(self):
         super().__init__()
         self._stop_event = threading.Event()

@@ -3,7 +3,7 @@ from __future__ import annotations
 from threading import Event
 
 from src.trading.trading_executor import TradingExecutor
-from src.trading.trading_scheduler import TradingScheduler
+from src.core.interfaces.trading_scheduler import TradingScheduler
 
 
 class TradingEngine:
