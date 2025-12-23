@@ -22,12 +22,15 @@ class MarketDataManager(RestClientRegistry, WebSocketRegistry):
             (key, ticker_symbol, exchange) = asset.key, asset.ticker_symbol, asset.exchange
             websocket_client = self.get_websocket(exchange.value)
             websocket_client.subscribe_market_data(
-                ticker_symbol, callback=lambda conn_key, data, asset_key=key: self.on_marketdata_update(asset_key, data)
+                ticker_symbol, callback=self._ws_callback(key)
             )
 
-    def on_marketdata_update(self, key: int, data: MarketData):
-        logging.warning(["Market data for key:", key, ", updates received:", data])
-        self.market_data[key] = data
+    def _ws_callback(self, asset_key: int):
+        def _on_marketdata_update(conn_key: str, data: MarketData):
+            logging.warning(["Market data for key:", asset_key, ", updates received:", data, conn_key])
+            self.market_data[asset_key] = data
+
+        return _on_marketdata_update
 
     def get_latest_marketdata(self, key: int) -> MarketData | None:
         if key in self.market_data:

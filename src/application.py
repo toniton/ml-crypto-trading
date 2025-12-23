@@ -6,14 +6,13 @@ import logging
 from queue import Queue
 from threading import Event
 
-from database.database_manager import DatabaseManager
-
 import src.trading.consensus.strategies
 import src.configuration.providers
 import src.clients
 import src.trading.protection.guards
-from database.unit_of_work import UnitOfWork
 
+from database.database_manager import DatabaseManager
+from database.unit_of_work import UnitOfWork
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
@@ -22,10 +21,9 @@ from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
+from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
-
-from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.trading.context.trading_context_manager import TradingContextManager
 from src.trading.fees.fees_manager import FeesManager
 from src.core.managers.manager_container import ManagerContainer
@@ -72,7 +70,7 @@ class Application:
         for cls in BaseConfig.__subclasses__():
             cls(self._application_config, self._environment_config)
 
-    def _create_managers(self,unit_of_work: UnitOfWork) -> ManagerContainer:
+    def _create_managers(self, unit_of_work: UnitOfWork) -> ManagerContainer:
         return ManagerContainer(
             account_manager=AccountManager(self._assets),
             fees_manager=FeesManager(),
@@ -87,9 +85,11 @@ class Application:
         if not isinstance(instance, (ExchangeRestClient, ExchangeWebSocketClient)):
             raise RuntimeError(f"Instance of type {type(instance)} not allowed!")
         for manager in vars(self._managers).values():
-            if isinstance(instance, ExchangeRestClient) and hasattr(manager, RestClientRegistry.register_client.__name__):
+            if (isinstance(instance, ExchangeRestClient)
+                    and hasattr(manager, RestClientRegistry.register_client.__name__)):
                 getattr(manager, RestClientRegistry.register_client.__name__)(instance)
-            if isinstance(instance, ExchangeWebSocketClient) and hasattr(manager, WebSocketRegistry.register_websocket.__name__):
+            if (isinstance(instance, ExchangeWebSocketClient)
+                    and hasattr(manager, WebSocketRegistry.register_websocket.__name__)):
                 getattr(manager, WebSocketRegistry.register_websocket.__name__)(instance)
 
     def _setup_clients(self):

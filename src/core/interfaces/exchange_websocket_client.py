@@ -34,7 +34,7 @@ class ExchangeWebSocketClient(ABC):
         pass
 
     @abstractmethod
-    def _get_order_update_subscription(self, order_id: str) -> OrderUpdateSubscriptionData:
+    def _get_order_update_subscription(self, instrument_name: str) -> OrderUpdateSubscriptionData:
         pass
 
     @abstractmethod

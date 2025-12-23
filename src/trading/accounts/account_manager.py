@@ -39,7 +39,7 @@ class AccountManager(RestClientRegistry, WebSocketRegistry):
                 trading_context_manager.register_trading_context(
                     asset.key, TradingContext(starting_balance=opening_balance.available_balance)
                 )
-            except Exception as exc:
+            except Exception:
                 logging.error(f"Unable to initialize account balance for {asset} from {exchange}", exc_info=True)
 
     def get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:

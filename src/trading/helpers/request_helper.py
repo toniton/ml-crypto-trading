@@ -7,7 +7,9 @@ from urllib.request import Request, urlopen
 
 class RequestHelper:
     @staticmethod
-    def create_request(base_url: str, path: str, method: str = "GET", data: Any = None, headers: dict = None) -> Request:
+    def create_request(
+            base_url: str, path: str, method: str = "GET", data: Any = None, headers: dict = None
+    ) -> Request:
         headers = {
             "Content-Type": "application/json",
             "User-Agent": "Mozilla/5.0",
@@ -38,4 +40,4 @@ class RequestHelper:
 
         except json.JSONDecodeError as exc:
             logging.error(f"Failed to parse JSON response: {exc}!")
-            raise RuntimeError(f"Invalid JSON response.") from exc
+            raise RuntimeError("Invalid JSON response.") from exc

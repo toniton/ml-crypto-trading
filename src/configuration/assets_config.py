@@ -27,4 +27,4 @@ class AssetsConfig(BaseSettings):
             dotenv_settings,
             file_secret_settings,
     ):
-        return YamlConfigSettingsSource(settings_cls), CustomYamlConfigSettingsSource(init_settings, settings_cls),
+        return YamlConfigSettingsSource(settings_cls), CustomYamlConfigSettingsSource(init_settings, settings_cls)

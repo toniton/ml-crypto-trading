@@ -5,10 +5,10 @@ from queue import Queue
 from uuid import uuid4
 
 from api.interfaces.asset import Asset
-from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from database.unit_of_work import UnitOfWork
+from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 from src.trading.helpers.trading_helper import TradingHelper
@@ -33,7 +33,7 @@ class OrderManager(RestClientRegistry, WebSocketRegistry):
 
     def _save_orders_to_database(self, orders: list[Order]) -> None:
         for order in orders:
-            logging.warning([f"Order update received, saving to DB", order])
+            logging.warning(["Order update received, saving to DB", order])
             order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
             order_repository.upsert(order)
         self.unit_of_work.complete()
@@ -43,7 +43,7 @@ class OrderManager(RestClientRegistry, WebSocketRegistry):
             websocket_client = self.get_websocket(asset.exchange.name)
             instrument_name = TradingHelper.format_ticker_symbol(asset.ticker_symbol, separator="_")
             websocket_client.subscribe_order_update(
-                instrument_name, callback=lambda data: self._save_orders_to_database(data)
+                instrument_name, callback=self._save_orders_to_database
             )
 
     def open_order(
@@ -76,10 +76,10 @@ class OrderManager(RestClientRegistry, WebSocketRegistry):
             order_repository.save(order)
             self.unit_of_work.complete()
         except Exception as exc:
-            raise RuntimeError(f"Error executing order:", order, exc)
+            raise RuntimeError("Error executing order:", order, exc) from exc
 
     def cancel_order(self, open_order: Order, market_price: str) -> Order:
-        raise NotImplementedError(f"Unable to cancel order:", open_order)
+        raise NotImplementedError("Unable to cancel order:", open_order)
 
     def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:
         order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
