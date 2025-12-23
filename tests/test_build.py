@@ -19,8 +19,15 @@ class TestBuildAndStartup(unittest.TestCase):
     @patch('main.ApplicationConfig')
     @patch('main.threading.Thread')
     @patch('main.Application')
-    def test_main_startup(self, mock_application_cls, mock_thread, mock_app_config_cls, mock_assets_config_cls):
+    @patch('main.EnvironmentConfig')
+    def test_main_startup(
+            self, mock_environment_cls, mock_application_cls,
+            mock_thread, mock_app_config_cls, mock_assets_config_cls
+    ):
         # Mock configs
+        mock_env_config_instance = MagicMock()
+        mock_environment_cls.return_value = mock_env_config_instance
+
         mock_app_config_instance = MagicMock()
         mock_app_config_cls.return_value = mock_app_config_instance
 
@@ -33,6 +40,7 @@ class TestBuildAndStartup(unittest.TestCase):
         # Check Application instantiated with configs
         mock_application_cls.assert_called_once()
         call_args = mock_application_cls.call_args
+        self.assertEqual(call_args.kwargs['environment_config'], mock_env_config_instance)
         self.assertEqual(call_args.kwargs['application_config'], mock_app_config_instance)
         self.assertEqual(call_args.kwargs['assets_config'], mock_assets_config_instance)
 
