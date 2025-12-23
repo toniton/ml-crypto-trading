@@ -34,10 +34,8 @@ def main():
             assets_config=assets_config, is_backtest_mode=is_backtest_mode)
         runner.startup()
     else:
-        app = Application(
-            application_config=application_config, environment_config=environment_config,
-            assets_config=assets_config
-        )
+        app = Application(application_config=application_config, environment_config=environment_config,
+                          assets_config=assets_config)
         app_thread = threading.Thread(target=app.startup, name="TradingEngine")
         app_thread.start()
 
