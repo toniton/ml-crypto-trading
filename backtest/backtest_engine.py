@@ -1,5 +1,4 @@
 import logging
-from time import sleep
 from typing import Optional
 
 from api.interfaces.market_data import MarketData
@@ -15,11 +14,6 @@ from src.application import Application
 
 
 class BacktestEngine:
-    """
-    Orchestrator for the event-driven backtesting system.
-    Wires up the EventBus, Clock, Data Loader, and simulated Clients.
-    """
-
     def __init__(
             self, app: Application, loader: BacktestDataLoader, clock: BacktestClock,
             scheduler: BacktestTradingScheduler, config: Optional[BacktestConfig] = None
@@ -43,7 +37,6 @@ class BacktestEngine:
         return self.websocket_client
 
     def run(self):
-        """Run the backtest simulation loop."""
         logging.warning(f"BacktestEngine: Starting simulation with {self.clock.total_ticks} ticks")
         self.clock.reset()
         self._is_running = True
@@ -53,9 +46,7 @@ class BacktestEngine:
             tick_count += 1
             timestamp = self.clock.now()
             logging.warning(f"BacktestEngine: Clock tick: {tick_count}")
-            sleep(0.5)
 
-            # Get Market Data for this timestamp
             data_point = self.loader.get_data(timestamp)
             if data_point:
                 market_data = MarketData(
@@ -66,24 +57,18 @@ class BacktestEngine:
                     timestamp=data_point.timestamp
                 )
 
-                # Publish Market Data Event
                 self.bus.publish(MarketDataEvent(
                     market_data=market_data,
                     ticker_symbol="BTC_USD"
                 ))
 
-            # Emit Tick Event (triggers polling strategies)
+            self.scheduler.on_tick(timestamp)
             self.bus.publish(TickEvent(timestamp=timestamp))
 
-            # Advance Scheduler
-            self.scheduler.on_tick(timestamp)
-
-            # Note: Strategies process events synchronously here because bus is synchronous.
         if self.app:
             self.app.shutdown()
         logging.warning("BacktestEngine: Simulation complete")
         self._is_running = False
-        # exit(0)
 
     def stop(self):
         self._is_running = False

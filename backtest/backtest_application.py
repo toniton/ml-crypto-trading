@@ -28,7 +28,6 @@ class BacktestApplication:
     def startup(self):
         backtest_config = BacktestConfig()
         loader = BacktestDataLoader(backtest_config.historical_data_path)
-        # Load data first to get timestamps
         data_points = loader.load("btc-usd", use_mini=True)
         timestamps = [dp.timestamp for dp in data_points]
 
@@ -36,21 +35,19 @@ class BacktestApplication:
         scheduler = BacktestTradingScheduler(clock)
 
         with PostgresContainer("postgres:16") as postgres:
-            psql_url = f"{postgres.get_container_host_ip()}:{postgres.get_exposed_port(postgres.port)}"
+            psql_url = f"{postgres.get_container_host_ip()}:{postgres.get_exposed_port(5432)}"
             application_config = self._application_config.model_copy(
                 update={"database_connection_host": psql_url}
             )
             environment_config = self._environment_config.model_copy(
                 update={
-                    "postgres_user": postgres.username, "postgres_database":postgres.dbname,
-                    "postgres_password": SecretStr(postgres.password)
+                    "postgres_user": postgres.POSTGRES_USER, "postgres_database":postgres.POSTGRES_DB,
+                    "postgres_password": SecretStr(postgres.POSTGRES_PASSWORD)
                 }
             )
-            app = Application(
-                application_config=application_config, environment_config=environment_config,
-                assets_config=self._assets_config, is_backtest_mode=self._is_backtest_mode,
-                trading_scheduler=scheduler
-            )
+            app = Application(application_config=application_config, environment_config=environment_config,
+                              assets_config=self._assets_config, is_backtest_mode=self._is_backtest_mode,
+                              backtest_scheduler=scheduler)
             backtest_engine = BacktestEngine(app, loader, clock, scheduler, backtest_config)
             app_thread = threading.Thread(target=app.startup, name="BacktestApplication")
             app_thread.start()

@@ -1,4 +1,3 @@
-"""Backtest WebSocket client for simulating exchange WebSocket events."""
 from typing import Callable, Optional
 
 from api.interfaces.account_balance import AccountBalance
@@ -18,28 +17,18 @@ from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClien
 
 
 class BacktestAuthHandler(AuthHandler):
-    """No-op auth handler for backtest mode."""
+    def is_auth_response(self, message: dict) -> bool:
+        pass
 
-    def get_auth_payload(self) -> dict:
-        return {}
+    def get_auth_request(self) -> Optional[dict]:
+        pass
 
-    def is_authenticated(self, response: dict) -> bool:
-        return True
+    def handle_auth_response(self, message: dict) -> int:
+        pass
 
 
 class BacktestWebSocketClient(ExchangeWebSocketClient):
-    """
-    Simulated WebSocket client for backtesting.
-    Acts as an adapter between the BacktestEventBus and strategy callbacks.
-    """
-
     def __init__(self, event_bus: BacktestEventBus):
-        """
-        Initialize the backtest WebSocket client.
-
-        Args:
-            event_bus: The central event bus to subscribe to.
-        """
         super().__init__()
         self.bus = event_bus
         # Track subscription IDs for unsubscription
@@ -70,7 +59,6 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
         return None
 
     def subscribe_balance(self, callback: Callable[[list[AccountBalance]], None]) -> str:
-        """Subscribe to balance updates via EventBus."""
         connection_key = f"{self.get_provider_name()}-BALANCE"
 
         def _handler(event: Event):
@@ -84,7 +72,6 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
     def subscribe_order_update(
             self, instrument_name: str, callback: Callable[[list[Order]], None]
     ) -> str:
-        """Subscribe to order updates via EventBus."""
         connection_key = f"{self.get_provider_name()}-ORDER_{instrument_name}"
 
         def _handler(event: Event):
@@ -100,7 +87,6 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
     def subscribe_market_data(
             self, ticker_symbol: str, callback: Callable[[str, MarketData], None]
     ) -> str:
-        """Subscribe to market data updates via EventBus."""
         connection_key = f"{self.get_provider_name()}-MARKET_{ticker_symbol}"
 
         def _handler(event: Event):
@@ -113,12 +99,10 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
         return connection_key
 
     def unsubscribe(self, connection_key: str) -> None:
-        """Unsubscribe from updates."""
         if connection_key in self._subscription_ids:
             sub_id = self._subscription_ids[connection_key]
             self.bus.unsubscribe(sub_id)
             del self._subscription_ids[connection_key]
 
     def _subscribe(self, connection_key: str, subscription_data, callback: Callable) -> str:
-        """Override base subscription to prevent WebSocketManager usage."""
         return connection_key

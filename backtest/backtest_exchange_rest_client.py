@@ -22,33 +22,18 @@ from src.core.interfaces.exchange_rest_client import ExchangeRestClient, Exchang
 
 @dataclass
 class SimulatedAccount:
-    """Simulated account state for backtesting."""
     balance_usd: float = 10000.0
     positions: Dict[str, float] = field(default_factory=dict)  # ticker -> quantity
     orders: List[Order] = field(default_factory=list)
 
 
 class BacktestExchangeRestClient(ExchangeRestClient):
-    """
-    Exchange provider for backtesting with historical data.
-
-    Orders fill immediately at the current market price (or limit price if cross).
-    Account balance and positions are tracked in memory.
-    """
-
     def __init__(
             self,
             clock: BacktestClock = None,
             event_bus: BacktestEventBus = None,
             data_loader: BacktestDataLoader = None,
     ):
-        """
-        Initialize the backtest provider.
-
-        Args:
-            event_bus: The central event bus.
-            config: Backtest configuration. Uses default if not provided.
-        """
         self.clock = clock
         self.loader = data_loader
         self.bus = event_bus
@@ -70,7 +55,6 @@ class BacktestExchangeRestClient(ExchangeRestClient):
         )
 
     def get_account_balance(self) -> list[AccountBalance]:
-        """Get simulated account balance."""
         return [
             AccountBalance(
                 currency="USD",
@@ -79,14 +63,12 @@ class BacktestExchangeRestClient(ExchangeRestClient):
         ]
 
     def get_account_fees(self) -> Fees:
-        """Get simulated account fees (zero fees for backtest)."""
         return Fees(
             maker_fee_pct=0.0,
             taker_fee_pct=0.0
         )
 
     def get_instrument_fees(self, ticker_symbol: str) -> Fees:
-        """Get simulated instrument fees (zero fees for backtest)."""
         return Fees(
             maker_fee_pct=0.0,
             taker_fee_pct=0.0
@@ -100,10 +82,6 @@ class BacktestExchangeRestClient(ExchangeRestClient):
             price: str,
             trade_action: TradeAction
     ) -> Order:
-        """
-        Place a simulated order that fills immediately.
-        Publishes OrderFillEvent and BalanceUpdateEvent.
-        """
         order_uuid = uuid or str(uuid4())
         qty = float(quantity)
         prc = float(price)
@@ -145,7 +123,6 @@ class BacktestExchangeRestClient(ExchangeRestClient):
             f"(Balance: ${self.account.balance_usd:.2f})"
         )
 
-        # Publish events to bus
         self.bus.publish(OrderFillEvent(order=order))
 
         balances = self.get_account_balance()
@@ -154,7 +131,6 @@ class BacktestExchangeRestClient(ExchangeRestClient):
         return order
 
     def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        """Get candle data (from cache)."""
         market_data = self.get_market_data(ticker_symbol)
         return [
             Candle(

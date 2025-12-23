@@ -1,4 +1,5 @@
-from typing import Callable, List
+from threading import Lock
+from typing import Callable
 
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
@@ -7,26 +8,26 @@ from src.core.interfaces.trading_scheduler import TradingScheduler
 
 
 class BacktestTradingScheduler(TradingScheduler):
-    def __init__(self, clock: 'BacktestClock'):
+    def __init__(self, clock: BacktestClock):
         super().__init__()
+        self._lock = Lock()
         self._clock = clock
-        self._callback: Callable[[List[Asset]], None] = None
+        self._callbacks: list[Callable[[list[Asset]], None]] = []
 
-    def start(self, callback: Callable[[List[Asset]], None]):
-        """
-        No threads, no loops.
-        Scheduler is advanced by the backtest engine.
-        """
-        self._callback = callback
+    def start(self, callback: Callable[[list[Asset]], None]):
+        with self._lock:
+            self._callbacks.append(callback)
 
     def on_tick(self, timestamp: int):
-        if not self._callback:
-            return
+        with self._lock:
+            if len(self._callbacks) == 0:
+                return
 
-        for schedule in self.get_registered_schedules():
-            if self._should_run(schedule, timestamp):
-                callback_assets = self.get_assets(schedule)
-                self._callback(callback_assets)
+            for schedule in self.get_registered_schedules():
+                if self._should_run(schedule, timestamp):
+                    callback_assets = self.get_assets(schedule)
+                    for callback in self._callbacks:
+                        callback(callback_assets)
 
     def stop(self):
         pass
