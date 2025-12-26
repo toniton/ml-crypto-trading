@@ -1,6 +1,6 @@
 from typing import Optional
 
-from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
+from src.configuration.exchanges_config import ExchangesConfig
 from src.core.interfaces.auth_handler import AuthHandler
 from src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
 from src.clients.cryptodotcom.handlers.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
@@ -17,14 +17,15 @@ from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMap
 
 class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
 
-    def __init__(self, config: CryptodotcomConfig = None):
+    def __init__(self, config: ExchangesConfig = None):
         super().__init__()
-        self.config = config or CryptodotcomConfig.get_instance()
+        _config = config or ExchangesConfig()
+        self._websocket_url = _config.crypto_dot_com.websocket_endpoint
 
     def _get_websocket_url(self, visibility: SubscriptionVisibility) -> str:
         if visibility is SubscriptionVisibility.PRIVATE:
-            return self.config.websocket_url + "user"
-        return self.config.websocket_url + "market"
+            return self._websocket_url + "user"
+        return self._websocket_url + "market"
 
     @staticmethod
     def get_provider_name() -> str:

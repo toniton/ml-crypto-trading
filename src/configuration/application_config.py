@@ -1,32 +1,18 @@
 from __future__ import annotations
 
+import os
 from typing import Optional
-
 from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict, YamlConfigSettingsSource
-
-from src.configuration.helpers.yaml_config_settings_source import CustomYamlConfigSettingsSource
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ApplicationConfig(BaseSettings):
-    crypto_dot_com_exchange_rest_endpoint: Optional[str] = Field(default=None)
-    crypto_dot_com_exchange_websocket_endpoint: Optional[str] = Field(default=None)
-    coin_market_cap_rest_endpoint: Optional[str] = Field(default=None)
-    database_connection_host: str = Field()
+    backtest_mode: Optional[bool] = Field(default=False, alias="backtest-mode")
+    backtest_initial_balance: Optional[float] = Field(default=10000.0)
+    backtest_tick_delay: Optional[float] = Field(default=0.0)
+    assets_config_filepath: Optional[str] = Field(alias="assets-conf")
+    historical_data_path: Optional[str] = Field(default=os.path.join(
+        os.path.abspath(os.getcwd()), "localstorage", "coinmarketcap", "history"
+    ))
 
-    _yaml_file: Optional[str | tuple[str, str]] = ""
-    model_config = SettingsConfigDict(
-        yaml_file=_yaml_file,
-        yaml_file_encoding="utf-8"
-    )
-
-    @classmethod
-    def settings_customise_sources(
-            cls,
-            settings_cls,
-            init_settings,
-            env_settings,
-            dotenv_settings,
-            file_secret_settings,
-    ):
-        return YamlConfigSettingsSource(settings_cls), CustomYamlConfigSettingsSource(init_settings, settings_cls)
+    model_config = SettingsConfigDict(cli_parse_args=True)

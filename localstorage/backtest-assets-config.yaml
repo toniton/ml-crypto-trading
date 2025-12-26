@@ -8,6 +8,6 @@ assets:
     candles_timeframe: "MIN1"
     schedule: 0
     guard_config:
-      max_drawdown_period: 8
-      max_drawdown_percentage: 0.60
-      cooldown_timeout: 5
+      max_drawdown_period: 800
+      max_drawdown_percentage: 0.10
+      cooldown_timeout: 0

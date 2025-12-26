@@ -1,0 +1,3 @@
+crypto_dot_com:
+  rest_endpoint: https://api.crypto.com/exchange/v1/
+  websocket_endpoint: wss://stream.crypto.com/exchange/v1/

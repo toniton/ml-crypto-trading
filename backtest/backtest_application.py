@@ -1,11 +1,7 @@
 import threading
 from time import sleep
 
-from pydantic import SecretStr
-from testcontainers.postgres import PostgresContainer
-
 from backtest.backtest_clock import BacktestClock
-from backtest.backtest_config import BacktestConfig
 from backtest.backtest_data_loader import BacktestDataLoader
 from backtest.backtest_engine import BacktestEngine
 from backtest.backtest_trading_scheduler import BacktestTradingScheduler
@@ -26,33 +22,21 @@ class BacktestApplication:
         self._is_backtest_mode = is_backtest_mode
 
     def startup(self):
-        backtest_config = BacktestConfig()
-        loader = BacktestDataLoader(backtest_config.historical_data_path)
+        loader = BacktestDataLoader(self._application_config.historical_data_path)
         data_points = loader.load("btc-usd", use_mini=True)
         timestamps = [dp.timestamp for dp in data_points]
 
-        clock = BacktestClock(timestamps=timestamps, tick_delay=backtest_config.backtest_tick_delay)
+        clock = BacktestClock(timestamps=timestamps, tick_delay=self._application_config.backtest_tick_delay)
         scheduler = BacktestTradingScheduler(clock)
 
-        with PostgresContainer("postgres:16") as postgres:
-            psql_url = f"{postgres.get_container_host_ip()}:{postgres.get_exposed_port(5432)}"
-            application_config = self._application_config.model_copy(
-                update={"database_connection_host": psql_url}
-            )
-            environment_config = self._environment_config.model_copy(
-                update={
-                    "postgres_user": postgres.POSTGRES_USER, "postgres_database":postgres.POSTGRES_DB,
-                    "postgres_password": SecretStr(postgres.POSTGRES_PASSWORD)
-                }
-            )
-            app = Application(application_config=application_config, environment_config=environment_config,
-                              assets_config=self._assets_config, is_backtest_mode=self._is_backtest_mode,
-                              backtest_scheduler=scheduler)
-            backtest_engine = BacktestEngine(app, loader, clock, scheduler, backtest_config)
-            app_thread = threading.Thread(target=app.startup, name="BacktestApplication")
-            app_thread.start()
-            backtest_thread = threading.Thread(target=backtest_engine.run, name="BacktestEngine")
-            backtest_thread.start()
-            backtest_thread.join()
-            app_thread.join()
-            sleep(1)
+        app = Application(application_config=self._application_config, environment_config=self._environment_config,
+                          assets_config=self._assets_config, is_backtest_mode=self._is_backtest_mode,
+                          backtest_scheduler=scheduler)
+        backtest_engine = BacktestEngine(app, loader, clock, scheduler, self._application_config)
+        app_thread = threading.Thread(target=app.startup, name="BacktestApplication")
+        app_thread.start()
+        backtest_thread = threading.Thread(target=backtest_engine.run, name="BacktestEngine")
+        backtest_thread.start()
+        backtest_thread.join()
+        app_thread.join()
+        sleep(1)

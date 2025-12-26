@@ -12,7 +12,7 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
-from src.configuration.providers.cryptodotcom_config import CryptodotcomConfig
+from src.configuration.exchanges_config import ExchangesConfig
 from src.trading.helpers.request_helper import RequestHelper
 from src.clients.cryptodotcom.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
 from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
@@ -24,19 +24,17 @@ from src.core.interfaces.exchange_rest_client import ExchangeRestClient, Exchang
 
 class CryptoDotComRestClient(ExchangeRestClient):
     def __init__(self):
-        config = CryptodotcomConfig.get_instance()
-        self.websocket_client = None
-        self.base_url = config.base_url
-        self.websocket_url = config.websocket_url
-        self.api_key = config.api_key
-        self.secret_key = config.secret_key
+        config = ExchangesConfig()
+        self._base_url = config.crypto_dot_com.rest_endpoint
+        self._api_key = config.crypto_dot_com.api_key
+        self._secret_key = config.crypto_dot_com.secret_key
 
     def get_provider_name(self):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_market_data(self, ticker_symbol: str) -> MarketData:
-        request = CryptoDotComRequestFactory.build_market_data_request(self.base_url, ticker_symbol)
+        request = CryptoDotComRequestFactory.build_market_data_request(self._base_url, ticker_symbol)
         response_data = RequestHelper.execute_request(request)
         market_data = CryptoDotComMarketDataResponseDto(**response_data)
         return CryptoDotComMapper.to_marketdata(market_data)
@@ -45,7 +43,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_account_balance(self) -> list[AccountBalance]:
         request = CryptoDotComRequestFactory.build_account_balance_request(
-            self.base_url, self.api_key, self.secret_key
+            self._base_url, self._api_key, self._secret_key
         )
         response_data = RequestHelper.execute_request(request)
         account_balance = CryptoDotComUserBalanceResponseDto(**response_data)
@@ -55,7 +53,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_account_fees(self) -> Fees:
         request = CryptoDotComRequestFactory.build_account_fees_request(
-            self.base_url, self.api_key, self.secret_key
+            self._base_url, self._api_key, self._secret_key
         )
         response_data = RequestHelper.execute_request(request)
         account_fees = CryptoDotComUserFeesResponseDto(**response_data)
@@ -65,7 +63,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_instrument_fees(self, ticker_symbol: str) -> Fees:
         request = CryptoDotComRequestFactory.build_instrument_fees_request(
-            self.base_url, self.api_key, self.secret_key, ticker_symbol
+            self._base_url, self._api_key, self._secret_key, ticker_symbol
         )
         response_data = RequestHelper.execute_request(request)
         account_balance = CryptoDotComInstrumentFeesResponseDto(**response_data)
@@ -80,7 +78,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
             trade_action: TradeAction
     ) -> CryptoDotComResponseOrderCreatedDto:
         request = CryptoDotComRequestFactory.build_order_request(
-            self.base_url, self.api_key, self.secret_key, uuid,
+            self._base_url, self._api_key, self._secret_key, uuid,
             ticker_symbol, quantity, price, trade_action
         )
         response_data = RequestHelper.execute_request(request)
@@ -88,7 +86,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        request = CryptoDotComRequestFactory.build_get_candle_request(self.base_url, ticker_symbol, timeframe)
+        request = CryptoDotComRequestFactory.build_get_candle_request(self._base_url, ticker_symbol, timeframe)
         response_data = RequestHelper.execute_request(request)
         candle_response = CryptoDotComCandleResponseDto(**response_data)
         return CryptoDotComMapper.to_candles(candle_response)

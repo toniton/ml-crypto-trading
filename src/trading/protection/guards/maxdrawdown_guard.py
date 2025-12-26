@@ -32,8 +32,7 @@ class MaxDrawDownGuard(Guard):
         trough_value, _ = PortfolioHelper.calculate_trough_value(peak_value, filtered_positions)
 
         draw_down = (trough_value - peak_value) / peak_value
-        logging.info([f"DrawDown: ${draw_down}."])
-        print([f"DrawDown: ${draw_down}."])
+        logging.info(f"DrawDown: ${draw_down}.")
 
         return -self.config.max_drawdown_percentage < draw_down or draw_down == 0
 

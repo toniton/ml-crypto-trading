@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -12,8 +12,9 @@ class AppEnvEnum(str, Enum):
 
 class EnvironmentConfig(BaseSettings):
     app_env: AppEnvEnum
-    crypto_dot_com_exchange_api_key: Optional[str] = None
-    crypto_dot_com_exchange_secret_key: Optional[str] = None
+    database_connection_host: str = Field()
+    crypto_dot_com__api_key: Optional[str] = None
+    crypto_dot_com__secret_key: Optional[str] = None
     coin_market_cap_api_key: Optional[str] = None
     postgres_user: Optional[str] = None
     postgres_database: Optional[str] = None
