@@ -1,0 +1,58 @@
+name: Build - Publish Artifacts
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-artifacts:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      git_sha: ${{ github.sha }}
+      is_tag: ${{ steps.version.outputs.is_tag }}
+      artifact_name: ${{ steps.version.outputs.artifact_name }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Generate version
+        id: version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+            IS_TAG="true"
+          else
+            VERSION=latest-$(date +%Y%m%d-%H%M%S)
+            IS_TAG="false"
+          fi
+          ARTIFACT_NAME="build-${VERSION}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "is_tag=${IS_TAG}" >> $GITHUB_OUTPUT
+          echo "artifact_name=${ARTIFACT_NAME}" >> $GITHUB_OUTPUT
+          echo "Version: ${VERSION}"
+          echo "Is Tag: ${IS_TAG}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.version.outputs.artifact_name }}
+          path: .
+
+          retention-days: 30
+          compression-level: 6
+
+      - name: Create release (for tags only)
+        if: steps.version.outputs.is_tag == 'true'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
