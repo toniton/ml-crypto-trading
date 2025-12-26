@@ -1,8 +1,16 @@
 version: '3'
 services:
+  trading_bot:
+    build: .
+    command: [ "--assets-conf=localstorage/backtest-assets-config.yaml", "--backtest-mode=true"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_CONNECTION_HOST: postgres:5432
   postgres:
     image: postgres:16
-    container_name: postgres
+    container_name: trading-db
     restart: always
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
@@ -10,3 +18,8 @@ services:
       POSTGRES_DB: ${POSTGRES_DATABASE}
     ports:
       - "5432:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $POSTGRES_USER" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5

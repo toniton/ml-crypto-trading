@@ -1,0 +1,10 @@
+.github
+tests
+.pylintrc
+.gitignore
+LICENSE.txt
+docker-compose.yml
+Dockerfile
+Makefile
+README.md
+!api/interfaces/**
