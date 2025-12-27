@@ -7,8 +7,9 @@ jobs:
   build-artifacts:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    environment: production
     permissions:
-      contents: read
+      contents: write
       packages: write
 
     outputs:
@@ -54,4 +55,4 @@ jobs:
           draft: false
           prerelease: false
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
