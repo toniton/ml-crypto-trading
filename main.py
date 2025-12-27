@@ -16,7 +16,7 @@ def main():
     application_config = ApplicationConfig()
     assets_config = AssetsConfig(_yaml_file=application_config.assets_config_filepath)
 
-    is_backtest_mode = application_config.backtest_mode or False
+    is_backtest_mode = application_config.backtest_mode is True
     if is_backtest_mode:
         runner = BacktestApplication(
             application_config=application_config, environment_config=environment_config,

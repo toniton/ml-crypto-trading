@@ -16,16 +16,13 @@ class TestDatabaseConfig(unittest.TestCase):
 
     def test_initialization_with_defaults(self):
         # Mock EnvironmentConfig and ApplicationConfig to avoid actual file reading
-        with patch('src.configuration.providers.database_config.EnvironmentConfig') as MockEnvConfig, \
-                patch('src.configuration.providers.database_config.ApplicationConfig') as MockAppConfig:
+        with patch('src.configuration.providers.database_config.EnvironmentConfig') as MockEnvConfig:
             mock_env_instance = MockEnvConfig.return_value
             mock_env_instance.postgres_user = 'test_user'
             mock_env_instance.postgres_password.get_secret_value.return_value = 'test_pass'
             mock_env_instance.postgres_database = 'test_db'
             mock_env_instance.app_env = AppEnvEnum.STAGING
-
-            mock_app_instance = MockAppConfig.return_value
-            mock_app_instance.database_connection_host = 'localhost:5432'
+            mock_env_instance.database_connection_host = 'localhost:5432'
 
             config = DatabaseConfig()
 
@@ -35,16 +32,15 @@ class TestDatabaseConfig(unittest.TestCase):
 
             # Verify dependencies were instantiated
             MockEnvConfig.assert_called_once()
-            MockAppConfig.assert_called_once()
 
     def test_initialization_with_explicit_configs(self):
         mock_env_config = MagicMock()
         mock_env_config.postgres_user = 'explicit_user'
         mock_env_config.postgres_password.get_secret_value.return_value = 'explicit_pass'
         mock_env_config.postgres_database = 'explicit_db'
+        mock_env_config.database_connection_host = 'explicit_host'
 
         mock_app_config = MagicMock()
-        mock_app_config.database_connection_host = 'explicit_host'
 
         config = DatabaseConfig(application_config=mock_app_config, environment_config=mock_env_config)
 
@@ -57,9 +53,9 @@ class TestDatabaseConfig(unittest.TestCase):
         mock_env_config.postgres_user = 'user'
         mock_env_config.postgres_password.get_secret_value.return_value = 'password'
         mock_env_config.postgres_database = 'db_name'
+        mock_env_config.database_connection_host = 'localhost:5432'
 
         mock_app_config = MagicMock()
-        mock_app_config.database_connection_host = 'localhost:5432'
 
         config = DatabaseConfig(application_config=mock_app_config, environment_config=mock_env_config)
 
