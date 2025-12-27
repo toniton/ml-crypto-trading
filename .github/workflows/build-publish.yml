@@ -51,7 +51,6 @@ jobs:
         if: steps.version.outputs.is_tag == 'true'
         uses: softprops/action-gh-release@v1
         with:
-          files: true
           draft: false
           prerelease: false
         env:
