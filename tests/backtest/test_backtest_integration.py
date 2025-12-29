@@ -1,9 +1,7 @@
-import os
 import sys
 from unittest.mock import patch, MagicMock
 import pytest
 from testcontainers.postgres import PostgresContainer
-from sqlalchemy import create_engine, text
 
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
@@ -48,12 +46,6 @@ def mock_data_dir(tmp_path):
 
 
 def test_backtest_run(postgres_container, mock_data_dir):
-    # Setup Configs
-    db_url = postgres_container.get_connection_url()
-    os.environ["DATABASE_URL"] = db_url
-
-    # Convert to valid postgres URL string if needed (testcontainers usually returns one)
-    # Ensure invalid args don't break pydantic settings
     with patch.object(sys, 'argv', ['app']):
         app_config = ApplicationConfig(**{
             "assets-conf": "dummy_conf.json",
@@ -63,7 +55,14 @@ def test_backtest_run(postgres_container, mock_data_dir):
     app_config.historical_data_path = mock_data_dir
     app_config.backtest_tick_delay = 0.01
 
-    env_config = EnvironmentConfig()
+    env_config = EnvironmentConfig(
+        app_env="production",
+        database_connection_host=f"{postgres_container.get_container_host_ip()}:"
+                                 f"{postgres_container.get_exposed_port(5432)}",
+        postgres_user=postgres_container.POSTGRES_USER,
+        postgres_password=postgres_container.POSTGRES_PASSWORD,
+        postgres_database=postgres_container.POSTGRES_DB
+    )
 
     # Use Mock for AssetsConfig to avoid Pydantic validation complexity (expecting yaml files etc.)
     # inside the test environment. We just need it to hold the assets list.
@@ -90,11 +89,6 @@ def test_backtest_run(postgres_container, mock_data_dir):
             candles_timeframe=Timeframe.MIN1
         )
     ]
-
-    # Initialize DB
-    engine = create_engine(db_url)
-    with engine.connect() as conn:
-        conn.execute(text("CREATE TABLE IF NOT EXISTS test (id serial PRIMARY KEY);"))
 
     # Run Backtest
     backtest_app = BacktestApplication(
