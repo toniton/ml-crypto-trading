@@ -7,17 +7,12 @@ PYLINT := $(VENV_DIR)/bin/pylint
 
 venv: $(VENV_DIR)/bin/activate
 
-$(VENV_DIR)/bin/activate: requirements.txt
+$(VENV_DIR)/bin/activate: requirements.txt requirements-dev.txt
 	python3 -m venv $(VENV_DIR)
 	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements-dev.txt
 	touch $(VENV_DIR)/bin/activate
 
-$(VENV_DIR)/bin/activate: requirements-dev.txt
-	python3 -m venv $(VENV_DIR)
-	$(PIP) install --upgrade pip
-	$(PIP) install -r requirements-dev.txt
-	touch $(VENV_DIR)/bin/activate
 pre-build:
 	mkdir $(VENV_DIR)/bin && mkdir $(PYTHON) && mkdir $(PIP)
 
