@@ -23,9 +23,9 @@ class BacktestApplication:
         self._timestamps = {}
 
     def startup(self):
-        loader = BacktestDataLoader(self._application_config.historical_data_path)
+        loader = BacktestDataLoader(self._application_config.historical_data_dir_path)
         for asset in self._assets_config.assets:
-            data_points = loader.load(asset.ticker_symbol, use_mini=False)
+            data_points = loader.load(asset.ticker_symbol)
             self._timestamps[asset.ticker_symbol] = [dp.timestamp for dp in data_points]
 
         clock = BacktestClock(timestamps=self._timestamps, tick_delay=self._application_config.backtest_tick_delay)

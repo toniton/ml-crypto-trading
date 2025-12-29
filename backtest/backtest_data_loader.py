@@ -23,9 +23,8 @@ class BacktestDataLoader:
         self._data_index = {}
         self.data_path = data_path
 
-    def load(self, ticker_symbol: str, use_mini: bool = False) -> List[HistoricalDataPoint]:
-        suffix = "-test-mini" if use_mini else ""
-        filename = f"{ticker_symbol.lower()}{suffix}.csv"
+    def load(self, ticker_symbol: str) -> List[HistoricalDataPoint]:
+        filename = f"{ticker_symbol}.csv"
         file_path = os.path.join(self.data_path, filename)
 
         if not os.path.exists(file_path):

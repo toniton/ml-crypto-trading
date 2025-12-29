@@ -29,18 +29,18 @@ def mock_data_dir(tmp_path):
     d.mkdir()
 
     # Create mock CSV files for two assets (non-mini as per updated BacktestApplication)
-    # Filenames should be snake_case to match ticker_symbol.lower() (BTC_USD -> btc_usd.csv)
+    # Filenames should match ticker_symbol (BTC_USD -> BTC_USD.csv) as per new loader logic
     btc_content = """timestamp;open;high;low;close;volume;marketCap
 2023-01-01 00:00:00;100;110;90;105;1000;1000000
 2023-01-01 00:00:01;105;115;95;110;1100;1100000
 """
-    (d / "btc_usd.csv").write_text(btc_content)
+    (d / "BTC_USD.csv").write_text(btc_content)
 
     eth_content = """timestamp;open;high;low;close;volume;marketCap
 2023-01-01 00:00:00;10;11;9;10.5;100;100000
 2023-01-01 00:00:01;10.5;11.5;9.5;11;110;110000
 """
-    (d / "eth_usd.csv").write_text(eth_content)
+    (d / "ETH_USD.csv").write_text(eth_content)
 
     return str(d)
 
@@ -49,10 +49,9 @@ def test_backtest_run(postgres_container, mock_data_dir):
     with patch.object(sys, 'argv', ['app']):
         app_config = ApplicationConfig(**{
             "assets-conf": "dummy_conf.json",
-            "backtest-mode": True
+            "backtest-mode": True,
+            "backtest-source": mock_data_dir
         })
-
-    app_config.historical_data_path = mock_data_dir
     app_config.backtest_tick_delay = 0.01
 
     env_config = EnvironmentConfig(

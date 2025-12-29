@@ -78,7 +78,7 @@ See `Makefile` for additional commands.
 Test your strategy with historical data:
 
 ```bash
-python main.py --assets-conf=examples/configurations/backtest-assets.yaml --backtest-mode=true
+python main.py --assets-conf=examples/configurations/backtest-assets.yaml --backtest-mode=true --backtest-source=examples/coinmarketcap/history
 ```
 
 Download historical data from [CoinMarketCap](https://coinmarketcap.com/). The CSV format is supported out of the box.

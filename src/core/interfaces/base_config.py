@@ -1,6 +1,5 @@
 import abc
 
-from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
 
 
@@ -8,9 +7,8 @@ class BaseConfig(abc.ABC, metaclass=abc.ABCMeta):
     _instance = None
 
     @abc.abstractmethod
-    def __init__(self, app_config: ApplicationConfig = None, env_config: EnvironmentConfig = None):
+    def __init__(self, env_config: EnvironmentConfig = None):
         self.env_config = env_config
-        self.app_config = app_config
 
     def __new__(cls, *args, **kwargs):
         if cls._instance is None:

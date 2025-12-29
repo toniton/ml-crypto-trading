@@ -15,13 +15,13 @@ class TestBacktestDataLoader:
 2023-01-01 00:00:00;100;110;90;105;1000;1000000
 2023-01-01 01:00:00;105;115;95;110;1100;1100000
 """
-        p = d / "btc-usd-test-mini.csv"
+        p = d / "btc-usd.csv"
         p.write_text(csv_content)
         return str(d)
 
     def test_load_and_get_data(self, mock_data_dir):
         loader = BacktestDataLoader(mock_data_dir)
-        data = loader.load("btc-usd", use_mini=True)
+        data = loader.load("btc-usd")
 
         # Verify load
         assert len(data) == 2

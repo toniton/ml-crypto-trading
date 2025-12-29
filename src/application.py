@@ -72,7 +72,7 @@ class Application:
     def _setup_configuration(self):
         ApplicationHelper.import_modules(src.configuration.providers)
         for cls in BaseConfig.__subclasses__():
-            cls(self._application_config, self._environment_config)
+            cls(self._environment_config)
 
     def _create_managers(self, unit_of_work: UnitOfWork) -> ManagerContainer:
         return ManagerContainer(
