@@ -11,6 +11,7 @@ tests
 .gitignore
 LICENSE.txt
 docker-compose.yml
+coverage.xml
 requirements-dev.txt
 Dockerfile
 Makefile
