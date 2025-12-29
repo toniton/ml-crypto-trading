@@ -31,16 +31,16 @@ class TestBacktestTradingScheduler(unittest.TestCase):
 
         # Test 1: Timestamp 0 (should trigger?)
         # 0 % 60 == 0. Yes.
-        scheduler.on_tick(0)
+        scheduler.on_tick(0, asset)
         callback.assert_called_once_with([asset])
         callback.reset_mock()
 
         # Test 2: Timestamp 1 (should NOT trigger)
-        scheduler.on_tick(1)
+        scheduler.on_tick(1, asset)
         callback.assert_not_called()
 
         # Test 3: Timestamp 60 (should trigger)
-        scheduler.on_tick(60)
+        scheduler.on_tick(60, asset)
         callback.assert_called_once_with([asset])
 
     def test_multiple_assets_different_schedules(self):
@@ -61,13 +61,15 @@ class TestBacktestTradingScheduler(unittest.TestCase):
         scheduler.start(callback)
 
         # T=0: Both match (0 % 60 == 0, 0 % 1 == 0)
-        scheduler.on_tick(0)
-        self.assertEqual(callback.call_count, 2)
+        scheduler.on_tick(0, asset_min)
+        scheduler.on_tick(0, asset_sec)
+        self.assertEqual(callback.call_count, 4)
 
         expected_calls = [call([asset_min]), call([asset_sec])]
         callback.assert_has_calls(expected_calls, any_order=True)
         callback.reset_mock()
 
-        # T=1: Sec matches (1%1==0), Min no (1%60!=0)
-        scheduler.on_tick(1)
-        callback.assert_called_once_with([asset_sec])
+        expected_calls = [call([asset_min]), call([asset_sec])]
+        scheduler.on_tick(61, asset_min)
+        scheduler.on_tick(61, asset_sec)
+        callback.assert_has_calls(expected_calls, any_order=True)

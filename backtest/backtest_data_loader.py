@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass
 from typing import List
@@ -18,7 +20,7 @@ class HistoricalDataPoint:
 
 class BacktestDataLoader:
     def __init__(self, data_path: str):
-        self._data_index = None
+        self._data_index = {}
         self.data_path = data_path
 
     def load(self, ticker_symbol: str, use_mini: bool = False) -> List[HistoricalDataPoint]:
@@ -47,11 +49,11 @@ class BacktestDataLoader:
 
         data_points.sort(key=lambda x: x.timestamp)
 
-        self._data_index = {dp.timestamp: dp for dp in data_points}
+        self._data_index[ticker_symbol] = {dp.timestamp: dp for dp in data_points}
 
         return data_points
 
-    def get_data(self, timestamp: int) -> HistoricalDataPoint | None:
-        if self._data_index:
-            return self._data_index.get(timestamp)
-        raise RuntimeError("Backtest data may not have been loaded. Try loading the dataset and try again.")
+    def get_data(self, ticker_symbol: str, timestamp: int) -> HistoricalDataPoint | None:
+        if ticker_symbol in self._data_index:
+            return self._data_index[ticker_symbol].get(timestamp)
+        return None

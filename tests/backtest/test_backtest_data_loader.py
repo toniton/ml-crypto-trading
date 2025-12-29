@@ -32,16 +32,17 @@ class TestBacktestDataLoader:
         ts2 = data[1].timestamp
 
         # Verify random access
-        dp1 = loader.get_data(ts1)
+        dp1 = loader.get_data("btc-usd", ts1)
         assert dp1 is not None
         assert dp1.close_price == 105.0
 
-        dp2 = loader.get_data(ts2)
+        dp2 = loader.get_data("btc-usd", ts2)
         assert dp2 is not None
         assert dp2.close_price == 110.0
 
         # Verify non-existent
-        assert loader.get_data(9999999999) is None
+        assert loader.get_data("btc-usd", 9999999999) is None
+        assert loader.get_data("unknown", ts1) is None
 
     def test_file_not_found(self, tmp_path):
         loader = BacktestDataLoader(str(tmp_path))

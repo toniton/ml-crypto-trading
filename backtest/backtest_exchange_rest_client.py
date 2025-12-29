@@ -23,7 +23,7 @@ from src.core.interfaces.exchange_rest_client import ExchangeRestClient, Exchang
 @dataclass
 class SimulatedAccount:
     balance_usd: float = 10000.0
-    positions: Dict[str, float] = field(default_factory=dict)  # ticker -> quantity
+    positions: Dict[str, float] = field(default_factory=dict)
     orders: List[Order] = field(default_factory=list)
 
 
@@ -40,12 +40,11 @@ class BacktestExchangeRestClient(ExchangeRestClient):
         self.account = SimulatedAccount()
 
     def get_provider_name(self) -> str:
-        # Return CRYPTO_DOT_COM to match existing assets configuration
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
 
     def get_market_data(self, ticker_symbol: str) -> MarketData:
-        current = self.clock.now()
-        data = self.loader.get_data(current)
+        current = self.clock.now(ticker_symbol)
+        data = self.loader.get_data(ticker_symbol, current)
         return MarketData(
             timestamp=data.timestamp,
             volume=str(data.volume),
@@ -87,7 +86,6 @@ class BacktestExchangeRestClient(ExchangeRestClient):
         prc = float(price)
         total_value = qty * prc
 
-        # Validate funds/positions
         if trade_action == TradeAction.BUY:
             if self.account.balance_usd < total_value:
                 raise ValueError(
@@ -97,7 +95,7 @@ class BacktestExchangeRestClient(ExchangeRestClient):
             self.account.positions[ticker_symbol] = (
                     self.account.positions.get(ticker_symbol, 0) + qty
             )
-        else:  # SELL
+        else:
             current_position = self.account.positions.get(ticker_symbol, 0)
             if current_position < qty:
                 raise ValueError(

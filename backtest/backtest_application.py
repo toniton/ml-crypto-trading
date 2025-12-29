@@ -20,22 +20,26 @@ class BacktestApplication:
         self._environment_config = environment_config
         self._assets_config = assets_config
         self._is_backtest_mode = is_backtest_mode
+        self._timestamps = {}
 
     def startup(self):
         loader = BacktestDataLoader(self._application_config.historical_data_path)
-        data_points = loader.load("btc-usd", use_mini=True)
-        timestamps = [dp.timestamp for dp in data_points]
+        for asset in self._assets_config.assets:
+            data_points = loader.load(asset.ticker_symbol, use_mini=False)
+            self._timestamps[asset.ticker_symbol] = [dp.timestamp for dp in data_points]
 
-        clock = BacktestClock(timestamps=timestamps, tick_delay=self._application_config.backtest_tick_delay)
+        clock = BacktestClock(timestamps=self._timestamps, tick_delay=self._application_config.backtest_tick_delay)
         scheduler = BacktestTradingScheduler(clock)
 
         app = Application(application_config=self._application_config, environment_config=self._environment_config,
                           assets_config=self._assets_config, is_backtest_mode=self._is_backtest_mode,
                           backtest_scheduler=scheduler)
         backtest_engine = BacktestEngine(app, loader, clock, scheduler, self._application_config)
-        app_thread = threading.Thread(target=app.startup, name="BacktestApplication")
+        app_thread = threading.Thread(target=app.startup, name="BacktestApplication", daemon=True)
         app_thread.start()
-        backtest_thread = threading.Thread(target=backtest_engine.run, name="BacktestEngine")
+        backtest_thread = threading.Thread(target=backtest_engine.run,
+                                           name="BacktestEngine",
+                                           args=(self._assets_config.assets,))
         backtest_thread.start()
         backtest_thread.join()
         app_thread.join()

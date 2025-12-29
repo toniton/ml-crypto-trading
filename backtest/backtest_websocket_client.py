@@ -31,7 +31,6 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
     def __init__(self, event_bus: BacktestEventBus):
         super().__init__()
         self.bus = event_bus
-        # Track subscription IDs for unsubscription
         self._subscription_ids: dict[str, int] = {}
 
     def _get_websocket_url(self, visibility: SubscriptionVisibility) -> str:
@@ -39,14 +38,12 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
 
     @staticmethod
     def get_provider_name() -> str:
-        # Return CRYPTO_DOT_COM to match existing assets configuration
         return "CRYPTO_DOT_COM"
 
     def _get_auth_handler(self) -> AuthHandler:
         return BacktestAuthHandler()
 
     def _get_balance_subscription(self) -> BalanceSubscriptionData:
-        # Unused in event-driven mode, keeping for interface compliance
         return BalanceSubscriptionData({}, {}, lambda d: [])
 
     def _get_order_update_subscription(self, instrument_name: str) -> OrderUpdateSubscriptionData:
@@ -79,7 +76,6 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
                 if event.order.ticker_symbol == instrument_name:
                     callback([event.order])
 
-        # Note: We subscribe to OrderFillEvent. Logic for filtering by ticker is inside handler.
         sub_id = self.bus.subscribe(OrderFillEvent, _handler)
         self._subscription_ids[connection_key] = sub_id
         return connection_key
