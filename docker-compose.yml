@@ -1,13 +1,16 @@
-version: '3'
 services:
   trading_bot:
     build: .
-    command: [ "--assets-conf=localstorage/backtest-assets-config.yaml", "--backtest-mode=true"]
+    command: [ "--assets-conf=examples/configurations/backtest-assets.yaml", "--backtest-mode=true"]
     depends_on:
       postgres:
         condition: service_healthy
     environment:
+      APP_ENV: production
       DATABASE_CONNECTION_HOST: postgres:5432
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE}
   postgres:
     image: postgres:16
     container_name: trading-db

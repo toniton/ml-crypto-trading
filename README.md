@@ -1,9 +1,82 @@
-# Rio Trading Bot
+# MCT Trading Bot
 
-Rio trading bot is a free and open-source cryptocurrency trading engine written in Python.
+MCT (stands for ML-Crypto-Trading) trading bot is a free and open-source cryptocurrency trading engine written in
+Python.
 > For educational and research purposes only.
+## Usage
 
-### Motivation
+### Configuration
+
+Create an asset configuration file and environment file with your API credentials.
+
+**assets.yaml**
+```yaml
+assets:  
+  - name: "Bitcoin (Crypto.com)"
+    base_ticker_symbol: "BTC"
+    quote_ticker_symbol: "USD"
+    exchange: "CRYPTO_DOT_COM"
+    min_quantity: 0.00001
+    decimal_places: 8
+    candles_timeframe: "MIN1"
+    schedule: 4
+    guard_config:
+      max_drawdown_period: 800
+      max_drawdown_percentage: 0.10
+      cooldown_timeout: 0
+```
+
+**.env**
+```
+APP_ENV=production
+CRYPTO_DOT_COM__API_KEY=your_api_key
+CRYPTO_DOT_COM__SECRET_KEY=your_secret_key
+COIN_MARKET_CAP_API_KEY=your_key
+POSTGRES_PASSWORD=your_password
+POSTGRES_DATABASE=trading_bot
+POSTGRES_USER=postgres
+DATABASE_CONNECTION_HOST=localhost:5432
+```
+
+See `examples/configurations/` for more examples.
+
+### Live Trading
+
+**Option 1: Docker (Recommended)**
+
+```bash
+docker pull toniton/ml-crypto-trading
+docker run --env-file .env toniton/ml-crypto-trading --assets-conf=examples/configurations/assets.yaml
+```
+
+Or with Docker Compose:
+```bash
+docker compose up -d trading_bot
+```
+
+**Option 2: Local Setup**
+
+```bash
+python main.py --assets-conf=examples/configurations/assets.yaml
+```
+
+Requirements:
+- PostgreSQL database running
+- Environment variables configured in `.env`
+- Python 3.12+
+
+See `Makefile` for additional commands.
+
+### Backtesting
+
+Test your strategy with historical data:
+
+```bash
+python main.py --assets-conf=examples/configurations/backtest-assets.yaml --backtest-mode=true
+```
+
+Download historical data from [CoinMarketCap](https://coinmarketcap.com/). The CSV format is supported out of the box.
+## Motivation
 
 The intent of developing yet-another-trading-bot is to create a simple trading bot that combines engineering
 expertise with financial skills within a clean, modular architecture. To enhance easy collaboration — allowing
@@ -12,6 +85,7 @@ developers and traders to integrate, experiment, and extend trading strategies w
 ## Core Features (Currently Supported)
 
 ### Multi-Asset Support
+
 Trade and manage multiple assets seamlessly across supported exchanges.
 
 ### Consensus Strategy
@@ -71,7 +145,9 @@ context and are lost when the application is stopped.
 
 ### Backtesting
 
-The application allows a backtesting service to be register providers and strategies at runtime using a specific port.
+The application allows a backtesting service to be register providers and strategies at runtime.
+It supports **multi-asset** simulation where each asset runs on an independent, concurrent clock. This allows for
+realistic simulation of multiple markets simultaneously.
 
 ## Architecture
 
@@ -113,10 +189,9 @@ If you have an idea for an enhancement or a bug fix, feel free to open a Pull Re
 
 > **Note:**  
 > For larger changes, new features, or proposals (RFCs), please start
-by [opening an issue on GitHub](https://github.com/toniton/ml-stocks-trading/issues/new) — especially for new or
-breaking changes.  
+> by [opening an issue on GitHub](https://github.com/toniton/ml-stocks-trading/issues/new) — especially for new or
+> breaking changes.  
 > This helps ensure contributions align with the project’s goals and prevents duplicate work.
-
 
 ### Creating a pull request
 
