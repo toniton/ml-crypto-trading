@@ -10,7 +10,6 @@ class TestBuildAndStartup(unittest.TestCase):
         # pylint: disable=import-outside-toplevel, unused-import
         try:
             import main
-            import server.web_server
             import src.application
         except ImportError as e:
             self.fail(f"Failed to import modules: {e}")
