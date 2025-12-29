@@ -18,6 +18,7 @@ class AssetScheduleRegistry(ABC):
         AssetSchedule.EVERY_MINUTE: 60,
         AssetSchedule.EVERY_HOUR: 3600,
         AssetSchedule.EVERY_DAY: 86400,
+        AssetSchedule.EVERY_WEEK: 86400 * 7,
     }
 
     def __init__(self):
