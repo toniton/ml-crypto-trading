@@ -59,8 +59,7 @@ class TestDatabaseConfig(unittest.TestCase):
         assert config.get_connection_endpoint() == expected_url
 
     def test_singleton_behavior(self):
-        with patch('src.configuration.providers.database_config.EnvironmentConfig'), \
-                patch('src.configuration.providers.database_config.ApplicationConfig'):
+        with patch('src.configuration.providers.database_config.EnvironmentConfig'):
             instance1 = DatabaseConfig.get_instance()
             instance2 = DatabaseConfig.get_instance()
 
