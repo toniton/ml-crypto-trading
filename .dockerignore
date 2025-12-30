@@ -13,6 +13,7 @@ LICENSE.txt
 docker-compose.yml
 coverage.xml
 requirements-dev.txt
+.pre-commit-config.yaml
 Dockerfile
 Makefile
 README.md
