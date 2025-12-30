@@ -1,5 +1,6 @@
 import abc
 
+from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.asset import Asset
@@ -10,7 +11,7 @@ class Guard(abc.ABC, metaclass=abc.ABCMeta):
     def __init__(self, config: GuardConfig):
         self.config = config
 
-    def can_trade(self, trade_action: TradeAction, trading_context: TradingContext) -> bool:
+    def can_trade(self, trade_action: TradeAction, trading_context: TradingContext, market_data: MarketData) -> bool:
         pass
 
     @staticmethod

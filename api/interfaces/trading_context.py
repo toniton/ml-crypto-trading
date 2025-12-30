@@ -1,6 +1,7 @@
 import dataclasses
 import time
 from math import inf
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
@@ -21,7 +22,7 @@ class TradingContext:
     highest_sell: float = -inf
     open_positions: list[Order] = dataclasses.field(default_factory=lambda: [])
     close_positions: list[Order] = dataclasses.field(default_factory=lambda: [])
-    last_activity_time: float = time.time()
+    last_activity_time: Optional[float] = None
 
     def __post_init__(self):
         self.available_balance = self.starting_balance

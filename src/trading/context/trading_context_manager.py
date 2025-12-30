@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import time
-
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.order import Order
 
@@ -28,7 +26,7 @@ class TradingContextManager:
         self.trading_contexts[asset_key].highest_buy = max(self.trading_contexts[asset_key].highest_buy, price)
         self.trading_contexts[asset_key].buy_count += 1
         self.trading_contexts[asset_key].open_positions.append(order)
-        self.trading_contexts[asset_key].last_activity_time = time.time()
+        self.trading_contexts[asset_key].last_activity_time = order.created_time
 
     def record_sell(self, asset_key: int, closed_order: Order):
         price = float(closed_order.price)
@@ -43,7 +41,7 @@ class TradingContextManager:
         self.trading_contexts[asset_key].close_positions.append(closed_order)
         self.trading_contexts[asset_key].lowest_sell = min(self.trading_contexts[asset_key].lowest_sell, price)
         self.trading_contexts[asset_key].highest_sell = max(self.trading_contexts[asset_key].highest_sell, price)
-        self.trading_contexts[asset_key].last_activity_time = time.time()
+        self.trading_contexts[asset_key].last_activity_time = closed_order.created_time
         self.trading_contexts[asset_key].open_positions = [
             open_order for open_order in open_positions if open_order.uuid != closed_order.uuid
         ]

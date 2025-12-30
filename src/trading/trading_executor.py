@@ -47,7 +47,7 @@ class TradingExecutor:
     def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
         trading_context = self.trading_context_manager.get_trading_context(asset.key)
 
-        if not self.protection_manager.can_trade(asset.key, action, trading_context):
+        if not self.protection_manager.can_trade(asset.key, action, trading_context, market_data):
             return False
 
         consensus_result = self.consensus_manager.get_quorum(
@@ -99,7 +99,8 @@ class TradingExecutor:
                     quantity=quantity,
                     price=str(price),
                     provider_name=asset.exchange.value,
-                    trade_action=TradeAction.BUY
+                    trade_action=TradeAction.BUY,
+                    timestamp=market_data.timestamp
                 )
                 self.activity_queue.put_nowait(buy_order.model_dump_json())
                 self.trading_context_manager.record_buy(asset.key, buy_order)
@@ -133,7 +134,7 @@ class TradingExecutor:
                     sell_order = self.order_manager.open_order(
                         uuid=best_order.uuid, price=current_price, trade_action=TradeAction.SELL,
                         quantity=best_order.quantity, provider_name=best_order.provider_name,
-                        ticker_symbol=best_order.ticker_symbol,
+                        ticker_symbol=best_order.ticker_symbol, timestamp=market_data.timestamp
                     )
                     self.activity_queue.put_nowait(sell_order.model_dump_json())
                     self.trading_context_manager.record_sell(asset.key, sell_order)

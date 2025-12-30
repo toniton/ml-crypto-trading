@@ -1,6 +1,5 @@
 import logging
 import threading
-import time
 from queue import Queue
 from uuid import uuid4
 
@@ -48,7 +47,8 @@ class OrderManager(RestClientRegistry, WebSocketRegistry):
 
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
-            price: str, trade_action: TradeAction, uuid: str = str(uuid4())
+            price: str, trade_action: TradeAction,
+            timestamp: float, uuid: str = str(uuid4())
     ):
         order = Order(
             uuid=uuid,
@@ -57,7 +57,7 @@ class OrderManager(RestClientRegistry, WebSocketRegistry):
             provider_name=provider_name,
             trade_action=trade_action,
             ticker_symbol=ticker_symbol,
-            created_time=time.time()
+            created_time=timestamp
         )
         self.order_queue.put(order)
         return order

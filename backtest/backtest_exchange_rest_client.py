@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Dict, List
 from uuid import uuid4
@@ -112,7 +111,7 @@ class BacktestExchangeRestClient(ExchangeRestClient):
             status=OrderStatus.COMPLETED,
             provider_name=self.get_provider_name(),
             trade_action=trade_action,
-            created_time=time.time()
+            created_time=self.clock.now(ticker_symbol)
         )
         self.account.orders.append(order)
 

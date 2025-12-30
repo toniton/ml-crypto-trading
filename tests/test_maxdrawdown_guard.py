@@ -116,4 +116,4 @@ class MaxDrawDownGuardTest(TestCase):
         )
         trading_context.available_balance = 5
         draw_down_guard = MaxDrawDownGuard(self.config)
-        assert draw_down_guard.can_trade(TradeAction.BUY, trading_context) is True
+        assert draw_down_guard.can_trade(TradeAction.BUY, trading_context, None) is True

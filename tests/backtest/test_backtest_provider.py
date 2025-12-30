@@ -13,8 +13,14 @@ class TestBacktestExchangeRestClient:
         return BacktestEventBus()
 
     @pytest.fixture
-    def provider(self, event_bus):
-        return BacktestExchangeRestClient(event_bus=event_bus)
+    def mock_clock(self):
+        clock = Mock()
+        clock.now.return_value = 1234567890.0
+        return clock
+
+    @pytest.fixture
+    def provider(self, event_bus, mock_clock):
+        return BacktestExchangeRestClient(event_bus=event_bus, clock=mock_clock)
 
     def test_place_buy_order_and_events(self, provider, event_bus):
         # Mock callbacks to verify events
