@@ -40,9 +40,7 @@ class TestDatabaseConfig(unittest.TestCase):
         mock_env_config.postgres_database = 'explicit_db'
         mock_env_config.database_connection_host = 'explicit_host'
 
-        mock_app_config = MagicMock()
-
-        config = DatabaseConfig(application_config=mock_app_config, environment_config=mock_env_config)
+        config = DatabaseConfig(environment_config=mock_env_config)
 
         assert config.postgres_user == 'explicit_user'
         assert config.postgres_database == 'explicit_db'
@@ -55,9 +53,7 @@ class TestDatabaseConfig(unittest.TestCase):
         mock_env_config.postgres_database = 'db_name'
         mock_env_config.database_connection_host = 'localhost:5432'
 
-        mock_app_config = MagicMock()
-
-        config = DatabaseConfig(application_config=mock_app_config, environment_config=mock_env_config)
+        config = DatabaseConfig(environment_config=mock_env_config)
 
         expected_url = "postgresql://user:password@localhost:5432/db_name"
         assert config.get_connection_endpoint() == expected_url
