@@ -12,5 +12,6 @@ repos:
         entry: pytest tests/
         language: unsupported
         types: [ python ]
+        stages: [ pre-push ]
         always_run: true
         require_serial: true
