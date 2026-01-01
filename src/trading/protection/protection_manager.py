@@ -5,7 +5,8 @@ from src.core.interfaces.guard import Guard
 
 
 class ProtectionManager:
-    guards: dict[int, list[Guard]] = {}
+    def __init__(self):
+        self.guards: dict[int, list[Guard]] = {}
 
     def register_guard(self, asset_key: int, guard: Guard):
         if asset_key in self.guards:

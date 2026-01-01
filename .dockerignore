@@ -16,5 +16,4 @@ requirements-dev.txt
 .pre-commit-config.yaml
 Dockerfile
 Makefile
-README.md
 !api/interfaces/**

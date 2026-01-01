@@ -39,7 +39,6 @@ assets:
 APP_ENV=production
 CRYPTO_DOT_COM__API_KEY=your_api_key
 CRYPTO_DOT_COM__SECRET_KEY=your_secret_key
-COIN_MARKET_CAP_API_KEY=your_key
 POSTGRES_PASSWORD=your_password
 POSTGRES_DATABASE=trading_bot
 POSTGRES_USER=postgres
