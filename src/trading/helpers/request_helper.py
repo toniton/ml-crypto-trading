@@ -1,14 +1,20 @@
 import json
-import logging
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
-class RequestHelper:
-    @staticmethod
+
+class RequestHelper(ApplicationLoggingMixin):
+    @classmethod
     def create_request(
-            base_url: str, path: str, method: str = "GET", data: Any = None, headers: dict = None
+            cls,
+            base_url: str,
+            path: str,
+            method: str = "GET",
+            data: Any = None,
+            headers: dict[str, str] = None
     ) -> Request:
         headers = {
             "Content-Type": "application/json",
@@ -18,16 +24,16 @@ class RequestHelper:
         request = Request(url=base_url + path, method=method, headers=headers, data=data)
         return request
 
-    @staticmethod
-    def execute_request(request):
+    @classmethod
+    def execute_request(cls, request):
         try:
             with urlopen(request) as response:
-                logging.debug(f"Request to {request.full_url} returned {response.status}")
+                cls().app_logger.debug(f"Request to {request.full_url} returned {response.status}")
                 body = response.read()
                 return json.loads(body)
 
         except HTTPError as exc:
-            logging.error(f"HTTP error while calling {request.full_url}: {exc}")
+            cls().app_logger.error(f"HTTP error while calling {request.full_url}: {exc}")
             try:
                 detail = exc.read().decode()
             except Exception:
@@ -35,9 +41,9 @@ class RequestHelper:
             raise RuntimeError(f"HTTP error: {detail}") from exc
 
         except URLError as exc:
-            logging.error(f"URL error while calling {request.full_url}: {exc.reason}")
+            cls().app_logger.error(f"URL error while calling {request.full_url}: {exc.reason}")
             raise RuntimeError(f"URL error: {exc.reason}") from exc
 
         except json.JSONDecodeError as exc:
-            logging.error(f"Failed to parse JSON response: {exc}!")
+            cls().app_logger.error(f"Failed to parse JSON response: {exc}!")
             raise RuntimeError("Invalid JSON response.") from exc

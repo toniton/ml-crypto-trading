@@ -1,4 +1,3 @@
-import logging
 import threading
 from typing import Optional
 
@@ -13,9 +12,10 @@ from backtest.backtest_websocket_client import BacktestWebSocketClient
 from backtest.events import TickEvent, MarketDataEvent
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class BacktestEngine:
+class BacktestEngine(ApplicationLoggingMixin):
     def __init__(
             self, app: Application, loader: BacktestDataLoader, clock: BacktestClock,
             scheduler: BacktestTradingScheduler, config: Optional[ApplicationConfig] = None
@@ -34,7 +34,7 @@ class BacktestEngine:
         self.app.register_client(self.rest_client, self.websocket_client)
 
     def run(self, assets: list[Asset]):
-        logging.warning(f"BacktestEngine: Starting simulation for {len(assets)} assets")
+        self.app_logger.info(f"Starting simulation for {len(assets)} assets")
         self._is_running = True
         self._threads = []
 
@@ -48,13 +48,13 @@ class BacktestEngine:
 
         if self.app:
             self.app.shutdown()
-        logging.warning("BacktestEngine: Simulation complete")
+        self.app_logger.info("Simulation complete")
         self._is_running = False
 
     def _run_asset_loop(self, asset: Asset):
         try:
             self.clock.reset(asset.ticker_symbol)
-            logging.info(f"Started backtest loop for {asset.ticker_symbol}")
+            self.app_logger.info(f"Started backtest loop for {asset.ticker_symbol}")
 
             while self._is_running and self.clock.tick(asset.ticker_symbol):
                 timestamp = self.clock.now(asset.ticker_symbol)
@@ -77,7 +77,7 @@ class BacktestEngine:
                 self.scheduler.on_tick(timestamp, asset)
                 self.bus.publish(TickEvent(timestamp=timestamp))
         except Exception as e:
-            logging.error(f"Error in backtest loop for {asset.ticker_symbol}: {e}")
+            self.app_logger.error(f"Error in backtest loop for {asset.ticker_symbol}: {e}")
 
     def stop(self):
         self._is_running = False

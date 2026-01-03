@@ -1,14 +1,13 @@
-import logging
-
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.asset import Asset
 from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.core.interfaces.guard import Guard
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class MaxDrawDownGuard(Guard):
+class MaxDrawDownGuard(ApplicationLoggingMixin, Guard):
     @classmethod
     def _calculate_max_draw_down(cls, starting_balance: float, final_balance: float, trough_value: float) -> float:
         peak_value = max(starting_balance, final_balance)
@@ -33,7 +32,7 @@ class MaxDrawDownGuard(Guard):
         trough_value, _ = PortfolioHelper.calculate_trough_value(peak_value, filtered_positions)
 
         draw_down = (trough_value - peak_value) / peak_value
-        logging.info(f"DrawDown: ${draw_down}.")
+        self.app_logger.debug(f"DrawDown: ${draw_down}.")
 
         return -self.config.max_drawdown_percentage < draw_down or draw_down == 0
 

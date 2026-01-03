@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import atexit
-import logging
 
 from queue import Queue
 from threading import Event
@@ -22,6 +21,7 @@ from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClien
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.context.trading_context_manager import TradingContextManager
@@ -39,7 +39,7 @@ from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.core.interfaces.trading_scheduler import TradingScheduler
 
 
-class Application:
+class Application(ApplicationLoggingMixin):
     def __init__(
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
             assets_config: AssetsConfig, activity_queue: Queue = Queue(),
@@ -127,7 +127,7 @@ class Application:
     def startup(self):
         if self.is_running.is_set():
             return
-        logging.warning("Starting Application...")
+        self.app_logger.info("Starting Application...")
         self.is_running.set()
         trading_scheduler = self._backtest_scheduler if self._is_backtest_mode else LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
@@ -144,5 +144,7 @@ class Application:
             return
         if self._trading_engine:
             self._trading_engine.stop_application()
+        if self._managers and self._managers.order_manager:
+            self._managers.order_manager.shutdown()
         self.is_running.clear()
-        logging.warning("Stopping Application...")
+        self.app_logger.info("Stopping Application...")

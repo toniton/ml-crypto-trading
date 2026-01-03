@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 import time
 from queue import Queue
 
@@ -11,12 +10,16 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.core.logging.trading_logging_mixin import TradingLoggingMixin
+from src.core.logging.audit_logging_mixin import AuditLoggingMixin
 from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.core.managers.manager_container import ManagerContainer
 from src.trading.orders.order_helper import OrderHelper
 
 
-class TradingExecutor:
+class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
+
     def __init__(
             self,
             assets: list[Asset],
@@ -53,9 +56,7 @@ class TradingExecutor:
         consensus_result = self.consensus_manager.get_quorum(
             action, asset.ticker_symbol, trading_context, market_data, candles
         )
-        logging.warning([
-            f"Consensus={consensus_result} for asset={asset}"
-        ])
+        self.app_logger.debug(f"Consensus={consensus_result} for asset={asset}")
         return bool(consensus_result)
 
     def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
@@ -65,9 +66,7 @@ class TradingExecutor:
             raise ValueError(f"Insufficient balance for {currency_symbol}: ${account_balance.available_balance}")
 
         market_data = self._fetch_market_data(asset)
-        logging.warning([
-            f"Fetched market data for Asset. Asset={asset} MarketData={market_data}"
-        ])
+        self.app_logger.debug(f"Fetched market data for {asset}: {market_data}")
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
         candles = self.market_data_manager.get_candles(
             asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe
@@ -81,15 +80,16 @@ class TradingExecutor:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
                 self.trading_context_manager.update_trading_context(asset.key, account_balance.available_balance)
                 if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
-                    logging.info(f"No consensus to buy {asset.ticker_symbol}")
+                    self.app_logger.debug(f"No consensus to buy {asset.ticker_symbol}")
                     continue
 
+                self.app_logger.info(f"Consensus reached to buy {asset.ticker_symbol}")
                 price = market_data.close_price
                 price = float(price) + (float(price) * fees.maker_fee_pct * 0.01)
                 price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
 
-                logging.warning([
-                    f"Fetched price for Asset. Asset={asset} Price={price}",
+                self.app_logger.debug([
+                    f"Calculated price for {asset}: Price={price}",
                     f"Fees={fees}",
                     f"Available balance={account_balance.available_balance}"
                 ])
@@ -104,20 +104,30 @@ class TradingExecutor:
                 )
                 self.activity_queue.put_nowait(buy_order.model_dump_json())
                 self.trading_context_manager.record_buy(asset.key, buy_order)
+
+                self.trading_logger.info(f"Order opened: {asset.ticker_symbol} BUY {quantity} @ {price}")
+
+                self.log_audit_event(
+                    event_type='order_opened',
+                    asset=asset.ticker_symbol,
+                    action=TradeAction.BUY.value,
+                    market_data=market_data,
+                    context=f'order_id={buy_order.uuid},price={price},quantity={quantity}'
+                )
             except Exception as exc:
-                logging.error([f"Error occurred processing asset. Asset={asset}", exc])
+                self.app_logger.error(f"Error processing asset {asset}: {exc}", exc_info=True)
 
     def check_unclosed_orders(self, assets: list[Asset]):
         for asset in assets:
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
                 if not trading_context.open_positions:
-                    logging.info([f"No open positions for asset. Asset={asset}"])
+                    self.app_logger.debug(f"No open positions for {asset}")
                     continue
                 _, market_data, candles, fees = self._prepare_trade_context(asset)
                 current_price = market_data.close_price
 
-                logging.warning([f"Fetched current_price for {asset}. Price={current_price}", f"Fees={fees}"])
+                self.app_logger.debug(f"Current price for {asset}: {current_price}, Fees={fees}")
 
                 if not self._should_trade(asset, TradeAction.SELL, market_data, candles):
                     continue
@@ -139,9 +149,20 @@ class TradingExecutor:
                     self.activity_queue.put_nowait(sell_order.model_dump_json())
                     self.trading_context_manager.record_sell(asset.key, sell_order)
 
+                    self.trading_logger.info(
+                        f"Order closed: {asset.ticker_symbol} SELL {best_order.quantity} @ {current_price}")
+
+                    self.log_audit_event(
+                        event_type='order_closed',
+                        asset=asset.ticker_symbol,
+                        action=TradeAction.SELL.value,
+                        market_data=market_data,
+                        context=f'order_id={sell_order.uuid},price={current_price},quantity={best_order.quantity}'
+                    )
+
             except Exception as exc:
-                logging.error([f"Error occurred finalizing asset. Asset={asset}", exc])
-        logging.info(["Threading..., sleeping...."])
+                self.app_logger.error(f"Error finalizing asset {asset}: {exc}", exc_info=True)
+        self.app_logger.debug("Check unclosed orders completed")
 
     def backfill_trading_context(self):
         # Check DB for unclosed orders and add it to trading context
@@ -155,29 +176,30 @@ class TradingExecutor:
                 trading_context.end_time = time.time()
                 market_data = self._fetch_market_data(asset)
 
-                print("Trading Context")
-                print(f"======= {asset.ticker_symbol} =======================")
-                print(["Portfolio value", PortfolioHelper.calculate_portfolio_value(trading_context.available_balance,
-                                                                                    market_data.close_price,
-                                                                                    trading_context.open_positions)
-                       ])
-                print(["Unrealized PNL value", PortfolioHelper.calculate_unrealized_pnl_value(
+                self.app_logger.info("Trading Context Summary")
+                self.app_logger.info(f"======= {asset.ticker_symbol} =======================")
+                self.app_logger.info(
+                    ["Portfolio value", PortfolioHelper.calculate_portfolio_value(trading_context.available_balance,
+                                                                                  market_data.close_price,
+                                                                                  trading_context.open_positions)
+                     ])
+                self.app_logger.info(["Unrealized PNL value", PortfolioHelper.calculate_unrealized_pnl_value(
                     trading_context.starting_balance, market_data.close_price,
                     trading_context.open_positions, trading_context.close_positions
                 )
-                       ])
-                print(["self.start_time", trading_context.start_time])
-                print(["self.starting_balance", trading_context.starting_balance])
-                print(["self.available_balance", trading_context.available_balance])
-                print(["self.closing_balance", trading_context.closing_balance])
-                print(["self.buy_count", trading_context.buy_count])
-                print(["self.lowest_buy", trading_context.lowest_buy])
-                print(["self.highest_buy", trading_context.highest_buy])
-                print(["self.lowest_sell", trading_context.lowest_sell])
-                print(["self.highest_sell", trading_context.highest_sell])
-                print(["self.open_positions", trading_context.open_positions])
-                print(["self.close_positions", trading_context.close_positions])
-                print(["self.end_time", trading_context.end_time])
-                print(["self.last_activity_time", trading_context.last_activity_time])
+                                      ])
+                self.app_logger.info(["self.start_time", trading_context.start_time])
+                self.app_logger.info(["self.starting_balance", trading_context.starting_balance])
+                self.app_logger.info(["self.available_balance", trading_context.available_balance])
+                self.app_logger.info(["self.closing_balance", trading_context.closing_balance])
+                self.app_logger.info(["self.buy_count", trading_context.buy_count])
+                self.app_logger.info(["self.lowest_buy", trading_context.lowest_buy])
+                self.app_logger.info(["self.highest_buy", trading_context.highest_buy])
+                self.app_logger.info(["self.lowest_sell", trading_context.lowest_sell])
+                self.app_logger.info(["self.highest_sell", trading_context.highest_sell])
+                self.app_logger.info(["self.open_positions", trading_context.open_positions])
+                self.app_logger.info(["self.close_positions", trading_context.close_positions])
+                self.app_logger.info(["self.end_time", trading_context.end_time])
+                self.app_logger.info(["self.last_activity_time", trading_context.last_activity_time])
             except Exception as exc:
-                print(exc)
+                self.app_logger.error(f"Error printing context for {asset}: {exc}", exc_info=True)

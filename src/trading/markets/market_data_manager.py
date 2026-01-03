@@ -1,16 +1,15 @@
 from __future__ import annotations
 
-import logging
-
 from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 
 
-class MarketDataManager(RestClientRegistry, WebSocketRegistry):
+class MarketDataManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
 
     def __init__(self, assets: list[Asset]):
         super().__init__()
@@ -27,7 +26,7 @@ class MarketDataManager(RestClientRegistry, WebSocketRegistry):
 
     def _ws_callback(self, asset_key: int):
         def _on_marketdata_update(conn_key: str, data: MarketData):
-            logging.warning(["Market data for key:", asset_key, ", updates received:", data, conn_key])
+            self.app_logger.debug(f"Market update: {asset_key} @ {data.close_price} (from {conn_key})")
             self.market_data[asset_key] = data
 
         return _on_marketdata_update

@@ -1,13 +1,12 @@
-import logging
-
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class ConsensusManager:
+class ConsensusManager(ApplicationLoggingMixin):
 
     def __init__(self):
         self.strategies = {}
@@ -39,10 +38,10 @@ class ConsensusManager:
         for strategy in self.strategies[trade_action]:
             vote = strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data, candles)
             votes.append(vote)
-            logging.warning("Strategy: %s Vote: %s", strategy.__class__.__name__, vote)
+            self.app_logger.debug(f"Strategy: {strategy.__class__.__name__} Vote: {vote}")
 
         if votes.count(True) >= consensus_factor * votes.count(False):
-            logging.warning("Quorum reached: %s %s", trade_action, votes)
+            self.app_logger.info(f"Quorum reached: {trade_action} {votes}")
             return True
-        logging.warning("Quorum not reached: %s %s", trade_action, votes)
+        self.app_logger.info(f"Quorum not reached: {trade_action} {votes}")
         return False

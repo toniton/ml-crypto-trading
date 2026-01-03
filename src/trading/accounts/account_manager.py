@@ -1,14 +1,13 @@
-import logging
-
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.trading_context import TradingContext
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 from src.trading.context.trading_context_manager import TradingContextManager
 
 
-class AccountManager(RestClientRegistry, WebSocketRegistry):
+class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
 
     def __init__(self, assets: list[Asset]):
         super().__init__()
@@ -22,7 +21,7 @@ class AccountManager(RestClientRegistry, WebSocketRegistry):
         for balance in balances:
             self.balances[provider_name][balance.currency] = balance
 
-        logging.warning(f"Updated balances for {provider_name}: {self.balances[provider_name]}")
+        self.app_logger.debug(f"Updated balances for {provider_name}: {self.balances[provider_name]}")
 
     def init_websocket(self):
         for provider_name, websocket in self.websockets.items():
@@ -40,7 +39,8 @@ class AccountManager(RestClientRegistry, WebSocketRegistry):
                     asset.key, TradingContext(starting_balance=opening_balance.available_balance)
                 )
             except Exception:
-                logging.error(f"Unable to initialize account balance for {asset} from {exchange}", exc_info=True)
+                self.app_logger.error(f"Unable to initialize account balance for {asset} from {exchange}",
+                                      exc_info=True)
 
     def get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
         if provider_name in self.balances and currency_symbol in self.balances[provider_name]:

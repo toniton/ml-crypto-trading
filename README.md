@@ -179,6 +179,94 @@ realistic simulation of multiple markets simultaneously.
     Rel(backtestService, tradingEngine, "Register backtest schedules, strategies, etc.", "WRITE")
 ```
 
+## Logging Architecture
+
+The trading bot uses a mixin-based logging architecture that separates concerns and supports auditability.
+
+### Configuration
+
+Logging is configured via `EnvironmentConfig` (Pydantic) using the following environment variables:
+
+- `LOG_DIR`: Directory for log files. Defaults to the current directory (`.`).
+- `LOG_LEVEL`: Minimum logging level (e.g., `DEBUG`, `INFO`). 
+    - **Default Behavior**: 
+        - `DEBUG` when `APP_ENV` is `staging`.
+        - `INFO` when `APP_ENV` is `production` or other environments.
+
+### Log Types
+
+- **Application Logs** (`application-YYYY-MM.log`): Debugging and operational logs including:
+  - Application startup/shutdown
+  - Configuration loading
+  - Consensus calculations
+  - Market data fetching
+  - Balance checks
+  - Errors and exceptions with stack traces
+  - Websocket connections
+  - Database operations
+  
+- **Trading Logs** (`trading-YYYY-MM.log`): **Order events only**:
+  - Order opened events (BUY orders)
+  - Order closed events (SELL orders)
+  
+- **Audit Logs** (`audit-ASSET-YYYY-MM.log`): **Partitioned by asset**, CSV format with market data snapshots captured **only when orders are opened/closed**:
+  - Full market data at order execution (close_price, high_price, low_price, volume)
+  - Event types: `order_opened`, `order_closed`
+  - Enables replay through backtesting
+
+### Log Format
+
+All logs use consistent formatting:
+```
+2026-01-03 00:43:15,123 - application.c93a7fae.ClassName - INFO - Message content
+```
+
+Audit logs use CSV format compatible with the backtest data loader:
+```csv
+timestamp,asset,event_type,action,close_price,high_price,low_price,volume,context
+1735862595789,BTC/USD,order_opened,BUY,42500.50,42600.00,42400.00,1250000,order_id=abc123
+1735862655789,BTC/USD,order_closed,SELL,42600.00,42700.00,42500.00,1300000,order_id=abc123
+```
+
+### Usage
+
+Classes inherit from logging mixins:
+
+```python
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.core.logging.trading_logging_mixin import TradingLoggingMixin
+from src.core.logging.audit_logging_mixin import AuditLoggingMixin
+
+class MyManager(ApplicationLoggingMixin):
+    def some_operation(self):
+        self.app_logger.debug("Calculating consensus")
+        self.app_logger.info("Configuration loaded")
+        self.app_logger.error("Connection failed", exc_info=True)
+
+class TradingComponent(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
+    def execute_trade(self, asset, market_data, order):
+        self.app_logger.debug(f"Fetching market data for {asset}")
+        
+        self.trading_logger.info(f"Order opened: {asset} BUY @ {market_data.close_price}")
+        
+        correlation_id = self.log_audit_event(
+            event_type='order_opened',
+            asset=asset,
+            action='BUY',
+            market_data=market_data,
+            context=f'order_id={order.uuid}'
+        )
+```
+
+### Audit Log Replay
+
+Audit logs can be replayed through the backtesting system:
+```bash
+python main.py --assets-conf=config.yaml --backtest-mode=true --backtest-source=./audit.log
+```
+
+This enables analysis of trading decisions with the exact market conditions that existed at the time.
+
 ## Related Projects
 
 While this project remains focused on simplicity, learning, and experimentation, we however recommend other projects

@@ -1,14 +1,14 @@
 import hashlib
 import hmac
-import logging
 import time
 from typing import Optional
 
 from src.configuration.exchanges_config import ExchangesConfig
 from src.core.interfaces.auth_handler import AuthHandler
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class CryptoDotComAuthHandler(AuthHandler):
+class CryptoDotComAuthHandler(ApplicationLoggingMixin, AuthHandler):
     def __init__(self):
         config = ExchangesConfig()
         self._api_key = config.crypto_dot_com.api_key
@@ -35,4 +35,4 @@ class CryptoDotComAuthHandler(AuthHandler):
         }
 
     def handle_auth_response(self, message: dict) -> int:
-        logging.info("Auth response got back, IJGB!")
+        self.app_logger.info("Auth response got back, IJGB!")

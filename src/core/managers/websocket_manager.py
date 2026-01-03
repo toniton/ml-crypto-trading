@@ -1,5 +1,4 @@
 import json
-import logging
 import threading
 import time
 from typing import Callable, Optional
@@ -9,9 +8,10 @@ from websocket import WebSocketApp
 from src.core.interfaces.auth_handler import AuthHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class WebSocketManager:
+class WebSocketManager(ApplicationLoggingMixin):
 
     def __init__(
             # TODO: get_websocket_url cannot be a function, function calls are expensive.
@@ -30,11 +30,11 @@ class WebSocketManager:
     def subscribe(
             self, connection_key: str,
             subscription_data: SubscriptionData,
-            callback: Callable, **sub_kwargs
+            callback: Callable, **_sub_kwargs
     ) -> str:
         if connection_key in self.connections:
             handler = self.connections[connection_key]
-            logging.info(f"Reusing existing handler for {connection_key} on {self.provider_name}")
+            self.app_logger.info(f"Reusing existing handler for {connection_key} on {self.provider_name}")
             handler.send(str(subscription_data.subscribe_payload))
             return connection_key
 
@@ -65,17 +65,17 @@ class WebSocketManager:
 
             handler.send(json.dumps(subscribe_payload))
             self.connections[connection_key] = handler
-            logging.info(f"Subscribed to {connection_key} on {self.provider_name}")
+            self.app_logger.info(f"Subscribed to {connection_key} on {self.provider_name}")
 
             return connection_key
         except Exception as exc:
-            logging.error(f"Subscription failed for {connection_key}: {exc}", exc_info=True)
+            self.app_logger.error(f"Subscription failed for {connection_key}: {exc}", exc_info=True)
             raise
 
     def unsubscribe(self, connection_key: str) -> None:
         try:
             if connection_key not in self.subscriptions:
-                logging.warning(f"Subscription {connection_key} not found")
+                self.app_logger.warning(f"Subscription {connection_key} not found")
                 return
 
             subscription_data, _ = self.subscriptions[connection_key]
@@ -86,9 +86,9 @@ class WebSocketManager:
                 del self.connections[connection_key]
             del self.subscriptions[connection_key]
             self.authenticated_connections.discard(connection_key)
-            logging.info(f"Unsubscribed from {connection_key} on {self.provider_name}")
+            self.app_logger.info(f"Unsubscribed from {connection_key} on {self.provider_name}")
         except Exception as exc:
-            logging.error(f"Unsubscription failed for {connection_key}: {exc}", exc_info=True)
+            self.app_logger.error(f"Unsubscription failed for {connection_key}: {exc}", exc_info=True)
 
     def _handle_message(self, connection_key: str, message: dict) -> None:
         try:
@@ -107,9 +107,9 @@ class WebSocketManager:
                 try:
                     callback(connection_key, data)
                 except Exception as exc:
-                    logging.error(f"Error invoking callback for {connection_key}: {exc}", exc_info=True)
+                    self.app_logger.error(f"Error invoking callback for {connection_key}: {exc}", exc_info=True)
         except Exception as exc:
-            logging.error(f"Error invoking callback for {connection_key}: {exc}", exc_info=True)
+            self.app_logger.error(f"Error invoking callback for {connection_key}: {exc}", exc_info=True)
 
     def _handle_heartbeat(self, connection_key: str, message: dict) -> None:
         try:
@@ -119,16 +119,16 @@ class WebSocketManager:
                 ws_connection = self.connections.get(connection_key)
                 if ws_connection:
                     ws_connection.send(json.dumps(response))
-                    logging.debug(f"Heartbeat response sent for {connection_key}")
+                    self.app_logger.debug(f"Heartbeat response sent for {connection_key}")
             else:
-                logging.debug(f"Heartbeat received for {connection_key}")
+                self.app_logger.debug(f"Heartbeat received for {connection_key}")
 
         except Exception as exc:
-            logging.error(f"Error handling heartbeat for {connection_key}: {exc}", exc_info=True)
+            self.app_logger.error(f"Error handling heartbeat for {connection_key}: {exc}", exc_info=True)
 
     def _handle_error(self, event_key: str, error: str) -> None:
-        logging.error(f"WebSocket error for {event_key}: {error}")
+        self.app_logger.error(f"WebSocket error for {event_key}: {error}")
 
     def _handle_close(self, event_key: str) -> None:
-        logging.warning(f"WebSocket closed for {event_key}")
+        self.app_logger.info(f"WebSocket closed for {event_key}")
         self.subscriptions.pop(event_key, None)

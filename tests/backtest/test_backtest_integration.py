@@ -10,6 +10,7 @@ from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import Asset
 from src.configuration.environment_config import EnvironmentConfig
 from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
+from src.core.logging.manager import LoggingManager
 
 # pylint: disable=redefined-outer-name
 
@@ -102,3 +103,6 @@ def test_backtest_run(postgres_container, mock_data_dir):
         backtest_app.startup()
     except Exception as e:
         pytest.fail(f"Backtest application failed to start/run: {e}")
+    finally:
+        backtest_app.shutdown()
+        LoggingManager.reset()

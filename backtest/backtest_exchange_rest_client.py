@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from typing import Dict, List
 from uuid import uuid4
@@ -17,6 +16,7 @@ from backtest.backtest_data_loader import BacktestDataLoader
 from backtest.backtest_event_bus import BacktestEventBus
 from backtest.events import BalanceUpdateEvent, OrderFillEvent
 from src.core.interfaces.exchange_rest_client import ExchangeRestClient, ExchangeProvidersEnum
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 @dataclass
@@ -26,7 +26,7 @@ class SimulatedAccount:
     orders: List[Order] = field(default_factory=list)
 
 
-class BacktestExchangeRestClient(ExchangeRestClient):
+class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
     def __init__(
             self,
             clock: BacktestClock = None,
@@ -115,7 +115,7 @@ class BacktestExchangeRestClient(ExchangeRestClient):
         )
         self.account.orders.append(order)
 
-        logging.info(
+        self.app_logger.info(
             f"BacktestRestClient: {trade_action.name} {quantity} {ticker_symbol} @ {price} "
             f"(Balance: ${self.account.balance_usd:.2f})"
         )

@@ -43,7 +43,7 @@ class TestAccountManager(unittest.TestCase):
         mock_context_manager = MagicMock(spec=TradingContextManager)
 
         with patch.object(self.account_manager, 'get_balance', side_effect=Exception("API Error")):
-            with self.assertLogs(level='ERROR') as log:
+            with self.assertLogs(self.account_manager.app_logger.name, level='ERROR') as log:
                 self.account_manager.init_account_balances(mock_context_manager)
                 self.assertIn("Unable to initialize account balance", log.output[0])
 

@@ -9,6 +9,14 @@ __pycache__/
 # C extensions
 *.so
 
+# Logs
+*.log
+*.log.*
+application-*.log
+trading-*.log
+audit-*.log
+test_logs_*/
+
 # Distribution / packaging
 .Python
 build/
