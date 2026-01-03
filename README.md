@@ -34,6 +34,9 @@ assets:
       cooldown_timeout: 0
 ```
 
+Running the bot usually requires some environment variables, it is therefore recommended to pass them inline using 
+docker environment arguments or create a .env file such as below:
+
 **.env**
 ```
 APP_ENV=production
@@ -54,6 +57,15 @@ See `examples/configurations/` for more examples.
 ```bash
 docker pull toniton/ml-crypto-trading
 docker run --env-file .env toniton/ml-crypto-trading --assets-conf=examples/configurations/assets.yaml
+```
+Or with a one-liner:
+
+```shell
+    docker run -v $PWD:/workspace \
+  -e APP_ENV='production' \
+  -e DATABASE_CONNECTION_HOST='localhost:5432' \
+  toniton/ml-crypto-trading:latest \
+  --assets-conf=examples/configurations/assets.yaml 
 ```
 
 Or with Docker Compose:
@@ -102,6 +114,10 @@ Multi-strategy decision engine powered by a Byzantine Fault Tolerant (BFT) votin
 ### Intelligent Trading Scheduler
 
 Trading scheduler gives you control over the frequency each asset trades: every second to every minute, hour, or day.
+
+### Audit Log Replay
+
+Audit logs can be replayed through the backtesting system.
 
 ### Trading mode
 

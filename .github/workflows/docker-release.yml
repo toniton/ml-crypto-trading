@@ -103,3 +103,12 @@ jobs:
         run: |
           docker run --rm ${{ env.IMAGE_NAME }}:latest
         continue-on-error: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Update docker repository description
+        uses: peter-evans/dockerhub-description@v5
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/${{ github.event.repository.name }}
+          short-description: ${{ github.event.repository.description }}
+          enable-url-completion: true
