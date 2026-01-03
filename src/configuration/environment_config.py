@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,5 +19,16 @@ class EnvironmentConfig(BaseSettings):
     postgres_user: Optional[str] = None
     postgres_database: Optional[str] = None
     postgres_password: Optional[SecretStr] = None
+    log_dir: str = Field(default='.')
+    log_level: Optional[str] = Field(default=None)
 
-    model_config = SettingsConfigDict(env_file=".env")
+    @model_validator(mode='after')
+    def set_default_log_level(self) -> 'EnvironmentConfig':
+        if self.log_level is None:
+            if self.app_env == AppEnvEnum.STAGING:
+                self.log_level = 'DEBUG'
+            else:
+                self.log_level = 'INFO'
+        return self
+
+    model_config = SettingsConfigDict(env_file=".env", extra='ignore')
