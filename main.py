@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import logging
 import threading
 
 from backtest.backtest_application import BacktestApplication
@@ -10,7 +9,6 @@ from src.configuration.environment_config import EnvironmentConfig
 
 
 def main():
-    logging.basicConfig(level=logging.INFO)
     environment_config = EnvironmentConfig()
 
     application_config = ApplicationConfig()
