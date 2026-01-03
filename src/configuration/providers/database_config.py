@@ -6,7 +6,6 @@ from src.core.interfaces.base_config import BaseConfig
 
 @dataclass
 class DatabaseConfig(BaseConfig):
-    # FIXME: Remove application_config
     def __init__(self, environment_config: EnvironmentConfig = None):
         if environment_config is None:
             environment_config = EnvironmentConfig()
