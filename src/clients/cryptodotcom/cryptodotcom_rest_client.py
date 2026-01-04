@@ -23,6 +23,7 @@ from src.core.interfaces.exchange_rest_client import ExchangeRestClient, Exchang
 
 
 class CryptoDotComRestClient(ExchangeRestClient):
+
     def __init__(self):
         config = ExchangesConfig()
         self._base_url = config.crypto_dot_com.rest_endpoint
@@ -80,6 +81,13 @@ class CryptoDotComRestClient(ExchangeRestClient):
         request = CryptoDotComRequestFactory.build_order_request(
             self._base_url, self._api_key, self._secret_key, uuid,
             ticker_symbol, quantity, price, trade_action
+        )
+        response_data = RequestHelper.execute_request(request)
+        return CryptoDotComResponseOrderCreatedDto(**response_data)
+
+    def cancel_order(self, uuid: str) -> CryptoDotComResponseOrderCreatedDto:
+        request = CryptoDotComRequestFactory.build_cancel_order_request(
+            self._base_url, self._api_key, self._secret_key, uuid
         )
         response_data = RequestHelper.execute_request(request)
         return CryptoDotComResponseOrderCreatedDto(**response_data)

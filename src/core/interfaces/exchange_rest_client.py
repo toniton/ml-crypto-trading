@@ -51,6 +51,13 @@ class ExchangeRestClient(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def cancel_order(
+            self,
+            uuid: str
+    ) -> None:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def get_candles(
             self,
             ticker_symbol: str,

@@ -24,11 +24,12 @@ class CryptoDotComRequestFactory:
             price: str,
             trade_action: TradeAction
     ) -> Request:
+        endpoint_path = "private/create-order"
         nonce = int(time.time() * 1000)
         request_data = {
             "id": 1,
             "nonce": nonce,
-            "method": "private/create-order",
+            "method": endpoint_path,
             "api_key": api_key,
             "params": {
                 "instrument_name": ticker_symbol,
@@ -38,7 +39,7 @@ class CryptoDotComRequestFactory:
                 "quantity": quantity,
                 "client_oid": uuid,
                 "exec_inst": ["POST_ONLY"],
-                "time_in_force": "FILL_OR_KILL"
+                "time_in_force": "GOOD_TILL_CANCEL"
             }
         }
 
@@ -58,7 +59,45 @@ class CryptoDotComRequestFactory:
 
         serialized_json = request_data_object.model_dump_json()
 
-        return RequestHelper.create_request(base_url, "private/create-orderrt", method="POST",
+        return RequestHelper.create_request(base_url, endpoint_path, method="POST",
+                                            data=serialized_json.encode("utf-8"))
+
+    @staticmethod
+    def build_cancel_order_request(
+            base_url: str,
+            api_key: str,
+            secret_key: str,
+            uuid: str
+    ) -> Request:
+        endpoint_path = "private/advanced/cancel-order"
+        nonce = int(time.time() * 1000)
+        request_data = {
+            "id": 1,
+            "nonce": nonce,
+            "method": endpoint_path,
+            "api_key": api_key,
+            "params": {
+                "client_oid": uuid
+            }
+        }
+
+        payload_str = request_data['method'] \
+                      + str(request_data.get('id')) \
+                      + request_data['api_key'] \
+                      + params_to_str(request_data['params'], 0, 2) \
+                      + str(request_data['nonce'])
+
+        request_data['sig'] = hmac.new(
+            bytes(str(secret_key), 'utf-8'),
+            msg=bytes(payload_str, 'utf-8'),
+            digestmod=hashlib.sha256
+        ).hexdigest()
+
+        request_data_object = CryptoDotComRequestOrderDto(**request_data)
+
+        serialized_json = request_data_object.model_dump_json()
+
+        return RequestHelper.create_request(base_url, endpoint_path, method="POST",
                                             data=serialized_json.encode("utf-8"))
 
     @staticmethod

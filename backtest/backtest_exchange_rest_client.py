@@ -127,6 +127,14 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
 
         return order
 
+    def cancel_order(
+            self,
+            uuid: str
+    ) -> None:
+        self.app_logger.info(f"BacktestExchangeRestClient: Cancelling order {uuid}")
+        # In this simple backtest, we just remove it from the list if it's there
+        self.account.orders = [o for o in self.account.orders if o.uuid != uuid]
+
     def get_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
         market_data = self.get_market_data(ticker_symbol)
         return [

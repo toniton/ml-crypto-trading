@@ -50,7 +50,7 @@ class TickerRequest(BaseModel):
 
 
 class OrderCreated(BaseModel):
-    order_id: str
+    order_id: Optional[str] = None
     client_oid: Optional[str] = None
 
 

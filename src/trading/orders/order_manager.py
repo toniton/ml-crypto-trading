@@ -1,10 +1,11 @@
+import queue
 import threading
 from queue import Queue
 from uuid import uuid4
 
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
-from api.interfaces.trade_action import OrderStatus, TradeAction
+from api.interfaces.trade_action import TradeAction
 from database.unit_of_work import UnitOfWork
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -24,18 +25,17 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
 
     def process_order_queue(self):
         self.app_logger.info("Order processing thread started")
-        while (not self._stop_event.is_set()) and (self.order_queue.not_empty is True):
+        while not self._stop_event.is_set():
             try:
-                # Use a timeout to allow checking stop_event
-                order = self.order_queue.get(timeout=0.5)
+                order = self.order_queue.get(timeout=0.1)
                 self.app_logger.debug(f"Order queue processing: {order}")
                 try:
                     self.execute_order(order)
-                    order.status = OrderStatus.PROCESSING
+                    self.app_logger.info(f"Order executed: {order.uuid}")
                 except RuntimeError as exc:
                     self.app_logger.error(f"Executing order failed. Order={order}: {exc}", exc_info=True)
-            except Exception: # Timeout
-                continue
+            except queue.Empty:
+                pass
         self.app_logger.info("Order processing thread exiting")
 
     def shutdown(self):
@@ -47,11 +47,15 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
                 self.app_logger.warning("OrderManager thread did not terminate in time")
 
     def _save_orders_to_database(self, orders: list[Order]) -> None:
-        for order in orders:
-            self.app_logger.debug(f"Order update received, saving to DB: {order}")
-            order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
-            order_repository.upsert(order)
-        self.unit_of_work.complete()
+        try:
+            for order in orders:
+                self.app_logger.debug(f"Order update received, saving to DB: {order}")
+                order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
+                order_repository.upsert(order)
+            self.unit_of_work.complete()
+        except Exception as e:
+            self.app_logger.error(f"Failed to save orders: {e}", exc_info=True)
+            raise
 
     def init_websocket(self, assets: list[Asset]):
         for asset in assets:
@@ -94,8 +98,12 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         except Exception as exc:
             raise RuntimeError("Error executing order:", order, exc) from exc
 
-    def cancel_order(self, open_order: Order, market_price: str) -> Order:
-        raise NotImplementedError("Unable to cancel order:", open_order)
+    def cancel_order(self, open_order: Order) -> None:
+        provider = self.get_client(open_order.provider_name)
+        try:
+            provider.cancel_order(open_order.uuid)
+        except Exception as exc:
+            raise RuntimeError("Unable to cancel order:", open_order) from exc
 
     def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:
         order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
