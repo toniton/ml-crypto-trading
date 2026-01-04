@@ -11,7 +11,6 @@ import src.clients
 import src.trading.protection.guards
 
 from database.database_manager import DatabaseManager
-from database.unit_of_work import UnitOfWork
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
@@ -56,10 +55,10 @@ class Application(ApplicationLoggingMixin):
         self._setup_configuration()
 
         db_manager = DatabaseManager()
-        unit_of_work = db_manager.initialize()
+        db_manager.initialize()
         self._assets = assets_config.assets
 
-        self._managers = self._create_managers(unit_of_work)
+        self._managers = self._create_managers(db_manager)
 
         if not self._is_backtest_mode:
             self._setup_clients()
@@ -74,11 +73,11 @@ class Application(ApplicationLoggingMixin):
         for cls in BaseConfig.__subclasses__():
             cls(self._environment_config)
 
-    def _create_managers(self, unit_of_work: UnitOfWork) -> ManagerContainer:
+    def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
         return ManagerContainer(
             account_manager=AccountManager(self._assets),
             fees_manager=FeesManager(),
-            order_manager=OrderManager(unit_of_work),
+            order_manager=OrderManager(db_manager),
             market_data_manager=MarketDataManager(self._assets),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),

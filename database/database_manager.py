@@ -3,7 +3,7 @@ import os
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, declarative_base
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 from database.unit_of_work import UnitOfWork
 from src.configuration.providers.database_config import DatabaseConfig
@@ -16,6 +16,7 @@ class DatabaseManager:
         config = DatabaseConfig.get_instance()
         self.database_connection_endpoint = config.get_connection_endpoint()
         self.engine = None
+        self._session_factory = None
 
     def _create_engine(self):
         if self.engine is None:
@@ -33,9 +34,13 @@ class DatabaseManager:
         alembic_cfg.set_main_option("script_location", migrations_path)
         command.upgrade(alembic_cfg, "head")
 
-    def initialize(self) -> UnitOfWork:
+    def initialize(self) -> None:
         self._run_migrations()
         self._create_tables()
         engine = self._create_engine()
-        session = Session(engine)
-        return UnitOfWork(session)
+        self._session_factory = sessionmaker(bind=engine)
+
+    def get_unit_of_work(self) -> UnitOfWork:
+        if self._session_factory is None:
+            raise RuntimeError("DatabaseManager must be initialized before calling get_unit_of_work()")
+        return UnitOfWork(self._session_factory())

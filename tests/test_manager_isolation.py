@@ -3,16 +3,18 @@ from unittest.mock import Mock
 from api.interfaces.asset import Asset
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.asset_schedule import AssetSchedule
+from database.database_manager import DatabaseManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.markets.market_data_manager import MarketDataManager
+from src.trading.orders.order_manager import OrderManager
 from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
 
 
 class TestManagerIsolation(unittest.TestCase):
+    # pylint: disable=protected-access
 
     def test_protection_manager_isolation(self):
-        """Test that ProtectionManager instances have isolated guard registries."""
         manager1 = ProtectionManager()
         guard1 = Mock()
         manager1.register_guard(asset_key=1, guard=guard1)
@@ -85,5 +87,15 @@ class TestManagerIsolation(unittest.TestCase):
 
         manager2 = MarketDataManager([asset2])
 
-        self.assertEqual(len(manager2._market_data), 0, "New MarketDataManager should have empty market data")
+        self.assertNotIn(asset1.key, manager2._market_data, "New MarketDataManager should not have asset1 data")
+        self.assertIn(asset2.key, manager2._market_data, "New MarketDataManager should have asset2 initialized")
         self.assertIn(asset1.key, manager1._market_data, "Original MarketDataManager should retain data")
+
+    def test_order_manager_isolation(self):
+        db_manager1 = Mock(spec=DatabaseManager)
+        manager1 = OrderManager(db_manager1)
+
+        db_manager2 = Mock(spec=DatabaseManager)
+        manager2 = OrderManager(db_manager2)
+
+        self.assertNotEqual(manager1.database_manager, manager2.database_manager)

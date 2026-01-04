@@ -6,7 +6,7 @@ from uuid import uuid4
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
-from database.unit_of_work import UnitOfWork
+from database.database_manager import DatabaseManager
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.rest_client_registry import RestClientRegistry
@@ -15,9 +15,9 @@ from src.trading.helpers.trading_helper import TradingHelper
 
 
 class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
-    def __init__(self, unit_of_work: UnitOfWork):
+    def __init__(self, database_manager: DatabaseManager):
         super().__init__()
-        self.unit_of_work = unit_of_work
+        self.database_manager = database_manager
         self.order_queue = Queue()
         self._stop_event = threading.Event()
         self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
@@ -48,11 +48,11 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
 
     def _save_orders_to_database(self, orders: list[Order]) -> None:
         try:
-            for order in orders:
-                self.app_logger.debug(f"Order update received, saving to DB: {order}")
-                order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
-                order_repository.upsert(order)
-            self.unit_of_work.complete()
+            with self.database_manager.get_unit_of_work() as uow:
+                for order in orders:
+                    self.app_logger.debug(f"Order update received, saving to DB: {order}")
+                    order_repository = uow.get_repository(PostgresOrderRepository)
+                    order_repository.upsert(order)
         except Exception as e:
             self.app_logger.error(f"Failed to save orders: {e}", exc_info=True)
             raise
@@ -92,11 +92,11 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
                 order.price,
                 order.trade_action
             )
-            order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
-            order_repository.upsert(order)
-            self.unit_of_work.complete()
+            with self.database_manager.get_unit_of_work() as uow:
+                order_repository = uow.get_repository(PostgresOrderRepository)
+                order_repository.save(order)
         except Exception as exc:
-            raise RuntimeError("Error executing order:", order, exc) from exc
+            raise RuntimeError("Error executing and/or saving order:", order, exc) from exc
 
     def cancel_order(self, open_order: Order) -> None:
         provider = self.get_client(open_order.provider_name)
@@ -106,5 +106,6 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             raise RuntimeError("Unable to cancel order:", open_order) from exc
 
     def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:
-        order_repository = self.unit_of_work.get_repository(PostgresOrderRepository)
-        return order_repository.get_by_price(ticker_symbol, price)
+        with self.database_manager.get_unit_of_work() as uow:
+            order_repository = uow.get_repository(PostgresOrderRepository)
+            return order_repository.get_by_price(ticker_symbol, price)
