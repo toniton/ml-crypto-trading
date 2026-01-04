@@ -3,7 +3,7 @@ from typing import Optional
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.order import Order
-from api.interfaces.trade_action import TradeAction
+from api.interfaces.trade_action import OrderStatus, TradeAction
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.mapper import Mapper
@@ -82,6 +82,19 @@ class CryptoDotComMapper(Mapper):
         )
 
     @staticmethod
+    def from_exchange_status(status: str) -> Optional[str]:
+        status_map = {
+            "NEW": OrderStatus.PENDING,
+            "PENDING": OrderStatus.PENDING,
+            "ACTIVE": OrderStatus.PROCESSING,
+            "CANCELED": OrderStatus.CANCELLED,
+            "REJECTED": OrderStatus.CANCELLED,
+            "EXPIRED": OrderStatus.CANCELLED,
+            "FILLED": OrderStatus.COMPLETED,
+        }
+        return status_map.get(status)
+
+    @staticmethod
     def to_orders(
             response: CryptoDotComResponseOrderUpdateDto
     ) -> list[Order]:
@@ -93,7 +106,8 @@ class CryptoDotComMapper(Mapper):
                 provider_name=CryptoDotComMapper.provider.value,
                 ticker_symbol=order.instrument_name,
                 price=order.limit_price,
-                created_time=order.create_time
+                created_time=order.create_time,
+                status=CryptoDotComMapper.from_exchange_status(order.status)
             )
             for order in response.result.data
         ] if response.result else []
