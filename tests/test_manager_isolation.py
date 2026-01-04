@@ -81,9 +81,9 @@ class TestManagerIsolation(unittest.TestCase):
         )
 
         manager1 = MarketDataManager([asset1])
-        manager1.market_data = {asset1.key: Mock(close_price="50000")}
+        manager1._market_data = {asset1.key: Mock(close_price="50000")}
 
         manager2 = MarketDataManager([asset2])
 
-        self.assertEqual(len(manager2.market_data), 0, "New MarketDataManager should have empty market data")
-        self.assertIn(asset1.key, manager1.market_data, "Original MarketDataManager should retain data")
+        self.assertEqual(len(manager2._market_data), 0, "New MarketDataManager should have empty market data")
+        self.assertIn(asset1.key, manager1._market_data, "Original MarketDataManager should retain data")

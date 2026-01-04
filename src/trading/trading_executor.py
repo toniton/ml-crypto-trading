@@ -43,10 +43,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.order_manager.init_websocket(self.assets)
         self.market_data_manager.init_websocket()
 
-    def _fetch_market_data(self, asset: Asset) -> MarketData:
-        market_data = self.market_data_manager.get_latest_marketdata(asset.key)
-        return market_data or self.market_data_manager.get_market_data(asset.ticker_symbol, asset.exchange.value)
-
     def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
         trading_context = self.trading_context_manager.get_trading_context(asset.key)
 
@@ -65,7 +61,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if account_balance.available_balance <= 0:
             raise ValueError(f"Insufficient balance for {currency_symbol}: ${account_balance.available_balance}")
 
-        market_data = self._fetch_market_data(asset)
+        market_data = self.market_data_manager.get_market_data(asset)
         self.app_logger.debug(f"Fetched market data for {asset}: {market_data}")
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
         candles = self.market_data_manager.get_candles(asset)
@@ -172,7 +168,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
                 trading_context.end_time = time.time()
-                market_data = self._fetch_market_data(asset)
+                market_data = self.market_data_manager.get_market_data(asset)
 
                 self.app_logger.info("Trading Context Summary")
                 self.app_logger.info(f"======= {asset.ticker_symbol} =======================")
