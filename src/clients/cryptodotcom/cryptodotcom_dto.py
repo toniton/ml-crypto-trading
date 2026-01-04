@@ -102,12 +102,12 @@ class TickerData(BaseModel):
     i: str
     v: str
     vv: str
-    oi: str
     c: Optional[str] = None
     b: Optional[str] = None
     bs: Optional[str] = None
     k: Optional[str] = None
     ks: Optional[str] = None
+    oi: Optional[str] = None
     t: int
 
 

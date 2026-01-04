@@ -1,15 +1,18 @@
 from typing import Callable, Optional
 
 from api.interfaces.account_balance import AccountBalance
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
+from api.interfaces.timeframe import Timeframe
 from backtest.backtest_event_bus import BacktestEventBus
 from backtest.events import MarketDataEvent, OrderFillEvent, BalanceUpdateEvent, Event
+from backtest.events.domain_events import CandlesEvent
 from src.core.interfaces.auth_handler import AuthHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import (
     BalanceSubscriptionData,
-    MarketDataSubscriptionData,
+    CandlesSubscriptionData, MarketDataSubscriptionData,
     OrderUpdateSubscriptionData,
     SubscriptionVisibility,
 )
@@ -52,6 +55,9 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
     def _get_market_data_subscription(self, ticker_symbol: str) -> MarketDataSubscriptionData:
         return MarketDataSubscriptionData({}, {}, lambda d: None)
 
+    def _get_candles_subscription(self, ticker_symbol: str, timeframe: Timeframe) -> CandlesSubscriptionData:
+        return CandlesSubscriptionData({}, {}, lambda d: None)
+
     def _get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
         return None
 
@@ -91,6 +97,20 @@ class BacktestWebSocketClient(ExchangeWebSocketClient):
                     callback(connection_key, event.market_data)
 
         sub_id = self.bus.subscribe(MarketDataEvent, _handler)
+        self._subscription_ids[connection_key] = sub_id
+        return connection_key
+
+    def subscribe_candles(
+            self, ticker_symbol: str, timeframe: Timeframe, callback: Callable[[str, list[Candle]], None]
+    ) -> str:
+        connection_key = f"{self.get_provider_name()}-CANDLES_{ticker_symbol}-{timeframe.value}"
+
+        def _handler(event: Event):
+            if isinstance(event, CandlesEvent):
+                if event.ticker_symbol == ticker_symbol:
+                    callback(connection_key, event.candles)
+
+        sub_id = self.bus.subscribe(CandlesEvent, _handler)
         self._subscription_ids[connection_key] = sub_id
         return connection_key
 

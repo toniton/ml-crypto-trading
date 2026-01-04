@@ -6,6 +6,7 @@ from typing import Callable, Generic, Optional, TypeVar
 from pydantic.dataclasses import dataclass
 
 from api.interfaces.account_balance import AccountBalance
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 
@@ -45,5 +46,11 @@ class OrderUpdateSubscriptionData(SubscriptionData[list[Order]]):
 
 @dataclass
 class MarketDataSubscriptionData(SubscriptionData[MarketData]):
+    def __post_init__(self):
+        self.visibility = SubscriptionVisibility.PUBLIC
+
+
+@dataclass
+class CandlesSubscriptionData(SubscriptionData[list[Candle]]):
     def __post_init__(self):
         self.visibility = SubscriptionVisibility.PUBLIC

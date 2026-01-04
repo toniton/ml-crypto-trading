@@ -127,7 +127,7 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
 
         return order
 
-    def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
+    def get_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
         market_data = self.get_market_data(ticker_symbol)
         return [
             Candle(

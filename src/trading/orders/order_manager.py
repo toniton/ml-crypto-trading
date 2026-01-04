@@ -24,7 +24,7 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
 
     def process_order_queue(self):
         self.app_logger.info("Order processing thread started")
-        while not self._stop_event.is_set():
+        while (not self._stop_event.is_set()) and (self.order_queue.not_empty is True):
             try:
                 # Use a timeout to allow checking stop_event
                 order = self.order_queue.get(timeout=0.5)

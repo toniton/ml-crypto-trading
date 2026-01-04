@@ -176,8 +176,7 @@ class CryptoDotComRequestFactory:
 
     @staticmethod
     def build_get_candle_request(base_url: str, ticker_symbol: str, timeframe: Timeframe):
-        instrument_name = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
         interval = CryptoDotComMapper.from_timeframe(timeframe)
         return RequestHelper.create_request(
-            base_url, f"public/get-candlestick?instrument_name={instrument_name}&timeframe={interval}"
+            base_url, f"public/get-candlestick?instrument_name={ticker_symbol}&timeframe={interval}"
         )

@@ -85,7 +85,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
         return CryptoDotComResponseOrderCreatedDto(**response_data)
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
-    def get_candle(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
+    def get_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
         request = CryptoDotComRequestFactory.build_get_candle_request(self._base_url, ticker_symbol, timeframe)
         response_data = RequestHelper.execute_request(request)
         candle_response = CryptoDotComCandleResponseDto(**response_data)

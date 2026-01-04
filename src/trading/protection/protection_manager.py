@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
@@ -6,13 +8,10 @@ from src.core.interfaces.guard import Guard
 
 class ProtectionManager:
     def __init__(self):
-        self.guards: dict[int, list[Guard]] = {}
+        self.guards: dict[int, list[Guard]] = defaultdict(list)
 
     def register_guard(self, asset_key: int, guard: Guard):
-        if asset_key in self.guards:
-            self.guards[asset_key].append(guard)
-        else:
-            self.guards[asset_key] = [guard]
+        self.guards[asset_key].append(guard)
 
     def can_trade(
             self, asset_key: int, trade_action: TradeAction,

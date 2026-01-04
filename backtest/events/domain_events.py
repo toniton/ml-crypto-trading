@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.account_balance import AccountBalance
@@ -17,6 +19,12 @@ class TickEvent(Event):
 class MarketDataEvent(Event):
     """Event emitted when new market data is available."""
     market_data: MarketData
+    ticker_symbol: str
+
+@dataclass
+class CandlesEvent(Event):
+    """Event emitted when new candle is available."""
+    candles: list[Candle]
     ticker_symbol: str
 
 @dataclass

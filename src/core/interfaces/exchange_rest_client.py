@@ -51,7 +51,7 @@ class ExchangeRestClient(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_candle(
+    def get_candles(
             self,
             ticker_symbol: str,
             timeframe: Timeframe

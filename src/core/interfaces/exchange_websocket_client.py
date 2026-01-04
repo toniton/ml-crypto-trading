@@ -2,12 +2,14 @@ from abc import ABC, abstractmethod
 from typing import Callable, Optional
 
 from api.interfaces.account_balance import AccountBalance
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
+from api.interfaces.timeframe import Timeframe
 from src.core.interfaces.auth_handler import AuthHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import BalanceSubscriptionData, \
-    MarketDataSubscriptionData, \
+    CandlesSubscriptionData, MarketDataSubscriptionData, \
     OrderUpdateSubscriptionData, SubscriptionData, SubscriptionVisibility
 from src.core.managers.websocket_manager import WebSocketManager
 
@@ -42,6 +44,10 @@ class ExchangeWebSocketClient(ABC):
         pass
 
     @abstractmethod
+    def _get_candles_subscription(self, ticker_symbol: str, timeframe: Timeframe) -> CandlesSubscriptionData:
+        pass
+
+    @abstractmethod
     def _get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
         pass
 
@@ -65,6 +71,15 @@ class ExchangeWebSocketClient(ABC):
         sub_data = self._get_market_data_subscription(ticker_symbol)
         return self._subscribe(
             connection_key=f"{self.get_provider_name()}-MARKET_{ticker_symbol}",
+            subscription_data=sub_data,
+            callback=lambda key, data: callback(key, sub_data.parse(data))
+        )
+
+    def subscribe_candles(self, ticker_symbol: str, timeframe: Timeframe,
+                          callback: Callable[[str, list[Candle]], None]) -> str:
+        sub_data = self._get_candles_subscription(ticker_symbol, timeframe)
+        return self._subscribe(
+            connection_key=f"{self.get_provider_name()}-CANDLES_{ticker_symbol}-{timeframe.value}",
             subscription_data=sub_data,
             callback=lambda key, data: callback(key, sub_data.parse(data))
         )

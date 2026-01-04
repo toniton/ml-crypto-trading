@@ -1,17 +1,18 @@
 from typing import Optional
 
+from api.interfaces.timeframe import Timeframe
 from src.configuration.exchanges_config import ExchangesConfig
 from src.core.interfaces.auth_handler import AuthHandler
 from src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
 from src.clients.cryptodotcom.handlers.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import BalanceSubscriptionData, \
-    MarketDataSubscriptionData, \
+    CandlesSubscriptionData, MarketDataSubscriptionData, \
     OrderUpdateSubscriptionData, SubscriptionVisibility
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
-from src.trading.helpers.trading_helper import TradingHelper
-from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComMarketDataResponseDto, \
-    CryptoDotComResponseOrderUpdateDto, CryptoDotComUserBalanceResponseDto
+from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComCandleResponseDto, \
+    CryptoDotComMarketDataResponseDto, CryptoDotComResponseOrderUpdateDto, \
+    CryptoDotComUserBalanceResponseDto
 from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
 
 
@@ -65,19 +66,34 @@ class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
         )
 
     def _get_market_data_subscription(self, ticker_symbol: str) -> MarketDataSubscriptionData:
-        ticker = TradingHelper.format_ticker_symbol(ticker_symbol, suffix="-PERP")
         return MarketDataSubscriptionData(
             subscribe_payload={
                 "id": 1,
                 "method": "subscribe",
-                "params": {"channels": [f"ticker.{ticker}"]}
+                "params": {"channels": [f"ticker.{ticker_symbol}"]}
             },
             unsubscribe_payload={
                 "id": 1,
                 "method": "unsubscribe",
-                "params": {"channels": [f"ticker.{ticker}"]}
+                "params": {"channels": [f"ticker.{ticker_symbol}"]}
             },
             parser=lambda data: CryptoDotComMapper.to_marketdata(CryptoDotComMarketDataResponseDto(**data))
+        )
+
+    def _get_candles_subscription(self, ticker_symbol: str, timeframe: Timeframe) -> CandlesSubscriptionData:
+        interval = CryptoDotComMapper.from_timeframe(timeframe)
+        return CandlesSubscriptionData(
+            subscribe_payload={
+                "id": 1,
+                "method": "subscribe",
+                "params": {"channels": [f"candlestick.{interval}.{ticker_symbol}"]}
+            },
+            unsubscribe_payload={
+                "id": 1,
+                "method": "unsubscribe",
+                "params": {"channels": [f"candlestick.{interval}.{ticker_symbol}"]}
+            },
+            parser=lambda data: CryptoDotComMapper.to_candles(CryptoDotComCandleResponseDto(**data))
         )
 
     def _get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
