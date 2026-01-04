@@ -32,7 +32,7 @@ class ConsensusManager(ApplicationLoggingMixin):
         if trade_action not in self.strategies:
             return False
 
-        consensus_factor = 1.3 if trade_action == TradeAction.BUY else 1
+        consensus_factor = 1.3 if trade_action == TradeAction.BUY else 0.5
 
         votes: list[bool] = []
         for strategy in self.strategies[trade_action]:

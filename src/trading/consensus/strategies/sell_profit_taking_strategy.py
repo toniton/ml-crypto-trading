@@ -7,7 +7,7 @@ from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStra
 
 class SellProfitTakingStrategy(RuleBasedTradingStrategy):
 
-    def __init__(self, take_profit_pct: float = 0.05):
+    def __init__(self, take_profit_pct: float = 0.02):
         super().__init__()
         self.type = TradeAction.SELL
         self.take_profit_pct = take_profit_pct
