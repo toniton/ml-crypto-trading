@@ -15,7 +15,6 @@ from src.core.logging.trading_logging_mixin import TradingLoggingMixin
 from src.core.logging.audit_logging_mixin import AuditLoggingMixin
 from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.core.managers.manager_container import ManagerContainer
-from src.trading.orders.order_helper import OrderHelper
 
 
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
@@ -127,16 +126,15 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     continue
 
                 open_orders: list[Order] = sorted(
-                    filter(OrderHelper.less_than_price_filter(current_price), trading_context.open_positions),
-                    key=lambda o, _current_price=market_data.close_price: (
-                            (float(_current_price) - float(o.price)) / float(o.price)
-                    )
+                    trading_context.open_positions,
+                    key=lambda o, _current_price=market_data.close_price:
+                    (float(_current_price) - float(o.price)) / float(o.price)
                 )
 
                 best_order: Order | None = next(iter(open_orders), None)
                 if best_order:
                     sell_order = self.order_manager.open_order(
-                        uuid=best_order.uuid, price=current_price, trade_action=TradeAction.SELL,
+                        price=current_price, trade_action=TradeAction.SELL,
                         quantity=best_order.quantity, provider_name=best_order.provider_name,
                         ticker_symbol=best_order.ticker_symbol, timestamp=market_data.timestamp
                     )

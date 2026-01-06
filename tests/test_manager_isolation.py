@@ -93,9 +93,12 @@ class TestManagerIsolation(unittest.TestCase):
 
     def test_order_manager_isolation(self):
         db_manager1 = Mock(spec=DatabaseManager)
-        manager1 = OrderManager(db_manager1)
+        journal1 = Mock()
+        manager1 = OrderManager(db_manager1, journal1)
 
         db_manager2 = Mock(spec=DatabaseManager)
-        manager2 = OrderManager(db_manager2)
+        journal2 = Mock()
+        manager2 = OrderManager(db_manager2, journal2)
 
-        self.assertNotEqual(manager1.database_manager, manager2.database_manager)
+        self.assertNotEqual(manager1._database_manager, manager2._database_manager)
+        self.assertNotEqual(manager1._trading_journal, manager2._trading_journal)

@@ -28,6 +28,7 @@ from src.trading.fees.fees_manager import FeesManager
 from src.core.managers.manager_container import ManagerContainer
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
+from src.trading.context.in_memory_trading_journal import InMemoryTradingJournal
 from src.core.interfaces.exchange_rest_client import ExchangeRestClient
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
@@ -74,10 +75,11 @@ class Application(ApplicationLoggingMixin):
             cls(self._environment_config)
 
     def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
+        trading_journal = InMemoryTradingJournal()
         return ManagerContainer(
             account_manager=AccountManager(self._assets),
             fees_manager=FeesManager(),
-            order_manager=OrderManager(db_manager),
+            order_manager=OrderManager(db_manager, trading_journal),
             market_data_manager=MarketDataManager(self._assets),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),

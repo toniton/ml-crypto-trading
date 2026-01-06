@@ -100,7 +100,7 @@ class CryptoDotComMapper(Mapper):
     ) -> list[Order]:
         return [
             Order(
-                uuid=order.order_id,
+                uuid=order.client_oid,
                 trade_action=TradeAction.BUY if order.side == "BUY" else TradeAction.SELL,
                 quantity=order.quantity,
                 provider_name=CryptoDotComMapper.provider.value,

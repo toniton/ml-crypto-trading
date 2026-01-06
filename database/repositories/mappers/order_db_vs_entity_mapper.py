@@ -1,3 +1,4 @@
+from datetime import datetime
 from database.dao.order_dao import OrderDao
 from api.interfaces.order import Order
 
@@ -25,4 +26,5 @@ class OrderDBVSEntityMapper:
             price=order.price,
             quantity=order.quantity,
             trade_action=order.trade_action.value,
+            created_time=datetime.fromtimestamp(order.created_time)
         )

@@ -6,19 +6,21 @@ from uuid import uuid4
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
+from api.interfaces.trade_action import OrderStatus
 from database.database_manager import DatabaseManager
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.core.interfaces.trading_journal import TradingJournal
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
-from src.trading.helpers.trading_helper import TradingHelper
 
 
 class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
-    def __init__(self, database_manager: DatabaseManager):
+    def __init__(self, database_manager: DatabaseManager, trading_journal: TradingJournal):
         super().__init__()
-        self.database_manager = database_manager
-        self.order_queue = Queue()
+        self._database_manager = database_manager
+        self._order_queue = Queue()
+        self._trading_journal = trading_journal
         self._stop_event = threading.Event()
         self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
         self._execute_thread.start()
@@ -27,7 +29,7 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         self.app_logger.info("Order processing thread started")
         while not self._stop_event.is_set():
             try:
-                order = self.order_queue.get(timeout=0.1)
+                order = self._order_queue.get(timeout=0.1)
                 self.app_logger.debug(f"Order queue processing: {order}")
                 try:
                     self.execute_order(order)
@@ -48,9 +50,11 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
 
     def _save_orders_to_database(self, orders: list[Order]) -> None:
         try:
-            with self.database_manager.get_unit_of_work() as uow:
+            with self._database_manager.get_unit_of_work() as uow:
                 for order in orders:
                     self.app_logger.debug(f"Order update received, saving to DB: {order}")
+                    if order.status == OrderStatus.COMPLETED:
+                        self._trading_journal.record_fill(order)
                     order_repository = uow.get_repository(PostgresOrderRepository)
                     order_repository.upsert(order)
         except Exception as e:
@@ -60,9 +64,8 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
     def init_websocket(self, assets: list[Asset]):
         for asset in assets:
             websocket_client = self.get_websocket(asset.exchange.name)
-            instrument_name = TradingHelper.format_ticker_symbol(asset.ticker_symbol, separator="_")
             websocket_client.subscribe_order_update(
-                instrument_name, callback=self._save_orders_to_database
+                asset.ticker_symbol, callback=self._save_orders_to_database
             )
 
     def open_order(
@@ -79,7 +82,7 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             ticker_symbol=ticker_symbol,
             created_time=timestamp
         )
-        self.order_queue.put(order)
+        self._order_queue.put(order)
         return order
 
     def execute_order(self, order: Order):
@@ -92,7 +95,7 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
                 order.price,
                 order.trade_action
             )
-            with self.database_manager.get_unit_of_work() as uow:
+            with self._database_manager.get_unit_of_work() as uow:
                 order_repository = uow.get_repository(PostgresOrderRepository)
                 order_repository.save(order)
         except Exception as exc:
@@ -106,6 +109,6 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             raise RuntimeError("Unable to cancel order:", open_order) from exc
 
     def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:
-        with self.database_manager.get_unit_of_work() as uow:
+        with self._database_manager.get_unit_of_work() as uow:
             order_repository = uow.get_repository(PostgresOrderRepository)
             return order_repository.get_by_price(ticker_symbol, price)
