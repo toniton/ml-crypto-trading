@@ -13,10 +13,10 @@ class RiskManagementBuyStrategy(RuleBasedTradingStrategy):
         self.type = TradeAction.BUY
 
     def get_quorum(
-        self, trade_action: TradeAction,
-        ticker_symbol: str, trading_context: TradingContext,
-        market_data: MarketData,
-        candles: list[Candle]
+            self, trade_action: TradeAction,
+            ticker_symbol: str, trading_context: TradingContext,
+            market_data: MarketData,
+            candles: list[Candle]
     ):
         _risk_per_trade = trading_context.available_balance * self.risk_tolerance
         # TODO: Get quantity from min_quantity or max_quantity in TradeContext.
