@@ -10,6 +10,11 @@ from database.repositories.order_repository import OrderRepository
 
 
 class PostgresOrderRepository(OrderRepository):
+    TERMINAL_STATUSES = {
+        OrderStatus.COMPLETED.value,
+        OrderStatus.CANCELLED.value
+    }
+
     def save(self, order: Order):
         order_dao = OrderDBVSEntityMapper.map_to_db(order)
         self.database_session.add(order_dao)
@@ -24,22 +29,26 @@ class PostgresOrderRepository(OrderRepository):
         pass
 
     def upsert(self, order: Order) -> None:
+        order_dao = OrderDBVSEntityMapper.map_to_db(order)
         insert_statement = insert(OrderDao).values(
-            uuid=order.uuid,
-            provider_name=order.provider_name,
-            ticker_symbol=order.ticker_symbol,
-            price=order.price,
-            quantity=order.quantity,
-            trade_action=str(order.trade_action.value),
-            status=str(order.status.value),
+            uuid=order_dao.uuid,
+            provider_name=order_dao.provider_name,
+            ticker_symbol=order_dao.ticker_symbol,
+            price=order_dao.price,
+            quantity=order_dao.quantity,
+            trade_action=order_dao.trade_action,
+            status=order_dao.status,
+            last_updated_timestamp=order_dao.last_updated_timestamp,
+            created_timestamp=order_dao.created_timestamp
         )
         upsert_statement = insert_statement.on_conflict_do_update(
             index_elements=["uuid"],
-            where=OrderDao.status.notin_([OrderStatus.COMPLETED.value, OrderStatus.CANCELLED.value]),
+            where=OrderDao.status.notin_(self.TERMINAL_STATUSES),
             set_={
-                OrderDao.price: order.price,
-                OrderDao.ticker_symbol: order.ticker_symbol,
-                OrderDao.status: str(order.status.value),
+                OrderDao.price: order_dao.price,
+                OrderDao.ticker_symbol: order_dao.ticker_symbol,
+                OrderDao.status: order_dao.status,
+                OrderDao.last_updated_timestamp: order_dao.last_updated_timestamp
             },
         )
         self.database_session.execute(upsert_statement)

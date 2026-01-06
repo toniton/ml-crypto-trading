@@ -1,5 +1,4 @@
-
-from sqlalchemy import Column, Integer, String, TIMESTAMP, text
+from sqlalchemy import Column, Integer, String, TIMESTAMP
 
 from database.database_manager import DatabaseManager
 
@@ -14,7 +13,5 @@ class OrderDao(DatabaseManager.BaseTableModel):
     quantity = Column(String)
     status = Column(String)
     trade_action = Column(String(4))
-    last_updated_time = Column(TIMESTAMP, default=None)
-    created_time = Column(
-        TIMESTAMP, server_default=text("CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-    )
+    last_updated_timestamp = Column(TIMESTAMP)
+    created_timestamp = Column(TIMESTAMP)

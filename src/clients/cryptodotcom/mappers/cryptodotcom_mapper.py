@@ -16,6 +16,7 @@ from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
 
 class CryptoDotComMapper(Mapper):
     provider = ExchangeProvidersEnum.CRYPTO_DOT_COM
+    NANOSECONDS_PER_SECOND = 1_000_000_000
 
     @staticmethod
     def to_marketdata(data: CryptoDotComMarketDataResponseDto) -> Optional[MarketData]:
@@ -94,8 +95,9 @@ class CryptoDotComMapper(Mapper):
         }
         return status_map.get(status)
 
-    @staticmethod
+    @classmethod
     def to_orders(
+            cls,
             response: CryptoDotComResponseOrderUpdateDto
     ) -> list[Order]:
         return [
@@ -106,7 +108,7 @@ class CryptoDotComMapper(Mapper):
                 provider_name=CryptoDotComMapper.provider.value,
                 ticker_symbol=order.instrument_name,
                 price=order.limit_price,
-                created_time=order.create_time,
+                created_time=int(order.create_time_ns) / cls.NANOSECONDS_PER_SECOND,
                 status=CryptoDotComMapper.from_exchange_status(order.status)
             )
             for order in response.result.data

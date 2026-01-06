@@ -97,7 +97,7 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             )
             with self._database_manager.get_unit_of_work() as uow:
                 order_repository = uow.get_repository(PostgresOrderRepository)
-                order_repository.save(order)
+                order_repository.upsert(order)
         except Exception as exc:
             raise RuntimeError("Error executing and/or saving order:", order, exc) from exc
 

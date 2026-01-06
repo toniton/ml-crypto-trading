@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from database.dao.order_dao import OrderDao
 from api.interfaces.order import Order
 
@@ -14,11 +14,12 @@ class OrderDBVSEntityMapper:
             price=order_dao.price,
             quantity=order_dao.quantity,
             trade_action=order_dao.trade_action,
-            created_time=order_dao.created_time.timestamp()
+            created_time=order_dao.created_timestamp.timestamp()
         )
 
     @staticmethod
     def map_to_db(order: Order) -> OrderDao:
+        created_datetime = datetime.fromtimestamp(order.created_time, tz=timezone.utc)
         return OrderDao(
             uuid=order.uuid,
             provider_name=order.provider_name,
@@ -26,5 +27,7 @@ class OrderDBVSEntityMapper:
             price=order.price,
             quantity=order.quantity,
             trade_action=order.trade_action.value,
-            created_time=datetime.fromtimestamp(order.created_time)
+            status=order.status.value,
+            last_updated_timestamp=datetime.now(timezone.utc),
+            created_timestamp=created_datetime
         )

@@ -79,7 +79,7 @@ class OrderUpdate(OrderCreated):
     instrument_name: Optional[str] = None
     fee_instrument_name: Optional[str] = None
     create_time: Optional[int] = None
-    create_time_ns: Optional[int] = None
+    create_time_ns: Optional[str] = None
     update_time: Optional[int] = None
     transaction_time_ns: Optional[int] = None
 
