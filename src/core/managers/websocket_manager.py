@@ -46,7 +46,7 @@ class WebSocketManager(ApplicationLoggingMixin):
                 url=self.get_websocket_url(subscription_data.visibility),
                 on_message=lambda ws, data: self._handle_message(connection_key, data),
                 on_error=lambda ws, e: self._handle_error(connection_key, e),
-                on_close=lambda ws, a, b: self._handle_close(connection_key)
+                on_close=lambda ws, close_code, close_msg: self._handle_close(connection_key, close_code, close_msg)
             )
 
             thread = threading.Thread(
@@ -129,6 +129,20 @@ class WebSocketManager(ApplicationLoggingMixin):
     def _handle_error(self, event_key: str, error: str) -> None:
         self.app_logger.error(f"WebSocket error for {event_key}: {error}")
 
-    def _handle_close(self, event_key: str) -> None:
-        self.app_logger.info(f"WebSocket closed for {event_key}")
-        self.subscriptions.pop(event_key, None)
+    def _handle_close(self, event_key: str, close_code: int, close_msg: str) -> None:
+        if close_code == 1000:
+            self.app_logger.info(f"WebSocket closed normally (1000) for {event_key}, reconnecting...")
+            if event_key in self.connections:
+                del self.connections[event_key]
+
+            if event_key in self.subscriptions:
+                subscription_data, callback = self.subscriptions[event_key]
+                # Re-subscribe triggers a new connection thread
+                self.subscribe(event_key, subscription_data, callback)
+        else:
+            self.app_logger.warning(f"WebSocket closed for {event_key}. Code: {close_code}, Msg: {close_msg}")
+            self.subscriptions.pop(event_key, None)
+            if event_key in self.connections:
+                del self.connections[event_key]
+            if event_key in self.authenticated_connections:
+                self.authenticated_connections.discard(event_key)
