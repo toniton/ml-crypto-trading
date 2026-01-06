@@ -1,7 +1,13 @@
 services:
   trading_bot:
     build: .
-    command: [ "--assets-conf=examples/configurations/backtest-assets.yaml", "--backtest-mode=true"]
+    command: [
+      "--assets-conf=examples/configurations/backtest-assets.yaml",
+      "--backtest-mode=true",
+      "--backtest-source=/workspace/examples/coinmarketcap/history"
+    ]
+    volumes:
+      - ./examples/:/workspace/examples/
     depends_on:
       postgres:
         condition: service_healthy
