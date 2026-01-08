@@ -2,17 +2,6 @@ from typing import Optional
 from pydantic import BaseModel
 
 
-class CryptoDotComRequestOrderParamsDto(BaseModel):
-    instrument_name: str
-    side: str
-    type: str
-    price: str
-    quantity: str
-    client_oid: Optional[str] = None
-    exec_inst: Optional[list[str]] = None
-    time_in_force: Optional[str] = None
-
-
 class CryptoDotComBaseModel(BaseModel):
     id: int
     method: str
@@ -20,33 +9,6 @@ class CryptoDotComBaseModel(BaseModel):
 
 class CryptoDotComResponseBaseModel(CryptoDotComBaseModel):
     code: int = 0
-
-
-class CryptoDotComRequestDto(BaseModel):
-    id: int
-    nonce: int
-    method: str
-    api_key: str
-    sig: str
-
-
-class CryptoDotComRequestOrderDto(CryptoDotComRequestDto):
-    params: CryptoDotComRequestOrderParamsDto
-
-
-class CryptoDotComRequestAccountBalanceDto(CryptoDotComRequestDto):
-    params: object
-
-
-class TickerRequestParams(BaseModel):
-    channels: list[str]
-
-
-class TickerRequest(BaseModel):
-    id: int = 1
-    method: str = "subscribe"
-    params: TickerRequestParams
-    nonce: int
 
 
 class OrderCreated(BaseModel):

@@ -18,14 +18,14 @@ class CryptoDotComMapper(Mapper):
     provider = ExchangeProvidersEnum.CRYPTO_DOT_COM
     NANOSECONDS_PER_SECOND = 1_000_000_000
 
-    @staticmethod
-    def to_marketdata(data: CryptoDotComMarketDataResponseDto) -> Optional[MarketData]:
+    @classmethod
+    def to_marketdata(cls, data: CryptoDotComMarketDataResponseDto) -> Optional[MarketData]:
         return MarketData(
             close_price=data.result.data[0].a,
             low_price=data.result.data[0].l,
             high_price=data.result.data[0].h,
             volume=data.result.data[0].vv,
-            timestamp=data.result.data[0].t
+            timestamp=int(data.result.data[0].t) / cls.NANOSECONDS_PER_SECOND
         )
 
     @staticmethod
