@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from urllib.error import HTTPError
-
-
 from cachetools import TTLCache, cached
 from circuitbreaker import circuit
 
@@ -10,15 +8,13 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.configuration.exchanges_config import ExchangesConfig
-from src.trading.helpers.request_helper import RequestHelper
-from src.clients.cryptodotcom.factories.cryptodotcom_request_factory import CryptoDotComRequestFactory
+from src.clients.cryptodotcom.cryptodotcom_request_builder import CryptoDotComRequestBuilder
 from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
-from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
-    CryptoDotComMarketDataResponseDto, CryptoDotComResponseOrderCreatedDto, \
-    CryptoDotComCandleResponseDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
+from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComResponseOrderCreatedDto
 from src.core.interfaces.exchange_rest_client import ExchangeRestClient, ExchangeProvidersEnum
 
 
@@ -33,42 +29,37 @@ class CryptoDotComRestClient(ExchangeRestClient):
     def get_provider_name(self):
         return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
 
+    def _builder(self) -> CryptoDotComRequestBuilder:
+        return CryptoDotComRequestBuilder(
+            self._base_url, self._api_key, self._secret_key
+        )
+
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_market_data(self, ticker_symbol: str) -> MarketData:
-        request = CryptoDotComRequestFactory.build_market_data_request(self._base_url, ticker_symbol)
-        response_data = RequestHelper.execute_request(request)
-        market_data = CryptoDotComMarketDataResponseDto(**response_data)
-        return CryptoDotComMapper.to_marketdata(market_data)
+        return self._builder().market_data(ticker_symbol).execute(
+            mapper=CryptoDotComMapper.to_marketdata
+        )
 
     @cached(cache=TTLCache(maxsize=2024, ttl=600))
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_account_balance(self) -> list[AccountBalance]:
-        request = CryptoDotComRequestFactory.build_account_balance_request(
-            self._base_url, self._api_key, self._secret_key
+        return self._builder().account_balance().execute(
+            mapper=CryptoDotComMapper.to_account_balance
         )
-        response_data = RequestHelper.execute_request(request)
-        account_balance = CryptoDotComUserBalanceResponseDto(**response_data)
-        return CryptoDotComMapper.to_account_balance(account_balance)
 
     @cached(cache=TTLCache(maxsize=2024, ttl=6000))
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_account_fees(self) -> Fees:
-        request = CryptoDotComRequestFactory.build_account_fees_request(
-            self._base_url, self._api_key, self._secret_key
+        return self._builder().account_fees().execute(
+            mapper=CryptoDotComMapper.to_fees
         )
-        response_data = RequestHelper.execute_request(request)
-        account_fees = CryptoDotComUserFeesResponseDto(**response_data)
-        return CryptoDotComMapper.to_fees(account_fees)
 
     @cached(cache=TTLCache(maxsize=2024, ttl=6000))
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_instrument_fees(self, ticker_symbol: str) -> Fees:
-        request = CryptoDotComRequestFactory.build_instrument_fees_request(
-            self._base_url, self._api_key, self._secret_key, ticker_symbol
+        return self._builder().instrument_fees(ticker_symbol).execute(
+            mapper=CryptoDotComMapper.to_instrument_fees
         )
-        response_data = RequestHelper.execute_request(request)
-        account_balance = CryptoDotComInstrumentFeesResponseDto(**response_data)
-        return CryptoDotComMapper.to_instrument_fees(account_balance)
 
     def place_order(
             self,
@@ -77,24 +68,16 @@ class CryptoDotComRestClient(ExchangeRestClient):
             quantity: str,
             price: str,
             trade_action: TradeAction
-    ) -> CryptoDotComResponseOrderCreatedDto:
-        request = CryptoDotComRequestFactory.build_order_request(
-            self._base_url, self._api_key, self._secret_key, uuid,
-            ticker_symbol, quantity, price, trade_action
-        )
-        response_data = RequestHelper.execute_request(request)
-        return CryptoDotComResponseOrderCreatedDto(**response_data)
+    ) -> Order:
+        return self._builder().create_order(
+            uuid, ticker_symbol, quantity, price, trade_action
+        ).execute()
 
     def cancel_order(self, uuid: str) -> CryptoDotComResponseOrderCreatedDto:
-        request = CryptoDotComRequestFactory.build_cancel_order_request(
-            self._base_url, self._api_key, self._secret_key, uuid
-        )
-        response_data = RequestHelper.execute_request(request)
-        return CryptoDotComResponseOrderCreatedDto(**response_data)
+        return self._builder().cancel_order(uuid).execute()
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
-        request = CryptoDotComRequestFactory.build_get_candle_request(self._base_url, ticker_symbol, timeframe)
-        response_data = RequestHelper.execute_request(request)
-        candle_response = CryptoDotComCandleResponseDto(**response_data)
-        return CryptoDotComMapper.to_candles(candle_response)
+        return self._builder().candles(ticker_symbol, timeframe).execute(
+            mapper=CryptoDotComMapper.to_candles
+        )

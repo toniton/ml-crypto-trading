@@ -7,7 +7,7 @@ repos:
         language: unsupported
         types: [ python ]
         require_serial: true
-        exclude: ^database/migrations/
+        exclude: ^(database/migrations|examples)
       - id: pytest
         name: pytest
         entry: pytest tests/
