@@ -14,7 +14,6 @@ from api.interfaces.trade_action import TradeAction
 from src.configuration.exchanges_config import ExchangesConfig
 from src.clients.cryptodotcom.cryptodotcom_request_builder import CryptoDotComRequestBuilder
 from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
-from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComResponseOrderCreatedDto
 from src.core.interfaces.exchange_rest_client import ExchangeRestClient, ExchangeProvidersEnum
 
 
@@ -73,8 +72,13 @@ class CryptoDotComRestClient(ExchangeRestClient):
             uuid, ticker_symbol, quantity, price, trade_action
         ).execute()
 
-    def cancel_order(self, uuid: str) -> CryptoDotComResponseOrderCreatedDto:
-        return self._builder().cancel_order(uuid).execute()
+    def get_order(self, uuid: str) -> Order:
+        return self._builder().get_order(uuid).execute(
+            mapper=CryptoDotComMapper.to_order
+        )
+
+    def cancel_order(self, uuid: str) -> None:
+        self._builder().cancel_order(uuid).execute()
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:

@@ -40,7 +40,7 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
                 pass
         self.app_logger.info("Order processing thread exiting")
 
-    def stop_order_executions(self):
+    def _stop_order_executions(self):
         self.app_logger.info("Stopping order executions...")
         self._stop_event.set()
         if hasattr(self, '_execute_thread') and self._execute_thread.is_alive():
@@ -61,12 +61,27 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             self.app_logger.error(f"Failed to save orders: {e}", exc_info=True)
             raise
 
-    def init_websocket(self, assets: list[Asset]):
+    def initialize(self, assets: list[Asset]):
+        self._init_websocket(assets)
+        self._update_pending_orders()
+
+    def _init_websocket(self, assets: list[Asset]):
         for asset in assets:
             websocket_client = self.get_websocket(asset.exchange.name)
             websocket_client.subscribe_order_update(
                 asset.ticker_symbol, callback=self._save_orders_to_database
             )
+
+    def _update_pending_orders(self):
+        pending_orders = self._get_pending_orders()
+        updated_orders = []
+        for order in pending_orders:
+            provider = self.get_client(order.provider_name)
+            try:
+                updated_orders.append(provider.get_order(order.uuid))
+            except Exception as exc:
+                raise RuntimeError("Unable to update pending order:", order) from exc
+        self._save_orders_to_database(updated_orders)
 
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
@@ -101,19 +116,23 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         except Exception as exc:
             raise RuntimeError("Error executing and/or saving order:", order, exc) from exc
 
-    def cancel_order(self, open_order: Order) -> None:
+    def _cancel_order(self, open_order: Order) -> None:
         provider = self.get_client(open_order.provider_name)
         try:
             provider.cancel_order(open_order.uuid)
         except Exception as exc:
             raise RuntimeError("Unable to cancel order:", open_order) from exc
 
-    def get_closing_orders(self) -> list[Order]:
+    def _get_pending_orders(self) -> list[Order]:
         with self._database_manager.get_unit_of_work() as uow:
             order_repository = uow.get_repository(PostgresOrderRepository)
             return order_repository.get_by_status(OrderStatus.PENDING)
 
-    def close_open_orders(self):
-        open_orders = self.get_closing_orders()
-        for order in open_orders:
-            self.cancel_order(order)
+    def _cancel_pending_orders(self):
+        pending_orders = self._get_pending_orders()
+        for order in pending_orders:
+            self._cancel_order(order)
+
+    def shutdown(self):
+        self._stop_order_executions()
+        self._cancel_pending_orders()

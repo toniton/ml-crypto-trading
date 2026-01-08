@@ -39,7 +39,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.account_manager.init_account_balances(self.trading_context_manager)
         self.fees_manager.init_account_fees()
         self.account_manager.init_websocket()
-        self.order_manager.init_websocket(self.assets)
+        self.order_manager.initialize(self.assets)
         self.market_data_manager.init_websocket()
 
     def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
@@ -157,8 +157,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.debug("Check unclosed orders completed")
 
     def stop(self):
-        self.order_manager.stop_order_executions()
-        self.order_manager.close_open_orders()
+        self.order_manager.shutdown()
 
     def print_context(self) -> None:
         for asset in self.assets:

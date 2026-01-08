@@ -127,6 +127,13 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
 
         return order
 
+    def get_order(
+            self,
+            uuid: str
+    ) -> Order:
+        self.app_logger.info(f"BacktestExchangeRestClient: Fetching order {uuid}")
+        return next(o for o in self.account.orders if o.uuid == uuid)
+
     def cancel_order(
             self,
             uuid: str

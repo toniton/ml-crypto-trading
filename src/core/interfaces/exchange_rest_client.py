@@ -9,6 +9,7 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 
@@ -48,6 +49,13 @@ class ExchangeRestClient(ABC):
             price: str,
             trade_action: TradeAction
     ):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_order(
+            self,
+            uuid: str
+    ) -> Order:
         raise NotImplementedError()
 
     @abc.abstractmethod

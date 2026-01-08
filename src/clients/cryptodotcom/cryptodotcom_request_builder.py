@@ -14,7 +14,7 @@ from src.core.interfaces.exchange_request_builder import Endpoint, ExchangeReque
 from src.clients.cryptodotcom.cryptodotcom_dto import (
     CryptoDotComMarketDataResponseDto,
     CryptoDotComCandleResponseDto,
-    CryptoDotComUserBalanceResponseDto,
+    CryptoDotComResponseOrderGetDto, CryptoDotComUserBalanceResponseDto,
     CryptoDotComUserFeesResponseDto,
     CryptoDotComInstrumentFeesResponseDto,
     CryptoDotComResponseOrderCreatedDto
@@ -190,6 +190,17 @@ class CryptoDotComRequestBuilder(ExchangeRequestBuilder):
                 "exec_inst": ["POST_ONLY"],
                 "time_in_force": "GOOD_TILL_CANCEL"
             }
+        )
+
+    def get_order(self, uuid: str) -> ExchangeRequestBuilder:
+        endpoint = Endpoint(
+            path="private/get-order-detail",
+            response_dto=CryptoDotComResponseOrderGetDto,
+            private=True
+        )
+        return self._set_endpoint(
+            endpoint,
+            {"client_oid": uuid}
         )
 
     def cancel_order(self, uuid: str) -> ExchangeRequestBuilder:

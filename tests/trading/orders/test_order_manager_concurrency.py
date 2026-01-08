@@ -24,7 +24,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
 
     def tearDown(self):
         if hasattr(self, 'order_manager'):
-            self.order_manager.stop_order_executions()
+            self.order_manager.shutdown()
 
     def test_save_orders_uses_isolated_unit_of_work(self):
         orders = [
@@ -71,7 +71,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertTrue(self.mock_uow.__exit__.called)
 
     def test_get_closing_orders_uses_isolated_unit_of_work(self):
-        self.order_manager.get_closing_orders()
+        self.order_manager._get_pending_orders()
 
         self.assertEqual(self.mock_db_manager.get_unit_of_work.call_count, 1)
         self.assertTrue(self.mock_uow.__enter__.called)
@@ -85,7 +85,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         order = Order(uuid="4", price="103", quantity="1", provider_name="p1",
                       trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time())
 
-        self.order_manager.cancel_order(order)
+        self.order_manager._cancel_order(order)
         mock_client.cancel_order.assert_called_once_with(order.uuid)
 
     def test_shutdown_stops_thread(self):
@@ -93,7 +93,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         time.sleep(0.1)
         self.assertTrue(self.order_manager._execute_thread.is_alive())
 
-        self.order_manager.stop_order_executions()
+        self.order_manager.shutdown()
 
         self.assertTrue(self.order_manager._stop_event.is_set())
         self.assertFalse(self.order_manager._execute_thread.is_alive())

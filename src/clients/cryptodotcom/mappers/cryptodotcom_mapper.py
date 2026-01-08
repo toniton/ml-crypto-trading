@@ -10,7 +10,9 @@ from api.interfaces.mapper import Mapper
 from api.interfaces.timeframe import Timeframe
 from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComInstrumentFeesResponseDto, \
     CryptoDotComMarketDataResponseDto, CryptoDotComCandleResponseDto, \
-    CryptoDotComResponseOrderUpdateDto, CryptoDotComUserBalanceResponseDto, CryptoDotComUserFeesResponseDto
+    CryptoDotComResponseOrderGetDto, CryptoDotComResponseOrderUpdateDto, \
+    CryptoDotComUserBalanceResponseDto, \
+    CryptoDotComUserFeesResponseDto
 from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
 
 
@@ -94,6 +96,22 @@ class CryptoDotComMapper(Mapper):
             "FILLED": OrderStatus.COMPLETED,
         }
         return status_map.get(status)
+
+    @classmethod
+    def to_order(
+            cls,
+            response: CryptoDotComResponseOrderGetDto
+    ) -> Order:
+        return Order(
+            uuid=response.result.client_oid,
+            trade_action=TradeAction.BUY if response.result.side == "BUY" else TradeAction.SELL,
+            quantity=response.result.quantity,
+            provider_name=CryptoDotComMapper.provider.value,
+            ticker_symbol=response.result.instrument_name,
+            price=response.result.limit_price,
+            created_time=int(response.result.create_time_ns) / cls.NANOSECONDS_PER_SECOND,
+            status=CryptoDotComMapper.from_exchange_status(response.result.status)
+        )
 
     @classmethod
     def to_orders(

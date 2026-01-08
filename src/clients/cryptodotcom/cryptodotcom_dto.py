@@ -20,7 +20,7 @@ class CryptoDotComResponseOrderCreatedDto(CryptoDotComResponseBaseModel):
     result: OrderCreated
 
 
-class OrderUpdate(OrderCreated):
+class OrderDetails(OrderCreated):
     account_id: str
     order_type: Optional[str] = None
     time_in_force: Optional[str] = None
@@ -49,12 +49,16 @@ class OrderUpdate(OrderCreated):
 class OrderUpdateResult(BaseModel):
     channel: Optional[str] = None
     subscription: Optional[str] = None
-    data: list[OrderUpdate]
+    data: list[OrderDetails]
     instrument_name: Optional[str] = None
 
 
 class CryptoDotComResponseOrderUpdateDto(CryptoDotComResponseBaseModel):
     result: Optional[OrderUpdateResult] = None
+
+
+class CryptoDotComResponseOrderGetDto(CryptoDotComResponseBaseModel):
+    result: OrderDetails = None
 
 
 class TickerData(BaseModel):
