@@ -8,4 +8,4 @@ class MarketData:
     high_price: str
     low_price: str
     close_price: str
-    timestamp: int
+    timestamp: float

@@ -20,11 +20,11 @@ class TradingEngine:
         self._is_running.set()
         self._trading_executor.init_application()
         self._trading_scheduler.start(self._trading_executor.create_buy_order)
-        self._trading_scheduler.start(self._trading_executor.check_unclosed_orders)
+        self._trading_scheduler.start(self._trading_executor.create_sell_order)
 
     def stop_application(self):
-        # FIXME: Consider cancelling all pending/open trades as part of application shutdown procedures.
         if self._is_running.is_set():
             self._trading_scheduler.stop()
+            self._trading_executor.stop()
             self._trading_executor.print_context()
         self._is_running.clear()

@@ -40,13 +40,13 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
                 pass
         self.app_logger.info("Order processing thread exiting")
 
-    def shutdown(self):
-        self.app_logger.info("Shutting down OrderManager...")
+    def stop_order_executions(self):
+        self.app_logger.info("Stopping order executions...")
         self._stop_event.set()
         if hasattr(self, '_execute_thread') and self._execute_thread.is_alive():
             self._execute_thread.join(timeout=5)
             if self._execute_thread.is_alive():
-                self.app_logger.warning("OrderManager thread did not terminate in time")
+                self.app_logger.warning("Order execution thread failed to terminate in time.")
 
     def _save_orders_to_database(self, orders: list[Order]) -> None:
         try:
@@ -108,7 +108,12 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         except Exception as exc:
             raise RuntimeError("Unable to cancel order:", open_order) from exc
 
-    def get_closing_orders(self, ticker_symbol: str, price: str) -> list[Order]:
+    def get_closing_orders(self) -> list[Order]:
         with self._database_manager.get_unit_of_work() as uow:
             order_repository = uow.get_repository(PostgresOrderRepository)
-            return order_repository.get_by_price(ticker_symbol, price)
+            return order_repository.get_by_status(OrderStatus.PENDING)
+
+    def close_open_orders(self):
+        open_orders = self.get_closing_orders()
+        for order in open_orders:
+            self.cancel_order(order)

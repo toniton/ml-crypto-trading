@@ -110,7 +110,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             except Exception as exc:
                 self.app_logger.error(f"Error processing asset {asset}: {exc}", exc_info=True)
 
-    def check_unclosed_orders(self, assets: list[Asset]):
+    def create_sell_order(self, assets: list[Asset]):
         for asset in assets:
             try:
                 trading_context = self.trading_context_manager.get_trading_context(asset.key)
@@ -156,10 +156,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 self.app_logger.error(f"Error finalizing asset {asset}: {exc}", exc_info=True)
         self.app_logger.debug("Check unclosed orders completed")
 
-    def backfill_trading_context(self):
-        # Check DB for unclosed orders and add it to trading context
-        # closing_orders = self.order_manager.get_closing_orders(asset.ticker_symbol, price)
-        ...
+    def stop(self):
+        self.order_manager.stop_order_executions()
+        self.order_manager.close_open_orders()
 
     def print_context(self) -> None:
         for asset in self.assets:

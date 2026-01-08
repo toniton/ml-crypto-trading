@@ -62,8 +62,11 @@ class PostgresOrderRepository(OrderRepository):
     def get_by_date(self, date):
         pass
 
-    def get_by_status(self, status):
-        pass
+    def get_by_status(self, status: OrderStatus):
+        query = self.database_session.query(OrderDao)
+        filtered_query = query.filter(OrderDao.status.in_([status.value]))
+        results = list(map(OrderDBVSEntityMapper.map_to_entity, filtered_query.all()))
+        return results
 
     def get_by_price(self, ticker_symbol: str, price: str) -> list[Order]:
         result = []

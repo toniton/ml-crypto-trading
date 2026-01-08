@@ -145,7 +145,5 @@ class Application(ApplicationLoggingMixin):
             return
         if self._trading_engine:
             self._trading_engine.stop_application()
-        if self._managers and self._managers.order_manager:
-            self._managers.order_manager.shutdown()
         self.is_running.clear()
         self.app_logger.info("Stopping Application...")
