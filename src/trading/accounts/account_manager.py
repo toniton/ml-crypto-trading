@@ -1,10 +1,13 @@
+import time
+from collections import defaultdict
+
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
-from api.interfaces.trading_context import TradingContext
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
-from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.session.session_manager import SessionManager
 
 
 class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
@@ -13,6 +16,7 @@ class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegis
         super().__init__()
         self.assets = assets
         self.balances = {}
+        self.last_balance_updates = defaultdict(dict)
 
     def _cache_balances(self, provider_name: str, balances: list[AccountBalance]) -> None:
         if provider_name not in self.balances:
@@ -20,6 +24,7 @@ class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegis
 
         for balance in balances:
             self.balances[provider_name][balance.currency] = balance
+            self.last_balance_updates[provider_name][balance.currency] = time.time()
 
         self.app_logger.debug(f"Updated balances for {provider_name}: {self.balances[provider_name]}")
 
@@ -29,23 +34,36 @@ class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegis
                 callback=lambda data, provider=provider_name: self._cache_balances(provider, data)
             )
 
-    def init_account_balances(self, trading_context_manager: TradingContextManager):
+    def init_account_balances(self, session_manager: SessionManager):
         for asset in self.assets:
             exchange = asset.exchange
-            quote_ticker_symbol = asset.quote_ticker_symbol
             try:
-                opening_balance = self.get_balance(quote_ticker_symbol, exchange.value)
-                trading_context_manager.register_trading_context(
-                    asset.key, TradingContext(starting_balance=opening_balance.available_balance)
-                )
+                opening_balance = self.get_balance(asset, exchange.value)
+                session_manager.init_asset_balance(asset, opening_balance.available_balance)
             except Exception:
                 self.app_logger.error(f"Unable to initialize account balance for {asset} from {exchange}",
                                       exc_info=True)
 
-    def get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
-        if provider_name in self.balances and currency_symbol in self.balances[provider_name]:
-            return self.balances[provider_name][currency_symbol]
-        provider = self.get_client(provider_name)
-        data = provider.get_account_balance()
-        self._cache_balances(provider_name, data)
+    def get_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
+        currency_symbol = asset.quote_ticker_symbol
+        last_update = self.last_balance_updates.get(provider_name, {}).get(currency_symbol)
+        should_refresh = (
+                last_update is None or
+                (time.time() - last_update) > AssetScheduleRegistry.UNIT_SECONDS[asset.schedule]
+        )
+        if should_refresh:
+            provider = self.get_client(provider_name)
+            data = provider.get_account_balance()
+            self._cache_balances(provider_name, data)
+
         return self.balances.get(provider_name, {}).get(currency_symbol) or AccountBalance(currency_symbol, 0)
+
+    def close_account_balances(self, session_manager: SessionManager):
+        for asset in self.assets:
+            exchange = asset.exchange
+            try:
+                closing_balance = self.get_balance(asset, exchange.value)
+                session_manager.close_asset_balance(asset.key, closing_balance.available_balance)
+            except Exception:
+                self.app_logger.error(f"Unable to close account balance for {asset} from {exchange}",
+                                      exc_info=True)

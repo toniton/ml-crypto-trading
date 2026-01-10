@@ -1,28 +1,34 @@
-import dataclasses
-import time
+from dataclasses import field
 from math import inf
 from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from api.interfaces.order import Order
+from api.interfaces.market_data import MarketData
 
 
 @dataclass
 class TradingContext:
+    ticker_symbol: str
+    exchange: str
     starting_balance: float
-    start_time: float = time.time()
-    end_time: float = time.time()
     available_balance: float = 0
     closing_balance: float = 0
-    buy_count: int = 0
     lowest_buy: float = inf
     highest_buy: float = -inf
     lowest_sell: float = inf
     highest_sell: float = -inf
-    open_positions: list[Order] = dataclasses.field(default_factory=lambda: [])
-    close_positions: list[Order] = dataclasses.field(default_factory=lambda: [])
-    last_activity_time: Optional[float] = None
+    open_positions: list[MarketData] = field(default_factory=list)
+    close_positions: list[MarketData] = field(default_factory=list)
+    last_market_activity_time: Optional[float] = None
 
     def __post_init__(self):
         self.available_balance = self.starting_balance
+
+    @property
+    def buy_count(self) -> int:
+        return len(self.open_positions)
+
+    @property
+    def total_positions(self) -> int:
+        return len(self.open_positions) + len(self.close_positions)

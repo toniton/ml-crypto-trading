@@ -1,9 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from api.interfaces.account_balance import AccountBalance
-from api.interfaces.trading_context import TradingContext
 from src.trading.accounts.account_manager import AccountManager
-from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.session.session_manager import SessionManager
 
 
 class TestAccountManager(unittest.TestCase):
@@ -26,36 +25,37 @@ class TestAccountManager(unittest.TestCase):
         self.assertTrue(callable(kwargs.get('callback')), "Callback should be passed")
 
     def test_init_account_balances_success(self):
-        mock_context_manager = MagicMock(spec=TradingContextManager)
+        mock_session_manager = MagicMock(spec=SessionManager)
         mock_balance = AccountBalance(currency="USDT", available_balance=1000.0)
 
         with patch.object(self.account_manager, 'get_balance', return_value=mock_balance) as mock_get_balance:
-            self.account_manager.init_account_balances(mock_context_manager)
+            self.account_manager.init_account_balances(mock_session_manager)
 
-            mock_get_balance.assert_called_with("USDT", "BINANCE")
-            mock_context_manager.register_trading_context.assert_called_once()
-            call_args = mock_context_manager.register_trading_context.call_args
-            self.assertEqual(call_args[0][0], "BTC/USDT")
-            self.assertIsInstance(call_args[0][1], TradingContext)
-            self.assertEqual(call_args[0][1].starting_balance, 1000.0)
+            mock_get_balance.assert_called_with(self.mock_asset, "BINANCE")
+            mock_session_manager.init_asset_balance.assert_called_once()
+            call_args = mock_session_manager.init_asset_balance.call_args
+            self.assertEqual(self.mock_asset, call_args[0][0])
+            self.assertEqual(1000.0, call_args[0][1])
 
     def test_init_account_balances_failure(self):
-        mock_context_manager = MagicMock(spec=TradingContextManager)
+        mock_session_manager = MagicMock(spec=SessionManager)
 
         with patch.object(self.account_manager, 'get_balance', side_effect=Exception("API Error")):
             with self.assertLogs(self.account_manager.app_logger.name, level='ERROR') as log:
-                self.account_manager.init_account_balances(mock_context_manager)
+                self.account_manager.init_account_balances(mock_session_manager)
                 self.assertIn("Unable to initialize account balance", log.output[0])
 
-            mock_context_manager.register_trading_context.assert_not_called()
+            mock_session_manager.init_asset_balance.assert_not_called()
 
     def test_get_balance_cached(self):
         provider_name = "BINANCE"
         currency = "USDT"
         expected_balance = AccountBalance(currency="USDT", available_balance=500.0)
+        mock_rest_client = MagicMock()
+        self.account_manager.rest_clients = {"BINANCE": mock_rest_client}
         self.account_manager.balances = {provider_name: {currency: expected_balance}}
 
-        balance = self.account_manager.get_balance(currency, provider_name)
+        balance = self.account_manager.get_balance(self.mock_asset, provider_name)
 
         self.assertEqual(balance, expected_balance)
 
@@ -68,7 +68,7 @@ class TestAccountManager(unittest.TestCase):
         mock_provider.get_account_balance.return_value = [expected_balance]
 
         with patch.object(self.account_manager, 'get_client', return_value=mock_provider):
-            balance = self.account_manager.get_balance(currency, provider_name)
+            balance = self.account_manager.get_balance(self.mock_asset, provider_name)
 
             self.assertEqual(balance, expected_balance)
             self.assertIn(provider_name, self.account_manager.balances)
@@ -77,13 +77,12 @@ class TestAccountManager(unittest.TestCase):
 
     def test_get_balance_fetch_empty_returns_zero_balance(self):
         provider_name = "BINANCE"
-        currency = "USDT"
 
         mock_provider = MagicMock()
         mock_provider.get_account_balance.return_value = []
 
         with patch.object(self.account_manager, 'get_client', return_value=mock_provider):
-            balance = self.account_manager.get_balance(currency, provider_name)
+            balance = self.account_manager.get_balance(self.mock_asset, provider_name)
 
             self.assertEqual(balance.currency, "USDT")
             self.assertEqual(balance.available_balance, 0)

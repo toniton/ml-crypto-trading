@@ -19,10 +19,10 @@ class SellProfitTakingStrategy(RuleBasedTradingStrategy):
             candles: list[Candle]
     ):
         current_price = float(market_data.close_price)
-        open_orders = trading_context.open_positions
+        open_positions = trading_context.open_positions
 
-        for order in open_orders:
-            profit_pct = float(order.price) * (1 + (self.take_profit_pct / 100))
+        for position in open_positions:
+            profit_pct = float(position.close_price) * (1 + (self.take_profit_pct / 100))
             if current_price >= profit_pct:
                 return True
 

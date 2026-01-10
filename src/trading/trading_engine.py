@@ -26,5 +26,4 @@ class TradingEngine:
         if self._is_running.is_set():
             self._trading_scheduler.stop()
             self._trading_executor.stop()
-            self._trading_executor.print_context()
         self._is_running.clear()

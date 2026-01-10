@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import time
+import uuid
 from queue import Queue
 
 from api.interfaces.account_balance import AccountBalance
@@ -8,12 +8,11 @@ from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
-from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
+from api.interfaces.trading_session import TradingSession
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.logging.trading_logging_mixin import TradingLoggingMixin
 from src.core.logging.audit_logging_mixin import AuditLoggingMixin
-from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.core.managers.manager_container import ManagerContainer
 
 
@@ -31,19 +30,20 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.order_manager = manager_container.order_manager
         self.market_data_manager = manager_container.market_data_manager
         self.consensus_manager = manager_container.consensus_manager
-        self.trading_context_manager = manager_container.trading_context_manager
+        self.session_manager = manager_container.session_manager
         self.protection_manager = manager_container.protection_manager
         self.activity_queue = activity_queue
 
     def init_application(self):
-        self.account_manager.init_account_balances(self.trading_context_manager)
+        self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()
+        self.account_manager.init_account_balances(self.session_manager)
         self.fees_manager.init_account_fees()
         self.account_manager.init_websocket()
         self.order_manager.initialize(self.assets)
         self.market_data_manager.init_websocket()
 
     def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
-        trading_context = self.trading_context_manager.get_trading_context(asset.key)
+        trading_context = self.session_manager.get_trading_context(asset.key)
 
         if not self.protection_manager.can_trade(asset.key, action, trading_context, market_data):
             return False
@@ -55,10 +55,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         return bool(consensus_result)
 
     def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
-        currency_symbol = asset.quote_ticker_symbol
-        account_balance = self.account_manager.get_balance(currency_symbol, asset.exchange.value)
+        account_balance = self.account_manager.get_balance(asset, asset.exchange.value)
         if account_balance.available_balance <= 0:
-            raise ValueError(f"Insufficient balance for {currency_symbol}: ${account_balance.available_balance}")
+            self.app_logger.debug(f"Balance too low for {asset}: {account_balance}")
+            raise ValueError(f"Insufficient balance for {asset.quote_ticker_symbol}")
 
         market_data = self.market_data_manager.get_market_data(asset)
         self.app_logger.debug(f"Fetched market data for {asset}: {market_data}")
@@ -71,7 +71,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         for asset in assets:
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-                self.trading_context_manager.update_trading_context(asset.key, account_balance.available_balance)
+                self.session_manager.update_available_balance(asset.key, account_balance.available_balance)
                 if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
                     self.app_logger.debug(f"No consensus to buy {asset.ticker_symbol}")
                     continue
@@ -96,7 +96,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     timestamp=market_data.timestamp
                 )
                 self.activity_queue.put_nowait(buy_order.model_dump_json())
-                self.trading_context_manager.record_buy(asset.key, buy_order)
+                self.session_manager.record_position(asset.key, market_data, TradeAction.BUY)
 
                 self.trading_logger.info(f"Order opened: {asset.ticker_symbol} BUY {quantity} @ {price}")
 
@@ -113,7 +113,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     def create_sell_order(self, assets: list[Asset]):
         for asset in assets:
             try:
-                trading_context = self.trading_context_manager.get_trading_context(asset.key)
+                trading_context = self.session_manager.get_trading_context(asset.key)
                 if not trading_context.open_positions:
                     self.app_logger.debug(f"No open positions for {asset}")
                     continue
@@ -125,31 +125,32 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 if not self._should_trade(asset, TradeAction.SELL, market_data, candles):
                     continue
 
-                open_orders: list[Order] = sorted(
+                open_positions: list[MarketData] = sorted(
                     trading_context.open_positions,
                     key=lambda o, _current_price=market_data.close_price:
-                    (float(_current_price) - float(o.price)) / float(o.price)
+                    (float(_current_price) - float(o.close_price)) / float(o.close_price)
                 )
 
-                best_order: Order | None = next(iter(open_orders), None)
-                if best_order:
+                quantity = format(asset.min_quantity, "f")
+                best_position: MarketData | None = next(iter(open_positions), None)
+                if best_position:
                     sell_order = self.order_manager.open_order(
                         price=current_price, trade_action=TradeAction.SELL,
-                        quantity=best_order.quantity, provider_name=best_order.provider_name,
-                        ticker_symbol=best_order.ticker_symbol, timestamp=market_data.timestamp
+                        quantity=quantity, provider_name=asset.exchange.value,
+                        ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp
                     )
                     self.activity_queue.put_nowait(sell_order.model_dump_json())
-                    self.trading_context_manager.record_sell(asset.key, sell_order)
+                    self.session_manager.record_position(asset.key, market_data, TradeAction.SELL)
 
                     self.trading_logger.info(
-                        f"Order closed: {asset.ticker_symbol} SELL {best_order.quantity} @ {current_price}")
+                        f"Order closed: {asset.ticker_symbol} SELL {quantity} @ {current_price}")
 
                     self.log_audit_event(
                         event_type='order_closed',
                         asset=asset.ticker_symbol,
                         action=TradeAction.SELL.value,
                         market_data=market_data,
-                        context=f'order_id={sell_order.uuid},price={current_price},quantity={best_order.quantity}'
+                        context=f'order_id={sell_order.uuid},price={current_price},quantity={quantity}'
                     )
 
             except Exception as exc:
@@ -158,38 +159,13 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def stop(self):
         self.order_manager.shutdown()
+        self.account_manager.close_account_balances(self.session_manager)
+        session = self.session_manager.end_session()
+        self._print_session_summary(session)
 
-    def print_context(self) -> None:
-        for asset in self.assets:
-            try:
-                trading_context = self.trading_context_manager.get_trading_context(asset.key)
-                trading_context.end_time = time.time()
-                market_data = self.market_data_manager.get_market_data(asset)
-
-                self.app_logger.info("Trading Context Summary")
-                self.app_logger.info(f"======= {asset.ticker_symbol} =======================")
-                self.app_logger.info(
-                    ["Portfolio value", PortfolioHelper.calculate_portfolio_value(trading_context.available_balance,
-                                                                                  market_data.close_price,
-                                                                                  trading_context.open_positions)
-                     ])
-                self.app_logger.info(["Unrealized PNL value", PortfolioHelper.calculate_unrealized_pnl_value(
-                    trading_context.starting_balance, market_data.close_price,
-                    trading_context.open_positions, trading_context.close_positions
-                )
-                                      ])
-                self.app_logger.info(["self.start_time", trading_context.start_time])
-                self.app_logger.info(["self.starting_balance", trading_context.starting_balance])
-                self.app_logger.info(["self.available_balance", trading_context.available_balance])
-                self.app_logger.info(["self.closing_balance", trading_context.closing_balance])
-                self.app_logger.info(["self.buy_count", trading_context.buy_count])
-                self.app_logger.info(["self.lowest_buy", trading_context.lowest_buy])
-                self.app_logger.info(["self.highest_buy", trading_context.highest_buy])
-                self.app_logger.info(["self.lowest_sell", trading_context.lowest_sell])
-                self.app_logger.info(["self.highest_sell", trading_context.highest_sell])
-                self.app_logger.info(["self.open_positions", trading_context.open_positions])
-                self.app_logger.info(["self.close_positions", trading_context.close_positions])
-                self.app_logger.info(["self.end_time", trading_context.end_time])
-                self.app_logger.info(["self.last_activity_time", trading_context.last_activity_time])
-            except Exception as exc:
-                self.app_logger.error(f"Error printing context for {asset}: {exc}", exc_info=True)
+    def _print_session_summary(self, session: TradingSession) -> None:
+        session_summary = self.session_manager.get_session_summary(session)
+        self.app_logger.info("Trading Context Summary")
+        self.app_logger.info("==============================")
+        self.app_logger.info(session_summary)
+        self.app_logger.info("------------------------------")

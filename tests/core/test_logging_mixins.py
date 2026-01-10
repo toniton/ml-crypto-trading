@@ -41,6 +41,7 @@ class TestLoggingMixins(unittest.TestCase):
         LoggingManager.get_instance().setup_logging()
 
     def tearDown(self):
+        LoggingManager.reset()
         if os.path.exists(self.test_log_dir):
             shutil.rmtree(self.test_log_dir)
         logging.shutdown()

@@ -24,12 +24,13 @@ class MaxDrawDownGuard(ApplicationLoggingMixin, Guard):
         close_positions = trading_context.close_positions
 
         positions = open_positions + close_positions
-        positions.sort(key=lambda x: x.created_time)
+        positions.sort(key=lambda x: x.timestamp)
 
-        peak_value, peak_time = PortfolioHelper.calculate_peak_value(starting_balance, positions)
+        peak_value, peak_time = PortfolioHelper.calculate_peak_value(starting_balance, open_positions, close_positions)
 
-        filtered_positions = filter(lambda x: x.created_time > peak_time, positions)
-        trough_value, _ = PortfolioHelper.calculate_trough_value(peak_value, filtered_positions)
+        filtered_open = list(filter(lambda x: x.timestamp > peak_time if peak_time else True, open_positions))
+        filtered_close = list(filter(lambda x: x.timestamp > peak_time if peak_time else True, close_positions))
+        trough_value, _ = PortfolioHelper.calculate_trough_value(peak_value, filtered_open, filtered_close)
 
         draw_down = (trough_value - peak_value) / peak_value
         self.app_logger.debug(f"DrawDown: ${draw_down}.")

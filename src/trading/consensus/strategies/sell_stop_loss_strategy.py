@@ -19,10 +19,10 @@ class SellStopLossStrategy(RuleBasedTradingStrategy):
             candles: list[Candle]
     ):
         current_price = market_data.close_price
-        open_orders = trading_context.open_positions
+        open_positions = trading_context.open_positions
 
-        for order in open_orders:
-            loss_pct = (float(order.price) - float(current_price)) / float(order.price)
+        for position in open_positions:
+            loss_pct = (float(position.close_price) - float(current_price)) / float(position.close_price)
             if loss_pct >= self.stop_loss_pct:
                 return True
 

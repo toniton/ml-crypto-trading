@@ -29,6 +29,7 @@ class TestLogSeparation(unittest.TestCase):
         manager.setup_logging()
 
     def tearDown(self):
+        LoggingManager.reset()
         if os.path.exists(self.test_log_dir):
             shutil.rmtree(self.test_log_dir)
         logging.shutdown()

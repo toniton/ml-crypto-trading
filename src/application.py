@@ -23,12 +23,12 @@ from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStra
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
-from src.trading.context.trading_context_manager import TradingContextManager
+from src.trading.session.session_manager import SessionManager
 from src.trading.fees.fees_manager import FeesManager
 from src.core.managers.manager_container import ManagerContainer
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
-from src.trading.context.in_memory_trading_journal import InMemoryTradingJournal
+from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.core.interfaces.exchange_rest_client import ExchangeRestClient
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
@@ -83,7 +83,7 @@ class Application(ApplicationLoggingMixin):
             market_data_manager=MarketDataManager(self._assets),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),
-            trading_context_manager=TradingContextManager(),
+            session_manager=SessionManager(),
         )
 
     def _register_with_managers(self, instance: ExchangeRestClient | ExchangeWebSocketClient):

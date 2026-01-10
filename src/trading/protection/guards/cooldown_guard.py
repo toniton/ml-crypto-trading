@@ -9,9 +9,9 @@ class CooldownGuard(Guard):
     def can_trade(self, trade_action: TradeAction, trading_context: TradingContext, market_data: MarketData) -> bool:
         if trade_action == TradeAction.SELL:
             return True
-        if trading_context.last_activity_time is None:
+        if trading_context.last_market_activity_time is None:
             return True
-        return (trading_context.last_activity_time + self.config.cooldown_timeout) < market_data.timestamp
+        return (trading_context.last_market_activity_time + self.config.cooldown_timeout) < market_data.timestamp
 
     @staticmethod
     def is_enabled(asset: Asset) -> bool:

@@ -1,70 +1,129 @@
-from api.interfaces.order import Order
-from api.interfaces.trade_action import TradeAction
+from typing import Optional, List
+from api.interfaces.market_data import MarketData
 
 
 class PortfolioHelper:
     @staticmethod
+    def _get_active_holdings(
+            open_positions: List[MarketData],
+            close_positions: List[MarketData]
+    ) -> List[float]:
+        """
+        Matches one sell to one buy (1-to-1 matching) and returns prices of remaining buys.
+        """
+        buys = sorted(open_positions, key=lambda x: x.timestamp)
+        sells = sorted(close_positions, key=lambda x: x.timestamp)
+
+        inventory = [float(b.close_price) for b in buys]
+
+        for _ in sells:
+            if inventory:
+                inventory.pop(0)
+
+        return inventory
+
+    @staticmethod
     def calculate_portfolio_value(
-        available_balance: float,
-        current_price: str,
-        open_positions: list[Order]
+            available_balance: float,
+            current_price: str,
+            open_positions: list[MarketData],
+            close_positions: list[MarketData] = None
     ) -> float:
         portfolio_value = available_balance
-        for order in open_positions:
-            if order.trade_action == TradeAction.BUY:
-                portfolio_value += (float(current_price) * float(order.quantity))
+        current_price_float = float(current_price)
+        active_holdings = PortfolioHelper._get_active_holdings(open_positions, close_positions or [])
+        for _ in active_holdings:
+            portfolio_value += current_price_float
         return portfolio_value
 
     @staticmethod
     def calculate_unrealized_pnl_value(
-        starting_balance: float,
-        current_price: str,
-        open_positions: list[Order],
-        close_positions: list[Order]
+            starting_balance: float,
+            current_price: str,
+            open_positions: list[MarketData],
+            close_positions: list[MarketData]
     ) -> float:
-        portfolio_value = starting_balance
-        for order in open_positions:
-            if order.trade_action == TradeAction.BUY:
-                portfolio_value += ((float(current_price) - float(order.price)) * float(order.quantity))
+        if starting_balance <= 0:
+            raise ValueError("Starting balance must be positive")
 
-        for order in close_positions:
-            if order.trade_action == TradeAction.SELL:
-                portfolio_value += ((float(current_price) - float(order.price)) * float(order.quantity))
+        current_price_float = float(current_price)
+        active_holdings = PortfolioHelper._get_active_holdings(open_positions, close_positions)
 
-        return portfolio_value - starting_balance
+        unrealized_pnl = 0.0
+        for buy_price in active_holdings:
+            unrealized_pnl += (current_price_float - buy_price)
+
+        return unrealized_pnl
 
     @staticmethod
-    def calculate_peak_value(starting_balance: float, positions: list[Order]) -> tuple[float, float]:
+    def calculate_peak_value(
+            starting_balance: float,
+            open_positions: list[MarketData],
+            closed_positions: list[MarketData]
+    ) -> tuple[float, Optional[float]]:
+        if starting_balance <= 0:
+            raise ValueError("Starting balance must be positive")
+
         portfolio_value = starting_balance
         peak_value = starting_balance
-        peak_time = 0
+        peak_time: Optional[float] = None
 
-        for order in positions[:-1]:
-            if order.trade_action == TradeAction.BUY:
-                portfolio_value -= (float(order.price) * float(order.quantity))
-            elif order.trade_action == TradeAction.SELL:
-                portfolio_value += (float(order.price) * float(order.quantity))
+        all_trades = []
+        for p in open_positions:
+            all_trades.append((p, True))
+        for p in closed_positions:
+            all_trades.append((p, False))
+
+        all_trades.sort(key=lambda x: x[0].timestamp)
+
+        for trade, is_buy in all_trades:
+            price = float(trade.close_price)
+
+            if is_buy:
+                portfolio_value -= price
+            else:
+                portfolio_value += price
 
             if portfolio_value > peak_value:
                 peak_value = portfolio_value
-                peak_time = order.created_time
+                peak_time = trade.timestamp
+
+            if portfolio_value <= 0:
+                return peak_value, peak_time
 
         return peak_value, peak_time
 
     @staticmethod
-    def calculate_trough_value(starting_balance: float, positions: list[Order]) -> tuple[float, float]:
+    def calculate_trough_value(
+            starting_balance: float,
+            open_positions: list[MarketData],
+            closed_positions: list[MarketData]
+    ) -> tuple[float, Optional[float]]:
         portfolio_value = starting_balance
         trough_value = starting_balance
-        trough_time = 0
+        trough_time: Optional[float] = None
 
-        for order in positions:
-            if order.trade_action == TradeAction.BUY:
-                portfolio_value -= (float(order.price) * float(order.quantity))
-            elif order.trade_action == TradeAction.SELL:
-                portfolio_value += (float(order.price) * float(order.quantity))
+        all_trades = []
+        for p in open_positions:
+            all_trades.append((p, True))
+        for p in closed_positions:
+            all_trades.append((p, False))
+
+        all_trades.sort(key=lambda x: x[0].timestamp)
+
+        for trade, is_buy in all_trades:
+            price = float(trade.close_price)
+
+            if is_buy:
+                portfolio_value -= price
+            else:
+                portfolio_value += price
 
             if portfolio_value < trough_value:
                 trough_value = portfolio_value
-                trough_time = order.created_time
+                trough_time = trade.timestamp
+
+            if portfolio_value <= 0:
+                return trough_value, trough_time
 
         return trough_value, trough_time

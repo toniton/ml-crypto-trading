@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import MagicMock
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus
-from src.trading.context.in_memory_trading_journal import InMemoryTradingJournal
+from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 
 
 class TestInMemoryTradingJournal(unittest.TestCase):
