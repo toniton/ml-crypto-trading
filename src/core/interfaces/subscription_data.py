@@ -2,13 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from typing import Callable, Generic, Optional, TypeVar
-
-from pydantic.dataclasses import dataclass
-
-from api.interfaces.account_balance import AccountBalance
-from api.interfaces.candle import Candle
-from api.interfaces.market_data import MarketData
-from api.interfaces.order import Order
+from dataclasses import dataclass
 
 
 class SubscriptionVisibility(Enum):
@@ -21,36 +15,17 @@ T = TypeVar('T')
 
 @dataclass
 class SubscriptionData(Generic[T]):
-    subscribe_payload: dict
-    unsubscribe_payload: Optional[dict] = None
+    payload: dict
     visibility: SubscriptionVisibility = SubscriptionVisibility.PUBLIC
     parser: Optional[Callable[[dict], T]] = None
+    filter: Optional[Callable[[dict], bool]] = None
 
     def parse(self, data: dict) -> T:
         if self.parser is None:
             raise ValueError("No parser provided for this subscription")
         return self.parser(data)
 
-
-@dataclass
-class BalanceSubscriptionData(SubscriptionData[list[AccountBalance]]):
-    def __post_init__(self):
-        self.visibility = SubscriptionVisibility.PRIVATE
-
-
-@dataclass
-class OrderUpdateSubscriptionData(SubscriptionData[list[Order]]):
-    def __post_init__(self):
-        self.visibility = SubscriptionVisibility.PRIVATE
-
-
-@dataclass
-class MarketDataSubscriptionData(SubscriptionData[MarketData]):
-    def __post_init__(self):
-        self.visibility = SubscriptionVisibility.PUBLIC
-
-
-@dataclass
-class CandlesSubscriptionData(SubscriptionData[list[Candle]]):
-    def __post_init__(self):
-        self.visibility = SubscriptionVisibility.PUBLIC
+    def matches(self, data: dict) -> bool:
+        if self.filter is None:
+            return True
+        return self.filter(data)

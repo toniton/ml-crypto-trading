@@ -32,6 +32,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.consensus_manager = manager_container.consensus_manager
         self.session_manager = manager_container.session_manager
         self.protection_manager = manager_container.protection_manager
+        self.websocket_manager = manager_container.websocket_manager
         self.activity_queue = activity_queue
 
     def init_application(self):
@@ -40,7 +41,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.fees_manager.init_account_fees()
         self.account_manager.init_websocket()
         self.order_manager.initialize(self.assets)
-        self.market_data_manager.init_websocket()
+        self.market_data_manager.initialize(self.assets)
 
     def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
         trading_context = self.session_manager.get_trading_context(asset.key)
@@ -158,7 +159,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.debug("Check unclosed orders completed")
 
     def stop(self):
+        self.market_data_manager.shutdown()
         self.order_manager.shutdown()
+        self.account_manager.shutdown()
         self.account_manager.close_account_balances(self.session_manager)
         session = self.session_manager.end_session()
         self._print_session_summary(session)

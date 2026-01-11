@@ -13,14 +13,20 @@ from src.core.interfaces.trading_journal import TradingJournal
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
+from src.clients.websocket_manager import WebSocketManager
 
 
 class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
-    def __init__(self, database_manager: DatabaseManager, trading_journal: TradingJournal):
+    def __init__(
+            self, database_manager: DatabaseManager, trading_journal: TradingJournal,
+            websocket_manager: WebSocketManager
+    ):
         super().__init__()
         self._database_manager = database_manager
+        self._websocket_manager = websocket_manager
         self._order_queue = Queue()
         self._trading_journal = trading_journal
+        self._assets = []
         self._stop_event = threading.Event()
         self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
         self._execute_thread.start()
@@ -62,14 +68,16 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             raise
 
     def initialize(self, assets: list[Asset]):
+        self._assets = assets
         self._init_websocket(assets)
         self._update_pending_orders()
 
     def _init_websocket(self, assets: list[Asset]):
         for asset in assets:
-            websocket_client = self.get_websocket(asset.exchange.name)
-            websocket_client.subscribe_order_update(
-                asset.ticker_symbol, callback=self._save_orders_to_database
+            self._websocket_manager.subscribe_order_update(
+                exchange=asset.exchange.value,
+                instrument_name=asset.ticker_symbol,
+                callback=self._save_orders_to_database
             )
 
     def _update_pending_orders(self):
@@ -136,3 +144,8 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
     def shutdown(self):
         self._stop_order_executions()
         self._cancel_pending_orders()
+        for asset in self._assets:
+            self._websocket_manager.unsubscribe_order_update(
+                exchange=asset.exchange.value,
+                instrument_name=asset.ticker_symbol
+            )

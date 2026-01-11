@@ -19,6 +19,7 @@ from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
+from src.clients.websocket_manager import WebSocketManager
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
@@ -76,19 +77,23 @@ class Application(ApplicationLoggingMixin):
 
     def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
         trading_journal = InMemoryTradingJournal()
+        websocket_manager = WebSocketManager()
         return ManagerContainer(
-            account_manager=AccountManager(self._assets),
+            account_manager=AccountManager(self._assets, websocket_manager),
             fees_manager=FeesManager(),
-            order_manager=OrderManager(db_manager, trading_journal),
-            market_data_manager=MarketDataManager(self._assets),
+            order_manager=OrderManager(db_manager, trading_journal, websocket_manager),
+            market_data_manager=MarketDataManager(websocket_manager),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),
             session_manager=SessionManager(),
+            websocket_manager=websocket_manager
         )
 
     def _register_with_managers(self, instance: ExchangeRestClient | ExchangeWebSocketClient):
         if not isinstance(instance, (ExchangeRestClient, ExchangeWebSocketClient)):
             raise RuntimeError(f"Instance of type {type(instance)} not allowed!")
+
+        # Register with the managers via registries
         for manager in vars(self._managers).values():
             if (isinstance(instance, ExchangeRestClient)
                     and hasattr(manager, RestClientRegistry.register_client.__name__)):

@@ -20,7 +20,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_db_manager.get_unit_of_work.return_value = self.mock_uow
         self.mock_uow.__enter__.return_value = self.mock_uow
         self.mock_journal = MagicMock(spec=TradingJournal)
-        self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal)
+        self.mock_websocket_manager = MagicMock()
+        self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal, self.mock_websocket_manager)
 
     def tearDown(self):
         if hasattr(self, 'order_manager'):

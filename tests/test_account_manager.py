@@ -12,16 +12,16 @@ class TestAccountManager(unittest.TestCase):
         self.mock_asset.quote_ticker_symbol = "USDT"
         self.mock_asset.key = "BTC/USDT"
         self.assets = [self.mock_asset]
-        self.account_manager = AccountManager(self.assets)
+        self.mock_websocket_manager = MagicMock()
+        self.account_manager = AccountManager(self.assets, self.mock_websocket_manager)
 
     def test_init_websocket(self):
         mock_websocket = MagicMock()
         self.account_manager.websockets = {"BINANCE": mock_websocket}
-
         self.account_manager.init_websocket()
 
-        mock_websocket.subscribe_balance.assert_called_once()
-        _, kwargs = mock_websocket.subscribe_balance.call_args
+        self.mock_websocket_manager.subscribe_account_balance.assert_called_once()
+        _, kwargs = self.mock_websocket_manager.subscribe_account_balance.call_args
         self.assertTrue(callable(kwargs.get('callback')), "Callback should be passed")
 
     def test_init_account_balances_success(self):

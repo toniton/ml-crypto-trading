@@ -7,14 +7,16 @@ from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
+from src.clients.websocket_manager import WebSocketManager
 from src.trading.session.session_manager import SessionManager
 
 
 class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
 
-    def __init__(self, assets: list[Asset]):
+    def __init__(self, assets: list[Asset], websocket_manager: WebSocketManager):
         super().__init__()
         self.assets = assets
+        self._websocket_manager = websocket_manager
         self.balances = {}
         self.last_balance_updates = defaultdict(dict)
 
@@ -29,10 +31,15 @@ class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegis
         self.app_logger.debug(f"Updated balances for {provider_name}: {self.balances[provider_name]}")
 
     def init_websocket(self):
-        for provider_name, websocket in self.websockets.items():
-            websocket.subscribe_balance(
+        for provider_name in self.websockets:
+            self._websocket_manager.subscribe_account_balance(
+                exchange=provider_name,
                 callback=lambda data, provider=provider_name: self._cache_balances(provider, data)
             )
+
+    def shutdown(self):
+        for provider_name in self.websockets:
+            self._websocket_manager.unsubscribe_account_balance(exchange=provider_name)
 
     def init_account_balances(self, session_manager: SessionManager):
         for asset in self.assets:

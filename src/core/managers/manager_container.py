@@ -7,6 +7,7 @@ from src.trading.fees.fees_manager import FeesManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
+from src.clients.websocket_manager import WebSocketManager
 
 
 @dataclass(frozen=True)
@@ -18,3 +19,4 @@ class ManagerContainer:
     consensus_manager: ConsensusManager
     protection_manager: ProtectionManager
     session_manager: SessionManager
+    websocket_manager: WebSocketManager

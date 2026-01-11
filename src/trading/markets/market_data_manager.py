@@ -7,34 +7,55 @@ from api.interfaces.market_data import MarketData
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
+from src.clients.websocket_manager import WebSocketManager
 
 
 class MarketDataManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
     MAX_CANDLES = 50
 
-    def __init__(self, assets: list[Asset]):
+    def __init__(self, websocket_manager: WebSocketManager):
         super().__init__()
-        self._assets = assets
-        self._market_data: dict[int, MarketData | None] = {asset.key: None for asset in assets}
-        self._candles: dict[int, list[Candle]] = {asset.key: [] for asset in assets}
+        self._websocket_manager = websocket_manager
+        self._assets: list[Asset] = []
+        self._market_data: dict[int, MarketData | None] = {}
+        self._candles: dict[int, list[Candle]] = {}
         self._last_market_data_updated: float = 0.0
 
-    def init_websocket(self):
-        for asset in self._assets:
+    def initialize(self, assets: list[Asset]):
+        self._assets = assets
+        for asset in assets:
+            self._market_data[asset.key] = None
+            self._candles[asset.key] = []
             (key, ticker_symbol, exchange,
              timeframe) = asset.key, asset.ticker_symbol, asset.exchange, asset.candles_timeframe
             self.get_candles(asset)
-            websocket_client = self.get_websocket(exchange.value)
-            websocket_client.subscribe_market_data(
-                ticker_symbol, callback=self._ws_marketdata_callback(key)
+            self._websocket_manager.subscribe_market_data(
+                exchange=exchange.value,
+                ticker_symbol=ticker_symbol,
+                callback=self._ws_marketdata_callback(key)
             )
-            websocket_client.subscribe_candles(
-                ticker_symbol, timeframe, callback=self._ws_candles_callback(key)
+            self._websocket_manager.subscribe_candles(
+                exchange=exchange.value,
+                ticker_symbol=ticker_symbol,
+                timeframe=timeframe,
+                callback=self._ws_candles_callback(key)
+            )
+
+    def shutdown(self):
+        for asset in self._assets:
+            self._websocket_manager.unsubscribe_market_data(
+                exchange=asset.exchange.value,
+                ticker_symbol=asset.ticker_symbol
+            )
+            self._websocket_manager.unsubscribe_candles(
+                exchange=asset.exchange.value,
+                ticker_symbol=asset.ticker_symbol,
+                timeframe=asset.candles_timeframe
             )
 
     def _ws_marketdata_callback(self, asset_key: int):
-        def _on_marketdata_update(conn_key: str, new_market_data: MarketData):
-            self.app_logger.debug(f"Market update: {asset_key} @ {new_market_data.close_price} (from {conn_key})")
+        def _on_marketdata_update(new_market_data: MarketData):
+            self.app_logger.debug(f"Market update: {asset_key} @ {new_market_data.close_price}")
             self._update_market_data(asset_key, new_market_data)
 
         return _on_marketdata_update
@@ -60,8 +81,8 @@ class MarketDataManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRe
         return market_data
 
     def _ws_candles_callback(self, asset_key: int):
-        def _on_candles_update(conn_key: str, new_candles: list[Candle]):
-            self.app_logger.debug(f"Candles update: {asset_key} @ {new_candles} (from {conn_key})")
+        def _on_candles_update(new_candles: list[Candle]):
+            self.app_logger.debug(f"Candles update: {asset_key} @ {new_candles}")
             self._update_candles(asset_key, new_candles)
 
         return _on_candles_update

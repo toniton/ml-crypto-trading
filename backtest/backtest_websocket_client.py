@@ -1,19 +1,11 @@
-from typing import Callable, Optional
+from typing import Optional, Any
 
-from api.interfaces.account_balance import AccountBalance
-from api.interfaces.candle import Candle
-from api.interfaces.market_data import MarketData
-from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from backtest.backtest_event_bus import BacktestEventBus
-from backtest.events import MarketDataEvent, OrderFillEvent, BalanceUpdateEvent, Event
-from backtest.events.domain_events import CandlesEvent
 from src.core.interfaces.auth_handler import AuthHandler
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import (
-    BalanceSubscriptionData,
-    CandlesSubscriptionData, MarketDataSubscriptionData,
-    OrderUpdateSubscriptionData,
+    SubscriptionData,
     SubscriptionVisibility,
 )
 from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
@@ -21,104 +13,92 @@ from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClien
 
 class BacktestAuthHandler(AuthHandler):
     def is_auth_response(self, message: dict) -> bool:
-        pass
+        return False
 
     def get_auth_request(self) -> Optional[dict]:
-        pass
+        return None
 
-    def handle_auth_response(self, message: dict) -> int:
+    def handle_auth_response(self, message: dict) -> None:
         pass
 
 
 class BacktestWebSocketClient(ExchangeWebSocketClient):
     def __init__(self, event_bus: BacktestEventBus):
-        super().__init__()
         self.bus = event_bus
-        self._subscription_ids: dict[str, int] = {}
+        self._current_subscription: Optional[dict[str, Any]] = None
 
-    def _get_websocket_url(self, visibility: SubscriptionVisibility) -> str:
+    def market_data(self, ticker_symbol: str) -> 'BacktestWebSocketClient':
+        self._current_subscription = {"type": "market_data", "ticker_symbol": ticker_symbol}
+        return self
+
+    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'BacktestWebSocketClient':
+        self._current_subscription = {"type": "candles", "ticker_symbol": ticker_symbol, "timeframe": timeframe}
+        return self
+
+    def account_balance(self) -> 'BacktestWebSocketClient':
+        self._current_subscription = {"type": "balance"}
+        return self
+
+    def order_update(self, instrument_name: str) -> 'BacktestWebSocketClient':
+        self._current_subscription = {"type": "order_update", "instrument_name": instrument_name}
+        return self
+
+    def get_subscription_data(self) -> SubscriptionData:
+        if not self._current_subscription:
+            raise ValueError("No subscription configured")
+
+        sub_type = self._current_subscription["type"]
+        visibility = SubscriptionVisibility.PUBLIC \
+            if sub_type in ["market_data", "candles"] else SubscriptionVisibility.PRIVATE
+
+        if sub_type == "market_data":
+            ticker_symbol = self._current_subscription["ticker_symbol"]
+            return SubscriptionData(
+                payload={"type": sub_type, "params": self._current_subscription},
+                visibility=visibility,
+                parser=lambda d: d["data"],
+                filter=lambda d: d.get("type") == "market_data" and d.get("ticker_symbol") == ticker_symbol
+            )
+        if sub_type == "candles":
+            ticker_symbol = self._current_subscription["ticker_symbol"]
+            return SubscriptionData(
+                payload={"type": sub_type, "params": self._current_subscription},
+                visibility=visibility,
+                parser=lambda d: d["data"],
+                filter=lambda d: d.get("type") == "candles" and d.get("ticker_symbol") == ticker_symbol
+            )
+        if sub_type == "balance":
+            return SubscriptionData(
+                payload={"type": sub_type, "params": self._current_subscription},
+                visibility=visibility,
+                parser=lambda d: d["data"],
+                filter=lambda d: d.get("type") == "balance"
+            )
+        if sub_type == "order_update":
+            instrument_name = self._current_subscription["instrument_name"]
+            return SubscriptionData(
+                payload={"type": sub_type, "params": self._current_subscription},
+                visibility=visibility,
+                parser=lambda d: d["data"],
+                filter=lambda d: d.get("type") == "order_update" and d.get("instrument_name") == instrument_name
+            )
+
+        raise ValueError(f"Unknown subscription type: {sub_type}")
+
+    def get_unsubscribe_payload(self, subscribe_payload: dict) -> dict:
+        payload = subscribe_payload.copy()
+        payload["method"] = "unsubscribe"
+        return payload
+
+    def get_websocket_url(self, visibility: SubscriptionVisibility) -> str:
         return "backtest://event-bus"
 
     @staticmethod
     def get_provider_name() -> str:
         return "CRYPTO_DOT_COM"
 
-    def _get_auth_handler(self) -> AuthHandler:
+    def get_auth_handler(self) -> Optional[AuthHandler]:
         return BacktestAuthHandler()
 
-    def _get_balance_subscription(self) -> BalanceSubscriptionData:
-        return BalanceSubscriptionData({}, {}, lambda d: [])
-
-    def _get_order_update_subscription(self, instrument_name: str) -> OrderUpdateSubscriptionData:
-        return OrderUpdateSubscriptionData({}, {}, lambda d: [])
-
-    def _get_market_data_subscription(self, ticker_symbol: str) -> MarketDataSubscriptionData:
-        return MarketDataSubscriptionData({}, {}, lambda d: None)
-
-    def _get_candles_subscription(self, ticker_symbol: str, timeframe: Timeframe) -> CandlesSubscriptionData:
-        return CandlesSubscriptionData({}, {}, lambda d: None)
-
-    def _get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
+    def get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
         return None
-
-    def subscribe_balance(self, callback: Callable[[list[AccountBalance]], None]) -> str:
-        connection_key = f"{self.get_provider_name()}-BALANCE"
-
-        def _handler(event: Event):
-            if isinstance(event, BalanceUpdateEvent):
-                callback(event.balances)
-
-        sub_id = self.bus.subscribe(BalanceUpdateEvent, _handler)
-        self._subscription_ids[connection_key] = sub_id
-        return connection_key
-
-    def subscribe_order_update(
-            self, instrument_name: str, callback: Callable[[list[Order]], None]
-    ) -> str:
-        connection_key = f"{self.get_provider_name()}-ORDER_{instrument_name}"
-
-        def _handler(event: Event):
-            if isinstance(event, OrderFillEvent):
-                if event.order.ticker_symbol == instrument_name:
-                    callback([event.order])
-
-        sub_id = self.bus.subscribe(OrderFillEvent, _handler)
-        self._subscription_ids[connection_key] = sub_id
-        return connection_key
-
-    def subscribe_market_data(
-            self, ticker_symbol: str, callback: Callable[[str, MarketData], None]
-    ) -> str:
-        connection_key = f"{self.get_provider_name()}-MARKET_{ticker_symbol}"
-
-        def _handler(event: Event):
-            if isinstance(event, MarketDataEvent):
-                if event.ticker_symbol == ticker_symbol:
-                    callback(connection_key, event.market_data)
-
-        sub_id = self.bus.subscribe(MarketDataEvent, _handler)
-        self._subscription_ids[connection_key] = sub_id
-        return connection_key
-
-    def subscribe_candles(
-            self, ticker_symbol: str, timeframe: Timeframe, callback: Callable[[str, list[Candle]], None]
-    ) -> str:
-        connection_key = f"{self.get_provider_name()}-CANDLES_{ticker_symbol}-{timeframe.value}"
-
-        def _handler(event: Event):
-            if isinstance(event, CandlesEvent):
-                if event.ticker_symbol == ticker_symbol:
-                    callback(connection_key, event.candles)
-
-        sub_id = self.bus.subscribe(CandlesEvent, _handler)
-        self._subscription_ids[connection_key] = sub_id
-        return connection_key
-
-    def unsubscribe(self, connection_key: str) -> None:
-        if connection_key in self._subscription_ids:
-            sub_id = self._subscription_ids[connection_key]
-            self.bus.unsubscribe(sub_id)
-            del self._subscription_ids[connection_key]
-
-    def _subscribe(self, connection_key: str, subscription_data, callback: Callable) -> str:
-        return connection_key
