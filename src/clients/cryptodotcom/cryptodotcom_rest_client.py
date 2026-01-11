@@ -67,8 +67,8 @@ class CryptoDotComRestClient(ExchangeRestClient):
             quantity: str,
             price: str,
             trade_action: TradeAction
-    ) -> Order:
-        return self._builder().create_order(
+    ) -> None:
+        self._builder().create_order(
             uuid, ticker_symbol, quantity, price, trade_action
         ).execute()
 

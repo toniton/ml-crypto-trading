@@ -48,7 +48,7 @@ class ExchangeRestClient(ABC):
             quantity: str,
             price: str,
             trade_action: TradeAction
-    ):
+    ) -> None:
         raise NotImplementedError()
 
     @abc.abstractmethod
