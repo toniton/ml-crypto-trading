@@ -16,7 +16,7 @@ from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
 from src.core.interfaces.base_config import BaseConfig
-from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.registries.rest_client_registry import RestClientRegistry
 from src.core.registries.websocket_registry import WebSocketRegistry
 from src.clients.websocket_manager import WebSocketManager
@@ -89,8 +89,8 @@ class Application(ApplicationLoggingMixin):
             websocket_manager=websocket_manager
         )
 
-    def _register_with_managers(self, instance: ExchangeRestClient | ExchangeWebSocketClient):
-        if not isinstance(instance, (ExchangeRestClient, ExchangeWebSocketClient)):
+    def _register_with_managers(self, instance: ExchangeRestClient | ExchangeWebSocketBuilder):
+        if not isinstance(instance, (ExchangeRestClient, ExchangeWebSocketBuilder)):
             raise RuntimeError(f"Instance of type {type(instance)} not allowed!")
 
         # Register with the managers via registries
@@ -98,7 +98,7 @@ class Application(ApplicationLoggingMixin):
             if (isinstance(instance, ExchangeRestClient)
                     and hasattr(manager, RestClientRegistry.register_client.__name__)):
                 getattr(manager, RestClientRegistry.register_client.__name__)(instance)
-            if (isinstance(instance, ExchangeWebSocketClient)
+            if (isinstance(instance, ExchangeWebSocketBuilder)
                     and hasattr(manager, WebSocketRegistry.register_websocket.__name__)):
                 getattr(manager, WebSocketRegistry.register_websocket.__name__)(instance)
 
@@ -108,7 +108,7 @@ class Application(ApplicationLoggingMixin):
             if cls.__module__.startswith(src.clients.__name__):
                 self._register_with_managers(cls())
 
-        for cls in ExchangeWebSocketClient.__subclasses__():
+        for cls in ExchangeWebSocketBuilder.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
                 self._register_with_managers(cls())
 
@@ -141,7 +141,7 @@ class Application(ApplicationLoggingMixin):
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
         self._trading_engine.start_application()
 
-    def register_client(self, rest_client: ExchangeRestClient, websocket_client: ExchangeWebSocketClient):
+    def register_client(self, rest_client: ExchangeRestClient, websocket_client: ExchangeWebSocketBuilder):
         self._register_with_managers(rest_client)
         self._register_with_managers(websocket_client)
 

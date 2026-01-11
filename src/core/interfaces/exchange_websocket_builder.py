@@ -7,21 +7,22 @@ from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
 
 
-class ExchangeWebSocketClient(ABC):
+class ExchangeWebSocketBuilder(ABC):
+
     @abstractmethod
-    def market_data(self, ticker_symbol: str) -> 'ExchangeWebSocketClient':
+    def market_data(self, ticker_symbol: str) -> 'ExchangeWebSocketBuilder':
         pass
 
     @abstractmethod
-    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'ExchangeWebSocketClient':
+    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'ExchangeWebSocketBuilder':
         pass
 
     @abstractmethod
-    def account_balance(self) -> 'ExchangeWebSocketClient':
+    def account_balance(self) -> 'ExchangeWebSocketBuilder':
         pass
 
     @abstractmethod
-    def order_update(self, instrument_name: str) -> 'ExchangeWebSocketClient':
+    def order_update(self, instrument_name: str) -> 'ExchangeWebSocketBuilder':
         pass
 
     @abstractmethod

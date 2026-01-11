@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import threading
 from typing import Optional
 
@@ -8,7 +9,7 @@ from backtest.backtest_data_loader import BacktestDataLoader
 from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_exchange_rest_client import BacktestExchangeRestClient
 from backtest.backtest_trading_scheduler import BacktestTradingScheduler
-from backtest.backtest_websocket_client import BacktestWebSocketClient
+from backtest.backtest_websocket_builder import BacktestWebSocketBuilder
 from backtest.events.domain_events import TickEvent, MarketDataEvent, CandlesEvent, OrderFillEvent, BalanceUpdateEvent
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
@@ -29,7 +30,7 @@ class BacktestEngine(ApplicationLoggingMixin):
         self.scheduler = scheduler
 
         self.rest_client = BacktestExchangeRestClient(self.clock, self.bus, self.loader)
-        self.websocket_client = BacktestWebSocketClient(self.bus)
+        self.websocket_client = BacktestWebSocketBuilder(self.bus)
         self._is_running = False
         self._threads = []
         self.app.register_client(self.rest_client, self.websocket_client)
@@ -77,7 +78,7 @@ class BacktestEngine(ApplicationLoggingMixin):
         self._threads = []
 
         for asset in assets:
-            asset_thread = threading.Thread(target=self._run_asset_loop, args=(asset,), daemon=True)
+            asset_thread = threading.Thread(target=self._run_asset_loop, args=(asset,))
             asset_thread.start()
             self._threads.append(asset_thread)
 
@@ -96,6 +97,8 @@ class BacktestEngine(ApplicationLoggingMixin):
 
             while self._is_running and self.clock.tick(asset.ticker_symbol):
                 timestamp = self.clock.now(asset.ticker_symbol)
+                readable_datetime = datetime.fromtimestamp(timestamp, tz=timezone.utc)
+                self.app_logger.info(f"Clock: {asset.ticker_symbol} @ {timestamp} or {readable_datetime}")
                 data_point = self.loader.get_data(asset.ticker_symbol, timestamp)
 
                 if data_point:

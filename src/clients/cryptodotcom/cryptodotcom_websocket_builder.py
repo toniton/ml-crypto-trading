@@ -3,26 +3,26 @@ from typing import Optional, Any, Callable
 
 from api.interfaces.timeframe import Timeframe
 from src.configuration.exchanges_config import ExchangesConfig
-from src.core.interfaces.auth_handler import AuthHandler
 from src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
 from src.clients.cryptodotcom.handlers.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
-from src.core.interfaces.heartbeat_handler import HeartbeatHandler
-from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
-from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
 from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComCandleResponseDto, \
     CryptoDotComMarketDataResponseDto, CryptoDotComResponseOrderUpdateDto, \
     CryptoDotComUserBalanceResponseDto
 from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
+from src.core.interfaces.auth_handler import AuthHandler
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
+from src.core.interfaces.heartbeat_handler import HeartbeatHandler
+from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
 
 
-class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
+class CryptoDotComWebSocketBuilder(ExchangeWebSocketBuilder):
 
     def __init__(self, config: ExchangesConfig = None):
         _config = config or ExchangesConfig()
         self._websocket_url = _config.crypto_dot_com.websocket_endpoint
         self._current_subscription: Optional[SubscriptionData] = None
 
-    def market_data(self, ticker_symbol: str) -> 'CryptoDotComWebSocketClient':
+    def market_data(self, ticker_symbol: str) -> 'CryptoDotComWebSocketBuilder':
         channel = f"ticker.{ticker_symbol}"
         self._current_subscription = self._build_sub(
             channel,
@@ -31,7 +31,7 @@ class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
         )
         return self
 
-    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'CryptoDotComWebSocketClient':
+    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'CryptoDotComWebSocketBuilder':
         interval = CryptoDotComMapper.from_timeframe(timeframe)
         channel = f"candlestick.{interval}.{ticker_symbol}"
         self._current_subscription = self._build_sub(
@@ -41,7 +41,7 @@ class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
         )
         return self
 
-    def account_balance(self) -> 'CryptoDotComWebSocketClient':
+    def account_balance(self) -> 'CryptoDotComWebSocketBuilder':
         self._current_subscription = self._build_sub(
             "user.balance",
             SubscriptionVisibility.PRIVATE,
@@ -49,7 +49,7 @@ class CryptoDotComWebSocketClient(ExchangeWebSocketClient):
         )
         return self
 
-    def order_update(self, instrument_name: str) -> 'CryptoDotComWebSocketClient':
+    def order_update(self, instrument_name: str) -> 'CryptoDotComWebSocketBuilder':
         channel = f"user.order.{instrument_name}"
         self._current_subscription = self._build_sub(
             channel,

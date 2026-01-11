@@ -6,7 +6,7 @@ from typing import Callable
 from websocket import WebSocketApp
 
 from api.interfaces.timeframe import Timeframe
-from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.subscription_data import SubscriptionVisibility, SubscriptionData
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
@@ -22,7 +22,7 @@ class WebSocketManager(ApplicationLoggingMixin, WebSocketRegistry):
         self._authenticated_connections: set[str] = set()
         self._last_heartbeat: dict[str, float] = {}
 
-    def register_websocket(self, websocket_client: ExchangeWebSocketClient):
+    def register_websocket(self, websocket_client: ExchangeWebSocketBuilder):
         super().register_websocket(websocket_client)
         provider_name = websocket_client.get_provider_name()
         if provider_name not in self._connections:
@@ -34,7 +34,7 @@ class WebSocketManager(ApplicationLoggingMixin, WebSocketRegistry):
         self._ensure_connection(client, SubscriptionVisibility.PUBLIC)
         self._ensure_connection(client, SubscriptionVisibility.PRIVATE)
 
-    def _ensure_connection(self, client: ExchangeWebSocketClient, visibility: SubscriptionVisibility):
+    def _ensure_connection(self, client: ExchangeWebSocketBuilder, visibility: SubscriptionVisibility):
         exchange = client.get_provider_name()
         if visibility in self._connections[exchange]:
             return

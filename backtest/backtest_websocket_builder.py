@@ -8,7 +8,7 @@ from src.core.interfaces.subscription_data import (
     SubscriptionData,
     SubscriptionVisibility,
 )
-from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 
 
 class BacktestAuthHandler(AuthHandler):
@@ -22,24 +22,24 @@ class BacktestAuthHandler(AuthHandler):
         pass
 
 
-class BacktestWebSocketClient(ExchangeWebSocketClient):
+class BacktestWebSocketBuilder(ExchangeWebSocketBuilder):
     def __init__(self, event_bus: BacktestEventBus):
         self.bus = event_bus
         self._current_subscription: Optional[dict[str, Any]] = None
 
-    def market_data(self, ticker_symbol: str) -> 'BacktestWebSocketClient':
+    def market_data(self, ticker_symbol: str) -> 'BacktestWebSocketBuilder':
         self._current_subscription = {"type": "market_data", "ticker_symbol": ticker_symbol}
         return self
 
-    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'BacktestWebSocketClient':
+    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'BacktestWebSocketBuilder':
         self._current_subscription = {"type": "candles", "ticker_symbol": ticker_symbol, "timeframe": timeframe}
         return self
 
-    def account_balance(self) -> 'BacktestWebSocketClient':
+    def account_balance(self) -> 'BacktestWebSocketBuilder':
         self._current_subscription = {"type": "balance"}
         return self
 
-    def order_update(self, instrument_name: str) -> 'BacktestWebSocketClient':
+    def order_update(self, instrument_name: str) -> 'BacktestWebSocketBuilder':
         self._current_subscription = {"type": "order_update", "instrument_name": instrument_name}
         return self
 

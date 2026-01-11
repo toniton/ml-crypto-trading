@@ -1,2 +1,2 @@
 from .cryptodotcom_rest_client import CryptoDotComRestClient
-from .cryptodotcom_websocket_client import CryptoDotComWebSocketClient
+from .cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder

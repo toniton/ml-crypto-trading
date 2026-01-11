@@ -1,7 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from src.clients.websocket_manager import WebSocketManager
-from src.core.interfaces.exchange_websocket_client import ExchangeWebSocketClient
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
 
 
@@ -15,7 +15,7 @@ class TestWebSocketManager(unittest.TestCase):
         self.patcher.stop()
 
     def test_register_websocket(self):
-        mock_client = MagicMock(spec=ExchangeWebSocketClient)
+        mock_client = MagicMock(spec=ExchangeWebSocketBuilder)
         mock_client.get_provider_name.return_value = "TEST_EXCHANGE"
 
         self.manager.register_websocket(mock_client)
@@ -27,7 +27,7 @@ class TestWebSocketManager(unittest.TestCase):
     @patch('src.clients.websocket_manager.WebSocketApp')
     @patch('threading.Thread')
     def test_ensure_connection(self, mock_thread, mock_ws_app):
-        mock_client = MagicMock(spec=ExchangeWebSocketClient)
+        mock_client = MagicMock(spec=ExchangeWebSocketBuilder)
         mock_client.get_provider_name.return_value = "TEST_EXCHANGE"
         mock_client.get_websocket_url.return_value = "ws://test.url"
 
@@ -41,7 +41,7 @@ class TestWebSocketManager(unittest.TestCase):
     @patch('src.clients.websocket_manager.WebSocketApp')
     @patch('threading.Thread')
     def test_subscribe_market_data(self, _mock_thread, mock_ws_app):
-        mock_client = MagicMock(spec=ExchangeWebSocketClient)
+        mock_client = MagicMock(spec=ExchangeWebSocketBuilder)
         mock_client.get_provider_name.return_value = "TEST_EXCHANGE"
         mock_client.get_websocket_url.return_value = "ws://test.url"
         mock_client.market_data.return_value = mock_client
@@ -66,7 +66,7 @@ class TestWebSocketManager(unittest.TestCase):
     @patch('src.clients.websocket_manager.WebSocketApp')
     @patch('threading.Thread')
     def test_unsubscribe(self, _mock_thread, _mock_ws_app):
-        mock_client = MagicMock(spec=ExchangeWebSocketClient)
+        mock_client = MagicMock(spec=ExchangeWebSocketBuilder)
         mock_client.get_provider_name.return_value = "TEST_EXCHANGE"
         mock_client.get_unsubscribe_payload.return_value = {"op": "unsub"}
 

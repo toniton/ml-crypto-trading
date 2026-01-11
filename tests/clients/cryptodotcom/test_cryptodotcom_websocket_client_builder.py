@@ -1,12 +1,12 @@
 import unittest
 from api.interfaces.timeframe import Timeframe
-from src.clients.cryptodotcom.cryptodotcom_websocket_client import CryptoDotComWebSocketClient
+from src.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder
 from src.core.interfaces.subscription_data import SubscriptionVisibility
 
 
 class TestCryptoDotComWebSocketClient(unittest.TestCase):
     def setUp(self):
-        self.client = CryptoDotComWebSocketClient()
+        self.client = CryptoDotComWebSocketBuilder()
 
     def test_market_data_builder(self):
         self.client.market_data("BTC_USDT")
