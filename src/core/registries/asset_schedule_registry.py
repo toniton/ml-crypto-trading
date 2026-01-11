@@ -12,6 +12,8 @@ class AssetScheduleRegistry(ABC):
         AssetSchedule.EVERY_MINUTE: lambda: every(1).minute,
         AssetSchedule.EVERY_HOUR: lambda: every(1).hour,
         AssetSchedule.EVERY_DAY: lambda: every(1).day,
+        AssetSchedule.EVERY_WEEK: lambda: every(1).week,
+        AssetSchedule.EVERY_MONTH: lambda: every(4).week,
     }
     UNIT_SECONDS = {
         AssetSchedule.EVERY_SECOND: 1,
@@ -19,6 +21,7 @@ class AssetScheduleRegistry(ABC):
         AssetSchedule.EVERY_HOUR: 3600,
         AssetSchedule.EVERY_DAY: 86400,
         AssetSchedule.EVERY_WEEK: 86400 * 7,
+        AssetSchedule.EVERY_MONTH: 86400 * 7 * 4,
     }
 
     def __init__(self):

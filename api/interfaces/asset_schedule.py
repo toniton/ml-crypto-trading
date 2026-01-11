@@ -7,3 +7,4 @@ class AssetSchedule(Enum):
     EVERY_HOUR = 2
     EVERY_DAY = 3
     EVERY_WEEK = 4
+    EVERY_MONTH = 5
