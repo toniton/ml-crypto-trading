@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from decimal import Decimal
 from threading import Event
 from typing import Optional
 
@@ -36,7 +37,7 @@ class SessionManager:
         self.current_session.session_time.start_time = time.time()
         self.is_running.set()
 
-    def init_asset_balance(self, asset: Asset, starting_balance: float) -> None:
+    def init_asset_balance(self, asset: Asset, starting_balance: Decimal) -> None:
         if not self.current_session:
             raise ValueError("No active session.")
 
@@ -84,7 +85,7 @@ class SessionManager:
         context.highest_sell = max(context.highest_sell, price)
         context.close_positions.append(market_data)
 
-    def close_asset_balance(self, asset_id: int, closing_balance: float) -> None:
+    def close_asset_balance(self, asset_id: int, closing_balance: Decimal) -> None:
         if not self.current_session:
             raise ValueError("No active session.")
 

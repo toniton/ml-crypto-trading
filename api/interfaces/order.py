@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from decimal import Decimal
 from typing import Optional
 
 from pydantic import RootModel
@@ -12,7 +13,7 @@ class Order:
     uuid: str
     provider_name: str
     ticker_symbol: str
-    price: str
+    price: Decimal
     quantity: str
     trade_action: TradeAction
     created_time: float

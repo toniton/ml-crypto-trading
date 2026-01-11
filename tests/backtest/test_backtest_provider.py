@@ -1,3 +1,4 @@
+from decimal import Decimal
 from unittest.mock import Mock
 import pytest
 from backtest.backtest_event_bus import BacktestEventBus
@@ -35,17 +36,14 @@ class TestBacktestExchangeRestClient:
             uuid="123",
             ticker_symbol="btc-usd",
             quantity="0.1",
-            price="50000.0",
+            price=Decimal("50000.0"),
             trade_action=TradeAction.BUY
         )
 
         # Verify Order
         assert order.status == OrderStatus.COMPLETED
         assert order.ticker_symbol == "btc-usd"
-        assert provider.account.balance_usd == 10000.0 - (50000.0 * 0.1)
-
-        # Wait, default balance is 10,000. Buying 1.0 @ 50,000 requires 50k.
-        # This should fail if balance is insufficient.
+        assert provider.account.balance_usd == Decimal("10000.0") - (Decimal("50000.0") * Decimal("0.1"))
 
     def test_insufficient_balance(self, provider):
         with pytest.raises(ValueError):
@@ -53,7 +51,7 @@ class TestBacktestExchangeRestClient:
                 uuid="123",
                 ticker_symbol="btc-usd",
                 quantity="1.0",
-                price="50000.0",  # 50k needed, 10k available
+                price=Decimal("50000.0"),  # 50k needed, 10k available
                 trade_action=TradeAction.BUY
             )
 
@@ -68,13 +66,13 @@ class TestBacktestExchangeRestClient:
             uuid="valid-buy",
             ticker_symbol="btc-usd",
             quantity="0.1",
-            price="10000.0",
+            price=Decimal("10000.0"),
             trade_action=TradeAction.BUY
         )
 
         # Verify simulated state
-        assert provider.account.balance_usd == 9000.0
-        assert provider.account.positions["btc-usd"] == 0.1
+        assert provider.account.balance_usd == Decimal("9000.0")
+        assert provider.account.positions["btc-usd"] == Decimal("0.1")
 
         # Verify Events
         assert order_callback.called
@@ -87,4 +85,4 @@ class TestBacktestExchangeRestClient:
 
         balance_args = balance_callback.call_args[0][0]
         assert isinstance(balance_args, BalanceUpdateEvent)
-        assert balance_args.balances[0].available_balance == 9000.0
+        assert balance_args.balances[0].available_balance == Decimal("9000.0")

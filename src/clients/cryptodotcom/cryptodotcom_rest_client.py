@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from urllib.error import HTTPError
 from cachetools import TTLCache, cached
 from circuitbreaker import circuit
@@ -65,7 +66,7 @@ class CryptoDotComRestClient(ExchangeRestClient):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action: TradeAction
     ) -> None:
         self._builder().create_order(

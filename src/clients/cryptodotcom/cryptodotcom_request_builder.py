@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import time
+from decimal import Decimal
 from typing import Optional, Callable, TypeVar
 from urllib.parse import urlencode
 from urllib.request import Request
@@ -170,7 +171,7 @@ class CryptoDotComRequestBuilder(ExchangeRequestBuilder):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action: TradeAction
     ) -> ExchangeRequestBuilder:
         endpoint = Endpoint(
@@ -184,7 +185,7 @@ class CryptoDotComRequestBuilder(ExchangeRequestBuilder):
                 "instrument_name": ticker_symbol,
                 "side": trade_action.value.upper(),
                 "type": "LIMIT",
-                "price": price,
+                "price": str(price),
                 "quantity": quantity,
                 "client_oid": uuid,
                 "exec_inst": ["POST_ONLY"],

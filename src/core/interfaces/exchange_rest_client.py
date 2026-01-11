@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 from abc import ABC
+from decimal import Decimal
 
 from enum import Enum
 
@@ -46,7 +47,7 @@ class ExchangeRestClient(ABC):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action: TradeAction
     ) -> None:
         raise NotImplementedError()

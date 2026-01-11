@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
+from api.interfaces.asset_schedule import AssetSchedule
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
 from src.core.registries.rest_client_registry import RestClientRegistry
@@ -45,18 +46,25 @@ class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegis
         for asset in self.assets:
             exchange = asset.exchange
             try:
-                opening_balance = self.get_balance(asset, exchange.value)
+                opening_balance = self.get_quote_balance(asset, exchange.value)
                 session_manager.init_asset_balance(asset, opening_balance.available_balance)
             except Exception:
                 self.app_logger.error(f"Unable to initialize account balance for {asset} from {exchange}",
                                       exc_info=True)
 
-    def get_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
+    def get_base_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
+        currency_symbol = asset.base_ticker_symbol
+        return self._get_balance(currency_symbol, asset.schedule, provider_name)
+
+    def get_quote_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
         currency_symbol = asset.quote_ticker_symbol
+        return self._get_balance(currency_symbol, asset.schedule, provider_name)
+
+    def _get_balance(self, currency_symbol: str, schedule: AssetSchedule, provider_name: str) -> AccountBalance:
         last_update = self.last_balance_updates.get(provider_name, {}).get(currency_symbol)
         should_refresh = (
                 last_update is None or
-                (time.time() - last_update) > AssetScheduleRegistry.UNIT_SECONDS[asset.schedule]
+                (time.time() - last_update) > AssetScheduleRegistry.UNIT_SECONDS[schedule]
         )
         if should_refresh:
             provider = self.get_client(provider_name)
@@ -69,7 +77,7 @@ class AccountManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegis
         for asset in self.assets:
             exchange = asset.exchange
             try:
-                closing_balance = self.get_balance(asset, exchange.value)
+                closing_balance = self.get_quote_balance(asset, exchange.value)
                 session_manager.close_asset_balance(asset.key, closing_balance.available_balance)
             except Exception:
                 self.app_logger.error(f"Unable to close account balance for {asset} from {exchange}",

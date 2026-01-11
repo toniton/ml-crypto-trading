@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
@@ -18,7 +20,7 @@ class RiskManagementBuyStrategy(RuleBasedTradingStrategy):
             market_data: MarketData,
             candles: list[Candle]
     ):
-        _risk_per_trade = trading_context.available_balance * self.risk_tolerance
+        _risk_per_trade = trading_context.available_balance * Decimal(self.risk_tolerance)
         # TODO: Get quantity from min_quantity or max_quantity in TradeContext.
         _quantity = 1
         # if (quantity * float(market_data.close_price)) > risk_per_trade:

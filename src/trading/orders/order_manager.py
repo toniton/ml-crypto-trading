@@ -1,5 +1,6 @@
 import queue
 import threading
+from decimal import Decimal
 from queue import Queue
 from uuid import uuid4
 
@@ -87,13 +88,17 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             provider = self.get_client(order.provider_name)
             try:
                 updated_orders.append(provider.get_order(order.uuid))
+            except (RuntimeError, RuntimeWarning) as exc:
+                self.app_logger.warning(f"Unable to update pending order {order.uuid} from exchange: {exc}")
             except Exception as exc:
+                self.app_logger.error(f"Unexpected error updating pending order {order.uuid}: {exc}", exc_info=True)
                 raise RuntimeError("Unable to update pending order:", order) from exc
-        self._save_orders_to_database(updated_orders)
+        if updated_orders:
+            self._save_orders_to_database(updated_orders)
 
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
-            price: str, trade_action: TradeAction,
+            price: Decimal, trade_action: TradeAction,
             timestamp: float, uuid: str = None
     ):
         order = Order(

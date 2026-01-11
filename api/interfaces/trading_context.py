@@ -1,4 +1,5 @@
 from dataclasses import field
+from decimal import Decimal
 from math import inf
 from typing import Optional
 
@@ -11,9 +12,9 @@ from api.interfaces.market_data import MarketData
 class TradingContext:
     ticker_symbol: str
     exchange: str
-    starting_balance: float
-    available_balance: float = 0
-    closing_balance: float = 0
+    starting_balance: Decimal
+    available_balance: Decimal = 0
+    closing_balance: Decimal = 0
     lowest_buy: float = inf
     highest_buy: float = -inf
     lowest_sell: float = inf

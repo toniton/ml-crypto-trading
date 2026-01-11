@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Optional
 
 from api.interfaces.account_balance import AccountBalance
@@ -61,7 +62,7 @@ class CryptoDotComMapper(Mapper):
         return [
             AccountBalance(
                 currency=balance.instrument_name,
-                available_balance=float(balance.max_withdrawal_balance or 0.0)
+                available_balance=Decimal(balance.max_withdrawal_balance or 0.0)
             )
             for balance in response.result.data[0].position_balances
         ] if response.result else []
@@ -71,8 +72,8 @@ class CryptoDotComMapper(Mapper):
             response: CryptoDotComUserFeesResponseDto
     ) -> Fees:
         return Fees(
-            maker_fee_pct=float(response.result.effective_spot_maker_rate_bps) * 0.01,
-            taker_fee_pct=float(response.result.effective_spot_taker_rate_bps) * 0.01,
+            maker_fee_pct=Decimal(response.result.effective_spot_maker_rate_bps) * Decimal(0.01),
+            taker_fee_pct=Decimal(response.result.effective_spot_taker_rate_bps) * Decimal(0.01),
         )
 
     @staticmethod
@@ -80,8 +81,8 @@ class CryptoDotComMapper(Mapper):
             response: CryptoDotComInstrumentFeesResponseDto
     ) -> Fees:
         return Fees(
-            maker_fee_pct=float(response.result.effective_maker_rate_bps) * 0.01,
-            taker_fee_pct=float(response.result.effective_taker_rate_bps) * 0.01,
+            maker_fee_pct=Decimal(response.result.effective_maker_rate_bps) * Decimal(0.01),
+            taker_fee_pct=Decimal(response.result.effective_taker_rate_bps) * Decimal(0.01),
         )
 
     @staticmethod

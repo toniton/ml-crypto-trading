@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Dict, List
 from uuid import uuid4
 
@@ -21,8 +22,8 @@ from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 @dataclass
 class SimulatedAccount:
-    balance_usd: float = 10000.0
-    positions: Dict[str, float] = field(default_factory=dict)
+    balance_usd: Decimal = Decimal("10000.0")
+    positions: Dict[str, Decimal] = field(default_factory=dict)
     orders: List[Order] = field(default_factory=list)
 
 
@@ -62,14 +63,14 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
 
     def get_account_fees(self) -> Fees:
         return Fees(
-            maker_fee_pct=0.0,
-            taker_fee_pct=0.0
+            maker_fee_pct=Decimal("0.0"),
+            taker_fee_pct=Decimal("0.0")
         )
 
     def get_instrument_fees(self, ticker_symbol: str) -> Fees:
         return Fees(
-            maker_fee_pct=0.0,
-            taker_fee_pct=0.0
+            maker_fee_pct=Decimal("0.0"),
+            taker_fee_pct=Decimal("0.0")
         )
 
     def place_order(
@@ -77,13 +78,12 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action: TradeAction
     ) -> Order:
         order_uuid = uuid or str(uuid4())
-        qty = float(quantity)
-        prc = float(price)
-        total_value = qty * prc
+        qty = Decimal(quantity)
+        total_value = qty * price
 
         if trade_action == TradeAction.BUY:
             if self.account.balance_usd < total_value:
@@ -92,10 +92,10 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
                 )
             self.account.balance_usd -= total_value
             self.account.positions[ticker_symbol] = (
-                    self.account.positions.get(ticker_symbol, 0) + qty
+                    self.account.positions.get(ticker_symbol, Decimal("0")) + qty
             )
         else:
-            current_position = self.account.positions.get(ticker_symbol, 0)
+            current_position = self.account.positions.get(ticker_symbol, Decimal("0"))
             if current_position < qty:
                 raise ValueError(
                     f"Insufficient position: {current_position} < {qty}"
@@ -117,7 +117,7 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
 
         self.app_logger.info(
             f"BacktestRestClient: {trade_action.name} {quantity} {ticker_symbol} @ {price} "
-            f"(Balance: ${self.account.balance_usd:.2f})"
+            f"(Balance: ${self.account.balance_usd})"
         )
 
         self.bus.publish(OrderFillEvent(order=order))
@@ -132,14 +132,16 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
             uuid: str
     ) -> Order:
         self.app_logger.info(f"BacktestExchangeRestClient: Fetching order {uuid}")
-        return next(o for o in self.account.orders if o.uuid == uuid)
+        try:
+            return next(o for o in self.account.orders if o.uuid == uuid)
+        except StopIteration as exc:
+            raise RuntimeWarning(f"Order {uuid} not found") from exc
 
     def cancel_order(
             self,
             uuid: str
     ) -> None:
         self.app_logger.info(f"BacktestExchangeRestClient: Cancelling order {uuid}")
-        # In this simple backtest, we just remove it from the list if it's there
         self.account.orders = [o for o in self.account.orders if o.uuid != uuid]
 
     def get_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
@@ -154,12 +156,17 @@ class BacktestExchangeRestClient(ApplicationLoggingMixin, ExchangeRestClient):
             )
         ]
 
-    def get_total_value(self) -> float:
+    def get_total_value(self) -> Decimal:
         total = self.account.balance_usd
-        for _ticker, qty in self.account.positions.items():
+        for ticker, qty in self.account.positions.items():
             try:
-                if self._latest_market_data:
-                    total += qty * float(self._latest_market_data.close_price)
+                # We need access to latest market data here.
+                # This could be improved by injecting market data manager or similar.
+                # For now, we'll try to get it from loader if clock is available.
+                timestamp = self.clock.now(ticker)
+                data = self.loader.get_data(ticker, timestamp)
+                if data:
+                    total += qty * Decimal(str(data.close_price))
             except (ValueError, AttributeError):
                 pass
         return total

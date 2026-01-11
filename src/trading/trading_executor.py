@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from decimal import Decimal, ROUND_UP
 from queue import Queue
 
 from api.interfaces.account_balance import AccountBalance
@@ -56,9 +57,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         return bool(consensus_result)
 
     def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
-        account_balance = self.account_manager.get_balance(asset, asset.exchange.value)
-        if account_balance.available_balance <= 0:
-            self.app_logger.debug(f"Balance too low for {asset}: {account_balance}")
+        quote_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
+        self.session_manager.update_available_balance(asset.key, quote_balance.available_balance)
+        if quote_balance.available_balance <= 0:
+            self.app_logger.debug(f"Balance too low for {asset}: {quote_balance}")
             raise ValueError(f"Insufficient balance for {asset.quote_ticker_symbol}")
 
         market_data = self.market_data_manager.get_market_data(asset)
@@ -66,21 +68,23 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
         candles = self.market_data_manager.get_candles(asset)
 
-        return account_balance, market_data, candles, fees
+        return quote_balance, market_data, candles, fees
 
     def create_buy_order(self, assets: list[Asset]):
         for asset in assets:
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-                self.session_manager.update_available_balance(asset.key, account_balance.available_balance)
                 if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
                     self.app_logger.debug(f"No consensus to buy {asset.ticker_symbol}")
                     continue
 
                 self.app_logger.info(f"Consensus reached to buy {asset.ticker_symbol}")
-                price = market_data.close_price
-                price = float(price) + (float(price) * fees.maker_fee_pct * 0.01)
-                price = format(round(price, asset.decimal_places), f".{asset.decimal_places}f")
+                price = Decimal(market_data.close_price)
+                fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
+                price = (price * fee_multiplier).quantize(
+                    Decimal(f"1.{'0' * asset.decimal_places}"),
+                    rounding=ROUND_UP
+                )
 
                 self.app_logger.debug([
                     f"Calculated price for {asset}: Price={price}",
@@ -91,7 +95,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 buy_order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
                     quantity=quantity,
-                    price=str(price),
+                    price=price,
                     provider_name=asset.exchange.value,
                     trade_action=TradeAction.BUY,
                     timestamp=market_data.timestamp
@@ -119,9 +123,16 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     self.app_logger.debug(f"No open positions for {asset}")
                     continue
                 _, market_data, candles, fees = self._prepare_trade_context(asset)
-                current_price = market_data.close_price
+                base_balance = self.account_manager.get_base_balance(asset, asset.exchange.value)
 
-                self.app_logger.debug(f"Current price for {asset}: {current_price}, Fees={fees}")
+                price = Decimal(market_data.close_price)
+                fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
+                price = (price * fee_multiplier).quantize(
+                    Decimal(f"1.{'0' * asset.decimal_places}"),
+                    rounding=ROUND_UP
+                )
+
+                self.app_logger.debug(f"Current price for {asset}: {price}, Fees={fees}")
 
                 if not self._should_trade(asset, TradeAction.SELL, market_data, candles):
                     continue
@@ -134,9 +145,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
                 quantity = format(asset.min_quantity, "f")
                 best_position: MarketData | None = next(iter(open_positions), None)
-                if best_position:
+                if best_position and base_balance.available_balance > asset.min_quantity:
                     sell_order = self.order_manager.open_order(
-                        price=current_price, trade_action=TradeAction.SELL,
+                        price=price, trade_action=TradeAction.SELL,
                         quantity=quantity, provider_name=asset.exchange.value,
                         ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp
                     )
@@ -144,14 +155,14 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     self.session_manager.record_position(asset.key, market_data, TradeAction.SELL)
 
                     self.trading_logger.info(
-                        f"Order closed: {asset.ticker_symbol} SELL {quantity} @ {current_price}")
+                        f"Order closed: {asset.ticker_symbol} SELL {quantity} @ {price}")
 
                     self.log_audit_event(
                         event_type='order_closed',
                         asset=asset.ticker_symbol,
                         action=TradeAction.SELL.value,
                         market_data=market_data,
-                        context=f'order_id={sell_order.uuid},price={current_price},quantity={quantity}'
+                        context=f'order_id={sell_order.uuid},price={price},quantity={quantity}'
                     )
 
             except Exception as exc:
