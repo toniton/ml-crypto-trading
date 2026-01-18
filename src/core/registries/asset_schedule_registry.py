@@ -1,12 +1,11 @@
-from abc import ABC
-
 from schedule import every
 
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
+from src.core.interfaces.registry import Registry
 
 
-class AssetScheduleRegistry(ABC):
+class AssetScheduleRegistry(Registry[AssetSchedule, Asset]):
     UNIT_MAP = {
         AssetSchedule.EVERY_SECOND: lambda: every(1).second,
         AssetSchedule.EVERY_MINUTE: lambda: every(1).minute,
@@ -24,23 +23,13 @@ class AssetScheduleRegistry(ABC):
         AssetSchedule.EVERY_MONTH: 86400 * 7 * 4,
     }
 
-    def __init__(self):
-        self.schedules: dict[AssetSchedule, list[Asset]] = {}
-
     def register_assets(self, assets: list[Asset]):
         for asset in assets:
             asset_schedule = asset.schedule
-            if asset_schedule not in self.schedules:
-                self.schedules[asset_schedule] = []
-            if asset in self.schedules[asset_schedule]:
-                raise ValueError(f"Asset {asset.name} already registered.")
-            self.schedules[asset_schedule].append(asset)
+            self._register(asset_schedule, asset)
 
     def get_assets(self, schedule: AssetSchedule) -> list[Asset]:
-        assets = self.schedules.get(schedule)
-        if assets is None:
-            raise ValueError(f"Schedule {schedule} not registered.")
-        return assets
+        return self._get(schedule)
 
     def get_registered_schedules(self) -> list[AssetSchedule]:
-        return list(self.schedules.keys())
+        return self._keys()

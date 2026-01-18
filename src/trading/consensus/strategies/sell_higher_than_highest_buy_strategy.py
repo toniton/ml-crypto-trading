@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from api.interfaces.trade_action import TradeAction
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 
@@ -13,13 +15,12 @@ class SellHigherThanHighestBuyStrategy(RuleBasedTradingStrategy):
             return False
 
         # Skip if no buys have been made yet
-        if trading_context.highest_buy == float('-inf'):
+        if trading_context.highest_buy == Decimal('-inf'):
             return False
 
-        current_price = float(market_data.close_price)
-        threshold_price = trading_context.highest_buy * (1 + self.grid_spacing_pct)
+        threshold_price = trading_context.highest_buy * Decimal(1 + self.grid_spacing_pct)
 
-        if current_price > threshold_price:
+        if market_data.close_price > threshold_price:
             return True
 
         return False

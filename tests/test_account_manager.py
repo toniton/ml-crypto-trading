@@ -14,11 +14,13 @@ class TestAccountManager(unittest.TestCase):
         self.mock_asset.key = "BTC/USDT"
         self.assets = [self.mock_asset]
         self.mock_websocket_manager = MagicMock()
-        self.account_manager = AccountManager(self.assets, self.mock_websocket_manager)
+        self.mock_rest_manager = MagicMock()
+        self.account_manager = AccountManager(self.assets, self.mock_rest_manager, self.mock_websocket_manager)
 
     def test_init_websocket(self):
-        mock_websocket = MagicMock()
-        self.account_manager.websockets = {"BINANCE": mock_websocket}
+        # Mocking WebSocketManager to return a list of services
+        self.mock_websocket_manager.get_registered_services.return_value = ["BINANCE"]
+
         self.account_manager.init_websocket()
 
         self.mock_websocket_manager.subscribe_account_balance.assert_called_once()
@@ -52,8 +54,9 @@ class TestAccountManager(unittest.TestCase):
         provider_name = "BINANCE"
         currency = "USDT"
         expected_balance = AccountBalance(currency="USDT", available_balance=Decimal("500.0"))
-        mock_rest_client = MagicMock()
-        self.account_manager.rest_clients = {"BINANCE": mock_rest_client}
+        # We need to manually populate balances because register_service doesn't do it.
+        # But wait, self.balances is initialized empty.
+        # The test wants to test "cached" behavior, assuming balances are present.
         self.account_manager.balances = {provider_name: {currency: expected_balance}}
 
         balance = self.account_manager.get_quote_balance(self.mock_asset, provider_name)
@@ -66,27 +69,29 @@ class TestAccountManager(unittest.TestCase):
         expected_balance = AccountBalance(currency="USDT", available_balance=Decimal("500.0"))
 
         mock_provider = MagicMock()
-        mock_provider.get_account_balance.return_value = [expected_balance]
+        mock_provider.execute.return_value = [expected_balance]
+        mock_provider.account_balance.return_value = MagicMock()
 
-        with patch.object(self.account_manager, 'get_client', return_value=mock_provider):
-            balance = self.account_manager.get_quote_balance(self.mock_asset, provider_name)
+        self.mock_rest_manager.get_account_balance.return_value = [expected_balance]
+        balance = self.account_manager.get_quote_balance(self.mock_asset, provider_name)
 
-            self.assertEqual(balance, expected_balance)
-            self.assertIn(provider_name, self.account_manager.balances)
-            self.assertIn(currency, self.account_manager.balances[provider_name])
-            self.assertEqual(self.account_manager.balances[provider_name][currency], expected_balance)
+        self.assertEqual(balance, expected_balance)
+        self.assertIn(provider_name, self.account_manager.balances)
+        self.assertIn(currency, self.account_manager.balances[provider_name])
+        self.assertEqual(self.account_manager.balances[provider_name][currency], expected_balance)
 
     def test_get_balance_fetch_empty_returns_zero_balance(self):
         provider_name = "BINANCE"
 
         mock_provider = MagicMock()
-        mock_provider.get_account_balance.return_value = []
+        mock_provider.execute.return_value = []
+        mock_provider.account_balance.return_value = MagicMock()
 
-        with patch.object(self.account_manager, 'get_client', return_value=mock_provider):
-            balance = self.account_manager.get_quote_balance(self.mock_asset, provider_name)
+        self.mock_rest_manager.get_account_balance.return_value = []
+        balance = self.account_manager.get_quote_balance(self.mock_asset, provider_name)
 
-            self.assertEqual(balance.currency, "USDT")
-            self.assertEqual(balance.available_balance, Decimal("0"))
+        self.assertEqual(balance.currency, "USDT")
+        self.assertEqual(balance.available_balance, Decimal("0"))
 
     def test_cache_balances_updates_existing(self):
         provider_name = "BINANCE"

@@ -7,7 +7,6 @@ from threading import Event
 
 import src.trading.consensus.strategies
 import src.configuration.providers
-import src.clients
 import src.trading.protection.guards
 
 from database.database_manager import DatabaseManager
@@ -16,10 +15,8 @@ from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
 from src.core.interfaces.base_config import BaseConfig
-from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
-from src.core.registries.rest_client_registry import RestClientRegistry
-from src.core.registries.websocket_registry import WebSocketRegistry
 from src.clients.websocket_manager import WebSocketManager
+from src.clients.rest_manager import RestManager
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
@@ -30,7 +27,8 @@ from src.core.managers.manager_container import ManagerContainer
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
-from src.core.interfaces.exchange_rest_client import ExchangeRestClient
+from src.core.interfaces.exchange_rest_service import ExchangeRestService
+from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.guard import Guard
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.trading_engine import TradingEngine
@@ -78,37 +76,35 @@ class Application(ApplicationLoggingMixin):
     def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
         trading_journal = InMemoryTradingJournal()
         websocket_manager = WebSocketManager()
+        rest_manager = RestManager()
         return ManagerContainer(
-            account_manager=AccountManager(self._assets, websocket_manager),
-            fees_manager=FeesManager(),
-            order_manager=OrderManager(db_manager, trading_journal, websocket_manager),
-            market_data_manager=MarketDataManager(websocket_manager),
+            account_manager=AccountManager(self._assets, rest_manager, websocket_manager),
+            fees_manager=FeesManager(rest_manager),
+            order_manager=OrderManager(db_manager, trading_journal, rest_manager, websocket_manager),
+            market_data_manager=MarketDataManager(rest_manager, websocket_manager),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),
             session_manager=SessionManager(),
-            websocket_manager=websocket_manager
+            websocket_manager=websocket_manager,
+            rest_manager=rest_manager
         )
 
-    def _register_with_managers(self, instance: ExchangeRestClient | ExchangeWebSocketBuilder):
-        if not isinstance(instance, (ExchangeRestClient, ExchangeWebSocketBuilder)):
+    def _register_with_managers(self, instance: ExchangeRestService | ExchangeWebSocketService):
+        if not isinstance(instance, (ExchangeRestService, ExchangeWebSocketService)):
             raise RuntimeError(f"Instance of type {type(instance)} not allowed!")
 
-        # Register with the managers via registries
-        for manager in vars(self._managers).values():
-            if (isinstance(instance, ExchangeRestClient)
-                    and hasattr(manager, RestClientRegistry.register_client.__name__)):
-                getattr(manager, RestClientRegistry.register_client.__name__)(instance)
-            if (isinstance(instance, ExchangeWebSocketBuilder)
-                    and hasattr(manager, WebSocketRegistry.register_websocket.__name__)):
-                getattr(manager, WebSocketRegistry.register_websocket.__name__)(instance)
+        if isinstance(instance, ExchangeRestService):
+            self._managers.rest_manager.register_service(instance)
+        if isinstance(instance, ExchangeWebSocketService):
+            self._managers.websocket_manager.register_service(instance)
 
     def _setup_clients(self):
         ApplicationHelper.import_modules(src.clients)
-        for cls in ExchangeRestClient.__subclasses__():
+        for cls in ExchangeRestService.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
                 self._register_with_managers(cls())
 
-        for cls in ExchangeWebSocketBuilder.__subclasses__():
+        for cls in ExchangeWebSocketService.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
                 self._register_with_managers(cls())
 
@@ -141,9 +137,9 @@ class Application(ApplicationLoggingMixin):
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
         self._trading_engine.start_application()
 
-    def register_client(self, rest_client: ExchangeRestClient, websocket_client: ExchangeWebSocketBuilder):
-        self._register_with_managers(rest_client)
-        self._register_with_managers(websocket_client)
+    def register_client(self, rest_service: ExchangeRestService, websocket_service: ExchangeWebSocketService):
+        self._register_with_managers(rest_service)
+        self._register_with_managers(websocket_service)
 
     def shutdown(self):
         if not self.is_running.is_set():

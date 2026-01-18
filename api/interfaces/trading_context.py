@@ -15,10 +15,10 @@ class TradingContext:
     starting_balance: Decimal
     available_balance: Decimal = 0
     closing_balance: Decimal = 0
-    lowest_buy: float = inf
-    highest_buy: float = -inf
-    lowest_sell: float = inf
-    highest_sell: float = -inf
+    lowest_buy: Decimal = inf
+    highest_buy: Decimal = -inf
+    lowest_sell: Decimal = inf
+    highest_sell: Decimal = -inf
     open_positions: list[MarketData] = field(default_factory=list)
     close_positions: list[MarketData] = field(default_factory=list)
     last_market_activity_time: Optional[float] = None

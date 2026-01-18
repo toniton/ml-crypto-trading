@@ -27,7 +27,7 @@ class LiveTradingScheduler(TradingScheduler):
         def loop():
             schedule_job = schedule_factory()
             schedule_job.do(tick_fn)
-            sleep_interval = self.UNIT_SECONDS.get(asset_schedule)
+            sleep_interval = self.UNIT_SECONDS[asset_schedule]
             while not self._stop_event.is_set():
                 run_pending()
                 time.sleep(sleep_interval)

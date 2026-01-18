@@ -12,18 +12,17 @@ from database.database_manager import DatabaseManager
 from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.interfaces.trading_journal import TradingJournal
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.registries.rest_client_registry import RestClientRegistry
-from src.core.registries.websocket_registry import WebSocketRegistry
+from src.clients.rest_manager import RestManager
 from src.clients.websocket_manager import WebSocketManager
 
 
-class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
+class OrderManager(ApplicationLoggingMixin):
     def __init__(
             self, database_manager: DatabaseManager, trading_journal: TradingJournal,
-            websocket_manager: WebSocketManager
+            rest_manager: RestManager, websocket_manager: WebSocketManager
     ):
-        super().__init__()
         self._database_manager = database_manager
+        self._rest_manager = rest_manager
         self._websocket_manager = websocket_manager
         self._order_queue = Queue()
         self._trading_journal = trading_journal
@@ -31,6 +30,22 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         self._stop_event = threading.Event()
         self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
         self._execute_thread.start()
+
+    def place_order(
+            self,
+            exchange: str,
+            uuid: str,
+            ticker_symbol: str,
+            quantity: str,
+            price: Decimal,
+            trade_action: TradeAction
+    ) -> None:
+        self._rest_manager.place_order(
+            exchange, uuid, ticker_symbol, quantity, str(price), trade_action
+        )
+
+    def get_order(self, exchange: str, uuid: str) -> Order:
+        return self._rest_manager.get_order(exchange, uuid)
 
     def process_order_queue(self):
         self.app_logger.info("Order processing thread started")
@@ -85,9 +100,8 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         pending_orders = self._get_pending_orders()
         updated_orders = []
         for order in pending_orders:
-            provider = self.get_client(order.provider_name)
             try:
-                updated_orders.append(provider.get_order(order.uuid))
+                updated_orders.append(self.get_order(order.provider_name, order.uuid))
             except (RuntimeError, RuntimeWarning) as exc:
                 self.app_logger.warning(f"Unable to update pending order {order.uuid} from exchange: {exc}")
             except Exception as exc:
@@ -114,9 +128,9 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
         return order
 
     def execute_order(self, order: Order):
-        provider = self.get_client(order.provider_name)
         try:
-            provider.place_order(
+            self.place_order(
+                order.provider_name,
                 order.uuid,
                 order.ticker_symbol,
                 order.quantity,
@@ -130,9 +144,8 @@ class OrderManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistr
             raise RuntimeError("Error executing and/or saving order:", order, exc) from exc
 
     def _cancel_order(self, open_order: Order) -> None:
-        provider = self.get_client(open_order.provider_name)
         try:
-            provider.cancel_order(open_order.uuid)
+            self._rest_manager.cancel_order(open_order.provider_name, open_order.uuid)
         except Exception as exc:
             raise RuntimeError("Unable to cancel order:", open_order) from exc
 

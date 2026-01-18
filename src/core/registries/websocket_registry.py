@@ -1,22 +1,13 @@
-from abc import ABC
+from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
+from src.core.interfaces.registry import Registry
 
-from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 
+class WebSocketRegistry(Registry[str, ExchangeWebSocketService]):
+    def register_service(self, service: ExchangeWebSocketService):
+        self._register(service.get_provider_name(), service)
 
-class  WebSocketRegistry(ABC):
+    def get_service(self, provider_name: str) -> ExchangeWebSocketService:
+        return self._get_first(provider_name)
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.websockets: dict[str, ExchangeWebSocketBuilder] = {}
-
-    def register_websocket(self, websocket_client: ExchangeWebSocketBuilder):
-        provider_name = websocket_client.get_provider_name()
-        if provider_name in iter(self.websockets):
-            raise ValueError(f"Provider ${provider_name} already registered.")
-        self.websockets[provider_name] = websocket_client
-
-    def get_websocket(self, provider_name: str) -> ExchangeWebSocketBuilder:
-        websocket = self.websockets.get(provider_name)
-        if websocket is None:
-            raise ValueError(f"Provider {provider_name} not registered.")
-        return websocket
+    def get_registered_services(self):
+        return self._keys()

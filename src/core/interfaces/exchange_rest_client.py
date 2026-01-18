@@ -22,28 +22,24 @@ class ExchangeProvidersEnum(Enum):
 
 class ExchangeRestClient(ABC):
     @abc.abstractmethod
-    def get_provider_name(self) -> str:
+    def get_market_data(self, exchange: str, ticker_symbol: str) -> MarketData:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_market_data(self, ticker_symbol: str) -> MarketData:
+    def get_account_balance(self, exchange: str) -> list[AccountBalance]:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_account_balance(self) -> list[AccountBalance]:
+    def get_account_fees(self, exchange: str) -> Fees:
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_account_fees(self) -> Fees:
-        raise NotImplementedError()
-
-    @abc.abstractmethod
-    def get_instrument_fees(self, ticker_symbol: str) -> Fees:
+    def get_instrument_fees(self, exchange: str, ticker_symbol: str) -> Fees:
         raise NotImplementedError()
 
     @abc.abstractmethod
     def place_order(
-            self,
+            self, exchange: str,
             uuid: str,
             ticker_symbol: str,
             quantity: str,
@@ -54,21 +50,21 @@ class ExchangeRestClient(ABC):
 
     @abc.abstractmethod
     def get_order(
-            self,
+            self, exchange: str,
             uuid: str
     ) -> Order:
         raise NotImplementedError()
 
     @abc.abstractmethod
     def cancel_order(
-            self,
+            self, exchange: str,
             uuid: str
     ) -> None:
         raise NotImplementedError()
 
     @abc.abstractmethod
     def get_candles(
-            self,
+            self, exchange: str,
             ticker_symbol: str,
             timeframe: Timeframe
     ) -> list[Candle]:

@@ -51,11 +51,13 @@ class TestManagerIsolation(unittest.TestCase):
         )
 
         ws_manager1 = Mock()
-        manager1 = AccountManager([asset1], ws_manager1)
+        rest_manager1 = Mock()
+        manager1 = AccountManager([asset1], rest_manager1, ws_manager1)
         manager1.balances = {"provider1": {"USD": Mock(available_balance=1000)}}
 
         ws_manager2 = Mock()
-        manager2 = AccountManager([asset2], ws_manager2)
+        rest_manager2 = Mock()
+        manager2 = AccountManager([asset2], rest_manager2, ws_manager2)
 
         self.assertEqual(len(manager2.balances), 0, "New AccountManager should have empty balances")
         self.assertIn("provider1", manager1.balances, "Original AccountManager should retain balances")
@@ -85,13 +87,15 @@ class TestManagerIsolation(unittest.TestCase):
         )
 
         ws_manager1 = Mock()
-        manager1 = MarketDataManager(ws_manager1)
+        rest_manager1 = Mock()
+        manager1 = MarketDataManager(rest_manager1, ws_manager1)
         with patch.object(manager1, 'get_candles', return_value=[]):
             manager1.initialize([asset1])
         manager1._market_data = {asset1.key: Mock(close_price="50000")}
 
         ws_manager2 = Mock()
-        manager2 = MarketDataManager(ws_manager2)
+        rest_manager2 = Mock()
+        manager2 = MarketDataManager(rest_manager2, ws_manager2)
         with patch.object(manager2, 'get_candles', return_value=[]):
             manager2.initialize([asset2])
 
@@ -103,12 +107,14 @@ class TestManagerIsolation(unittest.TestCase):
         db_manager1 = Mock(spec=DatabaseManager)
         journal1 = Mock()
         ws_manager1 = Mock()
-        manager1 = OrderManager(db_manager1, journal1, ws_manager1)
+        rest_manager1 = Mock()
+        manager1 = OrderManager(db_manager1, journal1, rest_manager1, ws_manager1)
 
         db_manager2 = Mock(spec=DatabaseManager)
         journal2 = Mock()
         ws_manager2 = Mock()
-        manager2 = OrderManager(db_manager2, journal2, ws_manager2)
+        rest_manager2 = Mock()
+        manager2 = OrderManager(db_manager2, journal2, rest_manager2, ws_manager2)
 
         self.assertNotEqual(manager1._database_manager, manager2._database_manager)
         self.assertNotEqual(manager1._trading_journal, manager2._trading_journal)

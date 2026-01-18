@@ -8,6 +8,7 @@ from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.clients.websocket_manager import WebSocketManager
+from src.clients.rest_manager import RestManager
 
 
 @dataclass(frozen=True)
@@ -20,3 +21,4 @@ class ManagerContainer:
     protection_manager: ProtectionManager
     session_manager: SessionManager
     websocket_manager: WebSocketManager
+    rest_manager: RestManager

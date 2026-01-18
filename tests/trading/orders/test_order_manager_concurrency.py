@@ -2,7 +2,6 @@ import threading
 import time
 import unittest
 from unittest.mock import MagicMock
-
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction, OrderStatus
 from database.database_manager import DatabaseManager
@@ -21,7 +20,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_uow.__enter__.return_value = self.mock_uow
         self.mock_journal = MagicMock(spec=TradingJournal)
         self.mock_websocket_manager = MagicMock()
-        self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal, self.mock_websocket_manager)
+        self.mock_rest_manager = MagicMock()
+        self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal, self.mock_rest_manager, self.mock_websocket_manager)
 
     def tearDown(self):
         if hasattr(self, 'order_manager'):
@@ -58,9 +58,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_journal.record_fill.assert_called_once_with(order)
 
     def test_execute_order_uses_isolated_unit_of_work(self):
-        mock_client = MagicMock()
-        mock_client.get_provider_name.return_value = "p1"
-        self.order_manager.register_client(mock_client)
+        self.mock_rest_manager.place_order.return_value = None
 
         order = Order(uuid="3", price="102", quantity="1", provider_name="p1",
                       trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time())
@@ -79,15 +77,13 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertTrue(self.mock_uow.__exit__.called)
 
     def test_cancel_order_calls_provider(self):
-        mock_client = MagicMock()
-        mock_client.get_provider_name.return_value = "p1"
-        self.order_manager.register_client(mock_client)
+        self.mock_rest_manager.cancel_order.return_value = None
 
         order = Order(uuid="4", price="103", quantity="1", provider_name="p1",
                       trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time())
 
         self.order_manager._cancel_order(order)
-        mock_client.cancel_order.assert_called_once_with(order.uuid)
+        self.mock_rest_manager.cancel_order.assert_called_once_with("p1", order.uuid)
 
     def test_shutdown_stops_thread(self):
         # Allow thread to start

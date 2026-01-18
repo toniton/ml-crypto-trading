@@ -39,7 +39,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     def init_application(self):
         self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()
         self.account_manager.init_account_balances(self.session_manager)
-        self.fees_manager.init_account_fees()
+        self.fees_manager.init_fees()
+        self.websocket_manager.connect(self.assets)
         self.account_manager.init_websocket()
         self.order_manager.initialize(self.assets)
         self.market_data_manager.initialize(self.assets)
@@ -65,7 +66,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
         market_data = self.market_data_manager.get_market_data(asset)
         self.app_logger.debug(f"Fetched market data for {asset}: {market_data}")
-        fees = self.fees_manager.get_instrument_fees(asset.ticker_symbol, asset.exchange.value)
+        fees = self.fees_manager.get_instrument_fees(asset.exchange.value, asset.ticker_symbol)
         candles = self.market_data_manager.get_candles(asset)
 
         return quote_balance, market_data, candles, fees

@@ -1,10 +1,12 @@
+from decimal import Decimal
+
 from pydantic.dataclasses import dataclass
 
 
 @dataclass
 class Candle:
-    open: str
-    low: str
-    high: str
-    close: str
+    open: Decimal
+    low: Decimal
+    high: Decimal
+    close: Decimal
     start_time: float

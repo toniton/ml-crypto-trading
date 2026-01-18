@@ -1,25 +1,33 @@
 from __future__ import annotations
 
+import threading
+from typing import List
 
 from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.registries.rest_client_registry import RestClientRegistry
-from src.core.registries.websocket_registry import WebSocketRegistry
+from api.interfaces.timeframe import Timeframe
+from src.clients.rest_manager import RestManager
 from src.clients.websocket_manager import WebSocketManager
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class MarketDataManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRegistry):
+class MarketDataManager(ApplicationLoggingMixin):
     MAX_CANDLES = 50
 
-    def __init__(self, websocket_manager: WebSocketManager):
-        super().__init__()
+    def __init__(self, rest_manager: RestManager, websocket_manager: WebSocketManager):
+        self._rest_manager = rest_manager
         self._websocket_manager = websocket_manager
         self._assets: list[Asset] = []
         self._market_data: dict[int, MarketData | None] = {}
         self._candles: dict[int, list[Candle]] = {}
-        self._last_market_data_updated: float = 0.0
+        self._lock = threading.Lock()
+
+    def get_rest_market_data(self, exchange: str, ticker_symbol: str) -> MarketData:
+        return self._rest_manager.get_market_data(exchange, ticker_symbol)
+
+    def get_rest_candles(self, exchange: str, ticker_symbol: str, timeframe: Timeframe) -> List[Candle]:
+        return self._rest_manager.get_candles(exchange, ticker_symbol, timeframe)
 
     def initialize(self, assets: list[Asset]):
         self._assets = assets
@@ -61,22 +69,25 @@ class MarketDataManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRe
         return _on_marketdata_update
 
     def _update_market_data(self, asset_key: int, new_market_data: MarketData):
-        current_market_data = self._market_data[asset_key]
-        is_newer = current_market_data is None or current_market_data.timestamp < new_market_data.timestamp
+        with self._lock:
+            current_market_data = self._market_data.get(asset_key)
+            is_newer = current_market_data is None or current_market_data.timestamp < new_market_data.timestamp
 
-        if is_newer:
-            self._market_data[asset_key] = new_market_data
-            self.app_logger.debug(f"Market data updated - Asset: {asset_key}, Price: {new_market_data.close_price}")
-        else:
-            self.app_logger.debug(f"Market data ignored (outdated) - Asset: {asset_key}")
+            if is_newer:
+                self._market_data[asset_key] = new_market_data
+                self.app_logger.debug(f"Market data updated - Asset: {asset_key}, Price: {new_market_data.close_price}")
+            else:
+                self.app_logger.debug(f"Market data ignored (outdated) - Asset: {asset_key}")
 
     def get_market_data(self, asset: Asset) -> MarketData:
-        market_data = self._market_data.get(asset.key)
+        with self._lock:
+            market_data = self._market_data.get(asset.key)
+
         if market_data is None:
-            provider = self.get_client(asset.exchange.value)
-            new_market_data = provider.get_market_data(asset.ticker_symbol)
+            new_market_data = self.get_rest_market_data(asset.exchange.value, asset.ticker_symbol)
             self._update_market_data(asset.key, new_market_data)
-            return self._market_data.get(asset.key)
+            with self._lock:
+                return self._market_data.get(asset.key)
 
         return market_data
 
@@ -88,17 +99,24 @@ class MarketDataManager(ApplicationLoggingMixin, RestClientRegistry, WebSocketRe
         return _on_candles_update
 
     def _update_candles(self, asset_key: int, new_candles: list[Candle]) -> None:
-        self._candles[asset_key].extend(new_candles)
-        self._candles[asset_key].sort(key=lambda candle: candle.start_time)
+        with self._lock:
+            if asset_key not in self._candles:
+                self._candles[asset_key] = []
 
-        if len(self._candles[asset_key]) > self.MAX_CANDLES:
-            excess = len(self._candles[asset_key]) - self.MAX_CANDLES
-            del self._candles[asset_key][:excess]
+            self._candles[asset_key].extend(new_candles)
+            self._candles[asset_key].sort(key=lambda candle: candle.start_time)
+
+            if len(self._candles[asset_key]) > self.MAX_CANDLES:
+                excess = len(self._candles[asset_key]) - self.MAX_CANDLES
+                del self._candles[asset_key][:excess]
 
     def get_candles(self, asset: Asset) -> list[Candle]:
-        if len(self._candles[asset.key]) == 0:
-            provider = self.get_client(asset.exchange.value)
-            new_candles = provider.get_candles(asset.ticker_symbol, asset.candles_timeframe)
+        with self._lock:
+            candles_exist = len(self._candles.get(asset.key, [])) > 0
+
+        if not candles_exist:
+            new_candles = self.get_rest_candles(asset.exchange.value, asset.ticker_symbol, asset.candles_timeframe)
             self._update_candles(asset.key, new_candles)
 
-        return self._candles[asset.key].copy()
+        with self._lock:
+            return self._candles.get(asset.key, []).copy()

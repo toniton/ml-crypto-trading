@@ -2,59 +2,60 @@ import time
 from typing import Optional, Any, Callable
 
 from api.interfaces.timeframe import Timeframe
-from src.configuration.exchanges_config import ExchangesConfig
-from src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
-from src.clients.cryptodotcom.handlers.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
-from src.clients.cryptodotcom.cryptodotcom_dto import CryptoDotComCandleResponseDto, \
-    CryptoDotComMarketDataResponseDto, CryptoDotComResponseOrderUpdateDto, \
-    CryptoDotComUserBalanceResponseDto
-from src.clients.cryptodotcom.mappers.cryptodotcom_mapper import CryptoDotComMapper
-from src.core.interfaces.auth_handler import AuthHandler
+from src.clients.cryptodotcom.mappers.cryptodotcom_mappers import (
+    CryptoDotComMarketDataMapper,
+    CryptoDotComCandleMapper,
+    CryptoDotComAccountBalanceMapper,
+    CryptoDotComOrdersMapper
+)
+from src.clients.cryptodotcom.utils.timeframe_map import CryptoDotComTimeframe
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
-from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
 
 
 class CryptoDotComWebSocketBuilder(ExchangeWebSocketBuilder):
 
-    def __init__(self, config: ExchangesConfig = None):
-        _config = config or ExchangesConfig()
-        self._websocket_url = _config.crypto_dot_com.websocket_endpoint
+    def __init__(self):
+        super().__init__()
         self._current_subscription: Optional[SubscriptionData] = None
 
     def market_data(self, ticker_symbol: str) -> 'CryptoDotComWebSocketBuilder':
         channel = f"ticker.{ticker_symbol}"
+        mapper = CryptoDotComMarketDataMapper()
         self._current_subscription = self._build_sub(
             channel,
             SubscriptionVisibility.PUBLIC,
-            lambda d: CryptoDotComMapper.to_marketdata(CryptoDotComMarketDataResponseDto(**d))
+            mapper.map
         )
         return self
 
     def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'CryptoDotComWebSocketBuilder':
-        interval = CryptoDotComMapper.from_timeframe(timeframe)
+        interval = CryptoDotComTimeframe.MAP.get(timeframe)
         channel = f"candlestick.{interval}.{ticker_symbol}"
+        mapper = CryptoDotComCandleMapper()
         self._current_subscription = self._build_sub(
             channel,
             SubscriptionVisibility.PUBLIC,
-            lambda d: CryptoDotComMapper.to_candles(CryptoDotComCandleResponseDto(**d))
+            mapper.map
         )
         return self
 
     def account_balance(self) -> 'CryptoDotComWebSocketBuilder':
+        mapper = CryptoDotComAccountBalanceMapper()
         self._current_subscription = self._build_sub(
             "user.balance",
             SubscriptionVisibility.PRIVATE,
-            lambda d: CryptoDotComMapper.to_account_balance(CryptoDotComUserBalanceResponseDto(**d))
+            mapper.map
         )
         return self
 
     def order_update(self, instrument_name: str) -> 'CryptoDotComWebSocketBuilder':
         channel = f"user.order.{instrument_name}"
+        mapper = CryptoDotComOrdersMapper()
         self._current_subscription = self._build_sub(
             channel,
             SubscriptionVisibility.PRIVATE,
-            lambda d: CryptoDotComMapper.to_orders(CryptoDotComResponseOrderUpdateDto(**d))
+            mapper.map
         )
         return self
 
@@ -81,17 +82,3 @@ class CryptoDotComWebSocketBuilder(ExchangeWebSocketBuilder):
         payload["id"] = time.time_ns()
         payload["method"] = "unsubscribe"
         return payload
-
-    def get_websocket_url(self, visibility: SubscriptionVisibility) -> str:
-        endpoint = "user" if visibility is SubscriptionVisibility.PRIVATE else "market"
-        return self._websocket_url + endpoint
-
-    @staticmethod
-    def get_provider_name() -> str:
-        return "CRYPTO_DOT_COM"
-
-    def get_auth_handler(self) -> Optional[AuthHandler]:
-        return CryptoDotComAuthHandler()
-
-    def get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
-        return CryptoDotComHeartbeatHandler()
