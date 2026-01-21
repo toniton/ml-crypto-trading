@@ -1,3 +1,4 @@
+from decimal import Decimal
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
@@ -7,10 +8,10 @@ from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStra
 
 class SellProfitTakingStrategy(RuleBasedTradingStrategy):
 
-    def __init__(self, take_profit_pct: float = 0.02):
+    def __init__(self, take_profit_pct: Decimal = Decimal("0.02")):
         super().__init__()
         self.type = TradeAction.SELL
-        self.take_profit_pct = take_profit_pct
+        self.take_profit_pct = Decimal(str(take_profit_pct))
 
     def get_quorum(
             self, trade_action: TradeAction,
@@ -18,12 +19,15 @@ class SellProfitTakingStrategy(RuleBasedTradingStrategy):
             market_data: MarketData,
             candles: list[Candle]
     ):
-        current_price = float(market_data.close_price)
+        if trade_action != TradeAction.SELL:
+            return False
+
+        current_price = market_data.close_price
         open_positions = trading_context.open_positions
 
         for position in open_positions:
-            profit_pct = float(position.close_price) * (1 + (self.take_profit_pct / 100))
-            if current_price >= profit_pct:
+            threshold = position.close_price * (Decimal("1") + (self.take_profit_pct / Decimal("100")))
+            if current_price >= threshold:
                 return True
 
         return False

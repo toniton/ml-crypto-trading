@@ -8,7 +8,7 @@ from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
-from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestManagerIsolation(unittest.TestCase):

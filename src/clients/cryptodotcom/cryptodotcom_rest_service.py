@@ -1,6 +1,6 @@
 from src.clients.cryptodotcom.cryptodotcom_rest_builder import CryptoDotComRestBuilder
 from src.configuration.exchanges_config import ExchangesConfig
-from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 from src.core.interfaces.exchange_rest_service import ExchangeRestService, R
 from src.trading.helpers.request_helper import RequestHelper
 

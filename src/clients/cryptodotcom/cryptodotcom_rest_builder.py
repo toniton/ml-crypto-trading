@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import time
+from decimal import Decimal
 from typing import Generic, Optional, TypeVar
 from urllib.parse import urlencode
 from urllib.request import Request
@@ -115,8 +116,9 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
         )
 
     def candles(self, ticker_symbol: str, timeframe: Timeframe) -> CryptoDotComRestBuilder[list[Candle]]:
+        candle_timeframe = CryptoDotComTimeframe.MAP.get(timeframe)
         endpoint = Endpoint(
-            path=f"public/get-candlestick?instrument_name={ticker_symbol}&timeframe={CryptoDotComTimeframe.MAP.get(timeframe)}",
+            path=f"public/get-candlestick?instrument_name={ticker_symbol}&timeframe={candle_timeframe}",
             private=False,
             mapper=CryptoDotComCandleMapper()
         )
@@ -151,7 +153,7 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action: TradeAction
     ) -> CryptoDotComRestBuilder[None]:
         endpoint = Endpoint(
@@ -162,7 +164,7 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
             "instrument_name": ticker_symbol,
             "side": trade_action.value,
             "type": "LIMIT",
-            "price": price,
+            "price": str(price),
             "quantity": quantity,
             "client_oid": uuid,
             "time_in_force": "GOOD_TILL_CANCEL"

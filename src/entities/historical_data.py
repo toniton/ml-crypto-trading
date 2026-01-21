@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from decimal import Decimal
 
 from pydantic import BaseModel
 
@@ -9,8 +10,8 @@ class HistoricalData(BaseModel):
     asset: Asset
     year_week: str
     timestamp: str
-    open_price: float
-    close_price: float
-    high_price: float
-    low_price: float
+    open_price: Decimal
+    close_price: Decimal
+    high_price: Decimal
+    low_price: Decimal
     volume: int

@@ -41,7 +41,7 @@ class OrderManager(ApplicationLoggingMixin):
             trade_action: TradeAction
     ) -> None:
         self._rest_manager.place_order(
-            exchange, uuid, ticker_symbol, quantity, str(price), trade_action
+            exchange, uuid, ticker_symbol, quantity, price, trade_action
         )
 
     def get_order(self, exchange: str, uuid: str) -> Order:
@@ -101,7 +101,9 @@ class OrderManager(ApplicationLoggingMixin):
         updated_orders = []
         for order in pending_orders:
             try:
-                updated_orders.append(self.get_order(order.provider_name, order.uuid))
+                exchange_order_details = self.get_order(order.provider_name, order.uuid)
+                if exchange_order_details:
+                    updated_orders.append(exchange_order_details)
             except (RuntimeError, RuntimeWarning) as exc:
                 self.app_logger.warning(f"Unable to update pending order {order.uuid} from exchange: {exc}")
             except Exception as exc:
@@ -141,7 +143,7 @@ class OrderManager(ApplicationLoggingMixin):
                 order_repository = uow.get_repository(PostgresOrderRepository)
                 order_repository.upsert(order)
         except Exception as exc:
-            raise RuntimeError("Error executing and/or saving order:", order, exc) from exc
+            raise RuntimeError("Error executing and/or saving order:", order) from exc
 
     def _cancel_order(self, open_order: Order) -> None:
         try:

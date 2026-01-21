@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Optional, TypeVar, Generic
 from pydantic import BaseModel
 
@@ -53,7 +54,7 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action
     ) -> 'ExchangeRestBuilder[T, None]':
         raise NotImplementedError()

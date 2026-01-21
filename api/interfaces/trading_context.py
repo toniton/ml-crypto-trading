@@ -1,6 +1,5 @@
 from dataclasses import field
 from decimal import Decimal
-from math import inf
 from typing import Optional
 
 from pydantic.dataclasses import dataclass
@@ -15,10 +14,10 @@ class TradingContext:
     starting_balance: Decimal
     available_balance: Decimal = 0
     closing_balance: Decimal = 0
-    lowest_buy: Decimal = inf
-    highest_buy: Decimal = -inf
-    lowest_sell: Decimal = inf
-    highest_sell: Decimal = -inf
+    lowest_buy: Decimal = Decimal('inf')
+    highest_buy: Decimal = Decimal('-inf')
+    lowest_sell: Decimal = Decimal('inf')
+    highest_sell: Decimal = Decimal('-inf')
     open_positions: list[MarketData] = field(default_factory=list)
     close_positions: list[MarketData] = field(default_factory=list)
     last_market_activity_time: Optional[float] = None

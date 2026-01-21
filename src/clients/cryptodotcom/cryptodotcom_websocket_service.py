@@ -4,7 +4,7 @@ from src.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotCom
 from src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler import CryptoDotComAuthHandler
 from src.clients.cryptodotcom.handlers.heartbeats.cryptodotcom_heartbeat_handler import CryptoDotComHeartbeatHandler
 from src.configuration.exchanges_config import ExchangesConfig
-from src.core.interfaces.exchange_rest_client import ExchangeProvidersEnum
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler

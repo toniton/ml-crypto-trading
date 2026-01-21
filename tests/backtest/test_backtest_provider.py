@@ -2,13 +2,13 @@ from decimal import Decimal
 from unittest.mock import Mock
 import pytest
 from backtest.backtest_event_bus import BacktestEventBus
-from backtest.backtest_exchange_rest_client import BacktestExchangeRestClient
-from backtest.events import OrderFillEvent, BalanceUpdateEvent
+from backtest.backtest_rest_service import BacktestRestService
+from backtest.events.domain_events import OrderFillEvent, BalanceUpdateEvent
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.order import OrderStatus
 
 
-class TestBacktestExchangeRestClient:
+class TestBacktestRestService:
     @pytest.fixture
     def event_bus(self):
         return BacktestEventBus()
@@ -21,7 +21,7 @@ class TestBacktestExchangeRestClient:
 
     @pytest.fixture
     def provider(self, event_bus, mock_clock):
-        return BacktestExchangeRestClient(event_bus=event_bus, clock=mock_clock)
+        return BacktestRestService(event_bus=event_bus, clock=mock_clock, data_loader=Mock())
 
     def test_place_buy_order_and_events(self, provider, event_bus):
         # Mock callbacks to verify events
@@ -32,28 +32,31 @@ class TestBacktestExchangeRestClient:
         event_bus.subscribe(BalanceUpdateEvent, balance_callback)
 
         # Place Order (affordable)
-        order = provider.place_order(
+        builder = provider.builder().create_order(
             uuid="123",
             ticker_symbol="btc-usd",
             quantity="0.1",
             price=Decimal("50000.0"),
             trade_action=TradeAction.BUY
         )
+        provider.execute(builder)
 
         # Verify Order
+        order = provider.account.orders[-1]
         assert order.status == OrderStatus.COMPLETED
         assert order.ticker_symbol == "btc-usd"
         assert provider.account.balance_usd == Decimal("10000.0") - (Decimal("50000.0") * Decimal("0.1"))
 
     def test_insufficient_balance(self, provider):
+        builder = provider.builder().create_order(
+            uuid="123",
+            ticker_symbol="btc-usd",
+            quantity="1.0",
+            price=Decimal("50000.0"),  # 50k needed, 10k available
+            trade_action=TradeAction.BUY
+        )
         with pytest.raises(ValueError):
-            provider.place_order(
-                uuid="123",
-                ticker_symbol="btc-usd",
-                quantity="1.0",
-                price=Decimal("50000.0"),  # 50k needed, 10k available
-                trade_action=TradeAction.BUY
-            )
+            provider.execute(builder)
 
     def test_place_feasible_buy_order(self, provider, event_bus):
         order_callback = Mock()
@@ -62,13 +65,14 @@ class TestBacktestExchangeRestClient:
         event_bus.subscribe(BalanceUpdateEvent, balance_callback)
 
         # Buy 0.1 BTC @ 10,000 = $1,000 cost. Balance 10,000 -> 9,000.
-        _order = provider.place_order(
+        builder = provider.builder().create_order(
             uuid="valid-buy",
             ticker_symbol="btc-usd",
             quantity="0.1",
             price=Decimal("10000.0"),
             trade_action=TradeAction.BUY
         )
+        provider.execute(builder)
 
         # Verify simulated state
         assert provider.account.balance_usd == Decimal("9000.0")

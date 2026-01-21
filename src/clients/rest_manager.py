@@ -1,3 +1,4 @@
+from decimal import Decimal
 from typing import Any, List
 from urllib.error import HTTPError
 
@@ -10,11 +11,11 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
-from src.core.interfaces.exchange_rest_client import ExchangeRestClient
+from src.core.managers.exchange_rest_manager import ExchangeRestManager
 from src.core.registries.rest_registry import RestRegistry
 
 
-class RestManager(ExchangeRestClient, RestRegistry):
+class RestManager(ExchangeRestManager, RestRegistry):
     def __init__(self):
         super().__init__()
 
@@ -57,7 +58,7 @@ class RestManager(ExchangeRestClient, RestRegistry):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: str,
+            price: Decimal,
             trade_action: TradeAction
     ) -> None:
         service = self.get_service(exchange)

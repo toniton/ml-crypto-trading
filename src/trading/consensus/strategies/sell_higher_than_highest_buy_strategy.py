@@ -5,9 +5,9 @@ from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStra
 
 
 class SellHigherThanHighestBuyStrategy(RuleBasedTradingStrategy):
-    def __init__(self, grid_spacing_pct=0.5):
+    def __init__(self, grid_spacing_pct=Decimal("0.5")):
         super().__init__()
-        self.grid_spacing_pct = grid_spacing_pct / 100
+        self.grid_spacing_pct = Decimal(str(grid_spacing_pct)) / Decimal("100")
         self.type = TradeAction.SELL
 
     def get_quorum(self, trade_action, _ticker_symbol, trading_context, market_data, _candles):
@@ -18,7 +18,7 @@ class SellHigherThanHighestBuyStrategy(RuleBasedTradingStrategy):
         if trading_context.highest_buy == Decimal('-inf'):
             return False
 
-        threshold_price = trading_context.highest_buy * Decimal(1 + self.grid_spacing_pct)
+        threshold_price = trading_context.highest_buy * (Decimal("1") + self.grid_spacing_pct)
 
         if market_data.close_price > threshold_price:
             return True

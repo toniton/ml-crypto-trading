@@ -1,19 +1,23 @@
 from __future__ import annotations
 
-
+from decimal import Decimal
 from typing import Optional
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ApplicationConfig(BaseSettings):
-    backtest_mode: Optional[bool] = Field(default=False, alias="backtest-mode")
-    backtest_initial_balance: Optional[float] = Field(default=10000.0)
-    backtest_tick_delay: Optional[float] = Field(default=0.0)
-    assets_config_filepath: Optional[str] = Field(alias="assets-conf")
+    backtest_mode: bool = Field(default=False, alias="backtest-mode")
+    backtest_initial_balance: Decimal = Field(default=Decimal("10000.0"))
+    backtest_tick_delay: float = Field(default=0.0)
+    assets_config_filepath: str = Field(alias="assets-conf")
     historical_data_dir_path: Optional[str] = Field(default=None, alias="backtest-source")
 
-    model_config = SettingsConfigDict(cli_parse_args=True)
+    model_config = SettingsConfigDict(
+        cli_parse_args=True,
+        populate_by_name=True,
+        extra='ignore'
+    )
 
     @model_validator(mode='after')
     def check_backtest_source(self) -> ApplicationConfig:

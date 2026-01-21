@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 from abc import ABC
-from decimal import Decimal
 
 from enum import Enum
 
@@ -20,7 +19,7 @@ class ExchangeProvidersEnum(Enum):
     BACKTEST = "BACKTEST"
 
 
-class ExchangeRestClient(ABC):
+class ExchangeRestManager(ABC):
     @abc.abstractmethod
     def get_market_data(self, exchange: str, ticker_symbol: str) -> MarketData:
         raise NotImplementedError()
@@ -43,7 +42,7 @@ class ExchangeRestClient(ABC):
             uuid: str,
             ticker_symbol: str,
             quantity: str,
-            price: Decimal,
+            price: str,
             trade_action: TradeAction
     ) -> None:
         raise NotImplementedError()

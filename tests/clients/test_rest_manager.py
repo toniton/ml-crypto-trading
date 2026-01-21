@@ -1,4 +1,5 @@
 import unittest
+from decimal import Decimal
 from unittest.mock import MagicMock
 from api.interfaces.trade_action import TradeAction
 from src.clients.rest_manager import RestManager
@@ -42,7 +43,7 @@ class TestRestManager(unittest.TestCase):
     def test_place_order_encapsulation(self):
         mock_builder = self.mock_service.builder.return_value
         self.rest_manager.place_order(
-            "TEST_EXCHANGE", "uuid1", "BTC/USDT", "1.0", "50000", TradeAction.BUY
+            "TEST_EXCHANGE", "uuid1", "BTC/USDT", "1.0", Decimal("50000"), TradeAction.BUY
         )
 
         mock_builder.create_order.assert_called_once_with(

@@ -125,10 +125,10 @@ class SessionManager:
                     'available_balance': ctx.available_balance,
                     'closing_balance': ctx.closing_balance,
                     'buy_count': ctx.buy_count,
-                    'lowest_buy': ctx.lowest_buy if ctx.lowest_buy != float('inf') else None,
-                    'highest_buy': ctx.highest_buy if ctx.highest_buy != float('-inf') else None,
-                    'lowest_sell': ctx.lowest_sell if ctx.lowest_sell != float('inf') else None,
-                    'highest_sell': ctx.highest_sell if ctx.highest_sell != float('-inf') else None,
+                    'lowest_buy': ctx.lowest_buy if ctx.lowest_buy != Decimal('inf') else None,
+                    'highest_buy': ctx.highest_buy if ctx.highest_buy != Decimal('-inf') else None,
+                    'lowest_sell': ctx.lowest_sell if ctx.lowest_sell != Decimal('inf') else None,
+                    'highest_sell': ctx.highest_sell if ctx.highest_sell != Decimal('-inf') else None,
                 }
                 for asset_id, ctx in session.trading_contexts.items()
             }
