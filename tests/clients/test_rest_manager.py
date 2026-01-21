@@ -51,7 +51,3 @@ class TestRestManager(unittest.TestCase):
             "uuid1", "BTC/USDT", "1.0", Decimal("50000"), TradeAction.BUY
         )
         self.mock_service.execute.assert_called_once()
-
-
-if __name__ == '__main__':
-    unittest.main()
