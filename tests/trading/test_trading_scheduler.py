@@ -63,13 +63,16 @@ class TestBacktestTradingScheduler(unittest.TestCase):
         # T=0: Both match (0 % 60 == 0, 0 % 1 == 0)
         scheduler.on_tick(0, asset_min)
         scheduler.on_tick(0, asset_sec)
-        self.assertEqual(callback.call_count, 4)
+        self.assertEqual(callback.call_count, 2)
 
         expected_calls = [call([asset_min]), call([asset_sec])]
         callback.assert_has_calls(expected_calls, any_order=True)
         callback.reset_mock()
 
-        expected_calls = [call([asset_min]), call([asset_sec])]
+        # T=61:
+        # Minute asset: 61 // 60 = 1, 0 // 60 = 0. 1 > 0. Triggers.
+        # Second asset: 61 // 1 = 61, 0 // 1 = 0. 61 > 0. Triggers.
         scheduler.on_tick(61, asset_min)
         scheduler.on_tick(61, asset_sec)
+        self.assertEqual(callback.call_count, 2)
         callback.assert_has_calls(expected_calls, any_order=True)

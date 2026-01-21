@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from threading import Event
 
+from api.interfaces.asset import Asset
 from src.trading.trading_executor import TradingExecutor
 from src.core.interfaces.trading_scheduler import TradingScheduler
 
@@ -19,8 +20,12 @@ class TradingEngine:
     def start_application(self):
         self._is_running.set()
         self._trading_executor.init_application()
-        self._trading_scheduler.start(self._trading_executor.create_buy_order)
-        self._trading_scheduler.start(self._trading_executor.create_sell_order)
+
+        def run_trading_cycle(assets: list[Asset]) -> None:
+            self._trading_executor.create_buy_order(assets)
+            self._trading_executor.create_sell_order(assets)
+
+        self._trading_scheduler.start(run_trading_cycle)
 
     def stop_application(self):
         if self._is_running.is_set():

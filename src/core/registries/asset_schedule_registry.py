@@ -1,5 +1,3 @@
-from schedule import every
-
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from src.core.interfaces.registry import Registry
@@ -7,12 +5,12 @@ from src.core.interfaces.registry import Registry
 
 class AssetScheduleRegistry(Registry[AssetSchedule, Asset]):
     UNIT_MAP = {
-        AssetSchedule.EVERY_SECOND: lambda: every(1).second,
-        AssetSchedule.EVERY_MINUTE: lambda: every(1).minute,
-        AssetSchedule.EVERY_HOUR: lambda: every(1).hour,
-        AssetSchedule.EVERY_DAY: lambda: every(1).day,
-        AssetSchedule.EVERY_WEEK: lambda: every(1).week,
-        AssetSchedule.EVERY_MONTH: lambda: every(4).week,
+        AssetSchedule.EVERY_SECOND: lambda s: s.every(1).second,
+        AssetSchedule.EVERY_MINUTE: lambda s: s.every(1).minute,
+        AssetSchedule.EVERY_HOUR: lambda s: s.every(1).hour,
+        AssetSchedule.EVERY_DAY: lambda s: s.every(1).day,
+        AssetSchedule.EVERY_WEEK: lambda s: s.every(1).week,
+        AssetSchedule.EVERY_MONTH: lambda s: s.every(4).week,
     }
     UNIT_SECONDS = {
         AssetSchedule.EVERY_SECOND: 1,
