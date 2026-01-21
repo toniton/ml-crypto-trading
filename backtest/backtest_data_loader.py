@@ -36,14 +36,30 @@ class BacktestDataLoader:
             base_name.replace("-", "_"),
             base_name.replace("-", "_").lower(),
             base_name.replace("-", "_").upper(),
+            f"audit-{base_name}",
+            f"audit-{base_name.lower()}",
+            f"audit-{base_name.upper()}",
+            f"audit-{base_name.replace('-', '_')}",
+            f"audit-{base_name.replace('-', '_').lower()}",
+            f"audit-{base_name.replace('-', '_').upper()}",
         }
-        potential_filenames = [f"{f}.csv" for f in potential_names]
+        potential_filenames = []
+        for f in potential_names:
+            potential_filenames.append(f"{f}.csv")
+            potential_filenames.append(f"{f}.log")
+            # Support for dated audit logs like audit-BTC_USD-2026-01.log
+            # We can use glob to find these if we want, but let's stick to a few more patterns
+            potential_filenames.append(f"{f}-*.log")
+            potential_filenames.append(f"{f}*.log")
+            potential_filenames.append(f"{f}*.csv")
 
+        import glob
         file_path = None
-        for filename in potential_filenames:
-            candidate_path = os.path.join(self.data_path, filename)
-            if os.path.exists(candidate_path):
-                file_path = candidate_path
+        for pattern in potential_filenames:
+            candidate_pattern = os.path.join(self.data_path, pattern)
+            matches = glob.glob(candidate_pattern)
+            if matches:
+                file_path = matches[0]
                 break
 
         if not file_path:
@@ -52,27 +68,64 @@ class BacktestDataLoader:
                 f"Tried: {', '.join(potential_filenames)}"
             )
 
-        # Detect separator - try both ; and ,
-        try:
-            df = pd.read_csv(file_path, sep=";")
-            if len(df.columns) < 2:
-                raise ValueError("Separator detection failed")
-        except ValueError:
-            df = pd.read_csv(file_path, sep=",")
+        # Detect separator and format
+        first_line = ""
+        with open(file_path, "r") as f:
+            first_line = f.readline()
 
-        data_points = []
-        for _, row in df.iterrows():
-            timestamp = int(pd.Timestamp(row["timestamp"]).timestamp())
-            data_point = HistoricalDataPoint(
-                timestamp=timestamp,
-                open_price=Decimal(str(row["open"])),
-                high_price=Decimal(str(row["high"])),
-                low_price=Decimal(str(row["low"])),
-                close_price=Decimal(str(row["close"])),
-                volume=Decimal(str(row["volume"])),
-                market_cap=Decimal(str(row["marketCap"]))
-            )
-            data_points.append(data_point)
+        if "event_type" in first_line:
+            # Audit log format
+            df = pd.read_csv(file_path, sep=",")
+            data_points = []
+            for _, row in df.iterrows():
+                # Filter by ticker symbol if it's the global audit log
+                if "asset" in row and row["asset"] != ticker_symbol.replace("/", "_"):
+                    continue
+
+                # We only care about events that have market data
+                if pd.isna(row["close_price"]):
+                    continue
+
+                data_point = HistoricalDataPoint(
+                    timestamp=int(row["timestamp"]) // 1000,  # Audit log uses ms
+                    open_price=Decimal(str(row["close_price"])),  # Audit log doesn't have open, use close
+                    high_price=Decimal(str(row["high_price"])),
+                    low_price=Decimal(str(row["low_price"])),
+                    close_price=Decimal(str(row["close_price"])),
+                    volume=Decimal(str(row["volume"])),
+                    market_cap=Decimal("0")
+                )
+                data_points.append(data_point)
+        else:
+            # Historical data format
+            try:
+                df = pd.read_csv(file_path, sep=";")
+                if len(df.columns) < 2:
+                    raise ValueError("Separator detection failed")
+            except (ValueError, KeyError):
+                df = pd.read_csv(file_path, sep=",")
+
+            data_points = []
+            for _, row in df.iterrows():
+                try:
+                    ts_val = row["timestamp"]
+                    if isinstance(ts_val, (int, float)):
+                        timestamp = int(ts_val)
+                    else:
+                        timestamp = int(pd.Timestamp(ts_val).timestamp())
+
+                    data_point = HistoricalDataPoint(
+                        timestamp=timestamp,
+                        open_price=Decimal(str(row["open"])),
+                        high_price=Decimal(str(row["high"])),
+                        low_price=Decimal(str(row["low"])),
+                        close_price=Decimal(str(row["close"])),
+                        volume=Decimal(str(row["volume"])),
+                        market_cap=Decimal(str(row.get("marketCap", 0)))
+                    )
+                    data_points.append(data_point)
+                except Exception:
+                    continue
 
         data_points.sort(key=lambda x: x.timestamp)
 

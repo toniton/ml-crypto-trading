@@ -25,11 +25,12 @@ class BacktestTradingScheduler(TradingScheduler):
                 return
             symbol = asset.ticker_symbol
             previous_timestamp = self._last_execution.get(symbol)
-            for schedule in self.get_registered_schedules():
-                if self._should_run(schedule, current_timestamp, previous_timestamp):
-                    self._last_execution[symbol] = current_timestamp
-                    for callback in self._callbacks:
-                        callback([asset])
+            schedule = asset.schedule
+
+            if self._should_run(schedule, current_timestamp, previous_timestamp):
+                self._last_execution[symbol] = current_timestamp
+                for callback in self._callbacks:
+                    callback([asset])
 
     def stop(self):
         self._last_execution.clear()

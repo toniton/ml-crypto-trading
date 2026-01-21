@@ -7,9 +7,9 @@ from api.interfaces.market_data import MarketData
 from backtest.backtest_clock import BacktestClock
 from backtest.backtest_data_loader import BacktestDataLoader
 from backtest.backtest_event_bus import BacktestEventBus
-from backtest.backtest_exchange_rest_client import BacktestExchangeRestClient
+from backtest.backtest_rest_service import BacktestRestService
 from backtest.backtest_trading_scheduler import BacktestTradingScheduler
-from backtest.backtest_websocket_builder import BacktestWebSocketBuilder
+from backtest.backtest_websocket_service import BacktestWebSocketService
 from backtest.events.domain_events import TickEvent, MarketDataEvent, CandlesEvent, OrderFillEvent, BalanceUpdateEvent
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
@@ -29,11 +29,11 @@ class BacktestEngine(ApplicationLoggingMixin):
         self.clock = clock
         self.scheduler = scheduler
 
-        self.rest_client = BacktestExchangeRestClient(self.clock, self.bus, self.loader)
-        self.websocket_client = BacktestWebSocketBuilder(self.bus)
+        self.rest_service = BacktestRestService(self.clock, self.bus, self.loader, self.config)
+        self.websocket_service = BacktestWebSocketService(self.bus)
         self._is_running = False
         self._threads = []
-        self.app.register_client(self.rest_client, self.websocket_client)
+        self.app.register_client(self.rest_service, self.websocket_service)
         self._setup_bridge()
 
     def _setup_bridge(self):
@@ -41,28 +41,28 @@ class BacktestEngine(ApplicationLoggingMixin):
 
         def handle_market_data(event: MarketDataEvent):
             ws_manager.inject_message(
-                exchange="CRYPTO_DOT_COM",
+                exchange=self.websocket_service.get_provider_name(),
                 visibility=SubscriptionVisibility.PUBLIC,
                 data={"type": "market_data", "ticker_symbol": event.ticker_symbol, "data": event.market_data}
             )
 
         def handle_candles(event: CandlesEvent):
             ws_manager.inject_message(
-                exchange="CRYPTO_DOT_COM",
+                exchange=self.websocket_service.get_provider_name(),
                 visibility=SubscriptionVisibility.PUBLIC,
                 data={"type": "candles", "ticker_symbol": event.ticker_symbol, "data": event.candles}
             )
 
         def handle_order_fill(event: OrderFillEvent):
             ws_manager.inject_message(
-                exchange="CRYPTO_DOT_COM",
+                exchange=self.websocket_service.get_provider_name(),
                 visibility=SubscriptionVisibility.PRIVATE,
                 data={"type": "order_update", "instrument_name": event.order.ticker_symbol, "data": [event.order]}
             )
 
         def handle_balance_update(event: BalanceUpdateEvent):
             ws_manager.inject_message(
-                exchange="CRYPTO_DOT_COM",
+                exchange=self.websocket_service.get_provider_name(),
                 visibility=SubscriptionVisibility.PRIVATE,
                 data={"type": "balance", "data": event.balances}
             )

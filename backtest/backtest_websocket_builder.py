@@ -3,7 +3,6 @@ from typing import Optional, Any
 from api.interfaces.timeframe import Timeframe
 from backtest.backtest_event_bus import BacktestEventBus
 from src.core.interfaces.auth_handler import AuthHandler
-from src.core.interfaces.heartbeat_handler import HeartbeatHandler
 from src.core.interfaces.subscription_data import (
     SubscriptionData,
     SubscriptionVisibility,
@@ -89,16 +88,3 @@ class BacktestWebSocketBuilder(ExchangeWebSocketBuilder):
         payload = subscribe_payload.copy()
         payload["method"] = "unsubscribe"
         return payload
-
-    def get_websocket_url(self, visibility: SubscriptionVisibility) -> str:
-        return "backtest://event-bus"
-
-    @staticmethod
-    def get_provider_name() -> str:
-        return "CRYPTO_DOT_COM"
-
-    def get_auth_handler(self) -> Optional[AuthHandler]:
-        return BacktestAuthHandler()
-
-    def get_heartbeat_handler(self) -> Optional[HeartbeatHandler]:
-        return None
