@@ -18,6 +18,7 @@ from src.core.interfaces.subscription_data import SubscriptionVisibility, Subscr
 class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
     def __init__(self):
         super().__init__()
+        self._lock = threading.Lock()
         self._connections: dict[str, dict[SubscriptionVisibility, WebSocketApp | None]] = {}
         self._subscriptions: dict[str, dict[str, tuple[SubscriptionData, Callable]]] = {}
         self._authenticated_connections: set[str] = set()
@@ -45,14 +46,16 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
 
     def _ensure_connection(self, service: ExchangeWebSocketService, visibility: SubscriptionVisibility):
         exchange = service.get_provider_name()
-        if visibility in self._connections[exchange]:
-            return
+        with self._lock:
+            if visibility in self._connections[exchange]:
+                return
 
         url = service.get_websocket_url(visibility)
         conn_id = f"{exchange}-{visibility.value}"
 
         if url.startswith("backtest://"):
-            self._connections[exchange][visibility] = None  # Marker for backtest connection
+            with self._lock:
+                self._connections[exchange][visibility] = None  # Marker for backtest connection
             self.app_logger.info(f"Initialized mock WebSocket connection for {conn_id}")
             return
 
@@ -63,7 +66,8 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
             on_close=lambda ws, code, msg: self._handle_close(exchange, visibility, code, msg)
         )
 
-        self._connections[exchange][visibility] = handler
+        with self._lock:
+            self._connections[exchange][visibility] = handler
 
         thread = threading.Thread(
             target=handler.run_forever,
@@ -118,9 +122,11 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
     def _subscribe(self, exchange: str, key: str, sub_data: SubscriptionData, callback: Callable):
         service = self.get_service(exchange)
         self._ensure_connection(service, sub_data.visibility)
-        handler = self._connections[exchange][sub_data.visibility]
 
-        self._subscriptions[exchange][key] = (sub_data, callback)
+        with self._lock:
+            handler = self._connections[exchange][sub_data.visibility]
+            self._subscriptions[exchange][key] = (sub_data, callback)
+
         if handler:
             handler.send(json.dumps(sub_data.payload))
             self.app_logger.info(f"Subscribed to {key} on {exchange}")
@@ -140,16 +146,21 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
         self._unsubscribe(exchange, f"ORDER_{instrument_name}")
 
     def _unsubscribe(self, exchange: str, key: str):
-        if exchange in self._subscriptions and key in self._subscriptions[exchange]:
+        with self._lock:
+            if exchange not in self._subscriptions or key not in self._subscriptions[exchange]:
+                return
+
             sub_data, _ = self._subscriptions[exchange][key]
             handler = self._connections[exchange].get(sub_data.visibility)
-            if handler:
-                service = self.get_service(exchange)
-                builder = service.create_builder()
-                unsub_payload = builder.get_unsubscribe_payload(sub_data.payload)
-                handler.send(json.dumps(unsub_payload))
             del self._subscriptions[exchange][key]
-            self.app_logger.info(f"Unsubscribed from {key} on {exchange}")
+
+        if handler:
+            service = self.get_service(exchange)
+            builder = service.create_builder()
+            unsub_payload = builder.get_unsubscribe_payload(sub_data.payload)
+            handler.send(json.dumps(unsub_payload))
+
+        self.app_logger.info(f"Unsubscribed from {key} on {exchange}")
 
     def _handle_message(self, exchange: str, visibility: SubscriptionVisibility, message: str):
         try:
@@ -171,33 +182,42 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
         heartbeat_handler = service.get_heartbeat_handler()
         if heartbeat_handler and heartbeat_handler.is_heartbeat(data):
             conn_id = f"{exchange}-{visibility.value}"
-            self._last_heartbeat[conn_id] = time.time()
+            with self._lock:
+                self._last_heartbeat[conn_id] = time.time()
+                handler = self._connections.get(exchange, {}).get(visibility)
+
             response = heartbeat_handler.get_heartbeat_response(data)
-            if (response and exchange in self._connections and
-                    visibility in self._connections[exchange] and
-                    self._connections[exchange][visibility]):
-                self._connections[exchange][visibility].send(json.dumps(response))
+            if response and handler:
+                handler.send(json.dumps(response))
             return
 
         # Subscription callbacks
-        for _key, (sub_data, callback) in self._subscriptions[exchange].items():
-            if sub_data.visibility == visibility and sub_data.matches(data):
-                try:
-                    parsed_data = sub_data.parse(data)
-                    if parsed_data:
-                        callback(parsed_data)
-                except Exception:
-                    continue
+        callbacks_to_call = []
+        with self._lock:
+            if exchange in self._subscriptions:
+                # Create a list of callbacks to avoid dictionary size change error during iteration
+                for _key, (sub_data, callback) in self._subscriptions[exchange].items():
+                    if sub_data.visibility == visibility and sub_data.matches(data):
+                        callbacks_to_call.append((sub_data, callback))
+
+        for sub_data, callback in callbacks_to_call:
+            try:
+                parsed_data = sub_data.parse(data)
+                if parsed_data:
+                    callback(parsed_data)
+            except Exception:
+                continue
 
     def _handle_close(self, exchange: str, visibility: SubscriptionVisibility, code: int, msg: str):
         conn_id = f"{exchange}-{visibility.value}"
         self.app_logger.info(f"WebSocket closed for {conn_id}. Code: {code}, Msg: {msg}")
 
-        if conn_id in self._authenticated_connections:
-            self._authenticated_connections.remove(conn_id)
+        with self._lock:
+            if conn_id in self._authenticated_connections:
+                self._authenticated_connections.remove(conn_id)
 
-        if exchange in self._connections:
-            self._connections[exchange].pop(visibility, None)
+            if exchange in self._connections:
+                self._connections[exchange].pop(visibility, None)
 
         # Immediate reconnect logic could go here, or handled by a supervisor.
         if code != 1000:

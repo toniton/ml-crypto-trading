@@ -41,7 +41,7 @@ class ConsensusManager(ApplicationLoggingMixin):
             self.app_logger.debug(f"Strategy: {strategy.__class__.__name__} Vote: {vote}")
 
         if votes.count(True) >= consensus_factor * votes.count(False):
-            self.app_logger.info(f"Quorum reached: {trade_action} {votes}")
+            self.app_logger.info(f"Quorum reached: {ticker_symbol} {trade_action} {votes}")
             return True
-        self.app_logger.info(f"Quorum not reached: {trade_action} {votes}")
+        self.app_logger.info(f"Quorum not reached: {ticker_symbol} {trade_action} {votes}")
         return False

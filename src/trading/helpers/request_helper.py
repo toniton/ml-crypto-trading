@@ -36,7 +36,7 @@ class RequestHelper(ApplicationLoggingMixin):
             cls().app_logger.error(f"HTTP error while calling {request.full_url}: {exc}")
             try:
                 detail = exc.read().decode()
-            except Exception:
+            except UnicodeDecodeError:
                 detail = str(exc)
             raise RuntimeError(f"HTTP error: {detail}") from exc
 

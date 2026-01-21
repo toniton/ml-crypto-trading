@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-import threading
+import time
 
 from backtest.backtest_application import BacktestApplication
 from src.application import Application
@@ -23,8 +22,12 @@ def main():
     else:
         app = Application(application_config=application_config, environment_config=environment_config,
                           assets_config=assets_config)
-        app_thread = threading.Thread(target=app.startup, name="TradingEngine")
-        app_thread.start()
+        app.startup()
+        try:
+            while app.is_running.is_set():
+                time.sleep(1)
+        except (KeyboardInterrupt, SystemExit):
+            app.shutdown()
 
 
 if __name__ == "__main__":

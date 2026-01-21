@@ -36,9 +36,8 @@ class TestCryptoDotComRestService(unittest.TestCase):
         # Mocking generic Mapper
         mock_mapper = MagicMock()
         mock_mapper.map.return_value = {"mapped": "result"}
-        builder._mapper = mock_mapper
+        builder.mapper.return_value = mock_mapper
 
-        builder.build_request.return_value = MagicMock()
         builder.build_request.return_value = MagicMock()
 
         result = self.service.execute(builder)
