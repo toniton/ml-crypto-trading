@@ -2,6 +2,7 @@ VENV_DIR := ./venv
 PYTHON := $(VENV_DIR)/bin/python3
 PIP := $(VENV_DIR)/bin/pip
 PYLINT := $(VENV_DIR)/bin/pylint
+ALEMBIC := $(VENV_DIR)/bin/alembic
 
 .PHONY: clean
 
@@ -20,10 +21,13 @@ clean:
 	rm -rf $(VENV_DIR)
 
 migrate:
-	alembic revision --autogenerate -m "Updated order table"
+	$(ALEMBIC) revision --autogenerate -m "xxxxxxxxxxxxxxxxxxxxxxxx."
 
 upgrade:
-	alembic upgrade head
+	$(ALEMBIC) upgrade head
+
+downgrade:
+	$(ALEMBIC) downgrade base
 
 format:
 	pre-commit
@@ -32,7 +36,10 @@ lint: .pylintrc
 	$(PYLINT) src tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
 
 test:
-	export PYTHONPATH=$$PYTHONPATH:. && $(VENV_DIR)/bin/pytest tests/ --cov --cov-branch --cov-report=xml
+	export PYTHONPATH=$$PYTHONPATH:. && $(VENV_DIR)/bin/pytest tests/ --cov --cov-branch --cov-report=xml -s
 
 start:
 	$(PYTHON) ./main.py
+
+simulated:
+	$(PYTHON) ./main.py --assets-conf=examples/configurations/assets.yaml --simulated=true
