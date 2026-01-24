@@ -43,7 +43,9 @@ class BacktestApplication:
         self.backtest_engine = BacktestEngine(self.app, loader, clock, scheduler, bus, self._application_config)
         self.app_thread = threading.Thread(target=self.app.startup, name="BacktestApplication", daemon=True)
         self.app_thread.start()
-        self.app_thread.join(timeout=2)
+        if not self.app.is_ready.wait(timeout=10):
+            raise RuntimeError("Application failed to start within 10 seconds")
+
         self.backtest_thread = threading.Thread(target=self.backtest_engine.run,
                                                 name="BacktestEngine",
                                                 args=(self._assets_config.assets,))

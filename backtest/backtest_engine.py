@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
 import threading
+from datetime import datetime, timezone
 from typing import Optional
 
 from api.interfaces.asset import Asset
+from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from backtest.backtest_clock import BacktestClock
 from backtest.backtest_data_loader import BacktestDataLoader
@@ -10,7 +11,7 @@ from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_rest_service import BacktestRestService
 from backtest.backtest_trading_scheduler import BacktestTradingScheduler
 from backtest.backtest_websocket_service import BacktestWebSocketService
-from backtest.events.domain_events import TickEvent, MarketDataEvent, CandlesEvent, OrderFillEvent, BalanceUpdateEvent
+from backtest.events.domain_events import BalanceUpdateEvent, CandlesEvent, MarketDataEvent, OrderFillEvent, TickEvent
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
 from src.core.interfaces.subscription_data import SubscriptionVisibility
@@ -113,6 +114,19 @@ class BacktestEngine(ApplicationLoggingMixin):
                     self.bus.publish(MarketDataEvent(
                         market_data=market_data,
                         ticker_symbol=asset.ticker_symbol
+                    ))
+
+                    # Simulate candles based on current market data
+                    candle = Candle(
+                        open=market_data.close_price,  # Approximate
+                        high=market_data.high_price,
+                        low=market_data.low_price,
+                        close=market_data.close_price,
+                        start_time=float(market_data.timestamp)
+                    )
+                    self.bus.publish(CandlesEvent(
+                        ticker_symbol=asset.ticker_symbol,
+                        candles=[candle]
                     ))
 
                 self.scheduler.on_tick(timestamp, asset)

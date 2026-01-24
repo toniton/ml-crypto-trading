@@ -1,7 +1,7 @@
 import threading
 from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 from uuid import uuid4
 
 from api.interfaces.account_balance import AccountBalance
@@ -17,9 +17,9 @@ from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_rest_builder import BacktestRestBuilder
 from backtest.events.domain_events import BalanceUpdateEvent, OrderFillEvent
 from src.configuration.application_config import ApplicationConfig
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 @dataclass
@@ -64,10 +64,10 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             raise ValueError(f"No market data for {ticker_symbol} at {current}")
         return MarketData(
             timestamp=data.timestamp,
-            volume=str(data.volume),
-            low_price=str(data.low_price),
-            high_price=str(data.high_price),
-            close_price=str(data.close_price)
+            volume=data.volume,
+            low_price=data.low_price,
+            high_price=data.high_price,
+            close_price=data.close_price
         )
 
     def _handle_account_balance(self) -> list[AccountBalance]:
@@ -89,13 +89,13 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
                 )
             return balances
 
-    def _handle_account_fees(self) -> Fees:
+    def _handle_account_fees(self, _provider_name: str = None) -> Fees:
         return Fees(
             maker_fee_pct=Decimal("0.0"),
             taker_fee_pct=Decimal("0.0")
         )
 
-    def _handle_instrument_fees(self, _ticker_symbol: str) -> Fees:
+    def _handle_instrument_fees(self, _ticker_symbol: str, _provider_name: str = None) -> Fees:
         return Fees(
             maker_fee_pct=Decimal("0.0"),
             taker_fee_pct=Decimal("0.0")

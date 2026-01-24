@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Optional, TypeVar, Any
+from typing import Any, Optional, TypeVar
+
 from pydantic import BaseModel
 
 from api.interfaces.account_balance import AccountBalance
@@ -73,3 +74,9 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
         self.method_name = "cancel_order"
         self.params = {"uuid": uuid}
         return self
+
+    def get_endpoint(self) -> Optional[None]:
+        return None
+
+    def get_params(self) -> dict:
+        return self.params

@@ -42,6 +42,7 @@ class Application(ApplicationLoggingMixin):
             backtest_scheduler: TradingScheduler = None,
     ):
         self.is_running = Event()
+        self.is_ready = Event()
         self._trading_engine = None
         self._backtest_scheduler = backtest_scheduler
         self._is_backtest_mode = is_backtest_mode
@@ -139,6 +140,7 @@ class Application(ApplicationLoggingMixin):
         trading_executor = TradingExecutor(self._assets, self._managers, self._activity_queue)
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
         self._trading_engine.start_application()
+        self.is_ready.set()
 
     def register_client(self, rest_service: ExchangeRestService, websocket_service: ExchangeWebSocketService):
         self._register_with_managers(rest_service)
@@ -150,4 +152,5 @@ class Application(ApplicationLoggingMixin):
         if self._trading_engine:
             self._trading_engine.stop_application()
         self.is_running.clear()
+        self.is_ready.clear()
         self.app_logger.info("Stopping Application...")
