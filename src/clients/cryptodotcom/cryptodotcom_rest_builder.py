@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Generic, Optional, TypeVar
 from urllib.parse import urlencode
 from urllib.request import Request
+
 from pydantic import BaseModel
 
 from api.interfaces.account_balance import AccountBalance
@@ -20,11 +21,11 @@ from api.interfaces.trade_action import TradeAction
 from src.clients.cryptodotcom.mappers.cryptodotcom_mappers import CryptoDotComAccountBalanceMapper, \
     CryptoDotComCandleMapper, \
     CryptoDotComFeesMapper, CryptoDotComInstrumentFeesMapper, CryptoDotComMarketDataMapper, CryptoDotComOrderMapper
-from src.core.interfaces.mapper import Mapper
-from src.clients.cryptodotcom.utils.timeframe_map import CryptoDotComTimeframe
-from src.trading.helpers.request_helper import RequestHelper
-from src.core.interfaces.exchange_rest_builder import Endpoint, ExchangeRestBuilder
 from src.clients.cryptodotcom.utils.helpers import params_to_str
+from src.clients.cryptodotcom.utils.timeframe_map import CryptoDotComTimeframe
+from src.core.interfaces.exchange_rest_builder import Endpoint, ExchangeRestBuilder
+from src.core.interfaces.mapper import Mapper
+from src.trading.helpers.request_helper import RequestHelper
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -191,3 +192,9 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
         self._mapper = endpoint.mapper
         self._params = params or {}
         return self
+
+    def get_endpoint(self) -> Optional[Endpoint]:
+        return self._endpoint
+
+    def get_params(self) -> dict:
+        return self._params

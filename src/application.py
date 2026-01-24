@@ -1,41 +1,37 @@
 from __future__ import annotations
 
 import atexit
-
 from queue import Queue
 from threading import Event
 
-import src.trading.consensus.strategies
 import src.configuration.providers
+import src.trading.consensus.strategies
 import src.trading.protection.guards
-
 from database.database_manager import DatabaseManager
+from src.clients.client_factory import ClientFactory
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
 from src.core.interfaces.base_config import BaseConfig
-from src.clients.websocket_manager import WebSocketManager
-from src.clients.rest_manager import RestManager
-from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.trading.accounts.account_manager import AccountManager
-from src.trading.consensus.consensus_manager import ConsensusManager
-from src.trading.session.session_manager import SessionManager
-from src.trading.fees.fees_manager import FeesManager
-from src.core.managers.manager_container import ManagerContainer
-from src.trading.markets.market_data_manager import MarketDataManager
-from src.trading.orders.order_manager import OrderManager
-from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.guard import Guard
+from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
+from src.core.interfaces.trading_scheduler import TradingScheduler
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.core.managers.manager_container import ManagerContainer
+from src.trading.accounts.account_manager import AccountManager
+from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.fees.fees_manager import FeesManager
+from src.trading.live_trading_scheduler import LiveTradingScheduler
+from src.trading.markets.market_data_manager import MarketDataManager
+from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
+from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
+from src.trading.session.session_manager import SessionManager
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
-
-from src.trading.live_trading_scheduler import LiveTradingScheduler
-from src.core.interfaces.trading_scheduler import TradingScheduler
 
 
 class Application(ApplicationLoggingMixin):
@@ -75,8 +71,11 @@ class Application(ApplicationLoggingMixin):
 
     def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
         trading_journal = InMemoryTradingJournal()
-        websocket_manager = WebSocketManager()
-        rest_manager = RestManager()
+        is_simulated = self._application_config.simulated
+
+        websocket_manager = ClientFactory.create_websocket_manager(is_simulated)
+        rest_manager = ClientFactory.create_rest_manager(is_simulated)
+
         return ManagerContainer(
             account_manager=AccountManager(self._assets, rest_manager, websocket_manager),
             fees_manager=FeesManager(rest_manager),
@@ -100,13 +99,17 @@ class Application(ApplicationLoggingMixin):
 
     def _setup_clients(self):
         ApplicationHelper.import_modules(src.clients)
-        for cls in ExchangeRestService.__subclasses__():
-            if cls.__module__.startswith(src.clients.__name__):
-                self._register_with_managers(cls())
 
-        for cls in ExchangeWebSocketService.__subclasses__():
+        self._setup_service_clients(ExchangeRestService)
+        self._setup_service_clients(ExchangeWebSocketService)
+
+    def _setup_service_clients(
+            self, service_class: type[ExchangeRestService | ExchangeWebSocketService]
+    ):
+        for cls in service_class.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
-                self._register_with_managers(cls())
+                instance = cls()
+                self._register_with_managers(instance)
 
     def _setup_strategies(self):
         ApplicationHelper.import_modules(src.trading.consensus.strategies)

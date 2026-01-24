@@ -4,13 +4,11 @@
 [![linting: pylint](https://img.shields.io/badge/linting-pylint-yellowgreen)](https://github.com/pylint-dev/pylint)
 [![codecov](https://codecov.io/github/toniton/ml-crypto-trading/graph/badge.svg?token=N0VBWT87L7)](https://codecov.io/github/toniton/ml-crypto-trading)
 [![pre-commit](https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit)](https://github.com/pre-commit/pre-commit)
-
-
-
+[![Docker pull](https://img.shields.io/docker/pulls/toniton/ml-crypto-trading)](https://hub.docker.com/r/toniton/ml-crypto-trading)
 
 MCT (stands for ML-Crypto-Trading) trading bot is a free and open-source cryptocurrency trading engine written in
 Python.
-> For educational and research purposes only.
+> Caveat Utilitor! For educational and research purposes only.
 ## Usage
 
 ### Configuration
@@ -126,6 +124,15 @@ Audit logs can be replayed through the backtesting system.
 ### Supported Exchanges
 
 - [Crypto.com Exchange](https://crypto.com/exchange)
+
+### Simulated Trading
+
+You can run the bot in simulated mode, where order placement is intercepted and executed in-memory without hitting the
+real exchange.
+
+```bash
+python main.py --assets-conf=examples/configurations/assets.yaml --simulated=true
+```
 
 ## Core concepts
 

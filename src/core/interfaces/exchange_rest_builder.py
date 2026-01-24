@@ -3,7 +3,8 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Optional, TypeVar, Generic
+from typing import Generic, Optional, TypeVar
+
 from pydantic import BaseModel
 
 from api.interfaces.account_balance import AccountBalance
@@ -65,4 +66,12 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
 
     @abc.abstractmethod
     def cancel_order(self, uuid: str) -> 'ExchangeRestBuilder[T, None]':
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_endpoint(self) -> Optional[Endpoint]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_params(self) -> dict:
         raise NotImplementedError()
