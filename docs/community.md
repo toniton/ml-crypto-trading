@@ -1,5 +1,10 @@
 # Community
 
+## Discord 💬
+
+Join our active Discord channel to collaborate, share ideas, and get help:
+[https://discord.gg/vZh8w3Sz](https://discord.gg/vZh8w3Sz)
+
 ## Related Projects
 
 While this project remains focused on simplicity, learning, and experimentation, we however recommend other projects

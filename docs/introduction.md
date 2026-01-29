@@ -36,3 +36,10 @@ Audit logs can be replayed through the backtesting system.
 
 You can run the bot in simulated mode, where order placement is intercepted and executed in-memory without hitting the
 real exchange.
+
+---
+
+## Join the Community
+
+Interested in contributing or learning more? Join us on [Discord](https://discord.gg/vZh8w3Sz)!
+
