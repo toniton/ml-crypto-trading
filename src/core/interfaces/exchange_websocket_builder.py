@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 
 from api.interfaces.timeframe import Timeframe
@@ -20,6 +22,11 @@ class ExchangeWebSocketBuilder(ABC):
 
     @abstractmethod
     def order_update(self, instrument_name: str) -> 'ExchangeWebSocketBuilder':
+        pass
+
+    @property
+    @abstractmethod
+    def key(self) -> str | None:
         pass
 
     @abstractmethod

@@ -12,8 +12,8 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.logging.trading_logging_mixin import TradingLoggingMixin
 from src.core.logging.audit_logging_mixin import AuditLoggingMixin
+from src.core.logging.trading_logging_mixin import TradingLoggingMixin
 from src.core.managers.manager_container import ManagerContainer
 
 
@@ -40,7 +40,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()
         self.account_manager.init_account_balances(self.session_manager)
         self.fees_manager.init_fees()
-        self.websocket_manager.connect(self.assets)
+        self.websocket_manager.connect()
         self.account_manager.init_websocket()
         self.order_manager.initialize(self.assets)
         self.market_data_manager.initialize(self.assets)

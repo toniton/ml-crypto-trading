@@ -1,226 +1,120 @@
 from __future__ import annotations
 
-import json
 import threading
-import time
 from typing import Callable
 
-from websocket import WebSocketApp
-
-from api.interfaces.asset import Asset
+from api.interfaces.account_balance import AccountBalance
+from api.interfaces.candle import Candle
+from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
+from src.core.interfaces.subscription_data import SubscriptionVisibility
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.registries.websocket_registry import WebSocketRegistry
-from src.core.interfaces.subscription_data import SubscriptionVisibility, SubscriptionData
 
 
 class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
     def __init__(self):
         super().__init__()
         self._lock = threading.Lock()
-        self._connections: dict[str, dict[SubscriptionVisibility, WebSocketApp | None]] = {}
-        self._subscriptions: dict[str, dict[str, tuple[SubscriptionData, Callable]]] = {}
-        self._authenticated_connections: set[str] = set()
-        self._last_heartbeat: dict[str, float] = {}
+        self._subscriptions: dict[str, dict[str, tuple[ExchangeWebSocketBuilder, Callable]]] = {}
 
     def register_service(self, service: ExchangeWebSocketService):
         super().register_service(service)
         provider_name = service.get_provider_name()
-        if provider_name not in self._connections:
-            self._connections[provider_name] = {}
         if provider_name not in self._subscriptions:
             self._subscriptions[provider_name] = {}
 
-    def connect(self, assets: list[Asset]):
-        for asset in assets:
-            service = self.get_service(asset.exchange.value)
-            provider_name = service.get_provider_name()
-            # Ensure maps exist in case register_websocket wasn't used for this provider (unlikely)
-            if provider_name not in self._connections:
-                self._connections[provider_name] = {}
-            if provider_name not in self._subscriptions:
-                self._subscriptions[provider_name] = {}
-            self._ensure_connection(service, SubscriptionVisibility.PUBLIC)
-            self._ensure_connection(service, SubscriptionVisibility.PRIVATE)
+    def connect(self):
+        for service_name in self.get_registered_services():
+            service = self.get_service(service_name)
+            service.connect(self._handle_incoming_message)
 
-    def _ensure_connection(self, service: ExchangeWebSocketService, visibility: SubscriptionVisibility):
-        exchange = service.get_provider_name()
+    def _handle_incoming_message(self, exchange: str, visibility: SubscriptionVisibility, data: dict):
+        callbacks_to_call = []
         with self._lock:
-            if visibility in self._connections[exchange]:
+            if exchange not in self._subscriptions:
                 return
 
-        url = service.get_websocket_url(visibility)
-        conn_id = f"{exchange}-{visibility.value}"
+            for key, (builder, callback) in self._subscriptions[exchange].items():
+                sub_data = builder.get_subscription_data()
+                if sub_data.visibility == visibility and sub_data.matches(data):
+                    callbacks_to_call.append((key, builder, callback))
 
-        if url.startswith("backtest://"):
-            with self._lock:
-                self._connections[exchange][visibility] = None  # Marker for backtest connection
-            self.app_logger.info(f"Initialized mock WebSocket connection for {conn_id}")
-            return
+        for key, builder, callback in callbacks_to_call:
+            try:
+                sub_data = builder.get_subscription_data()
+                parsed_data = sub_data.parse(data)
+                if parsed_data:
+                    callback(parsed_data)
+            except Exception as e:
+                self.app_logger.error(
+                    f"Error parsing/executing callback for {key} on {exchange}: {e}",
+                    exc_info=True
+                )
 
-        handler = WebSocketApp(
-            url=url,
-            on_message=lambda ws, data: self._handle_message(exchange, visibility, data),
-            on_error=lambda ws, e: self.app_logger.error(f"WebSocket error for {conn_id}: {e}"),
-            on_close=lambda ws, code, msg: self._handle_close(exchange, visibility, code, msg)
-        )
-
-        with self._lock:
-            self._connections[exchange][visibility] = handler
-
-        thread = threading.Thread(
-            target=handler.run_forever,
-            daemon=True,
-            name=f"WS-{conn_id}"
-        )
-        thread.start()
-        self.app_logger.info(f"Started WebSocket connection for {conn_id}")
-
-        # Wait a bit for connection to establish
-        time.sleep(1)
-
-        if visibility == SubscriptionVisibility.PRIVATE:
-            auth_request = service.get_auth_request()
-            if auth_request:
-                handler.send(json.dumps(auth_request))
-                self._authenticated_connections.add(conn_id)
-                self.app_logger.info(f"Sent auth request for {conn_id}")
-
-    def subscribe_market_data(self, exchange: str, ticker_symbol: str, callback: Callable):
-        service = self.get_service(exchange)
-        builder = service.create_builder()
-        builder.market_data(ticker_symbol)
-        sub_data = builder.get_subscription_data()
+    def subscribe_market_data(self, exchange: str, ticker_symbol: str, callback: Callable[[MarketData], None]):
         key = f"MARKET_{ticker_symbol}"
-        self._subscribe(exchange, key, sub_data, callback)
-
-    def subscribe_candles(self, exchange: str, ticker_symbol: str, timeframe: Timeframe, callback: Callable):
         service = self.get_service(exchange)
-        builder = service.create_builder()
-        builder.candles(ticker_symbol, timeframe)
-        sub_data = builder.get_subscription_data()
+        builder = service.builder().market_data(ticker_symbol)
+        self._subscribe(key, service, builder, callback)
+
+    def subscribe_candles(
+            self, exchange: str, ticker_symbol: str,
+            timeframe: Timeframe, callback: Callable[[list[Candle]], None]
+    ):
         key = f"CANDLES_{ticker_symbol}_{timeframe.value}"
-        self._subscribe(exchange, key, sub_data, callback)
-
-    def subscribe_account_balance(self, exchange: str, callback: Callable):
         service = self.get_service(exchange)
-        builder = service.create_builder()
-        builder.account_balance()
-        sub_data = builder.get_subscription_data()
+        builder = service.builder().candles(ticker_symbol, timeframe)
+        self._subscribe(key, service, builder, callback)
+
+    def subscribe_account_balance(self, exchange: str, callback: Callable[[AccountBalance], None]):
         key = "BALANCE"
-        self._subscribe(exchange, key, sub_data, callback)
-
-    def subscribe_order_update(self, exchange: str, instrument_name: str, callback: Callable):
         service = self.get_service(exchange)
-        builder = service.create_builder()
-        builder.order_update(instrument_name)
-        sub_data = builder.get_subscription_data()
+        builder = service.builder().account_balance()
+        self._subscribe(key, service, builder, callback)
+
+    def subscribe_order_update(self, exchange: str, instrument_name: str, callback: Callable[[Order], None]):
         key = f"ORDER_{instrument_name}"
-        self._subscribe(exchange, key, sub_data, callback)
-
-    def _subscribe(self, exchange: str, key: str, sub_data: SubscriptionData, callback: Callable):
         service = self.get_service(exchange)
-        self._ensure_connection(service, sub_data.visibility)
+        builder = service.builder().order_update(instrument_name)
+        self._subscribe(key, service, builder, callback)
 
+    def _subscribe(
+            self, key: str, service: ExchangeWebSocketService,
+            builder: ExchangeWebSocketBuilder, callback: Callable
+    ):
+        service_name = service.get_provider_name()
         with self._lock:
-            handler = self._connections[exchange][sub_data.visibility]
-            self._subscriptions[exchange][key] = (sub_data, callback)
-
-        if handler:
-            handler.send(json.dumps(sub_data.payload))
-            self.app_logger.info(f"Subscribed to {key} on {exchange}")
-        else:
-            self.app_logger.info(f"Subscribed (backtest) to {key} on {exchange}")
+            self._subscriptions[service_name][key] = (builder, callback)
+            service.subscribe(builder)
 
     def unsubscribe_market_data(self, exchange: str, ticker_symbol: str):
-        self._unsubscribe(exchange, f"MARKET_{ticker_symbol}")
+        key = f"MARKET_{ticker_symbol}"
+        self._unsubscribe(exchange, key)
 
     def unsubscribe_candles(self, exchange: str, ticker_symbol: str, timeframe: Timeframe):
-        self._unsubscribe(exchange, f"CANDLES_{ticker_symbol}_{timeframe.value}")
+        key = f"CANDLES_{ticker_symbol}_{timeframe.value}"
+        self._unsubscribe(exchange, key)
 
     def unsubscribe_account_balance(self, exchange: str):
-        self._unsubscribe(exchange, "BALANCE")
+        key = "BALANCE"
+        self._unsubscribe(exchange, key)
 
     def unsubscribe_order_update(self, exchange: str, instrument_name: str):
-        self._unsubscribe(exchange, f"ORDER_{instrument_name}")
+        key = f"ORDER_{instrument_name}"
+        self._unsubscribe(exchange, key)
 
     def _unsubscribe(self, exchange: str, key: str):
+        service = self.get_service(exchange)
         with self._lock:
             if exchange not in self._subscriptions or key not in self._subscriptions[exchange]:
                 return
 
-            sub_data, _ = self._subscriptions[exchange][key]
-            handler = self._connections[exchange].get(sub_data.visibility)
+            builder, _ = self._subscriptions[exchange][key]
+            service.unsubscribe(builder)
             del self._subscriptions[exchange][key]
 
-        if handler:
-            service = self.get_service(exchange)
-            builder = service.create_builder()
-            unsub_payload = builder.get_unsubscribe_payload(sub_data.payload)
-            handler.send(json.dumps(unsub_payload))
-
         self.app_logger.info(f"Unsubscribed from {key} on {exchange}")
-
-    def _handle_message(self, exchange: str, visibility: SubscriptionVisibility, message: str):
-        try:
-            data = json.loads(message)
-            self.inject_message(exchange, visibility, data)
-        except Exception as e:
-            self.app_logger.error(f"Error handling message from {exchange}: {e}", exc_info=True)
-
-    def inject_message(self, exchange: str, visibility: SubscriptionVisibility, data: dict):
-        service = self.get_service(exchange)
-
-        # Auth handling
-        auth_handler = service.get_auth_handler()
-        if auth_handler and auth_handler.is_auth_response(data):
-            auth_handler.handle_auth_response(data)
-            return
-
-        # Heartbeat handling
-        heartbeat_handler = service.get_heartbeat_handler()
-        if heartbeat_handler and heartbeat_handler.is_heartbeat(data):
-            conn_id = f"{exchange}-{visibility.value}"
-            with self._lock:
-                self._last_heartbeat[conn_id] = time.time()
-                handler = self._connections.get(exchange, {}).get(visibility)
-
-            response = heartbeat_handler.get_heartbeat_response(data)
-            if response and handler:
-                handler.send(json.dumps(response))
-            return
-
-        # Subscription callbacks
-        callbacks_to_call = []
-        with self._lock:
-            if exchange in self._subscriptions:
-                # Create a list of callbacks to avoid dictionary size change error during iteration
-                for _key, (sub_data, callback) in self._subscriptions[exchange].items():
-                    if sub_data.visibility == visibility and sub_data.matches(data):
-                        callbacks_to_call.append((sub_data, callback))
-
-        for sub_data, callback in callbacks_to_call:
-            try:
-                parsed_data = sub_data.parse(data)
-                if parsed_data:
-                    callback(parsed_data)
-            except Exception:
-                continue
-
-    def _handle_close(self, exchange: str, visibility: SubscriptionVisibility, code: int, msg: str):
-        conn_id = f"{exchange}-{visibility.value}"
-        self.app_logger.info(f"WebSocket closed for {conn_id}. Code: {code}, Msg: {msg}")
-
-        with self._lock:
-            if conn_id in self._authenticated_connections:
-                self._authenticated_connections.remove(conn_id)
-
-            if exchange in self._connections:
-                self._connections[exchange].pop(visibility, None)
-
-        # Immediate reconnect logic could go here, or handled by a supervisor.
-        if code != 1000:
-            self.app_logger.warning(f"Abnormal closure for {conn_id}, attempting to reconnect...")
-            # Re-establishing connection will happen on next subscribe, or we can trigger it here.
-            # For simplicity, we just clear it so next use reconnects.

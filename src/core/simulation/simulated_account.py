@@ -8,7 +8,7 @@ from api.interfaces.trade_action import OrderStatus, TradeAction
 
 class SimulatedAccount:
     def __init__(self, initial_balance: Decimal = Decimal("10000.0")):
-        self._balances: dict[str, Decimal] = {"USD": initial_balance}
+        self._balances: dict[str, Decimal] = {"USD": initial_balance, "USDT": initial_balance}
         self._orders: dict[str, Order] = {}
 
     def get_balance(self, currency: str) -> Decimal:

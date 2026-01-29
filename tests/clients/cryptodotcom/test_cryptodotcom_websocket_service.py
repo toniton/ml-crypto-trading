@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.clients.cryptodotcom.cryptodotcom_websocket_service import CryptoDotComWebSocketService
 from src.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder
-from src.core.interfaces.subscription_data import SubscriptionVisibility
+from src.clients.cryptodotcom.cryptodotcom_websocket_service import CryptoDotComWebSocketService
 from src.configuration.exchanges_config import ExchangesConfig
+from src.core.interfaces.subscription_data import SubscriptionVisibility
 
 
 class TestCryptoDotComWebSocketService(unittest.TestCase):
@@ -33,14 +33,90 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
         self.assertEqual(url, "wss://stream.crypto.comuser")
 
     def test_create_builder(self):
-        builder = self.service.create_builder()
+        builder = self.service.builder()
         self.assertIsInstance(builder, CryptoDotComWebSocketBuilder)
 
-    def test_get_auth_request(self):
-        # Assuming CryptoDotComAuthHandler is working (it's tested separately ideally)
-        # But here we just check if it returns a dict.
-        with patch(
-                'src.clients.cryptodotcom.handlers.auths.cryptodotcom_auth_handler.CryptoDotComAuthHandler.get_auth_request') as mock_auth:
-            mock_auth.return_value = {"method": "auth"}
-            req = self.service.get_auth_request()
-            self.assertEqual(req, {"method": "auth"})
+    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('threading.Thread')
+    def test_ensure_connection_signaling(self, mock_thread, mock_ws_app):
+        # Setup - mock the wait to avoid blocking
+        with patch('threading.Event.wait', return_value=True):
+            self.service.connect(MagicMock())
+
+        # Verify connection event was created
+        exchange = self.service.get_provider_name()
+        conn_id = f"{exchange}-{SubscriptionVisibility.PUBLIC.value}"
+        self.assertIn(conn_id, self.service._connection_events)
+
+        # Simulate on_open to set the event
+        self.service._handle_open(exchange, SubscriptionVisibility.PUBLIC)
+        self.assertTrue(self.service._connection_events[conn_id].is_set())
+
+    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('threading.Thread')
+    def test_inject_message_dispatch(self, mock_thread, mock_ws_app):
+        with patch('threading.Event.wait', return_value=True):
+            callback = MagicMock()
+            self.service.connect(callback)
+
+        exchange = self.service.get_provider_name()
+        test_data = {"id": 1, "method": "subscribe", "result": {"data": "test"}}
+
+        # Inject message (assuming it's not a heartbeat or auth response)
+        self.service.inject_message(exchange, SubscriptionVisibility.PUBLIC, test_data)
+
+        callback.assert_called_once_with(exchange, SubscriptionVisibility.PUBLIC, test_data)
+
+    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('threading.Thread')
+    def test_inject_message_heartbeat(self, mock_thread, mock_ws_app):
+        with patch('threading.Event.wait', return_value=True):
+            callback = MagicMock()
+            self.service.connect(callback)
+
+        exchange = self.service.get_provider_name()
+        heartbeat_data = {"method": "public/heartbeat"}
+
+        with patch.object(self.service, 'get_heartbeat_handler') as mock_handler:
+            mock_inst = MagicMock()
+            mock_handler.return_value = mock_inst
+            mock_inst.is_heartbeat.return_value = True
+            mock_inst.get_heartbeat_response.return_value = {"method": "public/respond-heartbeat"}
+
+            # Setup a connection to send heartbeat response
+            mock_conn = MagicMock()
+            self.service._connections[exchange] = {SubscriptionVisibility.PUBLIC: mock_conn}
+
+            self.service.inject_message(exchange, SubscriptionVisibility.PUBLIC, heartbeat_data)
+
+            # Should NOT call the main callback
+            callback.assert_not_called()
+            # Should send respond-heartbeat
+            mock_conn.send.assert_called_once()
+
+    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('threading.Thread')
+    def test_subscribe_waits_for_connection(self, mock_thread, mock_ws_app):
+        mock_builder = MagicMock(spec=CryptoDotComWebSocketBuilder)
+        mock_builder.get_subscription_data.return_value = MagicMock(
+            payload={'method': 'subscribe'},
+            visibility=SubscriptionVisibility.PUBLIC
+        )
+
+        exchange = self.service.get_provider_name()
+        conn_id = f"{exchange}-{SubscriptionVisibility.PUBLIC.value}"
+
+        # Setup connection in state
+        mock_conn = MagicMock()
+        self.service._connections[exchange] = {SubscriptionVisibility.PUBLIC: mock_conn}
+
+        # Mock event and wait
+        mock_event = MagicMock()
+        self.service._connection_events[conn_id] = mock_event
+
+        # Execute
+        self.service.subscribe(mock_builder)
+
+        # Verify it waited and then sent
+        mock_event.wait.assert_called_once()
+        mock_conn.send.assert_called_once()

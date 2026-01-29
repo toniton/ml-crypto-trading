@@ -1,10 +1,12 @@
-from abc import ABC, abstractmethod
-from typing import Optional
+from __future__ import annotations
 
-from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
-from src.core.interfaces.subscription_data import SubscriptionVisibility
-from src.core.interfaces.heartbeat_handler import HeartbeatHandler
+from abc import ABC, abstractmethod
+from typing import Callable, Optional
+
 from src.core.interfaces.auth_handler import AuthHandler
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
+from src.core.interfaces.heartbeat_handler import HeartbeatHandler
+from src.core.interfaces.subscription_data import SubscriptionVisibility
 
 
 class ExchangeWebSocketService(ABC):
@@ -30,5 +32,17 @@ class ExchangeWebSocketService(ABC):
         pass
 
     @abstractmethod
-    def create_builder(self) -> ExchangeWebSocketBuilder:
+    def builder(self) -> ExchangeWebSocketBuilder:
+        pass
+
+    @abstractmethod
+    def connect(self, callback: Callable):
+        pass
+
+    @abstractmethod
+    def subscribe(self, builder: ExchangeWebSocketBuilder):
+        pass
+
+    @abstractmethod
+    def unsubscribe(self, builder: ExchangeWebSocketBuilder):
         pass

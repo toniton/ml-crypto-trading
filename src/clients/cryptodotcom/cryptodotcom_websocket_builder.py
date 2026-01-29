@@ -1,13 +1,11 @@
 import time
-from typing import Optional, Any, Callable
+from typing import Any, Callable, Optional
 
 from api.interfaces.timeframe import Timeframe
-from src.clients.cryptodotcom.mappers.cryptodotcom_mappers import (
-    CryptoDotComMarketDataMapper,
-    CryptoDotComCandleMapper,
-    CryptoDotComAccountBalanceMapper,
-    CryptoDotComOrdersMapper
-)
+from src.clients.cryptodotcom.mappers.cryptodotcom_mappers import (CryptoDotComAccountBalanceMapper,
+                                                                   CryptoDotComCandleMapper,
+                                                                   CryptoDotComMarketDataMapper,
+                                                                   CryptoDotComOrdersMapper)
 from src.clients.cryptodotcom.utils.timeframe_map import CryptoDotComTimeframe
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
@@ -17,13 +15,14 @@ class CryptoDotComWebSocketBuilder(ExchangeWebSocketBuilder):
 
     def __init__(self):
         super().__init__()
+        self._channel = None
         self._current_subscription: Optional[SubscriptionData] = None
 
     def market_data(self, ticker_symbol: str) -> 'CryptoDotComWebSocketBuilder':
-        channel = f"ticker.{ticker_symbol}"
+        self._channel = f"ticker.{ticker_symbol}"
         mapper = CryptoDotComMarketDataMapper()
         self._current_subscription = self._build_sub(
-            channel,
+            self._channel,
             SubscriptionVisibility.PUBLIC,
             mapper.map
         )
@@ -31,29 +30,34 @@ class CryptoDotComWebSocketBuilder(ExchangeWebSocketBuilder):
 
     def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'CryptoDotComWebSocketBuilder':
         interval = CryptoDotComTimeframe.MAP.get(timeframe)
-        channel = f"candlestick.{interval}.{ticker_symbol}"
+        self._channel = f"candlestick.{interval}.{ticker_symbol}"
         mapper = CryptoDotComCandleMapper()
         self._current_subscription = self._build_sub(
-            channel,
+            self._channel,
             SubscriptionVisibility.PUBLIC,
             mapper.map
         )
         return self
 
     def account_balance(self) -> 'CryptoDotComWebSocketBuilder':
+        self._channel = "user.balance"
         mapper = CryptoDotComAccountBalanceMapper()
         self._current_subscription = self._build_sub(
-            "user.balance",
+            self._channel,
             SubscriptionVisibility.PRIVATE,
             mapper.map
         )
         return self
 
+    @property
+    def key(self):
+        return self._channel
+
     def order_update(self, instrument_name: str) -> 'CryptoDotComWebSocketBuilder':
-        channel = f"user.order.{instrument_name}"
+        self._channel = f"user.order.{instrument_name}"
         mapper = CryptoDotComOrdersMapper()
         self._current_subscription = self._build_sub(
-            channel,
+            self._channel,
             SubscriptionVisibility.PRIVATE,
             mapper.map
         )

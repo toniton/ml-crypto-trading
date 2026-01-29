@@ -109,8 +109,10 @@ class Application(ApplicationLoggingMixin):
     ):
         for cls in service_class.__subclasses__():
             if cls.__module__.startswith(src.clients.__name__):
-                instance = cls()
-                self._register_with_managers(instance)
+                if hasattr(cls, 'get_supported_providers') and callable(cls.get_supported_providers):
+                    for provider in cls.get_supported_providers():
+                        instance = cls(provider)
+                        self._register_with_managers(instance)
 
     def _setup_strategies(self):
         ApplicationHelper.import_modules(src.trading.consensus.strategies)
