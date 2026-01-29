@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import abc
 from abc import ABC
-
 from enum import Enum
 
 from api.interfaces.account_balance import AccountBalance
@@ -16,6 +15,7 @@ from api.interfaces.trade_action import TradeAction
 
 class ExchangeProvidersEnum(Enum):
     CRYPTO_DOT_COM = "CRYPTO_DOT_COM"
+    CCXT_BINANCE = "CCXT_BINANCE"
     BACKTEST = "BACKTEST"
 
 

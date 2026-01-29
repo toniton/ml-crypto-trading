@@ -5,9 +5,9 @@ from pydantic import computed_field
 from pydantic.dataclasses import dataclass
 
 from api.interfaces.asset_schedule import AssetSchedule
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 @dataclass
@@ -22,14 +22,13 @@ class Asset:
     candles_timeframe: Timeframe
     guard_config: Optional[GuardConfig] = None
     keywords: Optional[list[str]] = None
-    market_cap: Optional[float] = None
-    sector: Optional[str] = None
-    industry: Optional[str] = None
+    separator: Optional[str] = None
 
     @computed_field
     @property
     def ticker_symbol(self) -> str:
-        return f"{self.base_ticker_symbol}_{self.quote_ticker_symbol}"
+        separator = self.separator if self.separator is not None else "_"
+        return f"{self.base_ticker_symbol}{separator}{self.quote_ticker_symbol}"
 
     @property
     def key(self) -> int:

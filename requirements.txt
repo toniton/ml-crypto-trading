@@ -1,3 +1,4 @@
+ccxt
 pandas~=2.3.3
 alembic==1.17.2
 circuitbreaker~=2.1.3

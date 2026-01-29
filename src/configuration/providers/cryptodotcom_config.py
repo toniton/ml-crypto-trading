@@ -1,9 +1,8 @@
 from typing import Optional
-from pydantic import BaseModel
+
+from src.configuration.environment_config import ExchangeCredentials
 
 
-class CryptoDotComConfig(BaseModel):
+class CryptoDotComConfig(ExchangeCredentials):
     rest_endpoint: Optional[str] = None
     websocket_endpoint: Optional[str] = None
-    api_key: Optional[str] = None
-    secret_key: Optional[str] = None
