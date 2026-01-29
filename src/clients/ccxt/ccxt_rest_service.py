@@ -9,19 +9,23 @@ from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class CCXTExchangeRestService(ExchangeRestService):
-    _SUPPORTED_PROVIDERS: ClassVar[set[str]] = {
-        ExchangeProvidersEnum.CCXT_BINANCE.value,
-        # 'kraken',
-        # 'coinbase',
-        # 'bybit',
-        # 'kucoin',
+    _SUPPORTED_PROVIDERS: ClassVar[set[ExchangeProvidersEnum]] = {
+        ExchangeProvidersEnum.CCXT_BINANCE,
+        ExchangeProvidersEnum.CCXT_KRAKEN,
+        ExchangeProvidersEnum.CCXT_COINBASE,
+        ExchangeProvidersEnum.CCXT_BYBIT,
+        ExchangeProvidersEnum.CCXT_KUCOIN,
     }
 
     _MAP = {
-        ExchangeProvidersEnum.CCXT_BINANCE.value: "binance"
+        ExchangeProvidersEnum.CCXT_BINANCE: "binance",
+        ExchangeProvidersEnum.CCXT_KRAKEN: "kraken",
+        ExchangeProvidersEnum.CCXT_COINBASE: "coinbase",
+        ExchangeProvidersEnum.CCXT_BYBIT: "bybit",
+        ExchangeProvidersEnum.CCXT_KUCOIN: "kucoin",
     }
 
-    def __init__(self, provider: str):
+    def __init__(self, provider: ExchangeProvidersEnum):
         self._provider = provider
         __p = self._MAP.get(provider) or ""
         try:
@@ -40,10 +44,10 @@ class CCXTExchangeRestService(ExchangeRestService):
             raise ImportError("ccxt library not installed. Install with: pip install ccxt") from exc
 
     def get_provider_name(self) -> str:
-        return self._provider.upper()
+        return self._provider.value
 
     @classmethod
-    def get_supported_providers(cls) -> set[str]:
+    def get_supported_providers(cls) -> set[ExchangeProvidersEnum]:
         return cls._SUPPORTED_PROVIDERS
 
     def execute(self, builder: CCXTExchangeRestBuilder) -> R:

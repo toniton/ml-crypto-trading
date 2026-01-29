@@ -16,6 +16,10 @@ from api.interfaces.trade_action import TradeAction
 class ExchangeProvidersEnum(Enum):
     CRYPTO_DOT_COM = "CRYPTO_DOT_COM"
     CCXT_BINANCE = "CCXT_BINANCE"
+    CCXT_KRAKEN = "CCXT_KRAKEN"
+    CCXT_COINBASE = "CCXT_COINBASE"
+    CCXT_BYBIT = "CCXT_BYBIT"
+    CCXT_KUCOIN = "CCXT_KUCOIN"
     BACKTEST = "BACKTEST"
 
 

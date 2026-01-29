@@ -2,18 +2,20 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from api.interfaces.order import TradeAction
 from src.clients.ccxt.ccxt_rest_builder import CCXTExchangeRestBuilder
 from src.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestCCXTRestExecution(unittest.TestCase):
-    @patch('src.clients.ccxt_rest_service.EnvironmentConfig')
+    @patch('src.clients.ccxt.ccxt_rest_service.EnvironmentConfig')
     @patch('ccxt.binance')
-    def setUp(self, mock_binance, mock_env_config):
+    def setUp(self, mock_binance, _mock_env_config):
         self.mock_exchange = MagicMock()
         mock_binance.return_value = self.mock_exchange
-        self.service = CCXTExchangeRestService('binance')
-        self.builder = CCXTExchangeRestBuilder('binance')
+        self.service = CCXTExchangeRestService(ExchangeProvidersEnum.CCXT_BINANCE)
+        self.builder = CCXTExchangeRestBuilder(ExchangeProvidersEnum.CCXT_BINANCE.value)
 
     def test_execute_market_data(self):
         self.mock_exchange.fetch_ticker.return_value = {
@@ -28,7 +30,6 @@ class TestCCXTRestExecution(unittest.TestCase):
         self.mock_exchange.fetch_ticker.assert_called_once_with(symbol='BTC/USDT')
 
     def test_execute_create_order(self):
-        from api.interfaces.order import TradeAction
         self.mock_exchange.create_order.return_value = {
             'id': '123',
             'clientOrderId': 'test-uuid',
@@ -55,7 +56,3 @@ class TestCCXTRestExecution(unittest.TestCase):
             price=50000.0,
             params={'clientOrderId': 'test-uuid'}
         )
-
-
-if __name__ == '__main__':
-    unittest.main()

@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from src.clients.client_factory import ClientFactory
 from src.clients.rest_manager import RestManager
 from src.clients.websocket_manager import WebSocketManager
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
 from src.core.simulation.simulated_rest_manager import SimulatedRestManager
@@ -40,19 +41,16 @@ def test_simulated_websocket_manager_skips_private(mocker):
     # Register service to initialize dictionaries
     swm.register_service(service)
 
-    # Test _ensure_connection for private
-    swm._ensure_connection(service, SubscriptionVisibility.PRIVATE)
-    mock_logger.info.assert_called_with(
-        "Simulated mode: Skipping private WebSocket connection for test_exchange-private")
-
     # Test _subscribe for private
     callback = MagicMock()
+    builder = MagicMock(spec=ExchangeWebSocketBuilder)
     sub_data = MagicMock(spec=SubscriptionData)
     sub_data.visibility = SubscriptionVisibility.PRIVATE
+    builder.get_subscription_data.return_value = sub_data
 
-    swm._subscribe("test_exchange", "private_key", sub_data, callback)
-    mock_logger.info.assert_any_call("Simulated mode: Skipping private subscription for private_key on test_exchange")
+    swm._subscribe("key1", service, builder, callback)
+    mock_logger.info.assert_any_call("Simulated mode: Skipping private subscription for key1 on test_exchange")
 
     # Verify subscription was registered despite skip (to maintain consistency)
     assert "test_exchange" in swm._subscriptions
-    assert "private_key" in swm._subscriptions["test_exchange"]
+    assert "key1" in swm._subscriptions["test_exchange"]

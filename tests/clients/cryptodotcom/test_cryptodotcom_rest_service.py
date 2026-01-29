@@ -1,8 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.clients.cryptodotcom.cryptodotcom_rest_service import CryptoDotComRestService
 from src.clients.cryptodotcom.cryptodotcom_rest_builder import CryptoDotComRestBuilder
+from src.clients.cryptodotcom.cryptodotcom_rest_service import CryptoDotComRestService
 from src.configuration.exchanges_config import ExchangesConfig
 
 
@@ -12,7 +12,8 @@ class TestCryptoDotComRestService(unittest.TestCase):
         self.config.crypto_dot_com = MagicMock()
         self.config.crypto_dot_com.rest_endpoint = "https://api.crypto.com"
         self.config.crypto_dot_com.api_key = "test_key"
-        self.config.crypto_dot_com.secret_key = "test_secret"
+        self.config.crypto_dot_com.secret_key = MagicMock()
+        self.config.crypto_dot_com.secret_key.get_secret_value.return_value = "test_secret"
 
         # Patching ExchangesConfig class in the service module
         patcher = patch('src.clients.cryptodotcom.cryptodotcom_rest_service.ExchangesConfig', return_value=self.config)

@@ -6,6 +6,7 @@ from src.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import AppEnvEnum, EnvironmentConfig
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestCCXTInitialization(unittest.TestCase):
@@ -25,8 +26,9 @@ class TestCCXTInitialization(unittest.TestCase):
     def test_application_initializes_all_ccxt_providers(self, mock_db):
         # We need to ensure the modules are imported so subclasses are known
 
-        with patch('src.clients.ccxt_rest_service.CCXTExchangeRestService.__init__', autospec=True) as mock_rest_init, \
-                patch('src.clients.ccxt_websocket_service.CCXTExchangeWebSocketService.__init__',
+        with patch('src.clients.ccxt.ccxt_rest_service.CCXTExchangeRestService.__init__',
+                   autospec=True) as mock_rest_init, \
+                patch('src.clients.ccxt.ccxt_websocket_service.CCXTExchangeWebSocketService.__init__',
                       autospec=True) as mock_ws_init:
 
             def rest_side_effect(self, provider):
@@ -50,16 +52,14 @@ class TestCCXTInitialization(unittest.TestCase):
         self.assertEqual(len(ccxt_providers), 5)
 
         # Verify REST services registered
-        for provider in list(ccxt_providers) + ["CRYPTO_DOT_COM"]:
-            self.assertTrue(app._managers.rest_manager.get_service(provider.upper()) is not None)
+        for provider in list(ccxt_providers) + [ExchangeProvidersEnum.CRYPTO_DOT_COM]:
+            provider_name = provider.value if isinstance(provider, ExchangeProvidersEnum) else provider
+            self.assertTrue(app._managers.rest_manager.get_service(provider_name) is not None)
 
         # Verify WebSocket services registered
-        for provider in list(ccxt_providers) + ["CRYPTO_DOT_COM"]:
-            self.assertTrue(app._managers.websocket_manager.get_service(provider.upper()) is not None)
+        for provider in list(ccxt_providers) + [ExchangeProvidersEnum.CRYPTO_DOT_COM]:
+            provider_name = provider.value if isinstance(provider, ExchangeProvidersEnum) else provider
+            self.assertTrue(app._managers.websocket_manager.get_service(provider_name) is not None)
 
         self.assertEqual(mock_rest_init.call_count, 5)
         self.assertEqual(mock_ws_init.call_count, 5)
-
-
-if __name__ == '__main__':
-    unittest.main()

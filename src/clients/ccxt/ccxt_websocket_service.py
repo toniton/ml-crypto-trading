@@ -18,14 +18,18 @@ from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingMixin):
     _SUPPORTED_PROVIDERS: ClassVar[set[ExchangeProvidersEnum]] = {
         ExchangeProvidersEnum.CCXT_BINANCE,
-        # ExchangeProvidersEnum.CCXT_KRAKEN,
-        # ExchangeProvidersEnum.CCXT_COINBASE,
-        # ExchangeProvidersEnum.CCXT_BYBIT,
-        # ExchangeProvidersEnum.CCXT_KUCOIN,
+        ExchangeProvidersEnum.CCXT_KRAKEN,
+        ExchangeProvidersEnum.CCXT_COINBASE,
+        ExchangeProvidersEnum.CCXT_BYBIT,
+        ExchangeProvidersEnum.CCXT_KUCOIN,
     }
 
     _MAP: ClassVar[dict[ExchangeProvidersEnum, str]] = {
-        ExchangeProvidersEnum.CCXT_BINANCE: "binance"
+        ExchangeProvidersEnum.CCXT_BINANCE: "binance",
+        ExchangeProvidersEnum.CCXT_KRAKEN: "kraken",
+        ExchangeProvidersEnum.CCXT_COINBASE: "coinbase",
+        ExchangeProvidersEnum.CCXT_BYBIT: "bybit",
+        ExchangeProvidersEnum.CCXT_KUCOIN: "kucoin",
     }
 
     def __init__(self, provider: ExchangeProvidersEnum):

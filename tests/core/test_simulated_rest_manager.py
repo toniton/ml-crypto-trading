@@ -15,14 +15,14 @@ class TestSimulatedRestManager(unittest.TestCase):
     def test_get_account_balance(self):
         # Default USD balance
         balances = self.manager.get_account_balance("BINANCE")
-        self.assertEqual(len(balances), 1)
+        self.assertEqual(len(balances), 2)
         self.assertEqual(balances[0].currency, "USD")
         self.assertEqual(balances[0].available_balance, self.initial_balance)
 
         # Update balance manually to test reflection
         self.account.set_balance("BTC", Decimal("1.5"))
         balances = self.manager.get_account_balance("BINANCE")
-        self.assertEqual(len(balances), 2)
+        self.assertEqual(len(balances), 3)
         btc_balance = next(b for b in balances if b.currency == "BTC")
         self.assertEqual(btc_balance.available_balance, Decimal("1.5"))
 

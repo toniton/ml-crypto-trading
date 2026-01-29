@@ -40,6 +40,10 @@ class TestCCXTExchangeWebSocketService(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn('ticker_BTC/USDT', self.service._subscriptions)
         mock_run_coroutine.assert_called_once()
+        # Silence RuntimeWarning: coroutine '...' was never awaited
+        # Retrieve the coroutine passed to run_coroutine_threadsafe and close it
+        coro = mock_run_coroutine.call_args[0][0]
+        coro.close()
 
     @patch('asyncio.sleep', new_callable=AsyncMock)
     async def test_watch_subscription_calls_callback(self, mock_sleep):
