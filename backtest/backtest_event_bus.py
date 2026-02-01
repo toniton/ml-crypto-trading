@@ -1,15 +1,15 @@
 from collections import defaultdict
-from typing import Callable, Type, Dict
+from typing import Callable
 
 from backtest.events import Event
 
 
 class BacktestEventBus:
     def __init__(self):
-        self._subscribers: Dict[Type[Event], Dict[int, Callable[[Event], None]]] = defaultdict(dict)
+        self._subscribers: dict[type[Event], dict[int, Callable[[Event], None]]] = defaultdict(dict)
         self._id_counter: int = 0
 
-    def subscribe(self, event_type: Type[Event], callback: Callable[[Event], None]) -> int:
+    def subscribe(self, event_type: type[Event], callback: Callable[[Event], None]) -> int:
         self._id_counter += 1
         self._subscribers[event_type][self._id_counter] = callback
         return self._id_counter

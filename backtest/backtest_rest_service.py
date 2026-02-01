@@ -46,7 +46,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
         self._lock = threading.Lock()
 
     def get_provider_name(self) -> str:
-        return ExchangeProvidersEnum.CRYPTO_DOT_COM.name
+        return ExchangeProvidersEnum.BACKTEST.value
 
     def builder(self) -> BacktestRestBuilder:
         return BacktestRestBuilder()

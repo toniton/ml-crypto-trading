@@ -1,13 +1,22 @@
-from typing import Optional, Any
+from __future__ import annotations
+
+from typing import Any, Optional
 
 from api.interfaces.timeframe import Timeframe
 from backtest.backtest_event_bus import BacktestEventBus
+from backtest.events.domain_events import (
+    BalanceUpdateEvent,
+    CandlesEvent,
+    Event,
+    MarketDataEvent,
+    OrderFillEvent,
+)
 from src.core.interfaces.auth_handler import AuthHandler
+from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.subscription_data import (
     SubscriptionData,
     SubscriptionVisibility,
 )
-from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 
 
 class BacktestAuthHandler(AuthHandler):
@@ -27,20 +36,58 @@ class BacktestWebSocketBuilder(ExchangeWebSocketBuilder):
         self._current_subscription: Optional[dict[str, Any]] = None
 
     def market_data(self, ticker_symbol: str) -> 'BacktestWebSocketBuilder':
-        self._current_subscription = {"type": "market_data", "ticker_symbol": ticker_symbol}
+        self._current_subscription = {
+            "type": "market_data",
+            "ticker_symbol": ticker_symbol,
+            "event_class": MarketDataEvent
+        }
         return self
 
     def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'BacktestWebSocketBuilder':
-        self._current_subscription = {"type": "candles", "ticker_symbol": ticker_symbol, "timeframe": timeframe}
+        self._current_subscription = {
+            "type": "candles",
+            "ticker_symbol": ticker_symbol,
+            "timeframe": timeframe.value,
+            "event_class": CandlesEvent
+        }
         return self
 
     def account_balance(self) -> 'BacktestWebSocketBuilder':
-        self._current_subscription = {"type": "balance"}
+        self._current_subscription = {
+            "type": "balance",
+            "event_class": BalanceUpdateEvent
+        }
         return self
 
     def order_update(self, instrument_name: str) -> 'BacktestWebSocketBuilder':
-        self._current_subscription = {"type": "order_update", "instrument_name": instrument_name}
+        self._current_subscription = {
+            "type": "order_update",
+            "instrument_name": instrument_name,
+            "event_class": OrderFillEvent
+        }
         return self
+
+    @property
+    def event_class(self) -> type[Event] | None:
+        if not self._current_subscription:
+            return None
+        return self._current_subscription.get("event_class")
+
+    @property
+    def key(self) -> str | None:
+        if not self._current_subscription:
+            return None
+        sub_type = self._current_subscription["type"]
+        if sub_type == "market_data":
+            return f"MARKET_{self._current_subscription['ticker_symbol']}"
+        if sub_type == "candles":
+            return (f"CANDLES_{self._current_subscription['ticker_symbol']}"
+                    f"_{self._current_subscription['timeframe']}")
+        if sub_type == "balance":
+            return "BALANCE"
+        if sub_type == "order_update":
+            return f"ORDER_{self._current_subscription['instrument_name']}"
+        return sub_type
 
     def get_subscription_data(self) -> SubscriptionData:
         if not self._current_subscription:

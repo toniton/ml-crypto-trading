@@ -11,10 +11,9 @@ from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_rest_service import BacktestRestService
 from backtest.backtest_trading_scheduler import BacktestTradingScheduler
 from backtest.backtest_websocket_service import BacktestWebSocketService
-from backtest.events.domain_events import BalanceUpdateEvent, CandlesEvent, MarketDataEvent, OrderFillEvent, TickEvent
+from backtest.events.domain_events import CandlesEvent, MarketDataEvent, TickEvent
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
-from src.core.interfaces.subscription_data import SubscriptionVisibility
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
@@ -34,44 +33,8 @@ class BacktestEngine(ApplicationLoggingMixin):
         self.websocket_service = BacktestWebSocketService(self.bus)
         self._is_running = False
         self._threads = []
+
         self.app.register_client(self.rest_service, self.websocket_service)
-        self._setup_bridge()
-
-    def _setup_bridge(self):
-        ws_manager = self.app._managers.websocket_manager
-
-        def handle_market_data(event: MarketDataEvent):
-            ws_manager.inject_message(
-                exchange=self.websocket_service.get_provider_name(),
-                visibility=SubscriptionVisibility.PUBLIC,
-                data={"type": "market_data", "ticker_symbol": event.ticker_symbol, "data": event.market_data}
-            )
-
-        def handle_candles(event: CandlesEvent):
-            ws_manager.inject_message(
-                exchange=self.websocket_service.get_provider_name(),
-                visibility=SubscriptionVisibility.PUBLIC,
-                data={"type": "candles", "ticker_symbol": event.ticker_symbol, "data": event.candles}
-            )
-
-        def handle_order_fill(event: OrderFillEvent):
-            ws_manager.inject_message(
-                exchange=self.websocket_service.get_provider_name(),
-                visibility=SubscriptionVisibility.PRIVATE,
-                data={"type": "order_update", "instrument_name": event.order.ticker_symbol, "data": [event.order]}
-            )
-
-        def handle_balance_update(event: BalanceUpdateEvent):
-            ws_manager.inject_message(
-                exchange=self.websocket_service.get_provider_name(),
-                visibility=SubscriptionVisibility.PRIVATE,
-                data={"type": "balance", "data": event.balances}
-            )
-
-        self.bus.subscribe(MarketDataEvent, handle_market_data)
-        self.bus.subscribe(CandlesEvent, handle_candles)
-        self.bus.subscribe(OrderFillEvent, handle_order_fill)
-        self.bus.subscribe(BalanceUpdateEvent, handle_balance_update)
 
     def run(self, assets: list[Asset]):
         self.app_logger.info(f"Starting simulation for {len(assets)} assets")
@@ -104,11 +67,11 @@ class BacktestEngine(ApplicationLoggingMixin):
 
                 if data_point:
                     market_data = MarketData(
-                        close_price=str(data_point.close_price),
-                        low_price=str(data_point.low_price),
-                        high_price=str(data_point.high_price),
-                        volume=str(data_point.volume),
-                        timestamp=data_point.timestamp
+                        close_price=data_point.close_price,
+                        low_price=data_point.low_price,
+                        high_price=data_point.high_price,
+                        volume=data_point.volume,
+                        timestamp=float(data_point.timestamp)
                     )
 
                     self.bus.publish(MarketDataEvent(
