@@ -57,6 +57,7 @@ class TestBacktestWebSocketService:
     def test_market_data_dispatch(self, service, event_bus):
         callback = MagicMock()
         service.connect(callback)
+        service.subscribe(service.builder().market_data("BTC_USD"))
 
         market_data = MarketData(
             close_price=Decimal("50000"),
@@ -81,6 +82,7 @@ class TestBacktestWebSocketService:
     def test_order_fill_dispatch(self, service, event_bus):
         callback = MagicMock()
         service.connect(callback)
+        service.subscribe(service.builder().order_update("BTC_USD"))
 
         order = Order(
             uuid="123",
@@ -108,6 +110,7 @@ class TestBacktestWebSocketService:
     def test_balance_update_dispatch(self, service, event_bus):
         callback = MagicMock()
         service.connect(callback)
+        service.subscribe(service.builder().account_balance())
 
         balances = []  # Mock list of balances
         event = BalanceUpdateEvent(balances=balances)
@@ -121,3 +124,29 @@ class TestBacktestWebSocketService:
                 "data": balances
             }
         )
+
+    def test_dynamic_unsubscription(self, service, event_bus):
+        callback = MagicMock()
+        service.connect(callback)
+        builder = service.builder().market_data("BTC_USD")
+
+        # Subscribe
+        service.subscribe(builder)
+        assert MarketDataEvent in service._bus_subscriptions
+
+        # Publish should work
+        market_data = MarketData(
+            close_price=Decimal("50000"), low_price=Decimal("49000"),
+            high_price=Decimal("51000"), volume=Decimal("10"),
+            timestamp=1234567890.0
+        )
+        event_bus.publish(MarketDataEvent(ticker_symbol="BTC_USD", market_data=market_data))
+        assert callback.call_count == 1
+
+        # Unsubscribe
+        service.unsubscribe(builder)
+        assert MarketDataEvent not in service._bus_subscriptions
+
+        # Publish should NO LONGER work
+        event_bus.publish(MarketDataEvent(ticker_symbol="BTC_USD", market_data=market_data))
+        assert callback.call_count == 1  # Still 1
