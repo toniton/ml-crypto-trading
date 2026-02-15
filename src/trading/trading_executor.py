@@ -3,6 +3,7 @@ from __future__ import annotations
 import uuid
 from decimal import Decimal, ROUND_UP
 from queue import Queue
+from typing import Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
@@ -11,6 +12,8 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
+from src.core.expressions.expression_parser import ExpressionParser
+from src.core.expressions.trading_expression_factory import TradingExpressionFactory
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.logging.audit_logging_mixin import AuditLoggingMixin
 from src.core.logging.trading_logging_mixin import TradingLoggingMixin
@@ -23,9 +26,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             self,
             assets: list[Asset],
             manager_container: ManagerContainer,
-            activity_queue: Queue
+            activity_queue: Queue,
+            dynamic_quantity: Optional[str] = None
     ):
         self.assets = assets
+        self.dynamic_quantity = dynamic_quantity
         self.account_manager = manager_container.account_manager
         self.fees_manager = manager_container.fees_manager
         self.order_manager = manager_container.order_manager
@@ -80,6 +85,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     continue
 
                 self.app_logger.info(f"Consensus reached to buy {asset.ticker_symbol}")
+
                 price = Decimal(market_data.close_price)
                 fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
                 price = (price * fee_multiplier).quantize(
@@ -92,7 +98,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     f"Fees={fees}",
                     f"Available balance={account_balance.available_balance}"
                 ])
-                quantity = format(asset.min_quantity, "f")
+                quantity = format(self._calculate_quantity(asset, market_data), "f")
                 buy_order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
                     quantity=quantity,
@@ -102,7 +108,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     timestamp=market_data.timestamp
                 )
                 self.activity_queue.put_nowait(buy_order.model_dump_json())
-                self.session_manager.record_position(asset.key, market_data, TradeAction.BUY)
+                self.session_manager.record_position(
+                    asset.key, market_data, TradeAction.BUY,
+                    quantity=Decimal(quantity), price=price
+                )
 
                 self.trading_logger.info(f"Order opened: {asset.ticker_symbol} BUY {quantity} @ {price}")
 
@@ -144,16 +153,20 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     (float(_current_price) - float(o.close_price)) / float(o.close_price)
                 )
 
-                quantity = format(asset.min_quantity, "f")
+                quantity_val = self._calculate_quantity(asset, market_data)
+                quantity = format(quantity_val, "f")
                 best_position: MarketData | None = next(iter(open_positions), None)
-                if best_position and base_balance.available_balance > asset.min_quantity:
+                if best_position and base_balance.available_balance >= quantity_val:
                     sell_order = self.order_manager.open_order(
                         price=price, trade_action=TradeAction.SELL,
                         quantity=quantity, provider_name=asset.exchange.value,
                         ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp
                     )
                     self.activity_queue.put_nowait(sell_order.model_dump_json())
-                    self.session_manager.record_position(asset.key, market_data, TradeAction.SELL)
+                    self.session_manager.record_position(
+                        asset.key, market_data, TradeAction.SELL,
+                        quantity=Decimal(quantity), price=price
+                    )
 
                     self.trading_logger.info(
                         f"Order closed: {asset.ticker_symbol} SELL {quantity} @ {price}")
@@ -184,3 +197,31 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.info("==============================")
         self.app_logger.info(session_summary)
         self.app_logger.info("------------------------------")
+
+    def _calculate_quantity(self, asset: Asset, market_data: MarketData) -> Decimal:
+        if not self.dynamic_quantity:
+            return Decimal(str(asset.min_quantity))
+
+        trading_context = self.session_manager.get_trading_context(asset.key)
+        account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
+        candles = self.market_data_manager.get_candles(asset)
+        consensus_score = self.consensus_manager.get_consensus_score(
+            TradeAction.BUY, asset.ticker_symbol, trading_context, market_data, candles
+        )
+
+        context = TradingExpressionFactory.create_context(
+            asset=asset,
+            market_data=market_data,
+            account_balance=account_balance,
+            trading_context=trading_context,
+            consensus_score=consensus_score,
+            candles=candles
+        )
+
+        parser = ExpressionParser(context)
+        try:
+            result = parser.parse(self.dynamic_quantity)
+            return Decimal(str(result))
+        except Exception as exc:
+            self.app_logger.error(f"Error parsing dynamic quantity '{self.dynamic_quantity}': {exc}")
+            return Decimal(str(asset.min_quantity))

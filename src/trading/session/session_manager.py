@@ -63,7 +63,8 @@ class SessionManager:
         with self._lock:
             self.current_session.trading_contexts[asset_key].available_balance = available_balance
 
-    def record_position(self, asset_id: int, market_data: MarketData, trade_action: TradeAction) -> None:
+    def record_position(self, asset_id: int, market_data: MarketData, trade_action: TradeAction,
+                        quantity: Decimal = Decimal(0), price: Decimal = Decimal(0)) -> None:
         with self._lock:
             if not self.current_session:
                 raise ValueError("No active session to record buy.")
@@ -75,21 +76,50 @@ class SessionManager:
             ctx.last_market_activity_time = market_data.timestamp
 
             if trade_action == TradeAction.BUY:
-                self._record_buy_position(ctx, market_data)
+                self._record_buy_position(ctx, market_data, quantity, price)
             elif trade_action == TradeAction.SELL:
-                self._record_sell_position(ctx, market_data)
+                self._record_sell_position(ctx, market_data, quantity, price)
 
     @staticmethod
-    def _record_buy_position(context: TradingContext, market_data: MarketData) -> None:
+    def _record_buy_position(context: TradingContext, market_data: MarketData,
+                             quantity: Decimal, price: Decimal) -> None:
         context.lowest_buy = min(context.lowest_buy, market_data.close_price)
         context.highest_buy = max(context.highest_buy, market_data.close_price)
         context.open_positions.append(market_data)
 
+        if quantity > 0:
+            total_cost = (context.position_qty * context.avg_entry_price) + (quantity * price)
+            context.position_qty += quantity
+            context.avg_entry_price = total_cost / context.position_qty
+
     @staticmethod
-    def _record_sell_position(context: TradingContext, market_data: MarketData) -> None:
+    def _record_sell_position(context: TradingContext, market_data: MarketData,
+                              quantity: Decimal, price: Decimal) -> None:
         context.lowest_sell = min(context.lowest_sell, market_data.close_price)
         context.highest_sell = max(context.highest_sell, market_data.close_price)
         context.close_positions.append(market_data)
+
+        if quantity > 0:
+            # Accumulate avg exit price
+            total_exit_value = (context.exit_qty * context.avg_exit_price) + (quantity * price)
+            context.exit_qty += quantity
+            context.avg_exit_price = total_exit_value / context.exit_qty
+
+            # Realized PnL
+            realized = (price - context.avg_entry_price) * quantity
+            context.realized_pnl += realized
+
+            # Reduce open position
+            context.position_qty = max(Decimal(0), context.position_qty - quantity)
+            if context.position_qty == 0:
+                context.avg_entry_price = Decimal(0)
+
+    def get_unrealized_pnl(self, asset_id: int, current_price: Decimal) -> Decimal:
+        with self._lock:
+            ctx = self.current_session.trading_contexts[asset_id]
+            if ctx.position_qty == 0:
+                return Decimal(0)
+            return (current_price - ctx.avg_entry_price) * ctx.position_qty
 
     def close_asset_balance(self, asset_id: int, closing_balance: Decimal) -> None:
         with self._lock:

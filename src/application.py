@@ -54,6 +54,7 @@ class Application(ApplicationLoggingMixin):
         db_manager = DatabaseManager()
         db_manager.initialize()
         self._assets = assets_config.assets
+        self._dynamic_quantity = assets_config.dynamic_quantity
 
         self._managers = self._create_managers(db_manager)
 
@@ -139,7 +140,9 @@ class Application(ApplicationLoggingMixin):
         self.is_running.set()
         trading_scheduler = self._backtest_scheduler if self._is_backtest_mode else LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
-        trading_executor = TradingExecutor(self._assets, self._managers, self._activity_queue)
+        trading_executor = TradingExecutor(
+            self._assets, self._managers, self._activity_queue, self._dynamic_quantity
+        )
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
         self._trading_engine.start_application()
         self.is_ready.set()

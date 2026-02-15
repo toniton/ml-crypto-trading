@@ -7,8 +7,13 @@
 [![Docker pull](https://img.shields.io/docker/pulls/toniton/ml-crypto-trading)](https://hub.docker.com/r/toniton/ml-crypto-trading)
 [![Discord chat](https://img.shields.io/discord/1465111294880518248?logo=discord&style=flat)](https://discord.gg/vZh8w3Sz)
 
-MCT (stands for ML-Crypto-Trading) trading bot is a free and open-source cryptocurrency trading engine written in
-Python.
+MCT (stands for ML-Crypto-Trading) is a high-performance trading engine that features a **Dynamic Expression Engine**
+allowing users to define position sizing and risk management logic using familiar, spreadsheet-like functions.
+
+> [!TIP]
+> **Financial Logic Without the Code.**
+> If you can write an Excel-style formula, you can define trading logic in MCT. The engine provides access to real-time
+> market data, balances, and technical indicators (RSI, EMA, SMA) directly in your configuration.
 
 > Caveat Utilitor! For educational and research purposes only.
 
@@ -38,15 +43,22 @@ Create your asset configuration and environment variables.
 
 **assets.yaml**
 ```yaml
-assets:  
-  - name: "Bitcoin (Crypto.com)"
+assets:
+  - name: "Bitcoin (Safety First)"
     base_ticker_symbol: "BTC"
-    quote_ticker_symbol: "USD"
     exchange: "CRYPTO_DOT_COM"
     min_quantity: 0.00001
-    decimal_places: 8
-    candles_timeframe: "MIN1"
     schedule: 4
+    # Dynamic logic: Use 2% of balance
+    dynamic_quantity: "max(min_qty, (balance * 0.02) / close)"
+
+  - name: "Ethereum (Aggressive)"
+    base_ticker_symbol: "ETH"
+    exchange: "CRYPTO_DOT_COM"
+    min_quantity: 0.01
+    schedule: 2
+    # Scaling logic: Scale up by 50% if RSI < 30
+    dynamic_quantity: "(balance * 0.05 / close) * (1.5 if rsi(14) < 30 else 1.0)"
 ```
 
 **.env**

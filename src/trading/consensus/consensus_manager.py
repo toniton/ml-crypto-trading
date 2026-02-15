@@ -1,8 +1,8 @@
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
-from api.interfaces.trading_strategy import TradingStrategy
 from api.interfaces.trading_context import TradingContext
+from api.interfaces.trading_strategy import TradingStrategy
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
@@ -45,3 +45,20 @@ class ConsensusManager(ApplicationLoggingMixin):
             return True
         self.app_logger.info(f"Quorum not reached: {ticker_symbol} {trade_action} {votes}")
         return False
+
+    def get_consensus_score(
+            self,
+            trade_action: TradeAction, ticker_symbol: str,
+            trading_context: TradingContext,
+            market_data: MarketData,
+            candles: list[Candle]
+    ) -> float:
+        if trade_action not in self.strategies or not self.strategies[trade_action]:
+            return 0.0
+
+        votes: list[bool] = []
+        for strategy in self.strategies[trade_action]:
+            vote = strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data, candles)
+            votes.append(vote)
+
+        return float(votes.count(True)) / len(votes)

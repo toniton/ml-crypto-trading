@@ -42,3 +42,37 @@ context and are lost when the application is stopped.
 The application allows a backtesting service to be register providers and strategies at runtime.
 It supports **multi-asset** simulation where each asset runs on an independent, concurrent clock. This allows for
 realistic simulation of multiple markets simultaneously.
+
+## Dynamic Expressions
+
+The position sizing engine uses an expression parser that allows you to calculate trade quantities at runtime. This
+provides the flexibility to define risk management and quantity logic using functional syntax directly in the YAML
+configuration.
+
+### Expression Context
+
+A `TradingExpressionFactory` provides a rich set of variables to each expression:
+
+| Category     | Variables                                              |
+|:-------------|:-------------------------------------------------------|
+| **Market**   | `close`, `high`, `low`, `volume`, `range`, `range_pct` |
+| **Account**  | `balance` (quote), `equity` (total asset value)        |
+| **Risk**     | `risk_pct` (default 0.01)                              |
+| **Signal**   | `signal` (0.0 to 1.0 consensus score)                  |
+| **Position** | `position_qty`, `avg_entry`, `pnl` (unrealized)        |
+| **Metadata** | `min_qty`, `decimals`                                  |
+
+### Technical Indicators
+
+Common indicators are available as helper functions within expressions:
+
+- `sma(period)`: Simple Moving Average
+- `ema(period)`: Exponential Moving Average
+- `rsi(period)`: Relative Strength Index
+- `avg(args...)`, `min(args...)`, `max(args...)`
+
+**Example Configuration:**
+
+```yaml
+dynamic_quantity: "(equity * 0.02) / close" # Risk 2% of total equity per trade
+```

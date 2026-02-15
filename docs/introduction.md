@@ -2,15 +2,21 @@
 
 ## Motivation
 
-The intent of developing yet-another-trading-bot is to create a simple trading bot that combines engineering
-expertise with financial skills within a clean, modular architecture. To enhance easy collaboration — allowing
-developers and traders to integrate, experiment, and extend trading strategies with minimal complexity.
+The intent of MCT is to provide a modular trading architecture that combines clean engineering practices with financial
+domain logic. It aims to create a flexible environment where developers and traders can collaborate, experiment, and
+extend trading strategies with clarity and minimal complexity.
 
 ## Core Features (Currently Supported)
 
 ### Multi-Asset Support
 
 Trade and manage multiple assets seamlessly across supported exchanges.
+
+### Dynamic Position Sizing
+
+The engine supports dynamic calculation of trade quantities using a built-in expression parser. This allows users to
+incorporate market volatility, balances, and technical indicators (RSI, EMA, SMA) directly into their position sizing
+logic.
 
 ### Consensus Strategy
 

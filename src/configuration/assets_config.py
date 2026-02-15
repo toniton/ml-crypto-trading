@@ -4,13 +4,14 @@ from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from api.interfaces.asset import Asset
 from src.configuration.helpers.yaml_config_settings_source import CustomYamlConfigSettingsSource, \
     YamlConfigSettingsSource
-from api.interfaces.asset import Asset
 
 
 class AssetsConfig(BaseSettings):
     assets: list[Asset]
+    dynamic_quantity: Optional[str] = None
 
     _yaml_file: Optional[str] = ""
     model_config = SettingsConfigDict(

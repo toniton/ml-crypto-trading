@@ -20,6 +20,11 @@ class TradingContext:
     highest_sell: Decimal = Decimal('-inf')
     open_positions: list[MarketData] = field(default_factory=list)
     close_positions: list[MarketData] = field(default_factory=list)
+    position_qty: Decimal = Decimal(0)
+    avg_entry_price: Decimal = Decimal(0)
+    exit_qty: Decimal = Decimal(0)
+    avg_exit_price: Decimal = Decimal(0)
+    realized_pnl: Decimal = Decimal(0)
     last_market_activity_time: Optional[float] = None
 
     def __post_init__(self):

@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, patch
 from src.application import Application
 from src.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
 from src.configuration.application_config import ApplicationConfig
-from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import AppEnvEnum, EnvironmentConfig
 from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
@@ -19,8 +18,9 @@ class TestCCXTInitialization(unittest.TestCase):
             database_connection_host="localhost"
         )
 
-        self.assets_config = MagicMock(spec=AssetsConfig)
+        self.assets_config = MagicMock()
         self.assets_config.assets = []
+        self.assets_config.dynamic_quantity = None
 
     @patch('src.application.DatabaseManager')
     def test_application_initializes_all_ccxt_providers(self, mock_db):
