@@ -15,21 +15,21 @@ class PostgresOrderRepository(OrderRepository):
         OrderStatus.CANCELLED.value
     }
 
-    def save(self, order: Order):
-        order_dao = OrderDBVSEntityMapper.map_to_db(order)
+    def save(self, entity: Order):
+        order_dao = OrderDBVSEntityMapper.map_to_db(entity)
         self.database_session.add(order_dao)
 
-    def get(self, order_id: str):
-        self.database_session.query(OrderDao).filter(OrderDao.uuid == order_id)
+    def get(self, entity_id: str):
+        self.database_session.query(OrderDao).filter(OrderDao.uuid == entity_id)
 
     def get_all(self):
         pass
 
-    def update(self, order_id, order):
+    def update(self, entity_id, entity):
         pass
 
-    def upsert(self, order: Order) -> None:
-        order_dao = OrderDBVSEntityMapper.map_to_db(order)
+    def upsert(self, entity: Order) -> None:
+        order_dao = OrderDBVSEntityMapper.map_to_db(entity)
         insert_statement = insert(OrderDao).values(
             uuid=order_dao.uuid,
             provider_name=order_dao.provider_name,
@@ -53,11 +53,11 @@ class PostgresOrderRepository(OrderRepository):
         )
         self.database_session.execute(upsert_statement)
 
-    def get_by_exchange(self, customer_id):
-        return 5
+    def get_by_exchange(self, exchange_name):
+        return self.database_session.query(OrderDao).filter(OrderDao.provider_name == exchange_name).all()
 
-    def get_by_ticker_symbol(self, product_id):
-        pass
+    def get_by_ticker_symbol(self, ticker_symbol):
+        return self.database_session.query(OrderDao).filter(OrderDao.ticker_symbol == ticker_symbol).all()
 
     def get_by_date(self, date):
         pass
