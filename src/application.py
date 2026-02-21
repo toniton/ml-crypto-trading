@@ -55,6 +55,7 @@ class Application(ApplicationLoggingMixin):
         db_manager.initialize()
         self._assets = trading_config.assets
         self._dynamic_quantity = trading_config.dynamic_quantity
+        self._consensus = trading_config.consensus
 
         self._managers = self._create_managers(db_manager)
 
@@ -83,7 +84,7 @@ class Application(ApplicationLoggingMixin):
             fees_manager=FeesManager(rest_manager),
             order_manager=OrderManager(db_manager, trading_journal, rest_manager, websocket_manager),
             market_data_manager=MarketDataManager(rest_manager, websocket_manager),
-            consensus_manager=ConsensusManager(),
+            consensus_manager=ConsensusManager(self._consensus),
             protection_manager=ProtectionManager(),
             session_manager=SessionManager(),
             websocket_manager=websocket_manager,

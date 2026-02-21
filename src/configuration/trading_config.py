@@ -7,10 +7,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from api.interfaces.asset import Asset
 from src.configuration.helpers.yaml_config_settings_source import CustomYamlConfigSettingsSource, \
     YamlConfigSettingsSource
+from src.trading.consensus.consensus_factor import ConsensusFactor
 
 
 class TradingConfig(BaseSettings):
     assets: list[Asset]
+    consensus: ConsensusFactor
     dynamic_quantity: Optional[str] = None
 
     _yaml_file: Optional[str] = ""

@@ -4,12 +4,14 @@ from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.trading_strategy import TradingStrategy
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.consensus.consensus_factor import ConsensusFactor
 
 
 class ConsensusManager(ApplicationLoggingMixin):
 
-    def __init__(self):
+    def __init__(self, consensus_factor: ConsensusFactor):
         self.strategies = {}
+        self.consensus_factor = consensus_factor
 
     def register_strategy(self, strategy: TradingStrategy):
         if strategy.type not in self.strategies:
@@ -32,7 +34,7 @@ class ConsensusManager(ApplicationLoggingMixin):
         if trade_action not in self.strategies:
             return False
 
-        consensus_factor = 1.3 if trade_action == TradeAction.BUY else 0.5
+        consensus_factor = self.consensus_factor.buy if trade_action == TradeAction.BUY else self.consensus_factor.sell
 
         votes: list[bool] = []
         for strategy in self.strategies[trade_action]:

@@ -59,6 +59,10 @@ assets:
     schedule: 2
     # Scaling logic: Scale up by 50% if RSI < 30
     dynamic_quantity: "(balance * 0.05 / close) * (1.5 if rsi(14) < 30 else 1.0)"
+
+consensus:
+  buy: 1.3
+  sell: 0.5
 ```
 
 **.env**

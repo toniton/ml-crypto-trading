@@ -33,8 +33,20 @@ These properties are specifically for running the bot in backtest mode using his
 
 The `trading-config.yaml` file defines which assets the bot should trade and their specific parameters.
 
+### Consensus Settings
+
+These settings control the thresholds for strategy quorum.
+
+| Field  | Description                                                          | Recommended |
+|:-------|:---------------------------------------------------------------------|:------------|
+| `buy`  | Consensus factor for BUY actions (True/False ratio). Default: `1.3`  | `1.0 - 2.0` |
+| `sell` | Consensus factor for SELL actions (True/False ratio). Default: `0.5` | `0.1 - 1.0` |
+
 ```yaml
-assets:
+consensus:
+  buy: 1.3
+  sell: 0.5
+```
   - name: "Bitcoin (Crypto.com)"
     base_ticker_symbol: "BTC"
     quote_ticker_symbol: "USD"

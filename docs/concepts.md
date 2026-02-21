@@ -17,6 +17,17 @@ The consensus model is built into the trading engine, enabling multiple strategi
 rather than competitively. This setup allows strategies to form a quorum and collectively vote using
 the [Byzantine Fault Tolerance](https://en.wikipedia.org/wiki/Byzantine_fault) approach.
 
+### Consensus Factors
+
+The consensus mechanism uses configurable thresholds to determine if a trade should be executed based on strategy votes.
+These are defined as ratios of **True** votes (agreement) to **False** votes (disagreement).
+
+- **Buy Consensus**: The minimum ratio required to trigger a BUY action.
+- **Sell Consensus**: The minimum ratio required to trigger a SELL action.
+
+A higher factor (e.g., 1.3) requires more agreement among strategies, while a lower factor (e.g., 0.5) is more
+permissive.
+
 ## Strategies
 
 Strategies are rules that define the decision-making of a trade action based on the trading context,
