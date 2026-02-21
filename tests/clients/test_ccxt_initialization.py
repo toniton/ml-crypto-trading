@@ -18,9 +18,9 @@ class TestCCXTInitialization(unittest.TestCase):
             database_connection_host="localhost"
         )
 
-        self.assets_config = MagicMock()
-        self.assets_config.assets = []
-        self.assets_config.dynamic_quantity = None
+        self.trading_config = MagicMock()
+        self.trading_config.assets = []
+        self.trading_config.dynamic_quantity = None
 
     @patch('src.application.DatabaseManager')
     def test_application_initializes_all_ccxt_providers(self, mock_db):
@@ -44,7 +44,7 @@ class TestCCXTInitialization(unittest.TestCase):
             app = Application(
                 application_config=self.app_config,
                 environment_config=self.env_config,
-                assets_config=self.assets_config
+                trading_config=self.trading_config
             )
 
         # Supported providers: 'binance', 'kraken', 'coinbase', 'bybit', 'kucoin' (5) + 'cryptodotcom' (1)

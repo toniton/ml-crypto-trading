@@ -10,9 +10,9 @@ import src.trading.protection.guards
 from database.database_manager import DatabaseManager
 from src.clients.client_factory import ClientFactory
 from src.configuration.application_config import ApplicationConfig
-from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
+from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
@@ -37,7 +37,7 @@ from src.trading.trading_executor import TradingExecutor
 class Application(ApplicationLoggingMixin):
     def __init__(
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
-            assets_config: AssetsConfig, activity_queue: Queue = Queue(),
+            trading_config: TradingConfig, activity_queue: Queue = Queue(),
             is_backtest_mode: bool = False,
             backtest_scheduler: TradingScheduler = None,
     ):
@@ -53,8 +53,8 @@ class Application(ApplicationLoggingMixin):
 
         db_manager = DatabaseManager()
         db_manager.initialize()
-        self._assets = assets_config.assets
-        self._dynamic_quantity = assets_config.dynamic_quantity
+        self._assets = trading_config.assets
+        self._dynamic_quantity = trading_config.dynamic_quantity
 
         self._managers = self._create_managers(db_manager)
 

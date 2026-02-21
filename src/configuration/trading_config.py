@@ -9,7 +9,7 @@ from src.configuration.helpers.yaml_config_settings_source import CustomYamlConf
     YamlConfigSettingsSource
 
 
-class AssetsConfig(BaseSettings):
+class TradingConfig(BaseSettings):
     assets: list[Asset]
     dynamic_quantity: Optional[str] = None
 

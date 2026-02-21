@@ -42,4 +42,4 @@ start:
 	$(PYTHON) ./main.py
 
 simulated:
-	$(PYTHON) ./main.py --assets-conf=examples/configurations/assets.yaml --simulated=true
+	$(PYTHON) ./main.py --assets-conf=examples/configurations/trading-config.yaml --simulated=true

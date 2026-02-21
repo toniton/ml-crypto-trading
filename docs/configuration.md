@@ -9,12 +9,12 @@ configuration files.
 
 These properties control the fundamental behavior of the bot and its connection to external services.
 
-| Property       | CLI Argument    | Env Variable               | Description                                  | Default          |
-|----------------|-----------------|----------------------------|----------------------------------------------|------------------|
-| Environment    | -               | `APP_ENV`                  | Environment mode (`staging`, `production`)   | -                |
-| Assets Config  | `--assets-conf` | -                          | Path to the `assets.yaml` configuration file | -                |
-| Simulated Mode | `--simulated`   | -                          | Enable in-memory order execution             | `false`          |
-| Database Host  | -               | `DATABASE_CONNECTION_HOST` | Host and port for PostgreSQL connection      | `localhost:5432` |
+| Property       | CLI Argument    | Env Variable               | Description                                          | Default          |
+|----------------|-----------------|----------------------------|------------------------------------------------------|------------------|
+| Environment    | -               | `APP_ENV`                  | Environment mode (`staging`, `production`)           | -                |
+| Assets Config  | `--assets-conf` | -                          | Path to the `trading-config.yaml` configuration file | -                |
+| Simulated Mode | `--simulated`   | -                          | Enable in-memory order execution                     | `false`          |
+| Database Host  | -               | `DATABASE_CONNECTION_HOST` | Host and port for PostgreSQL connection              | `localhost:5432` |
 
 ### Backtest Configuration
 
@@ -29,9 +29,9 @@ These properties are specifically for running the bot in backtest mode using his
 
 ---
 
-## Asset Configuration (assets.yaml)
+## Asset Configuration (trading-config.yaml)
 
-The `assets.yaml` file defines which assets the bot should trade and their specific parameters.
+The `trading-config.yaml` file defines which assets the bot should trade and their specific parameters.
 
 ```yaml
 assets:

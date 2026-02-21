@@ -8,14 +8,14 @@ from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_trading_scheduler import BacktestTradingScheduler
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
-from src.configuration.assets_config import AssetsConfig
 from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.trading_config import TradingConfig
 
 
 class BacktestApplication:
     def __init__(
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
-            assets_config: AssetsConfig, is_backtest_mode: bool = False,
+            trading_config: TradingConfig, is_backtest_mode: bool = False,
     ):
         self.app_thread = None
         self.app = None
@@ -23,13 +23,13 @@ class BacktestApplication:
         self.backtest_thread = None
         self._application_config = application_config
         self._environment_config = environment_config
-        self._assets_config = assets_config
+        self._trading_config = trading_config
         self._is_backtest_mode = is_backtest_mode
         self._timestamps = {}
 
     def startup(self):
         loader = BacktestDataLoader(self._application_config.historical_data_dir_path)
-        for asset in self._assets_config.assets:
+        for asset in self._trading_config.assets:
             data_points = loader.load(asset.ticker_symbol)
             self._timestamps[asset.ticker_symbol] = [dp.timestamp for dp in data_points]
 
@@ -38,7 +38,7 @@ class BacktestApplication:
         bus = BacktestEventBus()
 
         self.app = Application(application_config=self._application_config, environment_config=self._environment_config,
-                               assets_config=self._assets_config, is_backtest_mode=self._is_backtest_mode,
+                               trading_config=self._trading_config, is_backtest_mode=self._is_backtest_mode,
                                backtest_scheduler=scheduler)
         self.backtest_engine = BacktestEngine(self.app, loader, clock, scheduler, bus, self._application_config)
         self.app_thread = threading.Thread(target=self.app.startup, name="BacktestApplication", daemon=True)
@@ -48,7 +48,7 @@ class BacktestApplication:
 
         self.backtest_thread = threading.Thread(target=self.backtest_engine.run,
                                                 name="BacktestEngine",
-                                                args=(self._assets_config.assets,))
+                                                args=(self._trading_config.assets,))
         self.backtest_thread.start()
         self.backtest_thread.join()
         if self.app_thread.is_alive():

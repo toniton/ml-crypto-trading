@@ -11,7 +11,7 @@ class ApplicationConfig(BaseSettings):
     backtest_mode: bool = Field(default=False, alias="backtest-mode")
     backtest_initial_balance: Decimal = Field(default=Decimal("10000.0"))
     backtest_tick_delay: float = Field(default=0.0)
-    assets_config_filepath: str = Field(alias="assets-conf")
+    trading_config_filepath: str = Field(alias="assets-conf")
     historical_data_dir_path: Optional[str] = Field(default=None, alias="backtest-source")
     simulated: bool = Field(default=False, alias="simulated")
 

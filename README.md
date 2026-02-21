@@ -41,7 +41,7 @@ The easiest way to run the bot is using **Docker**.
 
 Create your asset configuration and environment variables.
 
-**assets.yaml**
+**trading-config.yaml**
 ```yaml
 assets:
   - name: "Bitcoin (Safety First)"
@@ -80,7 +80,7 @@ POSTGRES_DATABASE=trading_bot
 Test your strategy without risking real funds using historical CSV data.
 ```bash
 docker run -v $PWD:/workspace toniton/ml-crypto-trading \
-  --assets-conf=/workspace/assets.yaml \
+  --assets-conf=/workspace/trading-config.yaml \
   --backtest-mode=true \
   --backtest-source=/workspace/history/
 ```
@@ -90,7 +90,7 @@ docker run -v $PWD:/workspace toniton/ml-crypto-trading \
 Run the bot with real-time market data but simulate order execution in memory.
 ```bash
 docker run --env-file .env -v $PWD:/workspace toniton/ml-crypto-trading \
-  --assets-conf=/workspace/assets.yaml \
+  --assets-conf=/workspace/trading-config.yaml \
   --simulated=true
 ```
 
@@ -99,7 +99,7 @@ docker run --env-file .env -v $PWD:/workspace toniton/ml-crypto-trading \
 Execute real trades on the configured exchange.
 ```bash
 docker run --env-file .env -v $PWD:/workspace toniton/ml-crypto-trading \
-  --assets-conf=/workspace/assets.yaml
+  --assets-conf=/workspace/trading-config.yaml
 ```
 
 *For multi-container setups (with Database), check the included `docker-compose.yml`.*

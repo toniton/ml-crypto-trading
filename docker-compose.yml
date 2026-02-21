@@ -2,7 +2,7 @@ services:
   trading_bot:
     build: .
     command: [
-      "--assets-conf=examples/configurations/backtest-assets.yaml",
+      "--assets-conf=examples/configurations/backtest-trading-config.yaml",
       "--backtest-mode=true",
       "--backtest-source=/workspace/examples/coinmarketcap/history"
     ]
