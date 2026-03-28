@@ -7,21 +7,20 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
-from src.clients.cryptodotcom.cryptodotcom_dto import (
-    CryptoDotComMarketDataResponseDto,
-    CryptoDotComCandleResponseDto,
-    CryptoDotComUserBalanceResponseDto,
-    CryptoDotComUserFeesResponseDto,
-    CryptoDotComInstrumentFeesResponseDto,
-    CryptoDotComResponseOrderGetDto,
-    CryptoDotComResponseOrderUpdateDto
-)
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.clients.cryptodotcom.cryptodotcom_dto import (CryptoDotComCandleResponseDto,
+                                                       CryptoDotComInstrumentFeesResponseDto,
+                                                       CryptoDotComMarketDataResponseDto,
+                                                       CryptoDotComResponseOrderGetDto,
+                                                       CryptoDotComResponseOrderUpdateDto,
+                                                       CryptoDotComUserBalanceResponseDto,
+                                                       CryptoDotComUserFeesResponseDto)
 from src.core.interfaces.mapper import Mapper
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class CryptoDotComBaseMapper:
     NANOSECONDS_PER_SECOND = 1_000_000_000
+    MILLISECONDS_PER_SECOND = 1_000
     provider = ExchangeProvidersEnum.CRYPTO_DOT_COM
 
     @staticmethod
@@ -50,7 +49,7 @@ class CryptoDotComMarketDataMapper(Mapper[CryptoDotComMarketDataResponseDto, Opt
             low_price=Decimal(data.l),
             high_price=Decimal(data.h),
             volume=Decimal(data.vv),
-            timestamp=int(data.t) / self.NANOSECONDS_PER_SECOND
+            timestamp=int(data.t) / self.MILLISECONDS_PER_SECOND
         )
 
 
@@ -61,7 +60,13 @@ class CryptoDotComCandleMapper(Mapper[CryptoDotComCandleResponseDto, list[Candle
             return []
 
         return [
-            Candle(open=Decimal(x.o), close=Decimal(x.c), low=Decimal(x.l), high=Decimal(x.h), start_time=x.t)
+            Candle(
+                open=Decimal(x.o),
+                close=Decimal(x.c),
+                low=Decimal(x.l),
+                high=Decimal(x.h),
+                start_time=x.t / self.MILLISECONDS_PER_SECOND
+            )
             for x in dto.result.data
         ]
 
