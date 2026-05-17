@@ -81,7 +81,7 @@ class Application(ApplicationLoggingMixin):
 
         return ManagerContainer(
             account_manager=AccountManager(self._assets, rest_manager, websocket_manager),
-            fees_manager=FeesManager(rest_manager),
+            fees_manager=FeesManager(self._assets, rest_manager),
             order_manager=OrderManager(db_manager, trading_journal, rest_manager, websocket_manager),
             market_data_manager=MarketDataManager(rest_manager, websocket_manager),
             consensus_manager=ConsensusManager(self._consensus),

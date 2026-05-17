@@ -6,10 +6,10 @@ from decimal import Decimal
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
 from src.clients.rest_manager import RestManager
 from src.clients.websocket_manager import WebSocketManager
+from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
 from src.trading.session.session_manager import SessionManager
 
 
@@ -35,11 +35,15 @@ class AccountManager(ApplicationLoggingMixin):
         self.app_logger.debug(f"Updated balances for {provider_name}: {self.balances[provider_name]}")
 
     def init_websocket(self):
-        for provider_name in self._websocket_manager.get_registered_services():
-            self._websocket_manager.subscribe_account_balance(
-                exchange=provider_name,
-                callback=lambda data, provider=provider_name: self._cache_balances(provider, data)
-            )
+        subscribed_exchanges = set()
+        for asset in self.assets:
+            exchange = asset.exchange.value
+            if exchange not in subscribed_exchanges:
+                self._websocket_manager.subscribe_account_balance(
+                    exchange=exchange,
+                    callback=lambda data, provider=exchange: self._cache_balances(provider, data)
+                )
+                subscribed_exchanges.add(exchange)
 
     def shutdown(self):
         for provider_name in self._websocket_manager.get_registered_services():
