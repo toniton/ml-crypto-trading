@@ -57,16 +57,16 @@ class CCXTExchangeRestBuilder(ExchangeRestBuilder[T, R]):
         self._mapper = CCXTMapperFactory.get_mapper('balance')
         return self
 
-    def account_fees(self) -> 'CCXTExchangeRestBuilder[T, Fees]':
+    def account_fees(self) -> 'CCXTExchangeRestBuilder[T, Fees | None]':
         self._method_name = 'fetch_trading_fees'
         self._params = {}
-        self._mapper = None  # Placeholder or Fees mapper
+        self._mapper = CCXTMapperFactory.get_mapper('fees')
         return self
 
     def instrument_fees(self, ticker_symbol: str) -> 'CCXTExchangeRestBuilder[T, Fees]':
         self._method_name = 'fetch_trading_fee'
         self._params = {'symbol': ticker_symbol}
-        self._mapper = None  # Placeholder or Fees mapper
+        self._mapper = CCXTMapperFactory.get_mapper('fees')
         return self
 
     def create_order(

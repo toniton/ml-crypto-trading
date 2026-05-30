@@ -33,11 +33,11 @@ assets:
     schedule: 0
   - name: "BTTC (Binance)"
     base_ticker_symbol: "BTTC"
-    quote_ticker_symbol: "USDT"
+    quote_ticker_symbol: "USDC"
     exchange: "CCXT_BINANCE"
     separator: "/"
-    min_quantity: 100
-    decimal_places: 6
+    min_quantity: 31515.9
+    decimal_places: 1
     candles_timeframe: "MIN1"
     schedule: 0
 consensus:

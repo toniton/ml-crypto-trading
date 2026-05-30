@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
+from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
@@ -67,14 +68,21 @@ class CCXTCandleMapper(Mapper[List[Any], Candle], CCXTBaseMapper):
 
 class CCXTAccountBalanceMapper(Mapper[Dict[str, Any], List[AccountBalance]], CCXTBaseMapper):
     def map(self, source: Dict[str, Any]) -> List[AccountBalance]:
-        balances = []
-        if 'total' in source:
-            for currency, amount in source['total'].items():
-                if amount > 0:
-                    balances.append(AccountBalance(
-                        currency=currency,
-                        available_balance=Decimal(str(source['free'].get(currency, 0)))
-                    ))
+        balances: List[AccountBalance] = []
+        info = source.get("info", {})
+        for balance in info.get("balances", []):
+            currency = balance.get("asset")
+            free_balance = Decimal(str(balance.get("free", "0")))
+
+            if free_balance <= Decimal("0"):
+                continue
+
+            balances.append(
+                AccountBalance(
+                    currency=currency,
+                    available_balance=free_balance
+                )
+            )
         return balances
 
 
@@ -111,12 +119,27 @@ class CCXTTimeframe:
     }
 
 
+class CCXTFeesMapper(Mapper[Dict[str, Any], Optional[Fees]], CCXTBaseMapper):
+    def map(self, source: Dict[str, Any]) -> Optional[Fees]:
+        maker = source.get("maker")
+        taker = source.get("taker")
+
+        if maker is None or taker is None:
+            return None
+
+        return Fees(
+            maker_fee_pct=Decimal(maker) * Decimal(100),
+            taker_fee_pct=Decimal(taker) * Decimal(100)
+        )
+
+
 class CCXTMapperFactory:
     _MAPPER_REGISTRY: dict[str, type] = {
         'ticker': CCXTTickerMapper,
         'ohlcv': CCXTCandleMapper,
         'balance': CCXTAccountBalanceMapper,
         'orders': CCXTOrderMapper,
+        'fees': CCXTFeesMapper,
     }
 
     @classmethod
