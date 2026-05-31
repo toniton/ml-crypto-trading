@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+from abc import ABC
+
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from src.core.interfaces.registry import Registry
 
 
-class AssetScheduleRegistry(Registry[AssetSchedule, Asset]):
+class AssetScheduleRegistry(Registry[AssetSchedule, Asset], ABC):
     UNIT_MAP = {
         AssetSchedule.EVERY_SECOND: lambda s: s.every(1).second,
         AssetSchedule.EVERY_MINUTE: lambda s: s.every(1).minute,
@@ -21,9 +25,9 @@ class AssetScheduleRegistry(Registry[AssetSchedule, Asset]):
         AssetSchedule.EVERY_MONTH: 86400 * 7 * 4,
     }
 
-    def register_assets(self, assets: list[Asset]):
+    def register_assets(self, assets: list[Asset], override_schedule: AssetSchedule | None = None):
         for asset in assets:
-            asset_schedule = asset.schedule
+            asset_schedule = asset.schedule if override_schedule is None else override_schedule
             self._register(asset_schedule, asset)
 
     def get_assets(self, schedule: AssetSchedule) -> list[Asset]:
