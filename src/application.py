@@ -21,10 +21,15 @@ from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStra
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.core.managers.manager_container import ManagerContainer
+from src.llm.model_factory import ModelFactory
+from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
+from src.llm.tools.market_statistics_tool import MarketStatisticsTool
+from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.live_trading_scheduler import LiveTradingScheduler
+from src.trading.llm_oracle_scheduler import LlmOracleScheduler
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
@@ -32,6 +37,7 @@ from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
+from src.trading.trading_oracle import TradingOracle
 
 
 class Application(ApplicationLoggingMixin):
@@ -56,6 +62,7 @@ class Application(ApplicationLoggingMixin):
         self._assets = trading_config.assets
         self._dynamic_quantity = trading_config.dynamic_quantity
         self._consensus = trading_config.consensus
+        self._llm_settings = trading_config.llm
 
         self._managers = self._create_managers(db_manager)
 
@@ -144,7 +151,26 @@ class Application(ApplicationLoggingMixin):
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity
         )
-        self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
+        oracle_scheduler = LlmOracleScheduler(self._llm_settings)
+        oracle_scheduler.register_assets(self._assets, self._llm_settings.schedule)
+        llm = ModelFactory.create_model(self._llm_settings)
+        trading_oracle = TradingOracle(llm)
+        context_tool = TradingContextTool(
+            session_manager=self._managers.session_manager
+        )
+        fees_tool = ExchangeFeesTool(
+            fees_manager=self._managers.fees_manager,
+            assets=self._assets
+        )
+        market_stats_tool = MarketStatisticsTool(
+            market_data_manager=self._managers.market_data_manager,
+            assets=self._assets
+        )
+        trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool])
+
+        self._trading_engine = TradingEngine(
+            trading_scheduler, trading_executor, oracle_scheduler, trading_oracle
+        )
         self._trading_engine.start_application()
         self.is_ready.set()
 

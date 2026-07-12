@@ -23,3 +23,8 @@ class TestLangChainOllamaAdapter(unittest.TestCase):
         # Verify
         self.assertEqual(response, "Test response")
         mock_instance.invoke.assert_called_once()
+        mock_chat_ollama.assert_called_once_with(
+            model="test-model",
+            base_url="http://test",
+            temperature=0.0,
+        )
