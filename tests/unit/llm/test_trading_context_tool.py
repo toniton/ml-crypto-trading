@@ -8,6 +8,8 @@ from api.interfaces.trading_context import TradingContext
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
 from src.llm.tools.trading_context_tool import TradingContextTool, format_decimal
+from src.trading.fees.fees_manager import FeesManager
+from src.trading.markets.market_data_manager import MarketDataManager
 
 
 class TestTradingContextTool(unittest.TestCase):
@@ -74,7 +76,7 @@ class TestTradingContextTool(unittest.TestCase):
 
 class TestExchangeFeesTool(unittest.TestCase):
     def test_fees_tool_execution(self):
-        mock_fees_manager = MagicMock()
+        mock_fees_manager = MagicMock(spec=FeesManager)
         mock_fees = Fees(maker_fee_pct=Decimal("0.1"), taker_fee_pct=Decimal("0.2"))
         mock_fees_manager.get_instrument_fees.return_value = mock_fees
 
@@ -91,14 +93,14 @@ class TestExchangeFeesTool(unittest.TestCase):
         mock_fees_manager.get_instrument_fees.assert_called_once_with("CRYPTO_DOT_COM", "BTC_USD")
 
     def test_fees_tool_asset_not_found(self):
-        tool = ExchangeFeesTool(fees_manager=MagicMock(), assets=[])
+        tool = ExchangeFeesTool(fees_manager=MagicMock(spec=FeesManager), assets=[])
         result = tool._run(ticker_symbol="ETH_USD")
         self.assertIn("not found", result)
 
 
 class TestMarketStatisticsTool(unittest.TestCase):
     def test_stats_tool_execution(self):
-        mock_market_data_manager = MagicMock()
+        mock_market_data_manager = MagicMock(spec=MarketDataManager)
         mock_market_data = MarketData(
             volume=Decimal("1200.00"),
             high_price=Decimal("53000.00"),
@@ -121,6 +123,6 @@ class TestMarketStatisticsTool(unittest.TestCase):
         mock_market_data_manager.get_market_data.assert_called_once_with(mock_asset)
 
     def test_stats_tool_asset_not_found(self):
-        tool = MarketStatisticsTool(market_data_manager=MagicMock(), assets=[])
+        tool = MarketStatisticsTool(market_data_manager=MagicMock(spec=MarketDataManager), assets=[])
         result = tool._run(ticker_symbol="ETH_USD")
         self.assertIn("not found", result)

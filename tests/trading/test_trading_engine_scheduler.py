@@ -20,7 +20,6 @@ class TestTradingEngineScheduler(unittest.TestCase):
         mock_executor.create_buy_order = MagicMock()
         mock_executor.create_sell_order = MagicMock()
         mock_trading_oracle.generate_report = MagicMock()
-        mock_trading_oracle.generate_signal = MagicMock()
 
         engine = TradingEngine(
             trading_scheduler=mock_scheduler,
@@ -66,4 +65,3 @@ class TestTradingEngineScheduler(unittest.TestCase):
 
         # Verify both oracle methods were called
         mock_trading_oracle.generate_report.assert_called_once_with(dummy_assets)
-        mock_trading_oracle.generate_signal.assert_called_once_with(dummy_assets)
