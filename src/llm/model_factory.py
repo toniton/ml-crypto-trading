@@ -10,4 +10,5 @@ class ModelFactory:
             model_name=settings.model,
             base_url=settings.base_url,
             temperature=settings.temperature,
+            timeout=settings.timeout,
         )

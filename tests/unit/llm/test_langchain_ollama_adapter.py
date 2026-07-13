@@ -27,4 +27,30 @@ class TestLangChainOllamaAdapter(unittest.TestCase):
             model="test-model",
             base_url="http://test",
             temperature=0.0,
+            client_kwargs={},
+        )
+
+    @patch('src.llm.langchain_ollama_adapter.ChatOllama')
+    def test_generate_with_timeout(self, mock_chat_ollama):
+        # Setup
+        mock_instance = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = "Test response"
+        mock_response.tool_calls = []
+        mock_instance.invoke.return_value = mock_response
+        mock_chat_ollama.return_value = mock_instance
+
+        adapter = LangChainOllamaAdapter(model_name="test-model", base_url="http://test", timeout=30.0)
+
+        # Execute
+        response = adapter.generate("Hello")
+
+        # Verify
+        self.assertEqual(response, "Test response")
+        mock_instance.invoke.assert_called_once()
+        mock_chat_ollama.assert_called_once_with(
+            model="test-model",
+            base_url="http://test",
+            temperature=0.0,
+            client_kwargs={"timeout": 30.0},
         )

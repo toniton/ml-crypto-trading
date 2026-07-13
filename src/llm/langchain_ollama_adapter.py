@@ -8,11 +8,15 @@ from src.core.interfaces.llm_adapter import LlmAdapter
 
 
 class LangChainOllamaAdapter(LlmAdapter):
-    def __init__(self, model_name: str, base_url: str, temperature: float = 0.0):
+    def __init__(self, model_name: str, base_url: str, temperature: float = 0.0, timeout: float | None = None):
+        client_kwargs = {}
+        if timeout is not None:
+            client_kwargs["timeout"] = timeout
         self._model = ChatOllama(
             model=model_name,
             base_url=base_url,
             temperature=temperature,
+            client_kwargs=client_kwargs,
         )
         self._tool_lookup = {}
         self._bound_model = self._model

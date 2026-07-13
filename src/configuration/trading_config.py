@@ -16,6 +16,7 @@ class LlmSettings(BaseSettings):
     base_url: str = "http://localhost:11434"
     temperature: float = 0.0
     schedule: AssetSchedule = AssetSchedule.EVERY_MINUTE
+    timeout: Optional[float] = None
 
 
 class TradingConfig(BaseSettings):
