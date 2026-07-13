@@ -89,13 +89,13 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
                 )
             return balances
 
-    def _handle_account_fees(self, _provider_name: str = None) -> Fees:
+    def _handle_account_fees(self, provider_name: str = None) -> Fees:
         return Fees(
             maker_fee_pct=Decimal("0.0"),
             taker_fee_pct=Decimal("0.0")
         )
 
-    def _handle_instrument_fees(self, _ticker_symbol: str, _provider_name: str = None) -> Fees:
+    def _handle_instrument_fees(self, ticker_symbol: str, provider_name: str = None) -> Fees:
         return Fees(
             maker_fee_pct=Decimal("0.0"),
             taker_fee_pct=Decimal("0.0")
@@ -165,7 +165,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
     def _handle_cancel_order(self, uuid: str) -> None:
         self.account.orders = [o for o in self.account.orders if o.uuid != uuid]
 
-    def _handle_candles(self, ticker_symbol: str, _timeframe: Timeframe) -> list[Candle]:
+    def _handle_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
         market_data = self._handle_market_data(ticker_symbol)
         return [
             Candle(
