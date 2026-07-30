@@ -30,7 +30,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             dynamic_quantity: Optional[str] = None
     ):
         self.assets = assets
-        self.dynamic_quantity = dynamic_quantity
+        self._dynamic_quantity_parser = ExpressionParser(dynamic_quantity) if dynamic_quantity else None
         self.account_manager = manager_container.account_manager
         self.fees_manager = manager_container.fees_manager
         self.order_manager = manager_container.order_manager
@@ -40,6 +40,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.protection_manager = manager_container.protection_manager
         self.websocket_manager = manager_container.websocket_manager
         self.activity_queue = activity_queue
+
+    def update_dynamic_quantity_parser(self, formula: Optional[str]) -> None:
+        self._dynamic_quantity_parser = ExpressionParser(formula) if formula else None
 
     def init_application(self):
         self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()
@@ -199,7 +202,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.info("------------------------------")
 
     def _calculate_quantity(self, asset: Asset, market_data: MarketData) -> Decimal:
-        if not self.dynamic_quantity:
+        if not self._dynamic_quantity_parser:
             return Decimal(str(asset.min_quantity))
 
         trading_context = self.session_manager.get_trading_context(asset.key)
@@ -218,10 +221,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             candles=candles
         )
 
-        parser = ExpressionParser(context)
         try:
-            result = parser.parse(self.dynamic_quantity)
+            result = self._dynamic_quantity_parser.parse(context)
+            if result is None:
+                return Decimal(str(asset.min_quantity))
             return Decimal(str(result))
         except Exception as exc:
-            self.app_logger.error(f"Error parsing dynamic quantity '{self.dynamic_quantity}': {exc}")
+            self.app_logger.error(f"Error parsing dynamic quantity: {exc}")
             return Decimal(str(asset.min_quantity))
