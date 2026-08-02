@@ -12,6 +12,7 @@ class TestCCXTInitialization(unittest.TestCase):
     def setUp(self):
         self.app_config = MagicMock(spec=ApplicationConfig)
         self.app_config.simulated = False
+        self.app_config.trading_config_filepath = None
 
         self.env_config = EnvironmentConfig(
             app_env=AppEnvEnum.STAGING,
