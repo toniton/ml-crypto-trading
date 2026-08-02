@@ -90,12 +90,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
                 self.app_logger.info(f"Consensus reached to buy {asset.ticker_symbol}")
 
-                price = Decimal(market_data.close_price)
-                fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
-                price = (price * fee_multiplier).quantize(
-                    Decimal(f"1.{'0' * asset.quote_decimals}"),
-                    rounding=ROUND_UP
-                )
+                price = self._calculate_price(asset, market_data, fees)
 
                 self.app_logger.debug([
                     f"Calculated price for {asset}: Price={price}",
@@ -139,12 +134,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 _, market_data, candles, fees = self._prepare_trade_context(asset)
                 base_balance = self.account_manager.get_base_balance(asset, asset.exchange.value)
 
-                price = Decimal(market_data.close_price)
-                fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
-                price = (price * fee_multiplier).quantize(
-                    Decimal(f"1.{'0' * asset.quote_decimals}"),
-                    rounding=ROUND_UP
-                )
+                price = self._calculate_price(asset, market_data, fees)
 
                 self.app_logger.debug(f"Current price for {asset}: {price}, Fees={fees}")
 
@@ -201,6 +191,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.info("==============================")
         self.app_logger.info(session_summary)
         self.app_logger.info("------------------------------")
+
+    def _calculate_price(self, asset: Asset, market_data: MarketData, fees: Fees) -> Decimal:
+        price = Decimal(market_data.close_price)
+        fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
+        quantum = Decimal("1").scaleb(-asset.quote_decimals)
+        return (price * fee_multiplier).quantize(quantum, rounding=ROUND_UP)
 
     def _calculate_quantity(self, asset: Asset, market_data: MarketData) -> Decimal:
         fallback_quantity = Decimal(str(asset.min_quantity))
