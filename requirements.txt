@@ -11,5 +11,5 @@ PyYAML~=6.0.1
 websocket-client~=1.9.0
 SQLAlchemy~=2.0.51
 psycopg2-binary~=2.9.12
-cachetools~=4.2.4
+cachetools~=7.1.6
 langchain-ollama~=1.1.0
