@@ -43,6 +43,7 @@ class TestDynamicQuantity(unittest.TestCase):
 
         asset = MagicMock()
         asset.min_quantity = 0.001
+        asset.quantity_decimals = 3
         market_data = MarketData(
             volume=Decimal("100"),
             high_price=Decimal("110"),
@@ -58,6 +59,7 @@ class TestDynamicQuantity(unittest.TestCase):
 
         asset = MagicMock()
         asset.min_quantity = 0.001
+        asset.quantity_decimals = 3
         asset.exchange.value = "test_exchange"
         asset.ticker_symbol = "BTC_USD"
         asset.key = 1
@@ -85,6 +87,7 @@ class TestDynamicQuantity(unittest.TestCase):
 
         asset = MagicMock()
         asset.min_quantity = 0.001
+        asset.quantity_decimals = 3
         asset.exchange.value = "test_exchange"
         asset.ticker_symbol = "BTC_USD"
         asset.key = 1
@@ -113,6 +116,7 @@ class TestDynamicQuantity(unittest.TestCase):
 
         asset = MagicMock()
         asset.min_quantity = 0.001
+        asset.quantity_decimals = 3
         asset.exchange.value = "test_exchange"
         asset.ticker_symbol = "BTC_USD"
         asset.key = 1
@@ -141,6 +145,7 @@ class TestDynamicQuantity(unittest.TestCase):
 
         asset = MagicMock()
         asset.min_quantity = 0.001
+        asset.quantity_decimals = 3
         asset.exchange.value = "test_exchange"
         asset.ticker_symbol = "BTC_USD"
         asset.key = 1
@@ -168,6 +173,7 @@ class TestDynamicQuantity(unittest.TestCase):
 
         asset = MagicMock()
         asset.min_quantity = 0.001
+        asset.quantity_decimals = 3
         asset.exchange.value = "test_exchange"
         asset.ticker_symbol = "BTC_USD"
         asset.key = 1

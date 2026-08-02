@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from decimal import Decimal, ROUND_UP
+from decimal import Decimal, ROUND_DOWN, ROUND_UP
 from queue import Queue
 from typing import Optional
 
@@ -30,6 +30,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             dynamic_quantity: Optional[str] = None
     ):
         self.assets = assets
+        self._dynamic_quantity = dynamic_quantity
         self._dynamic_quantity_parser = ExpressionParser(dynamic_quantity) if dynamic_quantity else None
         self.account_manager = manager_container.account_manager
         self.fees_manager = manager_container.fees_manager
@@ -92,7 +93,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 price = Decimal(market_data.close_price)
                 fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
                 price = (price * fee_multiplier).quantize(
-                    Decimal(f"1.{'0' * asset.decimal_places}"),
+                    Decimal(f"1.{'0' * asset.quote_decimals}"),
                     rounding=ROUND_UP
                 )
 
@@ -141,7 +142,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 price = Decimal(market_data.close_price)
                 fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
                 price = (price * fee_multiplier).quantize(
-                    Decimal(f"1.{'0' * asset.decimal_places}"),
+                    Decimal(f"1.{'0' * asset.quote_decimals}"),
                     rounding=ROUND_UP
                 )
 
@@ -202,9 +203,34 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.info("------------------------------")
 
     def _calculate_quantity(self, asset: Asset, market_data: MarketData) -> Decimal:
-        if not self._dynamic_quantity_parser:
-            return Decimal(str(asset.min_quantity))
+        fallback_quantity = Decimal(str(asset.min_quantity))
 
+        if self._dynamic_quantity_parser is None:
+            return fallback_quantity
+
+        try:
+            quantity = self._evaluate_dynamic_quantity(asset, market_data)
+
+            if quantity is None:
+                return fallback_quantity
+
+            quantum = Decimal("1").scaleb(-asset.quantity_decimals)
+            quantity = quantity.quantize(quantum, rounding=ROUND_DOWN)
+
+            return max(quantity, fallback_quantity)
+
+        except Exception:
+            self.app_logger.exception(
+                "Failed to calculate dynamic quantity.",
+                extra={"asset": asset.ticker_symbol},
+            )
+            return fallback_quantity
+
+    def _evaluate_dynamic_quantity(
+            self,
+            asset: Asset,
+            market_data: MarketData,
+    ) -> Decimal | None:
         trading_context = self.session_manager.get_trading_context(asset.key)
         account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
         candles = self.market_data_manager.get_candles(asset)
@@ -221,11 +247,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             candles=candles
         )
 
-        try:
-            result = self._dynamic_quantity_parser.parse(context)
-            if result is None:
-                return Decimal(str(asset.min_quantity))
-            return Decimal(str(result))
-        except Exception as exc:
-            self.app_logger.error(f"Error parsing dynamic quantity: {exc}")
-            return Decimal(str(asset.min_quantity))
+        result = self._dynamic_quantity_parser.parse(context)
+
+        return None if result is None else Decimal(str(result))

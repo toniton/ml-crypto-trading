@@ -52,7 +52,8 @@ consensus:
     quote_ticker_symbol: "USD"
     exchange: "CRYPTO_DOT_COM"
     min_quantity: 0.00001
-    decimal_places: 8
+    quote_decimals: 8
+    quantity_decimals: 5
     candles_timeframe: "MIN1"
     schedule: 4
 ```

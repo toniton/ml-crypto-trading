@@ -4,7 +4,8 @@ assets:
     quote_ticker_symbol: "USD"
     exchange: "BACKTEST"
     min_quantity: 0.00001
-    decimal_places: 8
+    quote_decimals: 8
+    quantity_decimals: 5
     candles_timeframe: "MIN1"
     schedule: 2
     guard_config:
@@ -16,7 +17,8 @@ assets:
     quote_ticker_symbol: "USD"
     exchange: "BACKTEST"
     min_quantity: 0.01
-    decimal_places: 8
+    quote_decimals: 8
+    quantity_decimals: 2
     candles_timeframe: "MIN1"
     schedule: 2
     guard_config:

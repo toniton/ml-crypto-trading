@@ -1,14 +1,15 @@
 import unittest
 from unittest.mock import Mock, patch
+
 from api.interfaces.asset import Asset
-from api.interfaces.timeframe import Timeframe
 from api.interfaces.asset_schedule import AssetSchedule
+from api.interfaces.timeframe import Timeframe
 from database.database_manager import DatabaseManager
-from src.trading.protection.protection_manager import ProtectionManager
+from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.trading.protection.protection_manager import ProtectionManager
 
 
 class TestManagerIsolation(unittest.TestCase):
@@ -31,10 +32,11 @@ class TestManagerIsolation(unittest.TestCase):
         asset1 = Asset(
             base_ticker_symbol="BTC",
             quote_ticker_symbol="USD",
-            decimal_places=2,
+            quote_decimals=2,
             name="Bitcoin",
             exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
             min_quantity=0.0001,
+            quantity_decimals=4,
             schedule=AssetSchedule.EVERY_MINUTE,
             candles_timeframe=Timeframe.MIN1
         )
@@ -42,10 +44,11 @@ class TestManagerIsolation(unittest.TestCase):
         asset2 = Asset(
             base_ticker_symbol="ETH",
             quote_ticker_symbol="USD",
-            decimal_places=2,
+            quote_decimals=2,
             name="Ethereum",
             exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
             min_quantity=0.01,
+            quantity_decimals=2,
             schedule=AssetSchedule.EVERY_MINUTE,
             candles_timeframe=Timeframe.MIN1
         )
@@ -67,10 +70,11 @@ class TestManagerIsolation(unittest.TestCase):
         asset1 = Asset(
             base_ticker_symbol="BTC",
             quote_ticker_symbol="USD",
-            decimal_places=2,
+            quote_decimals=2,
             name="Bitcoin",
             exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
             min_quantity=0.0001,
+            quantity_decimals=4,
             schedule=AssetSchedule.EVERY_MINUTE,
             candles_timeframe=Timeframe.MIN1
         )
@@ -78,10 +82,11 @@ class TestManagerIsolation(unittest.TestCase):
         asset2 = Asset(
             base_ticker_symbol="ETH",
             quote_ticker_symbol="USD",
-            decimal_places=2,
+            quote_decimals=2,
             name="Ethereum",
             exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
             min_quantity=0.01,
+            quantity_decimals=2,
             schedule=AssetSchedule.EVERY_MINUTE,
             candles_timeframe=Timeframe.MIN1
         )

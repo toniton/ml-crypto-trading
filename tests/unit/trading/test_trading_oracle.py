@@ -19,10 +19,11 @@ class TestTradingOracle(unittest.TestCase):
         asset = Asset(
             base_ticker_symbol="BTC",
             quote_ticker_symbol="USD",
-            decimal_places=2,
+            quote_decimals=2,
             name="Bitcoin",
             exchange=ExchangeProvidersEnum.BACKTEST,
             min_quantity=0.001,
+            quantity_decimals=3,
             schedule=AssetSchedule.EVERY_MINUTE,
             candles_timeframe=Timeframe.MIN1
         )

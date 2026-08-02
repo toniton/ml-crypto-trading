@@ -31,20 +31,22 @@ class TestBacktestWebSocketService:
             Asset(
                 base_ticker_symbol="BTC",
                 quote_ticker_symbol="USD",
-                decimal_places=8,
+                quote_decimals=8,
                 name="Bitcoin",
                 exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
                 min_quantity=0.001,
+                quantity_decimals=3,
                 schedule=AssetSchedule.EVERY_MINUTE,
                 candles_timeframe=Timeframe.MIN1
             ),
             Asset(
                 base_ticker_symbol="ETH",
                 quote_ticker_symbol="USD",
-                decimal_places=8,
+                quote_decimals=8,
                 name="Ethereum",
                 exchange=ExchangeProvidersEnum.CCXT_BINANCE,
                 min_quantity=0.01,
+                quantity_decimals=2,
                 schedule=AssetSchedule.EVERY_MINUTE,
                 candles_timeframe=Timeframe.MIN1
             ),

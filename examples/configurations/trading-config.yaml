@@ -4,7 +4,8 @@ assets:
     quote_ticker_symbol: "USD"
     exchange: "CRYPTO_DOT_COM"
     min_quantity: 0.00005
-    decimal_places: 5
+    quote_decimals: 2
+    quantity_decimals: 5
     candles_timeframe: "MIN1"
     schedule: 1
     guard_config:
@@ -15,8 +16,9 @@ assets:
     base_ticker_symbol: "DOGE"
     quote_ticker_symbol: "USD"
     exchange: "CRYPTO_DOT_COM"
-    min_quantity: 10
-    decimal_places: 6
+    min_quantity: 14
+    quote_decimals: 6
+    quantity_decimals: 0
     candles_timeframe: "MIN1"
     schedule: 1
     guard_config:
@@ -27,8 +29,9 @@ assets:
     base_ticker_symbol: "CRO"
     quote_ticker_symbol: "USD"
     exchange: "CRYPTO_DOT_COM"
-    min_quantity: 15
-    decimal_places: 6
+    min_quantity: 19
+    quote_decimals: 6
+    quantity_decimals: 0
     candles_timeframe: "MIN1"
     schedule: 0
   - name: "BTTC (Binance)"
@@ -37,7 +40,8 @@ assets:
     exchange: "CCXT_BINANCE"
     separator: "/"
     min_quantity: 31515.9
-    decimal_places: 1
+    quote_decimals: 1
+    quantity_decimals: 1
     candles_timeframe: "MIN1"
     schedule: 0
 consensus:

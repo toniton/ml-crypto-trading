@@ -62,7 +62,7 @@ class TradingExpressionFactory:
 
             # Static
             "min_qty": float(asset.min_quantity),
-            "decimals": asset.decimal_places,
+            "decimals": asset.quote_decimals,
 
             # Helpers
             "candles": candles
