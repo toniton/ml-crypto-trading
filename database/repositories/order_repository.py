@@ -1,9 +1,10 @@
 import abc
 
+from api.interfaces.order import Order
 from database.repositories.base_repository import BaseRepository
 
 
-class OrderRepository(BaseRepository):
+class OrderRepository(BaseRepository[Order]):
 
     @abc.abstractmethod
     def get_by_exchange(self, exchange_name: str):
