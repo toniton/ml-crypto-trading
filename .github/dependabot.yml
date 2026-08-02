@@ -13,7 +13,3 @@ updates:
     labels:
       - "dependencies"
     rebase-strategy: "auto"
-    automerged_updates:
-      - match:
-          dependency_type: "all"
-          update_type: "version-update:semver-patch"
