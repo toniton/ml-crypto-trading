@@ -8,6 +8,9 @@ import src.configuration.providers
 import src.trading.consensus.strategies
 import src.trading.protection.guards
 from database.database_manager import DatabaseManager
+from vcs.application.events import RefChangedEvent
+from vcs.application.listener import RefChangeListener
+from vcs.application.service import VCSService
 from src.clients.client_factory import ClientFactory
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
@@ -63,6 +66,15 @@ class Application(ApplicationLoggingMixin):
         self._dynamic_quantity = trading_config.dynamic_quantity
         self._consensus = trading_config.consensus
         self._llm_settings = trading_config.llm
+        self._trading_config = trading_config
+
+        self._vcs_ref = "HEAD"
+        self._vcs = VCSService(db_manager)
+        self._config_listener = RefChangeListener(
+            db_manager=db_manager,
+            on_event_callback=self._on_vcs_ref_change,
+            config_vcs=self._vcs,
+        )
 
         self._managers = self._create_managers(db_manager)
 
@@ -146,6 +158,9 @@ class Application(ApplicationLoggingMixin):
             return
         self.app_logger.info("Starting Application...")
         self.is_running.set()
+        if not self._is_backtest_mode:
+            self._ensure_config_store_seeded()
+            self._config_listener.start()
         trading_scheduler = self._backtest_scheduler if self._is_backtest_mode else LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
         trading_executor = TradingExecutor(
@@ -178,9 +193,34 @@ class Application(ApplicationLoggingMixin):
         self._register_with_managers(rest_service)
         self._register_with_managers(websocket_service)
 
+    def _ensure_config_store_seeded(self) -> None:
+        self._vcs.seed_if_empty(
+            self._trading_config,
+            author="application-bootstrap",
+            message="Initial configuration committed at application start",
+        )
+
+    def _on_vcs_ref_change(self, event: RefChangedEvent) -> None:
+        if event.ref != self._vcs_ref:
+            return
+        self._apply_config_update(event.commit_hash)
+
+    def _apply_config_update(self, commit_hash: str) -> None:
+        try:
+            raw = self._vcs.checkout(commit_hash)
+            updated = TradingConfig.model_validate(raw)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.error("Config update from VCS failed: %s", exc)
+            return
+
+        if self._trading_engine:
+            self._trading_engine.update_config(updated)
+        self.app_logger.info("Config updated from VCS %s", commit_hash[:8])
+
     def shutdown(self):
         if not self.is_running.is_set():
             return
+        self._config_listener.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()
         self.is_running.clear()

@@ -12,6 +12,7 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
+from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.core.expressions.trading_expression_factory import TradingExpressionFactory
 from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -42,8 +43,17 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.websocket_manager = manager_container.websocket_manager
         self.activity_queue = activity_queue
 
-    def update_dynamic_quantity_parser(self, formula: Optional[str]) -> None:
-        self._dynamic_quantity_parser = ExpressionParser(formula) if formula else None
+    def update_config(self, trading_config: TradingConfig) -> None:
+        if trading_config.consensus != self.consensus_manager.consensus_factor:
+            self.consensus_manager.update_factor(trading_config.consensus)
+            self.app_logger.info("Config updated: consensus to %s", trading_config.consensus)
+
+        if trading_config.dynamic_quantity != self._dynamic_quantity:
+            self._dynamic_quantity = trading_config.dynamic_quantity
+            self._dynamic_quantity_parser = (
+                ExpressionParser(trading_config.dynamic_quantity) if trading_config.dynamic_quantity else None
+            )
+            self.app_logger.info("Config updated: dynamic_quantity to %r", trading_config.dynamic_quantity)
 
     def init_application(self):
         self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()

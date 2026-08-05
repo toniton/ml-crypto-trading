@@ -26,6 +26,7 @@ class TradingContext:
     avg_exit_price: Decimal = Decimal(0)
     realized_pnl: Decimal = Decimal(0)
     last_market_activity_time: Optional[float] = None
+    commit_hash: Optional[str] = None
 
     def __post_init__(self):
         self.available_balance = self.starting_balance

@@ -18,6 +18,9 @@ class ConsensusManager(ApplicationLoggingMixin):
             self.strategies[strategy.type] = []
         self.strategies[strategy.type].append(strategy)
 
+    def update_factor(self, consensus_factor: ConsensusFactor) -> None:
+        self.consensus_factor = consensus_factor
+
     def unregister_strategy(self, strategy: TradingStrategy):
         if strategy.type in self.strategies:
             self.strategies[strategy.type].remove(strategy)

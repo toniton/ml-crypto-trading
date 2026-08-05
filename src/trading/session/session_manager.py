@@ -15,23 +15,34 @@ from api.interfaces.trading_session import TradingSession
 
 
 class SessionManager:
-    def __init__(self):
+    def __init__(self, config_vcs=None):
         self.current_session: Optional[TradingSession] = None
         self.is_running: Event = Event()
         self._lock = threading.Lock()
+        self._config_vcs = config_vcs
 
-    def create_session(self, session_id: str) -> SessionManager:
+    def create_session(self, session_id: str, commit_hash: Optional[str] = None) -> SessionManager:
         with self._lock:
             if self.is_running.is_set():
                 raise ValueError("A session is already running. End it before creating a new one.")
+
+            if commit_hash is None and self._config_vcs is not None:
+                commit_hash = self._fetch_head_commit_hash()
 
             session = TradingSession(
                 session_id=session_id,
                 session_time=SessionTime(),
                 trading_contexts={},
+                commit_hash=commit_hash,
             )
             self.current_session = session
             return self
+
+    def _fetch_head_commit_hash(self) -> Optional[str]:
+        try:
+            return self._config_vcs.head("HEAD").hash
+        except Exception:  # pylint: disable=broad-except
+            return None
 
     def start_session(self) -> None:
         with self._lock:
@@ -51,7 +62,7 @@ class SessionManager:
 
             ctx = TradingContext(
                 starting_balance=starting_balance, ticker_symbol=asset.ticker_symbol,
-                exchange=asset.exchange.value
+                exchange=asset.exchange.value, commit_hash=self.current_session.commit_hash
             )
             self.current_session.trading_contexts[asset.key] = ctx
 
@@ -144,6 +155,7 @@ class SessionManager:
     def get_session_summary(self, session: TradingSession) -> dict:
         return {
             'session_id': session.session_id,
+            'commit_hash': session.commit_hash,
             'is_running': self.is_running.is_set(),
             'duration': session.session_time.duration,
             'assets': len(session.trading_contexts),
@@ -151,6 +163,7 @@ class SessionManager:
                 asset_id: {
                     'ticker_symbol': ctx.ticker_symbol,
                     'exchange': ctx.exchange,
+                    'commit_hash': ctx.commit_hash,
                     'starting_balance': ctx.starting_balance,
                     'available_balance': ctx.available_balance,
                     'closing_balance': ctx.closing_balance,

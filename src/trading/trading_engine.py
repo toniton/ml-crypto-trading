@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
 from api.interfaces.asset import Asset
+from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.trading.trading_executor import TradingExecutor
 from src.trading.trading_oracle import TradingOracle
@@ -44,3 +45,6 @@ class TradingEngine:
             self._trading_executor.stop()
             self._oracle_scheduler.stop()
         self._is_running.clear()
+
+    def update_config(self, trading_config: TradingConfig) -> None:
+        self._trading_executor.update_config(trading_config)
