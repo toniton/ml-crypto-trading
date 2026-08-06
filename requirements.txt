@@ -13,3 +13,4 @@ SQLAlchemy~=2.0.51
 psycopg2-binary~=2.9.12
 cachetools~=4.2.4
 langchain-ollama~=1.1.0
+mcp[cli]>=1.28,<2

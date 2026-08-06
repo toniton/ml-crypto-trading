@@ -123,6 +123,93 @@ For more detailed information, please refer to the documentation in the `docs/` 
 
 ---
 
+## MCP Server: Runtime Configuration Updates
+
+MCT includes a **Model Context Protocol (MCP) server** that enables runtime updates to trading configuration without stopping the application.
+
+### What is MCP?
+
+The Model Context Protocol allows AI agents (like Claude) to directly interact with MCT through standardized tools. This enables agents to:
+- Query the current trading configuration
+- Update consensus thresholds on-the-fly
+- Modify dynamic quantity formulas
+- Monitor and optimize trading logic in real-time
+
+### Available Tools
+
+The MCP server exposes three main tools:
+
+#### 1. `get_trading_config()`
+Retrieves the current trading configuration from the YAML file.
+
+**Returns:**
+- `consensus`: Current buy/sell thresholds
+- `dynamic_quantity`: Current formula for position sizing
+
+**Example:**
+```
+Agent: Get the current configuration
+Response: {
+  "consensus": {"buy": 1.3, "sell": 0.5},
+  "dynamic_quantity": "max(min_qty, (balance * 0.02) / close)"
+}
+```
+
+#### 2. `update_consensus(buy: float, sell: float)`
+Updates the consensus buy/sell thresholds for trading signals.
+
+**Parameters:**
+- `buy` (float): Buy threshold. Must be > 0. Higher values require stronger signal agreement to buy.
+- `sell` (float): Sell threshold. Must be > 0 and ≤ buy. Lower values require weaker agreement to sell.
+
+**Returns:** Updated consensus values
+
+**Validation:**
+- `buy` must be positive
+- `sell` must be positive and ≤ `buy`
+
+**Example:**
+```
+Agent: Increase buy threshold to 1.5 and sell to 0.7
+Updates to: {"buy": 1.5, "sell": 0.7}
+```
+
+#### 3. `update_dynamic_quantity(formula: str)`
+Updates the dynamic quantity formula for position sizing at runtime.
+
+**Parameters:**
+- `formula` (str): Python expression evaluated at order time. Pass empty string to disable.
+
+**Available Variables:**
+- `min_qty`: Minimum order quantity
+- `equity`: Account equity
+- `risk_pct`: Risk percentage
+- `close`: Current market price
+- `signal`: Signal strength
+- `pnl`: Current P&L
+- Indicator functions: `rsi(period)`, `ema(period)`, `sma(period)`
+
+**Returns:** Updated formula
+
+**Example:**
+```
+Agent: Use aggressive sizing when RSI is oversold
+Formula: "(balance * 0.05 / close) * (1.5 if rsi(14) < 30 else 1.0)"
+```
+
+### How Changes Are Applied
+
+1. **Atomic Writes**: Configuration updates are written atomically to the YAML file
+2. **Reload Cycle**: The running application picks up changes on its next config-reload (every 30 seconds)
+3. **No Restart Required**: Trading continues uninterrupted while configuration is updated
+4. **Persistence**: All changes persist in the config file across application restarts
+
+### Using the MCP Server with Agents
+
+For guidance on integrating the MCP server with AI agents, see [AGENT.MD](AGENT.MD).
+
+---
+
 ## License
 
 This source code is available on GitHub under
