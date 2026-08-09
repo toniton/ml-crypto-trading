@@ -27,6 +27,7 @@ from src.core.managers.manager_container import ManagerContainer
 from src.llm.model_factory import ModelFactory
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
+from src.llm.tools.open_orders_tool import GetOpenOrdersTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
@@ -181,7 +182,11 @@ class Application(ApplicationLoggingMixin):
             market_data_manager=self._managers.market_data_manager,
             assets=self._assets
         )
-        trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool])
+        open_orders_tool = GetOpenOrdersTool(
+            order_manager=self._managers.order_manager,
+            assets=self._assets
+        )
+        trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
 
         self._trading_engine = TradingEngine(
             trading_scheduler, trading_executor, oracle_scheduler, trading_oracle

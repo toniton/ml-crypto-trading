@@ -23,7 +23,7 @@ class TradingOracle(ApplicationLoggingMixin):
     def generate_report(self, assets: list[Asset]):
         prompt = (
             f"Generate a detailed trading report for focus assets: {[a.ticker_symbol for a in assets]}. "
-            "You can use the 'get_trading_context', 'get_exchange_fees', and 'get_market_statistics' tools to fetch more details about each asset if needed. "
+            "You can use the 'get_trading_context', 'get_exchange_fees', 'get_market_statistics', and 'get_open_orders' tools to fetch more details about each asset if needed. "
             "IMPORTANT: Call each tool separately for EACH individual asset. Pass a single string for ticker_symbol, not a list."
         )
         self.app_logger.info(f"Generating report for {[a.ticker_symbol for a in assets]}...")
