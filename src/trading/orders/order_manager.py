@@ -96,21 +96,29 @@ class OrderManager(ApplicationLoggingMixin):
                 callback=self._save_orders_to_database
             )
 
+    def get_open_orders(self, exchange: str, ticker_symbol: str = None) -> list[Order]:
+        open_orders: list[Order] = []
+        try:
+            exchange_open_orders = self._rest_manager.get_open_orders(exchange, ticker_symbol)
+            if exchange_open_orders:
+                open_orders.extend(exchange_open_orders)
+        except (RuntimeError, RuntimeWarning) as exc:
+            self.app_logger.warning(f"Unable to fetch open orders from {exchange}: {exc}")
+        except Exception as exc:
+            self.app_logger.error(f"Unexpected error fetching open orders from {exchange}: {exc}", exc_info=True)
+            raise RuntimeError("Unable to fetch open orders:", exchange) from exc
+        return open_orders
+
     def _update_pending_orders(self):
-        pending_orders = self._get_pending_orders()
-        updated_orders = []
-        for order in pending_orders:
+        for asset in self._assets:
+            exchange = asset.exchange.value
+            ticker_symbol = asset.ticker_symbol
             try:
-                exchange_order_details = self.get_order(order.provider_name, order.uuid)
-                if exchange_order_details:
-                    updated_orders.append(exchange_order_details)
-            except (RuntimeError, RuntimeWarning) as exc:
-                self.app_logger.warning(f"Unable to update pending order {order.uuid} from exchange: {exc}")
+                open_orders = self.get_open_orders(exchange, ticker_symbol)
+                if open_orders:
+                    self._save_orders_to_database(open_orders)
             except Exception as exc:
-                self.app_logger.error(f"Unexpected error updating pending order {order.uuid}: {exc}", exc_info=True)
-                raise RuntimeError("Unable to update pending order:", order) from exc
-        if updated_orders:
-            self._save_orders_to_database(updated_orders)
+                self.app_logger.warning(f"Unable to reconcile pending orders with exchanges: {exc}", exc_info=True)
 
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,

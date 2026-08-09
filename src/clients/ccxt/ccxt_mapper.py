@@ -103,6 +103,17 @@ class CCXTOrderMapper(Mapper[Dict[str, Any], Order], CCXTBaseMapper):
         )
 
 
+class CCXTOpenOrdersMapper(Mapper[List[Dict[str, Any]], List[Order]], CCXTBaseMapper):
+    def __init__(self, provider_name: str):
+        self._provider_name = provider_name
+
+    def map(self, source: List[Dict[str, Any]]) -> List[Order]:
+        return [
+            CCXTOrderMapper(self._provider_name).map(item)
+            for item in source
+        ]
+
+
 class CCXTTimeframe:
     MAP = {
         Timeframe.MIN1: "1m",
@@ -139,6 +150,7 @@ class CCXTMapperFactory:
         'ohlcv': CCXTCandleMapper,
         'balance': CCXTAccountBalanceMapper,
         'orders': CCXTOrderMapper,
+        'open_orders': CCXTOpenOrdersMapper,
         'fees': CCXTFeesMapper,
     }
 
@@ -148,9 +160,9 @@ class CCXTMapperFactory:
         if not mapper_class:
             return None
 
-        if subscription_type == 'orders' and provider_name:
+        if subscription_type in ('orders', 'open_orders') and provider_name:
             return mapper_class(provider_name)
-        if subscription_type == 'orders':
-            raise ValueError("provider_name is required for 'orders' mapper")
+        if subscription_type in ('orders', 'open_orders'):
+            raise ValueError(f"provider_name is required for '{subscription_type}' mapper")
 
         return mapper_class()

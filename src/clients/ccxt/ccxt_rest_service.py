@@ -37,6 +37,7 @@ class CCXTExchangeRestService(ExchangeRestService):
                 'apiKey': credentials.api_key if credentials else None,
                 'secret': credentials.secret_key.get_secret_value() if credentials and credentials.secret_key else None,
                 'enableRateLimit': True,
+                'options': {'fetchOpenOrders': {'warnWithoutSymbol': False}},
             })
         except AttributeError as exc:
             raise ValueError(f"CCXT does not support exchange: {__p}") from exc

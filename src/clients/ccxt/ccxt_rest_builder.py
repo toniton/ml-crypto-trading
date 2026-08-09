@@ -95,6 +95,12 @@ class CCXTExchangeRestBuilder(ExchangeRestBuilder[T, R]):
         self._mapper = CCXTMapperFactory.get_mapper('orders', self._provider_name)
         return self
 
+    def get_open_orders(self, ticker_symbol: str = None) -> 'CCXTExchangeRestBuilder[T, list[Order]]':
+        self._method_name = 'fetch_open_orders'
+        self._params = {'symbol': ticker_symbol} if ticker_symbol else {}
+        self._mapper = CCXTMapperFactory.get_mapper('open_orders', self._provider_name)
+        return self
+
     def cancel_order(self, uuid: str) -> 'CCXTExchangeRestBuilder[T, None]':
         self._method_name = 'cancel_order'
         self._params = {'id': uuid}

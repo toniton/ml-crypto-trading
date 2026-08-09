@@ -9,6 +9,7 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.core.managers.exchange_rest_manager import ExchangeRestManager
@@ -50,6 +51,12 @@ class RestManager(ExchangeRestManager, RestRegistry):
     def get_order(self, exchange: str, uuid: str) -> Any:
         service = self.get_service(exchange)
         builder = service.builder().get_order(uuid)
+        return service.execute(builder)
+
+    @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
+    def get_open_orders(self, exchange: str, ticker_symbol: str = None) -> List[Order]:
+        service = self.get_service(exchange)
+        builder = service.builder().get_open_orders(ticker_symbol)
         return service.execute(builder)
 
     def place_order(

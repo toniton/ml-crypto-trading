@@ -37,6 +37,15 @@ class SimulatedAccount:
     def get_order(self, order_id: str) -> Optional[Order]:
         return self._orders.get(order_id)
 
+    def get_open_orders(self, ticker_symbol: str = None) -> list[Order]:
+        open_orders = [
+            order for order in self._orders.values()
+            if order.status == OrderStatus.PENDING
+        ]
+        if ticker_symbol:
+            open_orders = [order for order in open_orders if order.ticker_symbol == ticker_symbol]
+        return open_orders
+
     def cancel_order(self, order_id: str):
         if order_id in self._orders:
             order = self._orders[order_id]

@@ -162,6 +162,15 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
         except StopIteration as exc:
             raise RuntimeWarning(f"Order {uuid} not found") from exc
 
+    def _handle_get_open_orders(self, ticker_symbol: str = None) -> list[Order]:
+        open_orders = [
+            o for o in self.account.orders
+            if o.status not in (OrderStatus.COMPLETED, OrderStatus.CANCELLED)
+        ]
+        if ticker_symbol:
+            open_orders = [o for o in open_orders if o.ticker_symbol == ticker_symbol]
+        return open_orders
+
     def _handle_cancel_order(self, uuid: str) -> None:
         self.account.orders = [o for o in self.account.orders if o.uuid != uuid]
 

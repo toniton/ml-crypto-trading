@@ -56,3 +56,40 @@ class TestCCXTRestExecution(unittest.TestCase):
             price=50000.0,
             params={'clientOrderId': 'test-uuid'}
         )
+
+    def test_execute_get_open_orders(self):
+        self.mock_exchange.fetch_open_orders.return_value = [
+            {
+                'id': '123',
+                'clientOrderId': 'test-uuid',
+                'symbol': 'BTC/USDT',
+                'price': 50000,
+                'amount': 1.5,
+                'side': 'buy',
+                'timestamp': 1600000000000,
+                'status': 'open'
+            },
+            {
+                'id': '124',
+                'clientOrderId': 'test-uuid-2',
+                'symbol': 'BTC/USDT',
+                'price': 49000,
+                'amount': 0.5,
+                'side': 'sell',
+                'timestamp': 1600000000000,
+                'status': 'open'
+            }
+        ]
+        self.builder.get_open_orders()
+        result = self.service.execute(self.builder)
+        self.mock_exchange.fetch_open_orders.assert_called_once_with()
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].uuid, 'test-uuid')
+        self.assertEqual(result[0].status.value, 'PENDING')
+        self.assertEqual(result[1].trade_action.value, 'SELL')
+
+    def test_execute_get_open_orders_with_symbol(self):
+        self.mock_exchange.fetch_open_orders.return_value = []
+        self.builder.get_open_orders('BTC/USDT')
+        self.service.execute(self.builder)
+        self.mock_exchange.fetch_open_orders.assert_called_once_with(symbol='BTC/USDT')

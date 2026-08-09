@@ -20,7 +20,8 @@ from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.clients.cryptodotcom.mappers.cryptodotcom_mappers import CryptoDotComAccountBalanceMapper, \
     CryptoDotComCandleMapper, \
-    CryptoDotComFeesMapper, CryptoDotComInstrumentFeesMapper, CryptoDotComMarketDataMapper, CryptoDotComOrderMapper
+    CryptoDotComFeesMapper, CryptoDotComInstrumentFeesMapper, CryptoDotComMarketDataMapper, CryptoDotComOrderMapper, \
+    CryptoDotComOrdersMapper
 from src.clients.cryptodotcom.utils.helpers import params_to_str
 from src.clients.cryptodotcom.utils.timeframe_map import CryptoDotComTimeframe
 from src.core.interfaces.exchange_rest_builder import Endpoint, ExchangeRestBuilder
@@ -179,6 +180,15 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
             mapper=CryptoDotComOrderMapper()
         )
         return self._set_endpoint(endpoint, {"client_oid": uuid})
+
+    def get_open_orders(self, ticker_symbol: str = None) -> CryptoDotComRestBuilder[list[Order]]:
+        endpoint = Endpoint(
+            path="private/get-open-orders",
+            private=True,
+            mapper=CryptoDotComOrdersMapper()
+        )
+        params = {"instrument_name": ticker_symbol} if ticker_symbol else {}
+        return self._set_endpoint(endpoint, params)
 
     def cancel_order(self, uuid: str) -> CryptoDotComRestBuilder[None]:
         endpoint = Endpoint(

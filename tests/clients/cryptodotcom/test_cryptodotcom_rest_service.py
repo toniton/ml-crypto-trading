@@ -48,3 +48,23 @@ class TestCryptoDotComRestService(unittest.TestCase):
         builder.sign.assert_called_with("test_key", "test_secret")
         mock_execute.assert_called_once()
         mock_mapper.map.assert_called_once()
+
+
+class TestCryptoDotComRestBuilderOpenOrders(unittest.TestCase):
+    def test_get_open_orders_endpoint(self):
+        builder = CryptoDotComRestBuilder()
+        builder.get_open_orders()
+        endpoint = builder.get_endpoint()
+        self.assertEqual(endpoint.path, "private/get-open-orders")
+        self.assertTrue(endpoint.private)
+        self.assertEqual(builder.get_params(), {})
+
+    def test_get_open_orders_with_ticker(self):
+        builder = CryptoDotComRestBuilder()
+        builder.get_open_orders("BTC_USD")
+        self.assertEqual(builder.get_params(), {"instrument_name": "BTC_USD"})
+
+    def test_get_open_orders_uses_orders_mapper(self):
+        builder = CryptoDotComRestBuilder()
+        builder.get_open_orders()
+        self.assertIsNotNone(builder.mapper())

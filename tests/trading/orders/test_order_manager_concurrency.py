@@ -76,6 +76,68 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertTrue(self.mock_uow.__enter__.called)
         self.assertTrue(self.mock_uow.__exit__.called)
 
+    def test_get_open_orders_does_not_update_database(self):
+        exchange_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
+                               trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                               created_time=time.time(), status=OrderStatus.PENDING)
+        mock_asset = MagicMock()
+        mock_asset.ticker_symbol = "BTC"
+        mock_asset.exchange.value = "p1"
+        self.order_manager._assets = [mock_asset]
+        self.order_manager._rest_manager.get_open_orders.return_value = [exchange_order]
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        updated = self.order_manager.get_open_orders("p1")
+
+        self.order_manager._rest_manager.get_open_orders.assert_called_once_with("p1", None)
+        self.order_manager._save_orders_to_database.assert_not_called()
+        self.assertEqual(updated, [exchange_order])
+
+    def test_get_open_orders_filters_by_ticker(self):
+        exchange_order = Order(uuid="6", price="104", quantity="1", provider_name="p1",
+                               trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                               created_time=time.time(), status=OrderStatus.PENDING)
+        mock_asset = MagicMock()
+        mock_asset.ticker_symbol = "BTC"
+        mock_asset.exchange.value = "p1"
+        self.order_manager._assets = [mock_asset]
+        self.order_manager._rest_manager.get_open_orders.return_value = [exchange_order]
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        updated = self.order_manager.get_open_orders("p1", "BTC")
+
+        self.order_manager._rest_manager.get_open_orders.assert_called_once_with("p1", "BTC")
+        self.order_manager._save_orders_to_database.assert_not_called()
+        self.assertEqual(updated, [exchange_order])
+
+    def test_get_open_orders_skips_failed_fetch(self):
+        mock_asset = MagicMock()
+        mock_asset.ticker_symbol = "BTC"
+        mock_asset.exchange.value = "p1"
+        self.order_manager._assets = [mock_asset]
+        self.order_manager._rest_manager.get_open_orders.side_effect = RuntimeError("exchange down")
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        updated = self.order_manager.get_open_orders("p1")
+
+        self.order_manager._save_orders_to_database.assert_not_called()
+        self.assertEqual(updated, [])
+
+    def test_update_pending_orders_updates_database(self):
+        exchange_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
+                               trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                               created_time=time.time(), status=OrderStatus.PENDING)
+        mock_asset = MagicMock()
+        mock_asset.ticker_symbol = "BTC"
+        mock_asset.exchange.value = "p1"
+        self.order_manager._assets = [mock_asset]
+        self.order_manager._rest_manager.get_open_orders.return_value = [exchange_order]
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        self.order_manager._update_pending_orders()
+
+        self.order_manager._save_orders_to_database.assert_called_once_with([exchange_order])
+
     def test_cancel_order_calls_provider(self):
         self.mock_rest_manager.cancel_order.return_value = None
 

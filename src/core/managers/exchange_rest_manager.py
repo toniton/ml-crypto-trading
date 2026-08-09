@@ -59,6 +59,13 @@ class ExchangeRestManager(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def get_open_orders(
+            self, exchange: str,
+            ticker_symbol: str = None
+    ) -> list[Order]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def cancel_order(
             self, exchange: str,
             uuid: str

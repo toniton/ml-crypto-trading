@@ -30,6 +30,9 @@ class SimulatedRestManager(RestManager):
     def get_order(self, exchange: str, uuid: str) -> Any:
         return self._account.get_order(uuid)
 
+    def get_open_orders(self, exchange: str, ticker_symbol: str = None) -> List[Order]:
+        return self._account.get_open_orders(ticker_symbol)
+
     def place_order(
             self,
             exchange: str,

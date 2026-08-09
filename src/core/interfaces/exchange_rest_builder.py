@@ -65,6 +65,10 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def get_open_orders(self, ticker_symbol: str = None) -> 'ExchangeRestBuilder[T, list[Order]]':
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def cancel_order(self, uuid: str) -> 'ExchangeRestBuilder[T, None]':
         raise NotImplementedError()
 

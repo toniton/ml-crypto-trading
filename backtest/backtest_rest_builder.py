@@ -70,6 +70,11 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
         self.params = {"uuid": uuid}
         return self
 
+    def get_open_orders(self, ticker_symbol: str = None) -> 'BacktestRestBuilder[T, list[Order]]':
+        self.method_name = "get_open_orders"
+        self.params = {"ticker_symbol": ticker_symbol}
+        return self
+
     def cancel_order(self, uuid: str) -> 'BacktestRestBuilder[T, None]':
         self.method_name = "cancel_order"
         self.params = {"uuid": uuid}

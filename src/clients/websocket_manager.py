@@ -76,7 +76,7 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
         builder = service.builder().account_balance()
         self._subscribe(key, service, builder, callback)
 
-    def subscribe_order_update(self, exchange: str, instrument_name: str, callback: Callable[[Order], None]):
+    def subscribe_order_update(self, exchange: str, instrument_name: str, callback: Callable[[list[Order]], None]):
         key = f"ORDER_{instrument_name}"
         service = self.get_service(exchange)
         builder = service.builder().order_update(instrument_name)
