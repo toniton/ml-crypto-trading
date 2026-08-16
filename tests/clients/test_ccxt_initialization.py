@@ -2,10 +2,10 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from src.application import Application
-from src.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import AppEnvEnum, EnvironmentConfig
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestCCXTInitialization(unittest.TestCase):
@@ -27,9 +27,9 @@ class TestCCXTInitialization(unittest.TestCase):
     def test_application_initializes_all_ccxt_providers(self, mock_db):
         # We need to ensure the modules are imported so subclasses are known
 
-        with patch('src.clients.ccxt.ccxt_rest_service.CCXTExchangeRestService.__init__',
+        with patch('src.exchange.clients.ccxt.ccxt_rest_service.CCXTExchangeRestService.__init__',
                    autospec=True) as mock_rest_init, \
-                patch('src.clients.ccxt.ccxt_websocket_service.CCXTExchangeWebSocketService.__init__',
+                patch('src.exchange.clients.ccxt.ccxt_websocket_service.CCXTExchangeWebSocketService.__init__',
                       autospec=True) as mock_ws_init:
 
             def rest_side_effect(self, provider):

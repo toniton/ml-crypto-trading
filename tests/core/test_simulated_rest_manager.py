@@ -2,8 +2,8 @@ import unittest
 from decimal import Decimal
 
 from api.interfaces.trade_action import OrderStatus, TradeAction
-from src.core.simulation.simulated_account import SimulatedAccount
-from src.core.simulation.simulated_rest_manager import SimulatedRestManager
+from src.simulation.simulated_account import SimulatedAccount
+from src.simulation.simulated_rest_manager import SimulatedRestManager
 
 
 class TestSimulatedRestManager(unittest.TestCase):

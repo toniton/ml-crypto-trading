@@ -6,8 +6,8 @@ import shutil
 import logging
 from unittest.mock import MagicMock
 
-from src.core.logging.audit_logging_mixin import AuditLoggingMixin
-from src.core.logging.manager import LoggingManager
+from src.logging.audit_logging_mixin import AuditLoggingMixin
+from src.logging.manager import LoggingManager
 from api.interfaces.market_data import MarketData
 
 

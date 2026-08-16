@@ -5,8 +5,8 @@ import uuid
 import shutil
 from unittest.mock import MagicMock
 
-from src.core.logging.manager import LoggingManager
-from src.core.logging.factory import LoggingFactory
+from src.logging.manager import LoggingManager
+from src.logging.factory import LoggingFactory
 
 
 class TestLogSeparation(unittest.TestCase):

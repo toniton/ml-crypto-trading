@@ -58,15 +58,16 @@ Classes inherit from specific mixins to gain logging capabilities without manual
 ### Example Usage
 
 ```python
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.logging.trading_logging_mixin import TradingLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging import TradingLoggingMixin
+
 
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin):
     def execute(self, market_data):
         self.app_logger.debug("Evaluating market conditions")
-        
+
         # ... logic ...
-        
+
         self.trading_logger.info(f"Executing BUY for {market_data.asset}")
 ```
 

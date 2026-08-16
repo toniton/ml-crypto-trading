@@ -7,10 +7,10 @@ import shutil
 from unittest.mock import MagicMock
 
 from api.interfaces.market_data import MarketData
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.logging.trading_logging_mixin import TradingLoggingMixin
-from src.core.logging.audit_logging_mixin import AuditLoggingMixin
-from src.core.logging.manager import LoggingManager
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.trading_logging_mixin import TradingLoggingMixin
+from src.logging.audit_logging_mixin import AuditLoggingMixin
+from src.logging.manager import LoggingManager
 
 
 class TestClass(ApplicationLoggingMixin):

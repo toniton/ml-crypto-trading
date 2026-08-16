@@ -6,10 +6,10 @@ from decimal import Decimal
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
-from src.clients.rest_manager import RestManager
-from src.clients.websocket_manager import WebSocketManager
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.registries.asset_schedule_registry import AssetScheduleRegistry
+from src.exchange.managers.rest_manager import RestManager
+from src.exchange.managers.websocket_manager import WebSocketManager
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.registries.asset_schedule_registry import AssetScheduleRegistry
 from src.trading.session.session_manager import SessionManager
 
 

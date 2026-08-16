@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, Field
 
-from vcs.core.hashing import Hashing
-from vcs.core.serializer import Serializer
+from src.vcs.core.hashing import Hashing
+from src.vcs.core.serializer import Serializer
 
 
 class SampleSubConfig(BaseModel):

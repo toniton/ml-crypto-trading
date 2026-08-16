@@ -3,19 +3,24 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.llm.tools.trading_context_tool import format_decimal
 from src.trading.markets.market_data_manager import MarketDataManager
 
 
 class MarketStatisticsInput(BaseModel):
-    ticker_symbol: str = Field(description="A single ticker symbol of the asset (e.g., 'BTC_USD'). Do not pass a list.")
+    ticker_symbol: str = Field(
+        description="A single ticker symbol of the asset (e.g., 'BTC_USD'). Do not pass a list."
+    )
 
 
 class MarketStatisticsTool(BaseTool, ApplicationLoggingMixin):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     name: str = "get_market_statistics"
-    description: str = "Returns the latest market statistics (close price, high price, low price, volume) for a SINGLE given asset."
+    description: str = (
+        "Returns the latest market statistics (close price, high price, low price, volume) "
+        "for a SINGLE given asset."
+    )
     args_schema: Type[BaseModel] = MarketStatisticsInput
     market_data_manager: MarketDataManager
     assets: list = []
@@ -26,7 +31,7 @@ class MarketStatisticsTool(BaseTool, ApplicationLoggingMixin):
             assets=assets
         )
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target_symbol = ticker_symbol.strip()
 
         # Find the asset object

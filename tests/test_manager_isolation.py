@@ -4,8 +4,8 @@ from unittest.mock import Mock, patch
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
-from database.database_manager import DatabaseManager
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.database.database_manager import DatabaseManager
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager

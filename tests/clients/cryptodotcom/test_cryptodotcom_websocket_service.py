@@ -1,10 +1,10 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder
-from src.clients.cryptodotcom.cryptodotcom_websocket_service import CryptoDotComWebSocketService
 from src.configuration.exchanges_config import ExchangesConfig
 from src.core.interfaces.subscription_data import SubscriptionVisibility
+from src.exchange.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder
+from src.exchange.clients.cryptodotcom.cryptodotcom_websocket_service import CryptoDotComWebSocketService
 
 
 class TestCryptoDotComWebSocketService(unittest.TestCase):
@@ -14,7 +14,7 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
         self.config.crypto_dot_com.websocket_endpoint = "wss://stream.crypto.com"
 
         # Patching ExchangesConfig class in the service module
-        patcher = patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.ExchangesConfig',
+        patcher = patch('src.exchange.clients.cryptodotcom.cryptodotcom_websocket_service.ExchangesConfig',
                         return_value=self.config)
         self.mock_get_config = patcher.start()
         self.addCleanup(patcher.stop)
@@ -36,7 +36,7 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
         builder = self.service.builder()
         self.assertIsInstance(builder, CryptoDotComWebSocketBuilder)
 
-    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('src.exchange.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
     @patch('threading.Thread')
     def test_ensure_connection_signaling(self, mock_thread, mock_ws_app):
         # Setup - mock the wait to avoid blocking
@@ -52,7 +52,7 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
         self.service._handle_open(exchange, SubscriptionVisibility.PUBLIC)
         self.assertTrue(self.service._connection_events[conn_id].is_set())
 
-    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('src.exchange.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
     @patch('threading.Thread')
     def test_inject_message_dispatch(self, mock_thread, mock_ws_app):
         with patch('threading.Event.wait', return_value=True):
@@ -67,7 +67,7 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
 
         callback.assert_called_once_with(exchange, SubscriptionVisibility.PUBLIC, test_data)
 
-    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('src.exchange.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
     @patch('threading.Thread')
     def test_inject_message_heartbeat(self, mock_thread, mock_ws_app):
         with patch('threading.Event.wait', return_value=True):
@@ -83,7 +83,7 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
             mock_inst.is_heartbeat.return_value = True
             mock_inst.get_heartbeat_response.return_value = {"method": "public/respond-heartbeat"}
 
-            # Setup a connection to send heartbeat response
+            # Set up a connection to send heartbeat response
             mock_conn = MagicMock()
             self.service._connections[exchange] = {SubscriptionVisibility.PUBLIC: mock_conn}
 
@@ -94,7 +94,7 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
             # Should send respond-heartbeat
             mock_conn.send.assert_called_once()
 
-    @patch('src.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
+    @patch('src.exchange.clients.cryptodotcom.cryptodotcom_websocket_service.WebSocketApp')
     @patch('threading.Thread')
     def test_subscribe_waits_for_connection(self, mock_thread, mock_ws_app):
         mock_builder = MagicMock(spec=CryptoDotComWebSocketBuilder)

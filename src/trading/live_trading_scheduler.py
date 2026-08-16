@@ -9,7 +9,7 @@ from schedule import Scheduler
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from src.core.interfaces.trading_scheduler import TradingScheduler
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class LiveTradingScheduler(TradingScheduler, ApplicationLoggingMixin):

@@ -7,15 +7,15 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from database.database_manager import DatabaseManager
+from src.database.database_manager import DatabaseManager
 from src.application import Application
 from src.configuration.trading_config import TradingConfig
 from src.trading.consensus.consensus_factor import ConsensusFactor
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
-from vcs.application.events import RefChangedEvent
-from vcs.application.service import VCSService
+from src.vcs.application.events import RefChangedEvent
+from src.vcs.application.service import VCSService
 
 
 @pytest.fixture

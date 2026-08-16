@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
-from src.core.simulation.simulated_websocket_manager import SimulatedWebSocketManager
+from src.simulation.simulated_websocket_manager import SimulatedWebSocketManager
 
 
 class TestSimulatedWebSocketManager(unittest.TestCase):

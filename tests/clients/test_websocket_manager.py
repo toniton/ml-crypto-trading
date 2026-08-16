@@ -1,15 +1,15 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from src.clients.websocket_manager import WebSocketManager
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
+from src.exchange.managers.websocket_manager import WebSocketManager
 
 
 class TestWebSocketManager(unittest.TestCase):
     def setUp(self):
-        self.patcher = patch('src.core.logging.application_logging_mixin.ApplicationLoggingMixin.app_logger')
+        self.patcher = patch('src.logging.application_logging_mixin.ApplicationLoggingMixin.app_logger')
         self.mock_logger = self.patcher.start()
         self.websocket_manager = WebSocketManager()
 

@@ -33,7 +33,7 @@ format:
 	pre-commit
 
 lint: .pylintrc
-	$(PYLINT) src tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
+	$(PYLINT) src tests main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
 
 test:
 	export PYTHONPATH=$$PYTHONPATH:. && $(VENV_DIR)/bin/pytest tests/ --cov --cov-branch --cov-report=xml -s

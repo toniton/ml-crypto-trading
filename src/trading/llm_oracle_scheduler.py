@@ -10,7 +10,7 @@ from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from src.configuration.trading_config import LlmSettings
 from src.core.interfaces.trading_scheduler import TradingScheduler
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class LlmOracleScheduler(TradingScheduler, ApplicationLoggingMixin):

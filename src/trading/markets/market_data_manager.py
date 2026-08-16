@@ -7,9 +7,9 @@ from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
-from src.clients.rest_manager import RestManager
-from src.clients.websocket_manager import WebSocketManager
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.exchange.managers.rest_manager import RestManager
+from src.exchange.managers.websocket_manager import WebSocketManager
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class MarketDataManager(ApplicationLoggingMixin):

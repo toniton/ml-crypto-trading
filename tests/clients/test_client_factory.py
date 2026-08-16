@@ -1,13 +1,13 @@
 from unittest.mock import MagicMock
 
-from src.clients.client_factory import ClientFactory
-from src.clients.rest_manager import RestManager
-from src.clients.websocket_manager import WebSocketManager
+from src.exchange.factories.client_factory import ClientFactory
+from src.exchange.managers.rest_manager import RestManager
+from src.exchange.managers.websocket_manager import WebSocketManager
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.subscription_data import SubscriptionData, SubscriptionVisibility
-from src.core.simulation.simulated_rest_manager import SimulatedRestManager
-from src.core.simulation.simulated_websocket_manager import SimulatedWebSocketManager
+from src.simulation.simulated_rest_manager import SimulatedRestManager
+from src.simulation.simulated_websocket_manager import SimulatedWebSocketManager
 
 
 def test_client_factory_real_managers():
@@ -31,7 +31,7 @@ def test_client_factory_simulated_managers():
 def test_simulated_websocket_manager_skips_private(mocker):
     # Mock the logger before instantiating the manager
     mock_logger = MagicMock()
-    mocker.patch('src.core.logging.factory.LoggingFactory.get_application_logger', return_value=mock_logger)
+    mocker.patch('src.logging.factory.LoggingFactory.get_application_logger', return_value=mock_logger)
 
     swm = SimulatedWebSocketManager()
     service = MagicMock(spec=ExchangeWebSocketService)

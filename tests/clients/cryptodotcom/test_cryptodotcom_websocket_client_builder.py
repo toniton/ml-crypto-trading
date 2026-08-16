@@ -1,7 +1,7 @@
 import unittest
 from api.interfaces.timeframe import Timeframe
-from src.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder
 from src.core.interfaces.subscription_data import SubscriptionVisibility
+from src.exchange.clients.cryptodotcom.cryptodotcom_websocket_builder import CryptoDotComWebSocketBuilder
 
 
 class TestCryptoDotComWebSocketClient(unittest.TestCase):

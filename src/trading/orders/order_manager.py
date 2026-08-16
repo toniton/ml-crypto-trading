@@ -8,12 +8,12 @@ from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trade_action import OrderStatus
-from database.database_manager import DatabaseManager
-from database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.database.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.interfaces.trading_journal import TradingJournal
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.clients.rest_manager import RestManager
-from src.clients.websocket_manager import WebSocketManager
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.exchange.managers.rest_manager import RestManager
+from src.exchange.managers.websocket_manager import WebSocketManager
 
 
 class OrderManager(ApplicationLoggingMixin):

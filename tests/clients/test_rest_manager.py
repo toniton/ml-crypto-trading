@@ -3,8 +3,8 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from api.interfaces.trade_action import TradeAction
-from src.clients.rest_manager import RestManager
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
+from src.exchange.managers.rest_manager import RestManager
 
 
 class TestRestManager(unittest.TestCase):

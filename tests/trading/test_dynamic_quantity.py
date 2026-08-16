@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.market_data import MarketData
 from api.interfaces.trading_context import TradingContext
-from src.core.managers.manager_container import ManagerContainer
+from src.trading.managers.manager_container import ManagerContainer
 from src.trading.trading_executor import TradingExecutor
 
 

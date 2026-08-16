@@ -14,7 +14,7 @@ from backtest.backtest_websocket_service import BacktestWebSocketService
 from backtest.events.domain_events import CandlesEvent, MarketDataEvent, TickEvent
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class BacktestEngine(ApplicationLoggingMixin):

@@ -34,7 +34,7 @@ class ExpressionParser:
         cls._validate_node(tree.body)
 
     @classmethod
-    def _validate_node(cls, node: ast.AST) -> None:
+    def _validate_node(cls, node: ast.AST) -> None:  # pylint: disable=too-many-return-statements,too-many-branches
         if isinstance(node, ast.Constant):
             return
         if isinstance(node, ast.Name):
@@ -84,7 +84,7 @@ class ExpressionParser:
             return None
         return self._evaluate(self._tree.body, context)
 
-    def _evaluate(self, node: ast.AST, context: ExpressionContext) -> Any:
+    def _evaluate(self, node: ast.AST, context: ExpressionContext) -> Any:  # pylint: disable=too-many-return-statements
         if isinstance(node, ast.Constant):
             return node.value
         if isinstance(node, ast.Name):
@@ -128,18 +128,17 @@ class ExpressionParser:
         return True
 
     def _apply_comparison(self, left: Any, op: ast.cmpop, right: Any) -> bool:
-        if isinstance(op, ast.Gt):
-            return left > right
-        if isinstance(op, ast.Lt):
-            return left < right
-        if isinstance(op, ast.GtE):
-            return left >= right
-        if isinstance(op, ast.LtE):
-            return left <= right
-        if isinstance(op, ast.Eq):
-            return left == right
-        if isinstance(op, ast.NotEq):
-            return left != right
+        comparisons = {
+            ast.Gt: lambda a, b: a > b,
+            ast.Lt: lambda a, b: a < b,
+            ast.GtE: lambda a, b: a >= b,
+            ast.LtE: lambda a, b: a <= b,
+            ast.Eq: lambda a, b: a == b,
+            ast.NotEq: lambda a, b: a != b,
+        }
+        for op_type, func in comparisons.items():
+            if isinstance(op, op_type):
+                return func(left, right)
         return False
 
     def _evaluate_ifexp(self, node: ast.IfExp, context: ExpressionContext) -> Any:

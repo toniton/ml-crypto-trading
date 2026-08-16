@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import MagicMock
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction, OrderStatus
-from database.database_manager import DatabaseManager
-from database.unit_of_work import UnitOfWork
+from src.database.database_manager import DatabaseManager
+from src.database.unit_of_work import UnitOfWork
 from src.trading.orders.order_manager import OrderManager
 
 from src.core.interfaces.trading_journal import TradingJournal

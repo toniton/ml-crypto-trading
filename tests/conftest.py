@@ -16,6 +16,6 @@ def setup_test_environment():
     mock_env.postgres_password = MagicMock()
     mock_env.postgres_password.get_secret_value.return_value = "password"
 
-    with patch('src.core.logging.manager.EnvironmentConfig', return_value=mock_env), \
+    with patch('src.logging.manager.EnvironmentConfig', return_value=mock_env), \
          patch('src.configuration.providers.database_config.EnvironmentConfig', return_value=mock_env):
         yield mock_env
