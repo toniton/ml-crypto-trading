@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 from decimal import Decimal
 from unittest.mock import MagicMock
 
@@ -17,7 +18,7 @@ from backtest.events.domain_events import (
     OrderFillEvent,
 )
 from src.core.interfaces.subscription_data import SubscriptionVisibility
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestBacktestWebSocketService:

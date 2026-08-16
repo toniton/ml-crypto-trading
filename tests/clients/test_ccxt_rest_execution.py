@@ -3,13 +3,13 @@ from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
 from api.interfaces.order import TradeAction
-from src.clients.ccxt.ccxt_rest_builder import CCXTExchangeRestBuilder
-from src.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.clients.ccxt.ccxt_rest_builder import CCXTExchangeRestBuilder
+from src.exchange.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestCCXTRestExecution(unittest.TestCase):
-    @patch('src.clients.ccxt.ccxt_rest_service.EnvironmentConfig')
+    @patch('src.exchange.clients.ccxt.ccxt_rest_service.EnvironmentConfig')
     @patch('ccxt.binance')
     def setUp(self, mock_binance, _mock_env_config):
         self.mock_exchange = MagicMock()

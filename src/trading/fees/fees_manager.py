@@ -4,7 +4,7 @@ import threading
 
 from api.interfaces.asset import Asset
 from api.interfaces.fees import Fees
-from src.clients.rest_manager import RestManager
+from src.exchange.managers.rest_manager import RestManager
 
 
 class FeesManager:

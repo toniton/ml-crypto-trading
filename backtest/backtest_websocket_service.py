@@ -19,7 +19,7 @@ from src.core.interfaces.subscription_data import (
     SubscriptionData,
     SubscriptionVisibility,
 )
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class BacktestWebSocketService(ExchangeWebSocketService):

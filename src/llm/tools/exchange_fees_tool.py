@@ -3,7 +3,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.llm.tools.trading_context_tool import format_decimal
 from src.trading.fees.fees_manager import FeesManager
 
@@ -26,7 +26,7 @@ class ExchangeFeesTool(BaseTool, ApplicationLoggingMixin):
             assets=assets
         )
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target_symbol = ticker_symbol.strip()
 
         # Find the asset object

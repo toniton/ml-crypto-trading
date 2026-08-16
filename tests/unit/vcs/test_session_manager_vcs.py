@@ -5,9 +5,9 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from api.interfaces.asset import Asset
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.session.session_manager import SessionManager
-from vcs.domain.commit import Commit
+from src.vcs.domain.commit import Commit
 
 
 def test_session_manager_pins_commit_hash():

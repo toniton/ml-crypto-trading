@@ -1,7 +1,7 @@
 import importlib
 import pkgutil
 
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class ApplicationHelper(ApplicationLoggingMixin):

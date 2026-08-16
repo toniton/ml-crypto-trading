@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock, patch

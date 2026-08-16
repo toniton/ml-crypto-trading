@@ -8,7 +8,7 @@ from pydantic.dataclasses import dataclass
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 @dataclass(frozen=True)

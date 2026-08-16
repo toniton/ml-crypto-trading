@@ -14,11 +14,11 @@ from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
 from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
-from src.core.expressions.trading_expression_factory import TradingExpressionFactory
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.logging.audit_logging_mixin import AuditLoggingMixin
-from src.core.logging.trading_logging_mixin import TradingLoggingMixin
-from src.core.managers.manager_container import ManagerContainer
+from src.trading.factories.trading_expression_factory import TradingExpressionFactory
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.audit_logging_mixin import AuditLoggingMixin
+from src.logging.trading_logging_mixin import TradingLoggingMixin
+from src.trading.managers.manager_container import ManagerContainer
 
 
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):

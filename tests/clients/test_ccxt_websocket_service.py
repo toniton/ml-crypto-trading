@@ -2,10 +2,10 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from src.clients.ccxt.ccxt_websocket_service import CCXTExchangeWebSocketService
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.subscription_data import SubscriptionVisibility
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.clients.ccxt.ccxt_websocket_service import CCXTExchangeWebSocketService
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestCCXTExchangeWebSocketService(unittest.IsolatedAsyncioTestCase):

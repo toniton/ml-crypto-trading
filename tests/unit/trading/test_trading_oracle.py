@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.trading_oracle import TradingOracle
 
 

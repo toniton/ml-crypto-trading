@@ -4,9 +4,9 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from vcs.application.events import RefChangedEvent
-from vcs.application.listener import RefChangeListener
-from vcs.domain.commit import Commit
+from src.vcs.application.events import RefChangedEvent
+from src.vcs.application.listener import RefChangeListener
+from src.vcs.domain.commit import Commit
 
 
 class FakeCursor:
@@ -136,14 +136,14 @@ class TestListenLoopResiliency:
             return fake_conn
 
         fake_engine.raw_connection = raw_connection
-        listener.db_manager._create_engine = MagicMock(return_value=fake_engine)
+        listener.db_manager.get_engine = MagicMock(return_value=fake_engine)
 
         def fake_select(_, __, ___, ____):
             listener._stop_event.set()
             return ([], [], [])
 
-        monkeypatch.setattr("vcs.application.listener.select.select", fake_select)
-        monkeypatch.setattr("vcs.application.listener.time.sleep", lambda _: None)
+        monkeypatch.setattr("src.vcs.application.listener.select.select", fake_select)
+        monkeypatch.setattr("src.vcs.application.listener.time.sleep", lambda _: None)
 
         listener._listen_loop()
 
@@ -161,14 +161,14 @@ class TestListenLoopResiliency:
         fake_conn = FakeConnection(payload='{"ref": "staging", "commit": "' + "h" * 64 + '"}')
         fake_engine = MagicMock()
         fake_engine.raw_connection = MagicMock(return_value=fake_conn)
-        listener.db_manager._create_engine = MagicMock(return_value=fake_engine)
+        listener.db_manager.get_engine = MagicMock(return_value=fake_engine)
 
         def fake_select(_, __, ___, ____):
             listener._stop_event.set()
             return ([fake_conn], [], [])
 
-        monkeypatch.setattr("vcs.application.listener.select.select", fake_select)
-        monkeypatch.setattr("vcs.application.listener.time.sleep", lambda _: None)
+        monkeypatch.setattr("src.vcs.application.listener.select.select", fake_select)
+        monkeypatch.setattr("src.vcs.application.listener.time.sleep", lambda _: None)
 
         listener._listen_loop()
 

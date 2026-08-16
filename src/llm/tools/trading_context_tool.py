@@ -4,7 +4,7 @@ from typing import Any, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class TradingContextInput(BaseModel):
@@ -32,14 +32,17 @@ def format_decimal(val: Any) -> str:
 class TradingContextTool(BaseTool, ApplicationLoggingMixin):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     name: str = "get_trading_context"
-    description: str = "Returns the current trading context (balances, open/closed positions) for a SINGLE given asset. Call this tool multiple times if you need to check multiple assets."
+    description: str = (
+        "Returns the current trading context (balances, open/closed positions) for a SINGLE given asset. "
+        "Call this tool multiple times if you need to check multiple assets."
+    )
     args_schema: Type[BaseModel] = TradingContextInput
     session_manager: Any
 
     def __init__(self, session_manager: Any):
         super().__init__(session_manager=session_manager)
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target_symbol = ticker_symbol.strip()
 
         if not self.session_manager.current_session:
@@ -52,7 +55,14 @@ class TradingContextTool(BaseTool, ApplicationLoggingMixin):
                 break
 
         if not target_ctx:
-            return f"Error: Asset {target_symbol} not found in current session. Available: {[ctx.ticker_symbol for ctx in self.session_manager.current_session.trading_contexts.values()]}"
+            available = [
+                ctx.ticker_symbol
+                for ctx in self.session_manager.current_session.trading_contexts.values()
+            ]
+            return (
+                f"Error: Asset {target_symbol} not found in current session. "
+                f"Available: {available}"
+            )
 
         open_positions_str = "None"
         if target_ctx.open_positions:

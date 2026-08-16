@@ -7,11 +7,12 @@ from threading import Event
 import src.configuration.providers
 import src.trading.consensus.strategies
 import src.trading.protection.guards
-from database.database_manager import DatabaseManager
-from vcs.application.events import RefChangedEvent
-from vcs.application.listener import RefChangeListener
-from vcs.application.service import VCSService
-from src.clients.client_factory import ClientFactory
+import src.exchange.clients
+from src.database.database_manager import DatabaseManager
+from src.vcs.application.events import RefChangedEvent
+from src.vcs.application.listener import RefChangeListener
+from src.vcs.application.service import VCSService
+from src.exchange.factories.client_factory import ClientFactory
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
@@ -22,8 +23,8 @@ from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketServ
 from src.core.interfaces.guard import Guard
 from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.core.interfaces.trading_scheduler import TradingScheduler
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.managers.manager_container import ManagerContainer
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.managers.manager_container import ManagerContainer
 from src.llm.model_factory import ModelFactory
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
@@ -121,7 +122,7 @@ class Application(ApplicationLoggingMixin):
             self._managers.websocket_manager.register_service(instance)
 
     def _setup_clients(self):
-        ApplicationHelper.import_modules(src.clients)
+        ApplicationHelper.import_modules(src.exchange.clients)
 
         self._setup_service_clients(ExchangeRestService)
         self._setup_service_clients(ExchangeWebSocketService)
@@ -130,7 +131,7 @@ class Application(ApplicationLoggingMixin):
             self, service_class: type[ExchangeRestService | ExchangeWebSocketService]
     ):
         for cls in service_class.__subclasses__():
-            if cls.__module__.startswith(src.clients.__name__):
+            if cls.__module__.startswith(src.exchange.clients.__name__):
                 if hasattr(cls, 'get_supported_providers') and callable(cls.get_supported_providers):
                     for provider in cls.get_supported_providers():
                         instance = cls(provider)

@@ -4,7 +4,7 @@ from api.interfaces.trading_context import TradingContext
 from api.interfaces.asset import Asset
 from src.trading.helpers.portfolio_helper import PortfolioHelper
 from src.core.interfaces.guard import Guard
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class MaxDrawDownGuard(ApplicationLoggingMixin, Guard):

@@ -7,11 +7,11 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from database.database_manager import DatabaseManager
-from database.repositories.providers.postgres_blob_repository import PostgresBlobRepository
-from database.repositories.providers.postgres_commit_repository import PostgresCommitRepository
-from database.repositories.providers.postgres_ref_repository import PostgresRefRepository
-from vcs.application.service import VCSService
+from src.database.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_blob_repository import PostgresBlobRepository
+from src.database.repositories.providers.postgres_commit_repository import PostgresCommitRepository
+from src.database.repositories.providers.postgres_ref_repository import PostgresRefRepository
+from src.vcs.application.service import VCSService
 
 
 @pytest.fixture

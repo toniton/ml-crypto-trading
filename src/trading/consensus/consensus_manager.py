@@ -3,7 +3,7 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.trading_strategy import TradingStrategy
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.consensus.consensus_factor import ConsensusFactor
 
 

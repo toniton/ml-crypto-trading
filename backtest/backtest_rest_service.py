@@ -18,8 +18,8 @@ from backtest.backtest_rest_builder import BacktestRestBuilder
 from backtest.events.domain_events import BalanceUpdateEvent, OrderFillEvent
 from src.configuration.application_config import ApplicationConfig
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
-from src.core.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.core.managers.exchange_rest_manager import ExchangeProvidersEnum
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 @dataclass
