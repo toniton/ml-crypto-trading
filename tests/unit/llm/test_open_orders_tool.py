@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
-from src.llm.tools.open_orders_tool import GetOpenOrdersTool
+from src.llm import GetOpenOrdersTool
 from src.trading.orders.order_manager import OrderManager
 
 

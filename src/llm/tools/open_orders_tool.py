@@ -3,8 +3,8 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.llm.tools.trading_context_tool import format_decimal
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.orders.order_manager import OrderManager
 
 
@@ -43,7 +43,7 @@ class GetOpenOrdersTool(BaseTool, ApplicationLoggingMixin):
             assets=assets
         )
 
-    def _run(self, exchange: str = None, ticker_symbol: str = None) -> str:  # pylint: disable=arguments-differ
+    def _run(self, exchange: str = None, ticker_symbol: str = None) -> str:
         target_exchange = exchange.strip() if exchange else None
         target_symbol = ticker_symbol.strip() if ticker_symbol else None
 

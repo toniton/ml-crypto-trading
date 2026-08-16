@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -12,12 +13,23 @@ from src.configuration.helpers.yaml_config_settings_source import CustomYamlConf
 from src.trading.consensus.consensus_factor import ConsensusFactor
 
 
+class LlmProvider(str, Enum):
+    OLLAMA = "ollama"
+    DEEPSEEK = "deepseek"
+    GEMINI = "gemini"
+    GROQ = "groq"
+
+
 class LlmSettings(BaseModel):
+    provider: LlmProvider = LlmProvider.OLLAMA
     model: str = "llama3.2"
-    base_url: str = "http://localhost:11434"
+    base_url: Optional[str] = Field(default=None,
+                                    description="Provider endpoint. If unset, the provider's default is used.")
     temperature: float = 0.0
-    schedule: AssetSchedule = AssetSchedule.EVERY_MINUTE
+    schedule: AssetSchedule = AssetSchedule.EVERY_HOUR
     timeout: Optional[float] = None
+    keep_alive: Optional[str] = None
+    api_key: Optional[str] = Field(default=None, description="API key for cloud LLM providers (e.g. DeepSeek).")
 
 
 class TradingConfig(BaseSettings):

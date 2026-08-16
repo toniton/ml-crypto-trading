@@ -14,6 +14,7 @@ class ApplicationConfig(BaseSettings):
     trading_config_filepath: str = Field(alias="assets-conf")
     historical_data_dir_path: Optional[str] = Field(default=None, alias="backtest-source")
     simulated: bool = Field(default=False, alias="simulated")
+    headless: bool = Field(default=False, alias="headless")
 
     model_config = SettingsConfigDict(
         cli_parse_args=True,

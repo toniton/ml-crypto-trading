@@ -5,9 +5,9 @@ from unittest.mock import MagicMock
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.trading_context import TradingContext
-from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
+from src.llm import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
-from src.llm.tools.trading_context_tool import TradingContextTool, format_decimal
+from src.llm import TradingContextTool, format_decimal
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.markets.market_data_manager import MarketDataManager
 

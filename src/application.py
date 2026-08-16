@@ -3,11 +3,14 @@ from __future__ import annotations
 import atexit
 from queue import Queue
 from threading import Event
+from typing import Optional
 
 import src.configuration.providers
 import src.trading.consensus.strategies
 import src.trading.protection.guards
 import src.exchange.clients
+from src.agent import AgentGateway
+from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
 from src.vcs.application.events import RefChangedEvent
 from src.vcs.application.listener import RefChangeListener
@@ -55,6 +58,7 @@ class Application(ApplicationLoggingMixin):
         self.is_running = Event()
         self.is_ready = Event()
         self._trading_engine = None
+        self._api_server: Optional[ApiServer] = None
         self._backtest_scheduler = backtest_scheduler
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
@@ -189,6 +193,13 @@ class Application(ApplicationLoggingMixin):
         )
         trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
 
+        if not self._application_config.headless:
+            api_llm = ModelFactory.create_model(self._llm_settings)
+            api_llm.bind_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
+            gateway = AgentGateway(api_llm, self._application_config.trading_config_filepath)
+            self._api_server = ApiServer(agent=gateway)
+            self._api_server.start()
+
         self._trading_engine = TradingEngine(
             trading_scheduler, trading_executor, oracle_scheduler, trading_oracle
         )
@@ -226,6 +237,9 @@ class Application(ApplicationLoggingMixin):
     def shutdown(self):
         if not self.is_running.is_set():
             return
+        if self._api_server:
+            self._api_server.stop()
+            self._api_server = None
         self._config_listener.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()
