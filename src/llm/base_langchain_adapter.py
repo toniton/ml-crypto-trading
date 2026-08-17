@@ -33,6 +33,8 @@ SYSTEM_PROMPT = """
             - Adapt your output format and level of detail to the user's request.
             - Be concise, objective, and evidence-driven.
             - Never answer using assumed tool outputs. If a required tool fails or is unavailable, explain that the information could not be retrieved.
+            - Write every calculation as ONE single-line formula, not split across lines. Wrap each formula in $$ ... $$ and put it on its own paragraph with a blank line before and after so it renders as a block.
+              Keep currency amounts (e.g. $64,249.78), units, and short narrative terms like P close in ordinary text; inside math use \\text{...} only for symbols such as \\text{BTC} and never write a bare $ inside a formula (escape it as \\$ if truly needed).
         """
 
 

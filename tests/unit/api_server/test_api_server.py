@@ -154,6 +154,20 @@ class TestGatewayStreaming(unittest.TestCase):
         self.assertEqual(tokens, ["a", "b", "c"])
         self.assertEqual(events[-1].type, "done")
 
+    def test_general_prompt_streams_normalized_math(self):
+        llm = FakeLlmAdapter(
+            chunks=[r"\[ 0.02282867 \tex", r"t{ BTC} \times $64,249.78/BTC", r" \approx $1,466.70 \]"],
+        )
+        gateway = build_gateway(llm)
+        events = self.collect(gateway.stream("How rich am I?"))
+        text = "".join(event.payload for event in events if event.type == "token")
+        self.assertEqual(events[-1].type, "done")
+        self.assertEqual(text.count("$$"), 2)
+        self.assertIn(r"\text{ BTC}", text)
+        self.assertIn(r"\times", text)
+        self.assertIn(r"\approx", text)
+        self.assertIn("$1,466.70", text)
+
     def test_configuration_prompt_streams_node_and_block_events(self):
         llm = FakeLlmAdapter([
             AgentRoute(

@@ -12,6 +12,7 @@ from src.agent.router.models import AgentIntent, AgentRoute
 from src.agent.runtime.agent import AgentDefinition
 from src.agent.runtime.registry import AgentRegistry
 from src.agent.events import AIEvent
+from src.llm.math_normalizer import DelimiterStream
 
 AgentResult = Union[ConfigurationResult, GeneralResult]
 
@@ -62,8 +63,25 @@ class AgentGateway:
         definition = self._registry.get_by_name(agent_name) or self._registry.get(route.intent)
 
         if definition.graph is None:
+            sanitizer = DelimiterStream()
             async for chunk in self._llm.stream(prompt):
-                yield AIEvent(type="token", response_id=response_id, agent=definition.name, payload=str(chunk))
+                if chunk:
+                    text = sanitizer.push(str(chunk))
+                    if text:
+                        yield AIEvent(
+                            type="token",
+                            response_id=response_id,
+                            agent=definition.name,
+                            payload=text,
+                        )
+            tail = sanitizer.flush()
+            if tail:
+                yield AIEvent(
+                    type="token",
+                    response_id=response_id,
+                    agent=definition.name,
+                    payload=tail,
+                )
             yield AIEvent(type="done", response_id=response_id, agent=definition.name,
                           payload={"kind": definition.name})
             return
