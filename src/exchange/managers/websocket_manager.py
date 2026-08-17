@@ -12,7 +12,7 @@ from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuil
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.subscription_data import SubscriptionVisibility
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.trading.registries.websocket_registry import WebSocketRegistry
+from src.exchange.registries.websocket_registry import WebSocketRegistry
 
 
 class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):

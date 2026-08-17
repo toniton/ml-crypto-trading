@@ -13,7 +13,7 @@ from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
-from src.trading.registries.rest_registry import RestRegistry
+from src.exchange.registries.rest_registry import RestRegistry
 
 
 class RestManager(ExchangeRestManager, RestRegistry):

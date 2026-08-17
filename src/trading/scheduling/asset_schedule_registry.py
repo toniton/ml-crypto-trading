@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from abc import ABC
-
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
-from src.core.interfaces.registry import Registry
+from src.core.registry import MultiRegistry
 
 
-class AssetScheduleRegistry(Registry[AssetSchedule, Asset], ABC):
+class AssetScheduleRegistry(MultiRegistry[AssetSchedule, Asset]):
     UNIT_MAP = {
         AssetSchedule.EVERY_SECOND: lambda s: s.every(1).second,
         AssetSchedule.EVERY_MINUTE: lambda s: s.every(1).minute,
@@ -28,10 +26,10 @@ class AssetScheduleRegistry(Registry[AssetSchedule, Asset], ABC):
     def register_assets(self, assets: list[Asset], override_schedule: AssetSchedule | None = None):
         for asset in assets:
             asset_schedule = asset.schedule if override_schedule is None else override_schedule
-            self._register(asset_schedule, asset)
+            self.register(asset_schedule, asset)
 
     def get_assets(self, schedule: AssetSchedule) -> list[Asset]:
-        return self._get(schedule)
+        return self.get(schedule)
 
     def get_registered_schedules(self) -> list[AssetSchedule]:
-        return self._keys()
+        return self.keys()

@@ -9,7 +9,7 @@ from api.interfaces.asset_schedule import AssetSchedule
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.trading.registries.asset_schedule_registry import AssetScheduleRegistry
+from src.trading.scheduling.asset_schedule_registry import AssetScheduleRegistry
 from src.trading.session.session_manager import SessionManager
 
 

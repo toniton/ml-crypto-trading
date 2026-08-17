@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Callable, List
 
 from api.interfaces.asset import Asset
-from src.trading.registries.asset_schedule_registry import AssetScheduleRegistry
+from src.trading.scheduling.asset_schedule_registry import AssetScheduleRegistry
 
 
 class TradingScheduler(AssetScheduleRegistry, ABC):
