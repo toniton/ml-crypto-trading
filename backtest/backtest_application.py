@@ -9,13 +9,14 @@ from backtest.backtest_trading_scheduler import BacktestTradingScheduler
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.llm_config import LlmConfig
 from src.configuration.trading_config import TradingConfig
 
 
 class BacktestApplication:
     def __init__(
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
-            trading_config: TradingConfig, is_backtest_mode: bool = False,
+            trading_config: TradingConfig, llm_config: LlmConfig, is_backtest_mode: bool = False,
     ):
         self.app_thread = None
         self.app = None
@@ -24,6 +25,7 @@ class BacktestApplication:
         self._application_config = application_config
         self._environment_config = environment_config
         self._trading_config = trading_config
+        self._llm_config = llm_config
         self._is_backtest_mode = is_backtest_mode
         self._timestamps = {}
 
@@ -38,7 +40,8 @@ class BacktestApplication:
         bus = BacktestEventBus()
 
         self.app = Application(application_config=self._application_config, environment_config=self._environment_config,
-                               trading_config=self._trading_config, is_backtest_mode=self._is_backtest_mode,
+                               trading_config=self._trading_config, llm_config=self._llm_config,
+                               is_backtest_mode=self._is_backtest_mode,
                                backtest_scheduler=scheduler)
         self.backtest_engine = BacktestEngine(self.app, loader, clock, scheduler, bus, self._application_config)
         self.app_thread = threading.Thread(target=self.app.startup, name="BacktestApplication", daemon=True)

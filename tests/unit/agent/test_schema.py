@@ -38,17 +38,6 @@ class TestSchema:
         paths = {field.path for field in fields}
         assert "consensus.buy" in paths
         assert "assets.BTC_USD.guard_config.max_drawdown_percentage" in paths
-        assert "llm.api_key" in paths
-
-    def test_api_key_is_locked(self, sample_config):
-        schema = ConfigurationSchema()
-        api_key_field = next(
-            field for field in schema.build_field_catalog(
-                {"llm": {"api_key": "secret"}, "assets": [], "consensus": {}}
-            )
-            if field.path == "llm.api_key"
-        )
-        assert api_key_field.mutable is False
 
     def test_render_catalog_readable(self, sample_config):
         schema = ConfigurationSchema()

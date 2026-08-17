@@ -18,6 +18,7 @@ from src.vcs.application.service import VCSService
 from src.exchange.factories.client_factory import ClientFactory
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.llm_config import LlmConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.base_config import BaseConfig
@@ -51,7 +52,8 @@ from src.trading.trading_oracle import TradingOracle
 class Application(ApplicationLoggingMixin):
     def __init__(
             self, application_config: ApplicationConfig, environment_config: EnvironmentConfig,
-            trading_config: TradingConfig, activity_queue: Queue = Queue(),
+            trading_config: TradingConfig, llm_config: LlmConfig,
+            activity_queue: Queue = Queue(),
             is_backtest_mode: bool = False,
             backtest_scheduler: TradingScheduler = None,
     ):
@@ -71,7 +73,7 @@ class Application(ApplicationLoggingMixin):
         self._assets = trading_config.assets
         self._dynamic_quantity = trading_config.dynamic_quantity
         self._consensus = trading_config.consensus
-        self._llm_settings = trading_config.llm
+        self._llm_config = llm_config
         self._trading_config = trading_config
 
         self._vcs_ref = "HEAD"
@@ -172,9 +174,9 @@ class Application(ApplicationLoggingMixin):
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity
         )
-        oracle_scheduler = LlmOracleScheduler(self._llm_settings)
-        oracle_scheduler.register_assets(self._assets, self._llm_settings.schedule)
-        llm = ModelFactory.create_model(self._llm_settings)
+        oracle_scheduler = LlmOracleScheduler(self._llm_config)
+        oracle_scheduler.register_assets(self._assets, self._llm_config.schedule)
+        llm = ModelFactory.create_model(self._llm_config)
         trading_oracle = TradingOracle(llm)
         context_tool = TradingContextTool(
             session_manager=self._managers.session_manager
@@ -194,7 +196,7 @@ class Application(ApplicationLoggingMixin):
         trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
 
         if not self._application_config.headless:
-            api_llm = ModelFactory.create_model(self._llm_settings)
+            api_llm = ModelFactory.create_model(self._llm_config)
             api_llm.bind_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
             gateway = AgentGateway(api_llm, self._application_config.trading_config_filepath)
             self._api_server = ApiServer(agent=gateway)

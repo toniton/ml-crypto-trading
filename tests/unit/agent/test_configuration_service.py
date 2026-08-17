@@ -36,7 +36,7 @@ class TestConfigurationService:
         assert validation.valid is False
         assert any("Unknown configuration path" in error for error in validation.errors)
 
-    def test_rejects_locked_secret(self, sample_config):
+    def test_rejects_llm_path_as_unknown(self, sample_config):
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="leak",
@@ -44,7 +44,7 @@ class TestConfigurationService:
         )
         validation = service.validate_proposal(proposal)
         assert validation.valid is False
-        assert any("locked" in error for error in validation.errors)
+        assert any("Unknown configuration path" in error for error in validation.errors)
 
     def test_rejects_constraint_violation(self, sample_config):
         service = ConfigurationService(sample_config)

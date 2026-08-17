@@ -36,7 +36,6 @@ def _seed_config(vcs, consensus=None, dynamic_quantity="min_qty", ref="HEAD", **
         "assets": [],
         "consensus": consensus or {"buy": 1.3, "sell": 0.5},
         "dynamic_quantity": dynamic_quantity,
-        "llm": {"model": "llama3.2", "base_url": "http://localhost:11434", "temperature": 0.0, "schedule": 1},
     }
     config.update(overrides)
     return vcs.commit(config, author="test", message="commit", ref=ref)

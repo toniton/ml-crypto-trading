@@ -19,12 +19,6 @@ consensus:
   buy: 1.3
   sell: 0.5
 dynamic_quantity: "max(min_qty, eq * 0.1)"
-llm:
-  provider: "groq"
-  model: "llama-3.3-70b-versatile"
-  temperature: 0.1
-  timeout: 120
-  api_key: "super-secret"
 """
 
 

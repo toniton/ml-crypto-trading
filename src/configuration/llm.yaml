@@ -1,0 +1,47 @@
+# LLM/agent infrastructure configuration.
+#
+# This file describes how the AI subsystem (trading oracle, router, agents)
+# connects to language models. It is infrastructure configuration: it is NOT
+# part of the trading strategy and is never modified by the configuration agent.
+#
+# API keys are never stored here. Cloud providers resolve their key from an
+# environment variable: by default LLM_PROVIDER__<PROVIDER>__API_KEY or
+# <PROVIDER>_API_KEY (see `api_key_env` to pick a custom variable).
+
+schedule: 2  # AssetSchedule.EVERY_HOUR: how often the LLM oracle scheduler runs.
+models:
+  # Local inference via Ollama:
+  # - name: "local"
+  #   provider: "ollama"
+  #   model_name: "llama3.2"
+  #   temperature: 0.1
+  #   timeout: 60
+  #   keep_alive: "1h"
+  #   api_base_url: "http://127.0.0.1:11434"
+  #   capabilities: ["tools"]
+  #   default: true
+  #
+  # Cloud inference via DeepSeek:
+  # - name: "deepseek"
+  #   provider: "deepseek"
+  #   model_name: "deepseek-chat"
+  #   temperature: 0.1
+  #   timeout: 120
+  #   capabilities: ["tools", "reasoning"]
+  #
+  # Cloud inference via Gemini:
+  # - name: "gemini"
+  #   provider: "gemini"
+  #   model_name: "gemini-3-flash-preview"
+  #   temperature: 0.1
+  #   timeout: 120
+  #   capabilities: ["tools", "reasoning"]
+  #
+  # Cloud inference via Groq (OpenAI-compatible):
+  - name: "default"
+    provider: "groq"
+    model_name: "openai/gpt-oss-120b"
+    temperature: 0.1
+    timeout: 120
+    capabilities: ["tools", "reasoning"]
+    default: true

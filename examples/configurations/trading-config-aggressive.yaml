@@ -29,9 +29,3 @@ consensus:
   buy: 0.9
   sell: 0.5
 dynamic_quantity: "max(min_qty, min(equity * 0.20 * signal / close, equity * 0.25 / close))"
-llm:
-  provider: "ollama"
-  model: "llama3.2"
-  base_url: "http://127.0.0.1:11434"
-  temperature: 0.1
-  timeout: 60

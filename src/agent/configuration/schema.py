@@ -47,47 +47,6 @@ GLOBAL_FIELD_SPECS: list[ConfigFieldSpec] = [
         type="string", mutable=True,
         constraints=["value is a non-empty string"],
     ),
-    ConfigFieldSpec(
-        path="llm.provider",
-        description="Which LLM provider is used. Changing it requires a restart.",
-        type="enum", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="llm.model",
-        description="Model identifier used with the configured provider. Changing it requires a restart.",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="llm.temperature",
-        description="Sampling temperature of the LLM.",
-        type="decimal", mutable=True, constraints=["0.0 <= value <= 2.0"],
-    ),
-    ConfigFieldSpec(
-        path="llm.timeout",
-        description="Request timeout in seconds for LLM calls.",
-        type="decimal", mutable=True, constraints=["value >= 1.0"],
-    ),
-    ConfigFieldSpec(
-        path="llm.api_key",
-        description="Secret API key for cloud providers. Never exposed or modified by the agent.",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="llm.base_url",
-        description="Provider endpoint override. Changing it requires a restart.",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="llm.keep_alive",
-        description="Keep-alive window for local Ollama models. Changing it requires a restart.",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="llm.schedule",
-        description="How often the LLM analysis scheduler runs.",
-        type="enum", mutable=True,
-        constraints=["value in {0,1,2,3,4,5}"],
-    ),
 ]
 
 ASSET_FIELD_SPECS: list[ConfigFieldSpec] = [

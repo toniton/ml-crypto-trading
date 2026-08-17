@@ -8,15 +8,15 @@ from schedule import Scheduler
 
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
-from src.configuration.trading_config import LlmSettings
+from src.configuration.llm_config import LlmConfig
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class LlmOracleScheduler(TradingScheduler, ApplicationLoggingMixin):
-    def __init__(self, settings: LlmSettings):
+    def __init__(self, settings: LlmConfig):
         super().__init__()
-        self._settings: LlmSettings = settings
+        self._settings: LlmConfig = settings
         self._scheduler: Scheduler = Scheduler()
         self._stop_event: threading.Event = threading.Event()
         self._executor: ThreadPoolExecutor = ThreadPoolExecutor(max_workers=15)

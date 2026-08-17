@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import AppEnvEnum, EnvironmentConfig
+from src.configuration.llm_config import LlmConfig
 from src.exchange.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
@@ -45,7 +46,8 @@ class TestCCXTInitialization(unittest.TestCase):
             app = Application(
                 application_config=self.app_config,
                 environment_config=self.env_config,
-                trading_config=self.trading_config
+                trading_config=self.trading_config,
+                llm_config=LlmConfig()
             )
 
         # Supported providers: 'binance', 'kraken', 'coinbase', 'bybit', 'kucoin' (5) + 'cryptodotcom' (1)

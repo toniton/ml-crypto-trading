@@ -32,6 +32,7 @@ class TestApplicationHeadless(unittest.TestCase):
     ):
         from src.application import Application
         from src.configuration.environment_config import EnvironmentConfig
+        from src.configuration.llm_config import LlmConfig
         from src.configuration.trading_config import TradingConfig
 
         app_config = ApplicationConfig(trading_config_filepath="config.yaml", headless=False)
@@ -40,12 +41,12 @@ class TestApplicationHeadless(unittest.TestCase):
         trading_config.assets = []
         trading_config.consensus = MagicMock()
         trading_config.dynamic_quantity = None
-        trading_config.llm = MagicMock()
+        llm_config = LlmConfig()
 
         mock_server_instance = MagicMock()
         mock_api_server_cls.return_value = mock_server_instance
 
-        app = Application(app_config, env_config, trading_config)
+        app = Application(app_config, env_config, trading_config, llm_config)
         app.startup()
 
         mock_api_server_cls.assert_called_once()
@@ -68,6 +69,7 @@ class TestApplicationHeadless(unittest.TestCase):
     ):
         from src.application import Application
         from src.configuration.environment_config import EnvironmentConfig
+        from src.configuration.llm_config import LlmConfig
         from src.configuration.trading_config import TradingConfig
 
         app_config = ApplicationConfig(trading_config_filepath="config.yaml", headless=True)
@@ -76,9 +78,9 @@ class TestApplicationHeadless(unittest.TestCase):
         trading_config.assets = []
         trading_config.consensus = MagicMock()
         trading_config.dynamic_quantity = None
-        trading_config.llm = MagicMock()
+        llm_config = LlmConfig()
 
-        app = Application(app_config, env_config, trading_config)
+        app = Application(app_config, env_config, trading_config, llm_config)
         app.startup()
 
         mock_api_server_cls.assert_not_called()
