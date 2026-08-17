@@ -1,4 +1,4 @@
-langchain-core~=1.5.3
+langchain-core~=1.5.4
 ccxt
 pandas~=3.0.5
 alembic==1.19.0
