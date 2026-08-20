@@ -9,7 +9,7 @@ class BuyContextAwareGridStrategy(RuleBasedTradingStrategy):
         super().__init__()
         self.grid_drop_pct = grid_drop_pct / Decimal("100")  # e.g. 0.5%
         self.cooldown_seconds = cooldown_seconds
-        self.type = TradeAction.BUY
+        self.action = TradeAction.BUY
 
     def get_quorum(self, trade_action, _ticker_symbol, trading_context, market_data, _candles):
         if trade_action != TradeAction.BUY:

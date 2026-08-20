@@ -9,7 +9,7 @@ class BuyVolatilityRiskStrategy(RuleBasedTradingStrategy):
     def __init__(self, risk_tolerance: float = 0.02):
         super().__init__()
         self.risk_tolerance = risk_tolerance
-        self.type = TradeAction.BUY
+        self.action = TradeAction.BUY
 
     @staticmethod
     def calculate_volatility(candles: list[Candle]) -> float:

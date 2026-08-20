@@ -9,7 +9,7 @@ class HammerAccumulationStrategy(RuleBasedTradingStrategy):
 
     def __init__(self):
         super().__init__()
-        self.type = TradeAction.BUY
+        self.action = TradeAction.BUY
 
     def get_quorum(
             self, trade_action: TradeAction,

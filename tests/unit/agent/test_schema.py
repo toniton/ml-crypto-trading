@@ -39,6 +39,72 @@ class TestSchema:
         assert "consensus.buy" in paths
         assert "assets.BTC_USD.guard_config.max_drawdown_percentage" in paths
 
+    def test_get_value_asset_strategy_name(self, sample_config):
+        raw = {
+            "assets": [{
+                "base_ticker_symbol": "BTC",
+                "quote_ticker_symbol": "USD",
+                "strategies": [{
+                    "name": "Trend",
+                    "type": "BUY",
+                    "expression": "close > 100",
+                    "enabled": True,
+                }],
+            }]
+        }
+        assert ConfigurationSchema.get_value(
+            raw, "assets.BTC_USD.strategies.Trend.expression"
+        ) == "close > 100"
+        assert ConfigurationSchema.get_value(
+            raw, "assets.BTC_USD.strategies.Trend.enabled"
+        ) is True
+        assert ConfigurationSchema.get_value(
+            raw, "assets.BTC_USD.strategies.Missing.type"
+        ) is None
+
+    def test_set_value_asset_strategy_name(self, sample_config):
+        raw = {
+            "assets": [{
+                "base_ticker_symbol": "BTC",
+                "quote_ticker_symbol": "USD",
+                "strategies": [{
+                    "name": "Trend",
+                    "type": "BUY",
+                    "expression": "close > 100",
+                    "enabled": True,
+                }],
+            }]
+        }
+        assert ConfigurationSchema.set_value(
+            raw, "assets.BTC_USD.strategies.Trend.enabled", False
+        )
+        assert raw["assets"][0]["strategies"][0]["enabled"] is False
+        assert not ConfigurationSchema.set_value(
+            raw, "assets.BTC_USD.strategies.Missing.enabled", True
+        )
+
+    def test_catalog_contains_strategies(self, sample_config):
+        schema = ConfigurationSchema()
+        fields = schema.build_field_catalog(
+            {
+                "assets": [{
+                    "base_ticker_symbol": "BTC",
+                    "quote_ticker_symbol": "USD",
+                    "strategies": [{
+                        "name": "Trend",
+                        "type": "BUY",
+                        "expression": "close > 100",
+                        "enabled": True,
+                    }],
+                }],
+                "consensus": {"buy": 1.3},
+            }
+        )
+        paths = {field.path for field in fields}
+        assert "assets.BTC_USD.strategies.Trend.type" in paths
+        assert "assets.BTC_USD.strategies.Trend.expression" in paths
+        assert "assets.BTC_USD.strategies.Trend.enabled" in paths
+
     def test_render_catalog_readable(self, sample_config):
         schema = ConfigurationSchema()
         rendered = schema.render_catalog(

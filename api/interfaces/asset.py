@@ -8,6 +8,7 @@ from pydantic.dataclasses import dataclass
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
+from src.configuration.strategy_config import StrategyConfig
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
@@ -25,6 +26,7 @@ class Asset:
     guard_config: Optional[GuardConfig] = None
     keywords: Optional[list[str]] = None
     separator: Optional[str] = None
+    strategies: Optional[list[StrategyConfig]] = None
 
     @computed_field
     @property

@@ -9,7 +9,7 @@ class BearishEngulfingSellStrategy(RuleBasedTradingStrategy):
 
     def __init__(self):
         super().__init__()
-        self.type = TradeAction.SELL
+        self.action = TradeAction.SELL
 
     def get_quorum(
             self, trade_action: TradeAction,

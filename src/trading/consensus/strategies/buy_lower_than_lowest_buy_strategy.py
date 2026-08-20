@@ -8,7 +8,7 @@ class BuyLowerThanLowestBuyStrategy(RuleBasedTradingStrategy):
     def __init__(self, grid_spacing_pct=Decimal("0.5")):
         super().__init__()
         self.grid_spacing_pct = Decimal(str(grid_spacing_pct)) / Decimal("100")
-        self.type = TradeAction.BUY
+        self.action = TradeAction.BUY
 
     def get_quorum(self, trade_action, _ticker_symbol, trading_context, market_data, _candles):
         if trade_action != TradeAction.BUY:

@@ -10,7 +10,7 @@ class PredictionSellTradingStrategy(MachineLearningTradingStrategy):
 
     # def __init__(self, engine: PredictionEngine):
     #     super().__init__()
-    #     self.type = TradeAction.SELL
+    #     self.action = TradeAction.SELL
     #     self.engine = engine
 
     def get_quorum(

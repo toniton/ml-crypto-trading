@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from abc import ABC
 
-from api.interfaces.trading_strategy import TradingStrategy
+from src.core.interfaces.trading_strategy import TradingStrategy
 
 
 class MachineLearningTradingStrategy(TradingStrategy, ABC):

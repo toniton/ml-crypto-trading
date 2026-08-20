@@ -12,6 +12,7 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
+from src.core.interfaces.trading_strategy import TradingStrategy
 from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.factories.trading_expression_factory import TradingExpressionFactory
@@ -19,6 +20,8 @@ from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
 from src.logging.trading_logging_mixin import TradingLoggingMixin
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.strategies.strategy_registry import StrategyRegistry
+from src.trading.strategies.strategy_resolver import StrategyResolver
 
 
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
@@ -28,7 +31,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             assets: list[Asset],
             manager_container: ManagerContainer,
             activity_queue: Queue,
-            dynamic_quantity: Optional[str] = None
+            dynamic_quantity: Optional[str] = None,
+            strategies_registry: Optional[StrategyRegistry] = None
     ):
         self.assets = assets
         self._dynamic_quantity = dynamic_quantity
@@ -42,6 +46,20 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.protection_manager = manager_container.protection_manager
         self.websocket_manager = manager_container.websocket_manager
         self.activity_queue = activity_queue
+        self._strategies_registry = strategies_registry or StrategyRegistry()
+        self._strategies: list[TradingStrategy] = []
+        self._register_asset_strategies(self.assets)
+
+    def _register_asset_strategies(self, assets: list[Asset]) -> None:
+        for asset in assets:
+            for strategy in StrategyResolver.resolve_asset(asset, self._strategies_registry):
+                self.consensus_manager.register_strategy(strategy)
+                self._strategies.append(strategy)
+
+    def _unregister_asset_strategies(self) -> None:
+        for strategy in self._strategies:
+            self.consensus_manager.unregister_strategy(strategy)
+        self._strategies = []
 
     def update_config(self, trading_config: TradingConfig) -> None:
         if trading_config.consensus != self.consensus_manager.consensus_factor:
@@ -54,6 +72,26 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 ExpressionParser(trading_config.dynamic_quantity) if trading_config.dynamic_quantity else None
             )
             self.app_logger.info("Config updated: dynamic_quantity to %r", trading_config.dynamic_quantity)
+
+        if self._assets_changed(trading_config.assets, self.assets):
+            self._unregister_asset_strategies()
+            self.assets = trading_config.assets
+            self._register_asset_strategies(self.assets)
+            self.app_logger.info(
+                "Config updated: strategies re-registered for %s",
+                [asset.ticker_symbol for asset in self.assets]
+            )
+
+    @staticmethod
+    def _assets_changed(config_assets: list[Asset], current_assets: list[Asset]) -> bool:
+        if len(config_assets) != len(current_assets):
+            return True
+        for config_asset, current_asset in zip(config_assets, current_assets):
+            if config_asset.ticker_symbol != current_asset.ticker_symbol:
+                return True
+            if (config_asset.strategies or []) != (current_asset.strategies or []):
+                return True
+        return False
 
     def init_application(self):
         self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()

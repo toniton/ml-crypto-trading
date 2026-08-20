@@ -10,7 +10,7 @@ class SellProfitTakingStrategy(RuleBasedTradingStrategy):
 
     def __init__(self, take_profit_pct: Decimal = Decimal("0.02")):
         super().__init__()
-        self.type = TradeAction.SELL
+        self.action = TradeAction.SELL
         self.take_profit_pct = Decimal(str(take_profit_pct))
 
     def get_quorum(

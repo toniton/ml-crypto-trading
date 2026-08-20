@@ -6,7 +6,7 @@ class BuyActiveOpenPositionsCountStrategy(RuleBasedTradingStrategy):
     def __init__(self, open_position_threshold=15):
         super().__init__()
         self.open_position_threshold = open_position_threshold
-        self.type = TradeAction.BUY
+        self.action = TradeAction.BUY
 
     def get_quorum(self, trade_action, _ticker_symbol, trading_context, market_data, _candles):
         if trade_action != TradeAction.BUY:

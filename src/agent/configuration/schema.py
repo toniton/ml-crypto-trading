@@ -49,6 +49,32 @@ GLOBAL_FIELD_SPECS: list[ConfigFieldSpec] = [
     ),
 ]
 
+STRATEGY_FIELD_SPECS: list[ConfigFieldSpec] = [
+    ConfigFieldSpec(
+        path="assets.{{symbol}}.strategies.{{name}}.type",
+        description="How the strategy is implemented: STATIC (built-in Python strategy) or DYNAMIC "
+                    "(expression).",
+        type="enum", mutable=True, constraints=["value in {STATIC, DYNAMIC}"],
+    ),
+    ConfigFieldSpec(
+        path="assets.{{symbol}}.strategies.{{name}}.action",
+        description="Direction the strategy votes for: BUY or SELL.",
+        type="enum", mutable=True, constraints=["value in {BUY, SELL}"],
+    ),
+    ConfigFieldSpec(
+        path="assets.{{symbol}}.strategies.{{name}}.expression",
+        description="Expression evaluated by a DYNAMIC strategy. True means it votes in its "
+                    "direction. May reference market, position and indicator variables.",
+        type="string", mutable=True,
+        constraints=["value is a non-empty string"],
+    ),
+    ConfigFieldSpec(
+        path="assets.{{symbol}}.strategies.{{name}}.enabled",
+        description="Whether the strategy is active in the consensus calculation.",
+        type="bool", mutable=True, constraints=["value in {True, False}"],
+    ),
+]
+
 ASSET_FIELD_SPECS: list[ConfigFieldSpec] = [
     ConfigFieldSpec(
         path="assets.{{symbol}}.name",
@@ -142,6 +168,13 @@ class ConfigurationSchema:
         return None
 
     @staticmethod
+    def find_asset_strategy_entry(asset_entry: dict, name: str) -> Optional[dict]:
+        for entry in asset_entry.get("strategies", []):
+            if entry.get("name") == name:
+                return entry
+        return None
+
+    @staticmethod
     def _descend_path(current: dict, fragments: list[str]) -> Any:
         value: Any = current
         for fragment in fragments:
@@ -157,6 +190,11 @@ class ConfigurationSchema:
             entry = ConfigurationSchema.find_asset_entry(raw_config, fragments[1])
             if entry is None:
                 return None
+            if fragments[2] == "strategies" and len(fragments) >= 5:
+                strategy = ConfigurationSchema.find_asset_strategy_entry(entry, fragments[3])
+                if strategy is None:
+                    return None
+                return ConfigurationSchema._descend_path(strategy, fragments[4:])
             return ConfigurationSchema._descend_path(entry, fragments[2:])
         return ConfigurationSchema._descend_path(raw_config, fragments)
 
@@ -167,6 +205,11 @@ class ConfigurationSchema:
             entry = ConfigurationSchema.find_asset_entry(raw_config, fragments[1])
             if entry is None:
                 return False
+            if fragments[2] == "strategies" and len(fragments) >= 5:
+                strategy = ConfigurationSchema.find_asset_strategy_entry(entry, fragments[3])
+                if strategy is None:
+                    return False
+                return ConfigurationSchema._set_descend(strategy, fragments[4:], value)
             return ConfigurationSchema._set_descend(entry, fragments[2:], value)
         return ConfigurationSchema._set_descend(raw_config, fragments, value)
 
@@ -192,6 +235,13 @@ class ConfigurationSchema:
             for spec in ASSET_FIELD_SPECS:
                 path = spec.path.replace("{{symbol}}", symbol)
                 fields.append(self._materialize(spec, raw_config, path=path))
+            for strategy in entry.get("strategies", []):
+                name = strategy.get("name")
+                if not name:
+                    continue
+                for spec in STRATEGY_FIELD_SPECS:
+                    path = spec.path.replace("{{symbol}}", symbol).replace("{{name}}", name)
+                    fields.append(self._materialize(spec, raw_config, path=path))
         return fields
 
     def _materialize(self, spec: ConfigFieldSpec, raw_config: dict, path: str) -> ConfigField:

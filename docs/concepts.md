@@ -34,6 +34,21 @@ Strategies are rules that define the decision-making of a trade action based on 
 technical indicators, candle data and other pre-configured settings. Each strategy can operate independently or as part
 of a multi-strategy consensus group.
 
+Strategies are declared explicitly per asset in `trading-config.yaml` (see
+[Asset Configuration](configuration.md)). Each entry declares how it is built (`type`:
+`STATIC` built-in Python class or `DYNAMIC` expression evaluated by the `ExpressionParser`)
+and the direction it votes for (`action`: `BUY`/`SELL`). A `DYNAMIC` entry can be a full
+inline definition or a reference to a predefined strategy from `strategies.yaml`. Predefined
+entries can describe built-in static strategies (Python `RuleBasedTradingStrategy`
+subclasses such as `HammerAccumulationStrategy`) or reusable expression templates.
+
+There are no global strategies: an asset only votes with the strategies it declares, so an
+asset with an empty `strategies` list never reaches quorum. The `StrategyResolver` resolves
+each asset's entries against the registry into an explicit effective set; it is pure
+configuration logic and never evaluates expressions. The resolved strategies are then
+instantiated as `ExpressionStrategy` (or as the referenced built-in class) and vote through
+the `ConsensusManager`, which logs every strategy name and its vote for debugging.
+
 ## Prediction (WIP)
 
 The trading engine can leverage machine learning models (AI/ML), such

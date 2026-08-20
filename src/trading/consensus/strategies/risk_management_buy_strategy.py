@@ -12,7 +12,7 @@ class RiskManagementBuyStrategy(RuleBasedTradingStrategy):
     def __init__(self, risk_tolerance=0.02):
         super().__init__()
         self.risk_tolerance = risk_tolerance
-        self.type = TradeAction.BUY
+        self.action = TradeAction.BUY
 
     def get_quorum(
             self, trade_action: TradeAction,

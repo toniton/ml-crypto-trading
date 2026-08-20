@@ -22,29 +22,15 @@ class TradingExpressionFactory:
         candles = candles or []
 
         close = float(market_data.close_price)
-        high = float(market_data.high_price)
-        low = float(market_data.low_price)
-        volume = float(market_data.volume)
-        range_val = high - low
-
         available_balance = float(account_balance.available_balance)
         position_qty = float(trading_context.position_qty)
-        avg_entry = float(trading_context.avg_entry_price)
-        equity = available_balance + (position_qty * close)
-        pnl = (close - avg_entry) * position_qty if position_qty > 0 else 0.0
 
         variables = {
-            # Market
-            "close": close,
-            "high": high,
-            "low": low,
-            "volume": volume,
-            "range": range_val,
-            "range_pct": range_val / close if close > 0 else 0.0,
+            **TradingExpressionFactory._build_market_variables(market_data),
 
             # Account
             "balance": available_balance,
-            "equity": equity,
+            "equity": available_balance + (position_qty * close),
 
             # Risk
             "risk_pct": 0.01,  # Default, could be moved to config
@@ -52,13 +38,7 @@ class TradingExpressionFactory:
             # Signal
             "signal": consensus_score,
 
-            # Position
-            "position_qty": position_qty,
-            "avg_entry": avg_entry,
-            "pnl": pnl,
-            "exit_qty": float(trading_context.exit_qty),
-            "avg_exit_price": float(trading_context.avg_exit_price),
-            "realized_pnl": float(trading_context.realized_pnl),
+            **TradingExpressionFactory._build_position_variables(trading_context, close),
 
             # Static
             "min_qty": float(asset.min_quantity),
@@ -68,7 +48,65 @@ class TradingExpressionFactory:
             "candles": candles
         }
 
-        functions = {
+        return DefaultContext(
+            variables=variables,
+            functions=TradingExpressionFactory._build_functions(candles)
+        )
+
+    @staticmethod
+    def create_strategy_context(
+            trading_context: TradingContext,
+            market_data: MarketData,
+            candles: List[Candle] = None
+    ) -> ExpressionContext:
+        candles = candles or []
+
+        close = float(market_data.close_price)
+        variables = {
+            **TradingExpressionFactory._build_market_variables(market_data),
+            **TradingExpressionFactory._build_position_variables(trading_context, close),
+            "candles": candles
+        }
+
+        return DefaultContext(
+            variables=variables,
+            functions=TradingExpressionFactory._build_functions(candles)
+        )
+
+    @staticmethod
+    def _build_market_variables(market_data: MarketData) -> dict:
+        close = float(market_data.close_price)
+        high = float(market_data.high_price)
+        low = float(market_data.low_price)
+        range_val = high - low
+
+        return {
+            "close": close,
+            "high": high,
+            "low": low,
+            "volume": float(market_data.volume),
+            "range": range_val,
+            "range_pct": range_val / close if close > 0 else 0.0,
+        }
+
+    @staticmethod
+    def _build_position_variables(trading_context: TradingContext, close: float) -> dict:
+        position_qty = float(trading_context.position_qty)
+        avg_entry = float(trading_context.avg_entry_price)
+        pnl = (close - avg_entry) * position_qty if position_qty > 0 else 0.0
+
+        return {
+            "position_qty": position_qty,
+            "avg_entry": avg_entry,
+            "pnl": pnl,
+            "exit_qty": float(trading_context.exit_qty),
+            "avg_exit_price": float(trading_context.avg_exit_price),
+            "realized_pnl": float(trading_context.realized_pnl),
+        }
+
+    @staticmethod
+    def _build_functions(candles: List[Candle]) -> dict:
+        return {
             "max": max,
             "min": min,
             "avg": lambda *args: sum(args) / len(args) if args else 0.0,
@@ -76,8 +114,6 @@ class TradingExpressionFactory:
             "ema": TradingExpressionFactory._calculate_ema(candles),
             "rsi": TradingExpressionFactory._calculate_rsi(candles)
         }
-
-        return DefaultContext(variables=variables, functions=functions)
 
     @staticmethod
     def _calculate_ema(candles: List[Candle]):

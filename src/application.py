@@ -6,7 +6,6 @@ from threading import Event
 from typing import Optional
 
 import src.configuration.providers
-import src.trading.consensus.strategies
 import src.trading.protection.guards
 import src.exchange.clients
 from src.agent import AgentGateway
@@ -20,12 +19,12 @@ from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.llm_config import LlmConfig
 from src.configuration.helpers.application_helper import ApplicationHelper
+from src.configuration.strategies_config import StrategiesConfig
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.guard import Guard
-from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.managers.manager_container import ManagerContainer
@@ -44,6 +43,7 @@ from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
+from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
 from src.trading.trading_oracle import TradingOracle
@@ -75,6 +75,8 @@ class Application(ApplicationLoggingMixin):
         self._consensus = trading_config.consensus
         self._llm_config = llm_config
         self._trading_config = trading_config
+        self._strategies_config = StrategiesConfig()
+        self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
 
         self._vcs_ref = "HEAD"
         self._vcs = VCSService(db_manager)
@@ -89,7 +91,6 @@ class Application(ApplicationLoggingMixin):
         if not self._is_backtest_mode:
             self._setup_clients()
 
-        self._setup_strategies()
         self._setup_protections()
 
         atexit.register(self.shutdown)
@@ -143,16 +144,6 @@ class Application(ApplicationLoggingMixin):
                         instance = cls(provider)
                         self._register_with_managers(instance)
 
-    def _setup_strategies(self):
-        ApplicationHelper.import_modules(src.trading.consensus.strategies)
-        for cls in RuleBasedTradingStrategy.__subclasses__():
-            instance = cls()
-            self._managers.consensus_manager.register_strategy(instance)
-
-        # for cls in MachineLearningTradingStrategy.__subclasses__():
-        #     instance = cls(prediction_engine)
-        #     self.consensus_manager.register_strategy(instance)
-
     def _setup_protections(self):
         ApplicationHelper.import_modules(src.trading.protection.guards)
         for asset in self._assets:
@@ -172,7 +163,8 @@ class Application(ApplicationLoggingMixin):
         trading_scheduler = self._backtest_scheduler if self._is_backtest_mode else LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
         trading_executor = TradingExecutor(
-            self._assets, self._managers, self._activity_queue, self._dynamic_quantity
+            self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
+            strategies_registry=self._strategies_registry
         )
         oracle_scheduler = LlmOracleScheduler(self._llm_config)
         oracle_scheduler.register_assets(self._assets, self._llm_config.schedule)

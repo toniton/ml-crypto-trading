@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.interfaces.asset import Asset
@@ -14,6 +15,20 @@ class TradingConfig(BaseSettings):
     assets: list[Asset]
     consensus: ConsensusFactor
     dynamic_quantity: Optional[str] = None
+
+    @field_validator("assets")
+    @classmethod
+    def _validate_unique_asset_strategies(cls, assets: list[Asset]) -> list[Asset]:
+        for asset in assets:
+            strategies = asset.strategies or []
+            names = [strategy.name for strategy in strategies]
+            duplicates = {name for name in names if names.count(name) > 1}
+            if duplicates:
+                raise ValueError(
+                    f"Duplicate strategy names for asset {asset.ticker_symbol}: "
+                    f"{sorted(duplicates)}"
+                )
+        return assets
 
     _yaml_file: Optional[str] = ""
     model_config = SettingsConfigDict(

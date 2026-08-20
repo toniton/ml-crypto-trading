@@ -10,7 +10,7 @@ class SellStopLossStrategy(RuleBasedTradingStrategy):
 
     def __init__(self, stop_loss_pct: Decimal = Decimal("0.02")):
         super().__init__()
-        self.type = TradeAction.SELL
+        self.action = TradeAction.SELL
         self.stop_loss_pct = Decimal(str(stop_loss_pct))
 
     def get_quorum(
