@@ -51,7 +51,8 @@ class TestModelFactory(unittest.TestCase):
         model = ModelFactory.create_model(config)
         self.assertIsInstance(model, LangChainGroqAdapter)
 
-    def test_selects_model_by_name(self):
+    @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")
+    def test_selects_model_by_name(self, _mock_key):
         config = _config(
             LlmModelConfig(name="local", provider=LlmProvider.OLLAMA, model_name="llama3.2"),
             LlmModelConfig(name="cloud", provider=LlmProvider.GROQ, model_name="llama-3.3", default=True),

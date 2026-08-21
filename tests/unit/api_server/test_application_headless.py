@@ -18,6 +18,7 @@ class TestApplicationHeadless(unittest.TestCase):
         config = ApplicationConfig(trading_config_filepath="config.yaml", headless=True)
         self.assertTrue(config.headless)
 
+    @patch("src.application.Application._setup_clients")
     @patch("src.application.Application._setup_configuration")
     @patch("src.application.DatabaseManager")
     @patch("src.application.VCSService")
@@ -28,7 +29,7 @@ class TestApplicationHeadless(unittest.TestCase):
     @patch("src.application.ApiServer")
     def test_application_starts_api_server_when_not_headless(
             self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
-            mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config
+            mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients
     ):
         from src.application import Application
         from src.configuration.environment_config import EnvironmentConfig
@@ -55,6 +56,7 @@ class TestApplicationHeadless(unittest.TestCase):
         app.shutdown()
         mock_server_instance.stop.assert_called_once()
 
+    @patch("src.application.Application._setup_clients")
     @patch("src.application.Application._setup_configuration")
     @patch("src.application.DatabaseManager")
     @patch("src.application.VCSService")
@@ -65,7 +67,7 @@ class TestApplicationHeadless(unittest.TestCase):
     @patch("src.application.ApiServer")
     def test_application_skips_api_server_when_headless(
             self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
-            mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config
+            mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients
     ):
         from src.application import Application
         from src.configuration.environment_config import EnvironmentConfig
