@@ -28,6 +28,9 @@ assets:
         type: "DYNAMIC"
         action: "BUY"
         expression: "close > sma(50) and range_pct > 0.03"
+    consensus:
+      buy: 1.3
+      sell: 0.5
   - name: "Doge (Crypto.com)"
     base_ticker_symbol: "DOGE"
     quote_ticker_symbol: "USD"
@@ -52,6 +55,9 @@ assets:
         type: "DYNAMIC"
         action: "BUY"
         enabled: false
+    consensus:
+      buy: 1.0
+      sell: 0.5
   - name: "CRO (Crypto.com)"
     base_ticker_symbol: "CRO"
     quote_ticker_symbol: "USD"
@@ -72,6 +78,9 @@ assets:
       - name: "RsiOverboughtSell"
         type: "DYNAMIC"
         action: "SELL"
+    consensus:
+      buy: 1.3
+      sell: 0.5
 #  - name: "BTTC (Binance)"
 #    base_ticker_symbol: "BTTC"
 #    quote_ticker_symbol: "USDC"
@@ -82,7 +91,4 @@ assets:
 #    quantity_decimals: 1
 #    candles_timeframe: "MIN1"
 #    schedule: 0
-consensus:
-  buy: 1.3
-  sell: 0.5
-dynamic_quantity: "max(min_qty, min((equity * risk_pct / close) * signal * (1.5 if rsi(14) > 60 else 1) * (1.5 if pnl > 0 else 0.5), equity * 0.1 / close))"
+dynamic_quantity: "max(min_qty, min((equity * risk_pct / close) * confidence * (1.5 if rsi(14) > 60 else 1) * (1.5 if pnl > 0 else 0.5), equity * 0.1 / close))"

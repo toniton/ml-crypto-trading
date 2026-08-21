@@ -12,9 +12,11 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
+from api.interfaces.trading_context import TradingContext
 from src.core.interfaces.trading_strategy import TradingStrategy
 from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
+from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.factories.trading_expression_factory import TradingExpressionFactory
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
@@ -42,6 +44,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.order_manager = manager_container.order_manager
         self.market_data_manager = manager_container.market_data_manager
         self.consensus_manager = manager_container.consensus_manager
+        self.consensus_manager.set_factors(self.assets)
         self.session_manager = manager_container.session_manager
         self.protection_manager = manager_container.protection_manager
         self.websocket_manager = manager_container.websocket_manager
@@ -62,9 +65,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self._strategies = []
 
     def update_config(self, trading_config: TradingConfig) -> None:
-        if trading_config.consensus != self.consensus_manager.consensus_factor:
-            self.consensus_manager.update_factor(trading_config.consensus)
-            self.app_logger.info("Config updated: consensus to %s", trading_config.consensus)
+        self.consensus_manager.set_factors(trading_config.assets)
 
         if trading_config.dynamic_quantity != self._dynamic_quantity:
             self._dynamic_quantity = trading_config.dynamic_quantity
@@ -102,17 +103,19 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.order_manager.initialize(self.assets)
         self.market_data_manager.initialize(self.assets)
 
-    def _should_trade(self, asset: Asset, action: TradeAction, market_data: MarketData, candles: list[Candle]) -> bool:
-        trading_context = self.session_manager.get_trading_context(asset.key)
-
+    def _evaluate_decision(
+            self, asset: Asset, action: TradeAction,
+            trading_context: TradingContext,
+            market_data: MarketData, candles: list[Candle]
+    ) -> Optional[ConsensusDecision]:
         if not self.protection_manager.can_trade(asset.key, action, trading_context, market_data):
-            return False
+            return None
 
-        consensus_result = self.consensus_manager.get_quorum(
+        decision = self.consensus_manager.evaluate(
             action, asset.ticker_symbol, trading_context, market_data, candles
         )
-        self.app_logger.debug(f"Consensus={consensus_result} for asset={asset}")
-        return bool(consensus_result)
+        self.app_logger.debug(f"Consensus={decision.quorum} for asset={asset}")
+        return decision
 
     def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
         quote_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
@@ -132,7 +135,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         for asset in assets:
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-                if not self._should_trade(asset, TradeAction.BUY, market_data, candles):
+                trading_context = self.session_manager.get_trading_context(asset.key)
+                decision = self._evaluate_decision(
+                    asset, TradeAction.BUY, trading_context, market_data, candles
+                )
+                if decision is None or not decision.quorum:
                     self.app_logger.debug(f"No consensus to buy {asset.ticker_symbol}")
                     continue
 
@@ -145,7 +152,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     f"Fees={fees}",
                     f"Available balance={account_balance.available_balance}"
                 ])
-                quantity = format(self._calculate_quantity(asset, market_data), "f")
+                quantity = format(
+                    self._calculate_quantity(asset, TradeAction.BUY, market_data, decision), "f"
+                )
                 buy_order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
                     quantity=quantity,
@@ -186,7 +195,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
                 self.app_logger.debug(f"Current price for {asset}: {price}, Fees={fees}")
 
-                if not self._should_trade(asset, TradeAction.SELL, market_data, candles):
+                decision = self._evaluate_decision(
+                    asset, TradeAction.SELL, trading_context, market_data, candles
+                )
+                if decision is None or not decision.quorum:
                     continue
 
                 open_positions: list[MarketData] = sorted(
@@ -195,7 +207,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     (float(_current_price) - float(o.close_price)) / float(o.close_price)
                 )
 
-                quantity_val = self._calculate_quantity(asset, market_data)
+                quantity_val = self._calculate_quantity(asset, TradeAction.SELL, market_data, decision)
                 quantity = format(quantity_val, "f")
                 best_position: MarketData | None = next(iter(open_positions), None)
                 if best_position and base_balance.available_balance >= quantity_val:
@@ -246,14 +258,17 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         quantum = Decimal("1").scaleb(-asset.quote_decimals)
         return (price * fee_multiplier).quantize(quantum, rounding=ROUND_UP)
 
-    def _calculate_quantity(self, asset: Asset, market_data: MarketData) -> Decimal:
+    def _calculate_quantity(
+            self, asset: Asset, action: TradeAction,  # pylint: disable=unused-argument
+            market_data: MarketData, decision: ConsensusDecision
+    ) -> Decimal:
         fallback_quantity = Decimal(str(asset.min_quantity))
 
         if self._dynamic_quantity_parser is None:
             return fallback_quantity
 
         try:
-            quantity = self._evaluate_dynamic_quantity(asset, market_data)
+            quantity = self._evaluate_dynamic_quantity(asset, market_data, decision)
 
             if quantity is None:
                 return fallback_quantity
@@ -274,20 +289,18 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             self,
             asset: Asset,
             market_data: MarketData,
+            decision: ConsensusDecision,
     ) -> Decimal | None:
         trading_context = self.session_manager.get_trading_context(asset.key)
         account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
         candles = self.market_data_manager.get_candles(asset)
-        consensus_score = self.consensus_manager.get_consensus_score(
-            TradeAction.BUY, asset.ticker_symbol, trading_context, market_data, candles
-        )
 
         context = TradingExpressionFactory.create_context(
             asset=asset,
             market_data=market_data,
             account_balance=account_balance,
             trading_context=trading_context,
-            consensus_score=consensus_score,
+            decision=decision,
             candles=candles
         )
 

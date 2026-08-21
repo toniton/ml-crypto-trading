@@ -62,11 +62,12 @@ def _asset(symbol, strategies=None):
         schedule=AssetSchedule.EVERY_MINUTE,
         candles_timeframe=Timeframe.MIN1,
         strategies=strategies,
+        consensus=ConsensusFactor(buy=1.3, sell=0.5),
     )
 
 
 def _make_executor(predefined=None, assets=None):
-    consensus_manager = ConsensusManager(ConsensusFactor(buy=1.3, sell=0.5))
+    consensus_manager = ConsensusManager()
     container = SimpleNamespace(
         account_manager=None,
         fees_manager=None,
@@ -265,8 +266,9 @@ def test_registered_strategy_participates_in_consensus():
     )
     consensus_manager = executor.consensus_manager
 
-    assert consensus_manager.get_quorum(TradeAction.BUY, "BTC_USD", _quorum_context(), _quorum_market(), []) is True
-    assert consensus_manager.get_consensus_score(TradeAction.BUY, "BTC_USD", _quorum_context(), _quorum_market(), []) == 1.0
+    decision = consensus_manager.evaluate(TradeAction.BUY, "BTC_USD", _quorum_context(), _quorum_market(), [])
+    assert decision.quorum is True
+    assert decision.vote_ratio == 1.0
 
 
 def test_strategy_only_votes_for_assets_that_declare_it():

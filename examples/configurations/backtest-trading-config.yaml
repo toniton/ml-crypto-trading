@@ -12,6 +12,9 @@ assets:
       max_drawdown_period: 800
       max_drawdown_percentage: 0.10
       cooldown_timeout: 86400
+    consensus:
+      buy: 1.3
+      sell: 0.5
   - name: "DOGE (Crypto.com)"
     base_ticker_symbol: "DOGE"
     quote_ticker_symbol: "USD"
@@ -25,7 +28,6 @@ assets:
       max_drawdown_period: 8
       max_drawdown_percentage: 0.45
       cooldown_timeout: 86400
-
-consensus:
-  buy: 1.3
-  sell: 0.5
+    consensus:
+      buy: 1.3
+      sell: 0.5

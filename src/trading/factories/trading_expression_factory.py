@@ -1,12 +1,14 @@
-from typing import List
+from typing import List, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
+from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from src.core.expressions.default_context import DefaultContext
 from src.core.interfaces.expression_context import ExpressionContext
+from src.trading.consensus.consensus_decision import ConsensusDecision
 
 
 class TradingExpressionFactory:
@@ -16,7 +18,7 @@ class TradingExpressionFactory:
             market_data: MarketData,
             account_balance: AccountBalance,
             trading_context: TradingContext,
-            consensus_score: float = 0.0,
+            decision: Optional[ConsensusDecision],
             candles: List[Candle] = None
     ) -> ExpressionContext:
         candles = candles or []
@@ -35,8 +37,8 @@ class TradingExpressionFactory:
             # Risk
             "risk_pct": 0.01,  # Default, could be moved to config
 
-            # Signal
-            "signal": consensus_score,
+            # Signal (action-aware consensus for the decision being executed)
+            **TradingExpressionFactory._build_consensus_variables(decision),
 
             **TradingExpressionFactory._build_position_variables(trading_context, close),
 
@@ -52,6 +54,30 @@ class TradingExpressionFactory:
             variables=variables,
             functions=TradingExpressionFactory._build_functions(candles)
         )
+
+    @staticmethod
+    def _build_consensus_variables(decision: Optional[ConsensusDecision]) -> dict:
+        if decision is None:
+            return {
+                "signal": 0,
+                "confidence": 0.0,
+                "vote_ratio": 0.0,
+                "weighted_vote_ratio": 0.0,
+                "quorum_threshold": 0.0,
+                "quorum_margin": 0.0,
+            }
+
+        direction = 1 if decision.trade_action == TradeAction.BUY else -1
+        return {
+            # Directional signal: +1 for BUY, -1 for SELL (separated from strength)
+            "signal": direction,
+            # Strength of consensus (0.0..1.0) — use for position sizing
+            "confidence": decision.vote_ratio,
+            "vote_ratio": decision.vote_ratio,
+            "weighted_vote_ratio": decision.weighted_vote_ratio,
+            "quorum_threshold": decision.quorum_threshold,
+            "quorum_margin": decision.quorum_margin,
+        }
 
     @staticmethod
     def create_strategy_context(

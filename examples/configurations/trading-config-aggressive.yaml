@@ -12,6 +12,9 @@ assets:
       max_drawdown_period: 4
       max_drawdown_percentage: 0.60
       cooldown_timeout: 1
+    consensus:
+      buy: 0.9
+      sell: 0.5
   - name: "Doge (Crypto.com)"
     base_ticker_symbol: "DOGE"
     quote_ticker_symbol: "USD"
@@ -25,7 +28,7 @@ assets:
       max_drawdown_period: 4
       max_drawdown_percentage: 0.60
       cooldown_timeout: 1
-consensus:
-  buy: 0.9
-  sell: 0.5
-dynamic_quantity: "max(min_qty, min(equity * 0.20 * signal / close, equity * 0.25 / close))"
+    consensus:
+      buy: 0.9
+      sell: 0.5
+dynamic_quantity: "max(min_qty, min(equity * 0.20 * confidence / close, equity * 0.25 / close))"

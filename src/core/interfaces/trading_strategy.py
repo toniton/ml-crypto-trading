@@ -9,9 +9,10 @@ from api.interfaces.trading_context import TradingContext
 
 
 class TradingStrategy(abc.ABC, metaclass=abc.ABCMeta):
-    def __init__(self, ticker_symbols: set[str] | list[str] | None = None):
+    def __init__(self, ticker_symbols: set[str] | list[str] | None = None, weight: float = 1.0):
         self.action: TradeAction | None = None
         self.ticker_symbols: set[str] | None = set(ticker_symbols) if ticker_symbols is not None else None
+        self.weight: float = weight
 
     @property
     def name(self) -> str:

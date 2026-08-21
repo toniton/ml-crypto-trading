@@ -10,6 +10,7 @@ from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
 from src.configuration.strategy_config import StrategyConfig
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.trading.consensus.consensus_factor import ConsensusFactor
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class Asset:
     keywords: Optional[list[str]] = None
     separator: Optional[str] = None
     strategies: Optional[list[StrategyConfig]] = None
+    consensus: Optional[ConsensusFactor] = None
 
     @computed_field
     @property

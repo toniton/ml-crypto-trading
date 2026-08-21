@@ -35,18 +35,31 @@ The `trading-config.yaml` file defines which assets the bot should trade and the
 
 ### Consensus Settings
 
-These settings control the thresholds for strategy quorum.
+Each asset carries its **own** consensus thresholds that control how many strategy votes are
+required before that asset trades. Consensus is evaluated separately per asset (and per
+action), so assets never share votes or thresholds.
+
+`consensus` is a **required** per-asset block — there is no global default. An asset that
+omits `consensus` has no threshold and will never reach quorum:
+
+```yaml
+assets:
+  - name: "Bitcoin (Crypto.com)"
+    base_ticker_symbol: "BTC"
+    quote_ticker_symbol: "USD"
+    # ...
+    consensus:
+      buy: 1.3
+      sell: 0.5
+```
 
 | Field  | Description                                                          | Recommended |
 |:-------|:---------------------------------------------------------------------|:------------|
-| `buy`  | Consensus factor for BUY actions (True/False ratio). Default: `1.3`  | `1.0 - 2.0` |
-| `sell` | Consensus factor for SELL actions (True/False ratio). Default: `0.5` | `0.1 - 1.0` |
+| `buy`  | Consensus factor for BUY actions (True/False ratio). Required, no default. | `1.0 - 2.0` |
+| `sell` | Consensus factor for SELL actions (True/False ratio). Required, no default. | `0.1 - 1.0` |
 
-```yaml
-consensus:
-  buy: 1.3
-  sell: 0.5
-```
+The factor quantifies how many more `true` votes (weighted) a direction needs relative to
+its `false` votes: quorum is met when `true_count >= factor * (total - true_count)`.
 
 ### Strategies
 

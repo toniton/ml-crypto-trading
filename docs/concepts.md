@@ -84,7 +84,7 @@ A `TradingExpressionFactory` provides a rich set of variables to each expression
 | **Market**   | `close`, `high`, `low`, `volume`, `range`, `range_pct` |
 | **Account**  | `balance` (quote), `equity` (total asset value)        |
 | **Risk**     | `risk_pct` (default 0.01)                              |
-| **Signal**   | `signal` (0.0 to 1.0 consensus score)                  |
+| **Signal**   | `signal` (+1 BUY / -1 SELL direction), `confidence` (0.0–1.0 vote ratio), plus `vote_ratio`, `weighted_vote_ratio`, `quorum_threshold`, `quorum_margin` |
 | **Position** | `position_qty`, `avg_entry`, `pnl` (unrealized)        |
 | **Metadata** | `min_qty`, `decimals`                                  |
 
