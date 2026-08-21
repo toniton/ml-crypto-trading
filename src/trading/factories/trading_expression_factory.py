@@ -144,14 +144,16 @@ class TradingExpressionFactory:
     @staticmethod
     def _calculate_ema(candles: List[Candle]):
         def ema(n):
+            if n <= 0:
+                raise ValueError("EMA period must be > 0")
             if not candles or len(candles) < n:
                 return 0.0
-            prices = [float(c.close) for c in candles[-n:]]
+            prices = [float(c.close) for c in candles]
             multiplier = 2 / (n + 1)
-            ema_val = sum(prices[:n]) / n
+            ema_value = sum(prices[:n]) / n
             for price in prices[n:]:
-                ema_val = (price - ema_val) * multiplier + ema_val
-            return ema_val
+                ema_value = (price - ema_value) * multiplier + ema_value
+            return ema_value
 
         return ema
 
