@@ -110,11 +110,21 @@ class TestDynamicQuantity(unittest.TestCase):
             Decimal("2110.0"),
         )
 
-    def test_calculate_quantity_with_error_falls_back(self):
+    def test_calculate_quantity_with_error_rejects_trade(self):
         executor, _ = self._setup_executor(dynamic_quantity="unknown_var + 1")
         self._stub_data_sources()
 
-        # Should fall back to asset.min_quantity
+        # Expression error -> reject (None), not fallback
+        self.assertIsNone(
+            executor._calculate_quantity(self._asset(), TradeAction.BUY, self._market(), _decision()),
+        )
+
+    def test_calculate_quantity_returns_none_falls_back(self):
+        # Simulate parser returning None (e.g. empty expression)
+        executor, _ = self._setup_executor(dynamic_quantity="volume / 1000")
+        self._stub_data_sources()
+        executor._dynamic_quantity_parser.parse = MagicMock(return_value=None)  # type: ignore[attr-defined]
+
         self.assertEqual(
             executor._calculate_quantity(self._asset(), TradeAction.BUY, self._market(), _decision()),
             Decimal("0.001"),

@@ -152,9 +152,14 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     f"Fees={fees}",
                     f"Available balance={account_balance.available_balance}"
                 ])
-                quantity = format(
-                    self._calculate_quantity(asset, TradeAction.BUY, market_data, decision), "f"
-                )
+                quantity_val = self._calculate_quantity(asset, TradeAction.BUY, market_data, decision)
+                if quantity_val is None:
+                    self.app_logger.warning(
+                        "Rejected BUY for %s: quantity calculation failed",
+                        asset.ticker_symbol,
+                    )
+                    continue
+                quantity = format(quantity_val, "f")
                 buy_order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
                     quantity=quantity,
@@ -208,6 +213,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 )
 
                 quantity_val = self._calculate_quantity(asset, TradeAction.SELL, market_data, decision)
+                if quantity_val is None:
+                    self.app_logger.warning(
+                        "Rejected SELL for %s: quantity calculation failed",
+                        asset.ticker_symbol,
+                    )
+                    continue
                 quantity = format(quantity_val, "f")
                 best_position: MarketData | None = next(iter(open_positions), None)
                 if best_position and base_balance.available_balance >= quantity_val:
@@ -261,29 +272,29 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     def _calculate_quantity(
             self, asset: Asset, action: TradeAction,  # pylint: disable=unused-argument
             market_data: MarketData, decision: ConsensusDecision
-    ) -> Decimal:
-        fallback_quantity = Decimal(str(asset.min_quantity))
+    ) -> Decimal | None:
+        minimum_order_quantity = Decimal(str(asset.min_quantity))
 
         if self._dynamic_quantity_parser is None:
-            return fallback_quantity
+            return minimum_order_quantity
 
         try:
             quantity = self._evaluate_dynamic_quantity(asset, market_data, decision)
 
             if quantity is None:
-                return fallback_quantity
+                return minimum_order_quantity
 
             quantum = Decimal("1").scaleb(-asset.quantity_decimals)
             quantity = quantity.quantize(quantum, rounding=ROUND_DOWN)
 
-            return max(quantity, fallback_quantity)
+            return max(quantity, minimum_order_quantity)
 
         except Exception:
             self.app_logger.exception(
-                "Failed to calculate dynamic quantity.",
+                "Failed to calculate dynamic quantity; rejecting trade.",
                 extra={"asset": asset.ticker_symbol},
             )
-            return fallback_quantity
+            return None
 
     def _evaluate_dynamic_quantity(
             self,
