@@ -1,3 +1,5 @@
+import asyncio
+
 from src.agent import AgentGateway
 from src.agent import (
     ConfigChange,
@@ -12,6 +14,14 @@ class TestAgentGateway:
         return AgentRoute(
             intent=AgentIntent.CONFIGURATION,
             goal=AgentGoal(objective=objective),
+        )
+
+    def _clarification_route(self):
+        return AgentRoute(
+            intent=AgentIntent.CONFIGURATION,
+            goal=AgentGoal(objective="make it better"),
+            requires_clarification=True,
+            clarification_question="What would you like to improve: profitability, trade frequency, or drawdown?",
         )
 
     def test_general_prompt_routed_by_intent(self, sample_config):
@@ -76,3 +86,32 @@ class TestAgentGateway:
         result = gateway.handle("Update dynamic quantity in my configuration.")
         assert result.kind == "configuration"
         assert result.proposal.changes[0].path == "dynamic_quantity"
+
+    def test_clarification_prompt_short_circuits_handle(self, sample_config):
+        llm = FakeLlmAdapter([self._clarification_route()])
+        gateway = AgentGateway(llm, sample_config)
+        result = gateway.handle("make it better")
+        assert result.kind == "clarification"
+        assert "profitability" in result.question
+        assert result.intent == AgentIntent.CONFIGURATION
+        assert result.goal.objective == "make it better"
+        # only the router ran; no agent graph was invoked
+        assert len(llm.structured_calls) == 1
+
+    def test_clarification_prompt_short_circuits_stream(self, sample_config):
+        llm = FakeLlmAdapter([self._clarification_route()])
+        gateway = AgentGateway(llm, sample_config)
+
+        async def collect():
+            return [event async for event in gateway.stream("make it better")]
+
+        events = asyncio.run(collect())
+        types = [event.type for event in events]
+        assert "clarification" in types
+        assert types[-1] == "done"
+        assert "token" not in types
+        clarification = next(event for event in events if event.type == "clarification")
+        assert "profitability" in clarification.payload["question"]
+        assert clarification.payload["intent"] == "configuration"
+        assert clarification.payload["goal"].objective == "make it better"
+        assert events[-1].payload == {"kind": "clarification"}

@@ -6,7 +6,7 @@ from typing import Any, AsyncIterator, Optional, Union
 from src.core.interfaces.llm_adapter import LlmAdapter
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.graph import ConfigurationGraph
-from src.agent.configuration.models import ConfigurationResult, GeneralResult
+from src.agent.configuration.models import ClarificationResult, ConfigurationResult, GeneralResult
 from src.agent.router.graph import RouterGraph
 from src.agent.router.models import AgentIntent, AgentRoute
 from src.agent.runtime.agent import AgentDefinition
@@ -14,7 +14,7 @@ from src.agent.runtime.registry import AgentRegistry
 from src.agent.events import AIEvent
 from src.llm.math_normalizer import DelimiterStream
 
-AgentResult = Union[ConfigurationResult, GeneralResult]
+AgentResult = Union[ConfigurationResult, ClarificationResult, GeneralResult]
 
 
 class AgentGateway:
@@ -30,6 +30,12 @@ class AgentGateway:
 
     def handle(self, prompt: str) -> AgentResult:
         route = self._route(prompt)
+        if route.requires_clarification:
+            return ClarificationResult(
+                question=route.clarification_question or "",
+                intent=route.intent,
+                goal=route.goal,
+            )
         definition = self._registry.get(route.intent)
         if definition.graph is None:
             return GeneralResult()
@@ -59,6 +65,19 @@ class AgentGateway:
                 yield mapped
 
         route: Optional[AgentRoute] = captures.get("route") or AgentRoute(intent=AgentIntent.GENERAL)
+        if route.requires_clarification:
+            yield AIEvent(
+                type="clarification",
+                response_id=response_id,
+                payload={
+                    "question": route.clarification_question or "",
+                    "intent": route.intent.value,
+                    "goal": route.goal,
+                },
+            )
+            yield AIEvent(type="done", response_id=response_id, payload={"kind": "clarification"})
+            return
+
         agent_name: str = captures.get("agent") or self._registry.agent_name_for(route.intent)
         definition = self._registry.get_by_name(agent_name) or self._registry.get(route.intent)
 

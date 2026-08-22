@@ -47,3 +47,14 @@ class TestAIEvent:
         assert event.response_id == ""
         assert event.id == ""
         assert event.agent == ""
+
+    def test_clarification_event_serializes(self):
+        event = AIEvent(
+            type="clarification",
+            response_id="abc",
+            payload={"question": "what?", "intent": "configuration"},
+        )
+        parsed = json.loads(event.to_json())
+        assert parsed["type"] == "clarification"
+        assert parsed["payload"]["question"] == "what?"
+        assert parsed["payload"]["intent"] == "configuration"

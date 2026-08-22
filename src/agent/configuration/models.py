@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Union
+from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
 
-from src.agent.router.models import AgentGoal
+from src.agent.router.models import AgentGoal, AgentIntent
 
 # Backwards-compatible alias: goal extraction now lives in the router.
 ConfigurationGoal = AgentGoal
@@ -107,6 +107,19 @@ class ConfigurationResult(BaseModel):
     proposal: ConfigurationProposal
     validation: ValidationResult
     presentation: ConfigurationPresentation
+
+
+class ClarificationResult(BaseModel):
+    kind: Literal["clarification"] = "clarification"
+    question: str = Field(description="The question to ask the user.")
+    intent: AgentIntent = Field(
+        default=AgentIntent.GENERAL,
+        description="The agent the request was being routed toward.",
+    )
+    goal: Optional[AgentGoal] = Field(
+        default=None,
+        description="The partial goal, if any, extracted before clarification.",
+    )
 
 
 class GeneralResult(BaseModel):

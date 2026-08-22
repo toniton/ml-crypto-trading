@@ -1,6 +1,7 @@
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.models import (
     ApprovalBlock,
+    ClarificationResult,
     ConfigChange,
     ConfigurationGoal,
     ConfigurationPresentation,
@@ -27,6 +28,7 @@ __all__ = [
     "AgentRegistry",
     "AgentResult",
     "ApprovalBlock",
+    "ClarificationResult",
     "ConfigChange",
     "ConfigurationGoal",
     "ConfigurationPresentation",

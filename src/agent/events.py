@@ -16,7 +16,7 @@ class AIEvent:
     retried, logged, or acted upon (e.g. an approval action on a later endpoint).
     """
 
-    type: Literal["node_started", "node_completed", "block", "token", "done"]
+    type: Literal["node_started", "node_completed", "block", "token", "clarification", "done"]
     response_id: str = field(default="")
     id: str = field(default="")
     agent: str = field(default="")
