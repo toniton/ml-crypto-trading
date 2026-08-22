@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from src.core.interfaces.llm_adapter import LlmAdapter
+from typing import List
+
+from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.models import ConfigurationProposal, ValidationResult
 from src.agent.configuration.prompts import CONFIGURATION_PROPOSAL_PROMPT, VALIDATION_ERROR_PROMPT
@@ -16,6 +18,7 @@ class GenerateProposalNode:
     def __call__(self, state: ConfigurationAgentState) -> dict:
         goal: AgentGoal = state["request"].goal
         catalog_context: str = state.get("catalog_context", "")
+        history_context: str = self._format_history(state.get("history", []))
         previous: ConfigurationProposal | None = state.get("proposal")
         validation: ValidationResult | None = state.get("validation")
 
@@ -24,6 +27,7 @@ class GenerateProposalNode:
             prompt = (
                     "USER GOAL\n"
                     f"{self._format_goal(goal)}\n\n"
+                    f"{history_context}"
                     "CURRENT CONFIGURATION CATALOG\n"
                     f"{catalog_context}\n\n"
                     "PREVIOUS PROPOSAL\n"
@@ -38,6 +42,7 @@ class GenerateProposalNode:
             prompt = (
                 "USER GOAL\n"
                 f"{self._format_goal(goal)}\n\n"
+                f"{history_context}"
                 "CURRENT CONFIGURATION CATALOG\n"
                 f"{catalog_context}"
             )
@@ -61,3 +66,12 @@ class GenerateProposalNode:
         if goal.ambiguities:
             lines.append("Ambiguities: " + "; ".join(goal.ambiguities))
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_history(history: List[ChatTurn]) -> str:
+        if not history:
+            return ""
+        lines = ["CONVERSATION HISTORY"]
+        for turn in history:
+            lines.append(f"{turn.role}: {turn.content}")
+        return "\n".join(lines) + "\n\n"

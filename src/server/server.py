@@ -4,6 +4,7 @@ from typing import Optional
 import uvicorn
 
 from src.agent import AgentGateway
+from src.core.interfaces.conversation_store import ConversationStore
 from src.server.app import ChatApp
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
@@ -11,14 +12,15 @@ from src.logging.application_logging_mixin import ApplicationLoggingMixin
 class ApiServer(ApplicationLoggingMixin):
     def __init__(
             self,
-            agent: Optional[AgentGateway] = None,
+            agent: AgentGateway,
+            conversations: ConversationStore,
             host: str = "127.0.0.1",
             port: int = 8000
     ):
         self.host = host
         self.port = port
         self.agent = agent
-        self.app = ChatApp.create(agent=agent)
+        self.app = ChatApp.create(agent=agent, conversations=conversations)
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None
 

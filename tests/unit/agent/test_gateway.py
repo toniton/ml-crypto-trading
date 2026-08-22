@@ -6,6 +6,7 @@ from src.agent import (
     ConfigurationProposal,
 )
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.core.interfaces.llm_adapter import ChatTurn
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 
@@ -115,3 +116,31 @@ class TestAgentGateway:
         assert clarification.payload["intent"] == "configuration"
         assert clarification.payload["goal"].objective == "make it better"
         assert events[-1].payload == {"kind": "clarification"}
+
+    def test_general_stream_forwards_history(self, sample_config):
+        llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.GENERAL)], chunks=["a", "b"])
+        gateway = AgentGateway(llm, sample_config)
+        history = [ChatTurn(role="user", content="what is BTC?"), ChatTurn(role="assistant", content="It is Bitcoin.")]
+
+        async def collect():
+            return [event async for event in gateway.stream("and ETH?", history=history)]
+
+        events = asyncio.run(collect())
+        assert events[-1].type == "done"
+        assert llm.last_history == history
+
+    def test_configuration_prompt_includes_history(self, sample_config):
+        history = [ChatTurn(role="user", content="make the strategy less conservative")]
+        llm = FakeLlmAdapter([
+            self._config_route(),
+            ConfigurationProposal(
+                summary="less conservative",
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+            ),
+        ])
+        gateway = AgentGateway(llm, sample_config)
+        result = gateway.handle("make it a bit more aggressive", history=history)
+        assert result.kind == "configuration"
+        proposal_prompt = llm.structured_calls[1][1]
+        assert "CONVERSATION HISTORY" in proposal_prompt
+        assert "make the strategy less conservative" in proposal_prompt

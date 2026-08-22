@@ -12,12 +12,12 @@ class AIEvent:
     This is the domain protocol between the agent and the transport layer
     (SSE/WebSocket). LangGraph internals are never exposed beyond `AgentGateway.stream`.
 
-    Every event carries a `response_id` so the stream can be correlated with a proposal,
+    Every event carries a `message_id` so the stream can be correlated with a proposal,
     retried, logged, or acted upon (e.g. an approval action on a later endpoint).
     """
 
-    type: Literal["node_started", "node_completed", "block", "token", "clarification", "done"]
-    response_id: str = field(default="")
+    type: Literal["node_started", "node_completed", "block", "token", "clarification", "session", "done"]
+    message_id: str = field(default="")
     id: str = field(default="")
     agent: str = field(default="")
     payload: Any = field(default=None)
@@ -25,7 +25,7 @@ class AIEvent:
     def to_dict(self) -> dict:
         data: dict = {
             "type": self.type,
-            "response_id": self.response_id,
+            "message_id": self.message_id,
             "payload": self.payload,
         }
         if self.type == "block" and self.id:

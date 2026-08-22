@@ -5,12 +5,12 @@ import json
 from abc import ABC
 from typing import Any, AsyncIterator, Dict, List, Type, TypeVar
 
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.messages.ai import ToolCall
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ValidationError
 
-from src.core.interfaces.llm_adapter import LlmAdapter
+from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
 
 Structured = TypeVar("Structured", bound=BaseModel)
 
@@ -73,8 +73,18 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
 
             messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_id))
 
-    def generate(self, prompt: str) -> str:
-        messages: list[BaseMessage] = [SystemMessage(content=self._system_prompt), HumanMessage(content=prompt)]
+    def _build_messages(self, prompt: str, history: List[ChatTurn] | None) -> list[BaseMessage]:
+        messages: list[BaseMessage] = [SystemMessage(content=self._system_prompt)]
+        for turn in history or []:
+            if turn.role == "assistant":
+                messages.append(AIMessage(content=turn.content))
+            else:
+                messages.append(HumanMessage(content=turn.content))
+        messages.append(HumanMessage(content=prompt))
+        return messages
+
+    def generate(self, prompt: str, history: List[ChatTurn] | None = None) -> str:
+        messages: list[BaseMessage] = self._build_messages(prompt, history)
 
         for _turn in range(self._max_turns):
             response = self._bound_model.invoke(messages)
@@ -157,8 +167,8 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
             fenced = "\n".join(lines).strip()
         return json.loads(fenced)
 
-    async def stream(self, prompt: str) -> AsyncIterator[str]:
-        messages: list[BaseMessage] = [SystemMessage(content=self._system_prompt), HumanMessage(content=prompt)]
+    async def stream(self, prompt: str, history: List[ChatTurn] | None = None) -> AsyncIterator[str]:
+        messages: list[BaseMessage] = self._build_messages(prompt, history)
 
         for _turn in range(self._max_turns):
             accumulated: Any = None

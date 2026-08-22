@@ -9,6 +9,7 @@ import src.configuration.providers
 import src.trading.protection.guards
 import src.exchange.clients
 from src.agent import AgentGateway
+from src.agent.conversation_manager import ConversationManager
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
 from src.vcs.application.events import RefChangedEvent
@@ -70,6 +71,7 @@ class Application(ApplicationLoggingMixin):
 
         db_manager = DatabaseManager()
         db_manager.initialize()
+        self._db_manager = db_manager
         self._assets = trading_config.assets
         self._dynamic_quantity = trading_config.dynamic_quantity
         self._llm_config = llm_config
@@ -190,7 +192,8 @@ class Application(ApplicationLoggingMixin):
             api_llm = ModelFactory.create_model(self._llm_config)
             api_llm.bind_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
             gateway = AgentGateway(api_llm, self._application_config.trading_config_filepath)
-            self._api_server = ApiServer(agent=gateway)
+            conversations = ConversationManager(self._db_manager)
+            self._api_server = ApiServer(agent=gateway, conversations=conversations)
             self._api_server.start()
 
         self._trading_engine = TradingEngine(

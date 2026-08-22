@@ -14,7 +14,7 @@ from src.agent import (
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
 from src.server.app import ChatApp
 from src.server.server import ApiServer
-from tests.unit.agent.fakes import FakeLlmAdapter
+from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
 
 SAMPLE_CONFIG = """
 assets:
@@ -46,7 +46,7 @@ def build_gateway(llm):
 class TestApiServerApp(unittest.TestCase):
     def setUp(self):
         self.llm = FakeLlmAdapter(chunks=["Token1 ", "Token2 ", "Token3"])
-        self.app = ChatApp.create(agent=build_gateway(self.llm))
+        self.app = ChatApp.create(agent=build_gateway(self.llm), conversations=FakeConversationStore())
         self.client = TestClient(self.app)
 
     def test_chat_endpoint_streaming_success(self):
@@ -77,7 +77,8 @@ class TestApiServerApp(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_chat_endpoint_no_agent(self):
-        app_no_agent = ChatApp.create(agent=None)
+        app_no_agent = ChatApp.create(agent=build_gateway(self.llm), conversations=FakeConversationStore())
+        app_no_agent.state.agent = None
         client = TestClient(app_no_agent)
         response = client.post("/api/v1/chat", json={"prompt": "Hello"})
         self.assertEqual(response.status_code, 503)
@@ -85,7 +86,12 @@ class TestApiServerApp(unittest.TestCase):
 
     @patch("uvicorn.Server.run")
     def test_api_server_lifecycle(self, mock_uvicorn_run):
-        server = ApiServer(agent=build_gateway(self.llm), host="127.0.0.1", port=9999)
+        server = ApiServer(
+            agent=build_gateway(self.llm),
+            conversations=FakeConversationStore(),
+            host="127.0.0.1",
+            port=9999,
+        )
         server.start()
         self.assertIsNotNone(server._thread)
         server.stop()
@@ -105,7 +111,7 @@ class TestApiServerApp(unittest.TestCase):
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
-        app = ChatApp.create(agent=build_gateway(llm))
+        app = ChatApp.create(agent=build_gateway(llm), conversations=FakeConversationStore())
         client = TestClient(app)
         response = client.post("/api/v1/chat", json={"prompt": "make the strategy less conservative"})
         self.assertEqual(response.status_code, 200)
@@ -127,10 +133,10 @@ class TestApiServerApp(unittest.TestCase):
         # router (understand_goal, route) + configuration graph (4 nodes)
         self.assertEqual(len(started), 6)
         self.assertEqual(len(set(started)), len(started))
-        # response_id correlated on every event
-        response_ids = {data["response_id"] for _, data in events}
-        self.assertEqual(len(response_ids), 1)
-        self.assertTrue(len(response_ids.pop()) == 32)
+        # message_id correlated on every event
+        message_ids = {data["message_id"] for _, data in events}
+        self.assertEqual(len(message_ids), 1)
+        self.assertTrue(len(message_ids.pop()) == 32)
         # block events carry ids and structured approval actions
         blocks = [data["payload"] for name, data in events if name == "block"]
         self.assertTrue(any(block["type"] == "configuration_diff" for block in blocks))
@@ -189,6 +195,45 @@ class TestGatewayStreaming(unittest.TestCase):
         diff_block = next(b for b in blocks if b.type == "configuration_diff")
         self.assertEqual(diff_block.prefix, "Proposed changes")
         self.assertEqual(diff_block.changes[0].path, "assets.BTC_USD.consensus.buy")
+
+
+class TestConversationSessions(unittest.TestCase):
+    def test_session_event_emitted_with_id(self):
+        llm = FakeLlmAdapter(chunks=["Token1 "])
+        app = ChatApp.create(agent=build_gateway(llm), conversations=FakeConversationStore())
+        client = TestClient(app)
+        response = client.post("/api/v1/chat", json={"prompt": "Analyze BTC"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("event: session", response.text)
+        self.assertTrue(_extract_session_id(response.text))
+
+    def test_history_reused_across_requests(self):
+        llm = FakeLlmAdapter(chunks=["ok"])
+        app = ChatApp.create(agent=build_gateway(llm), conversations=FakeConversationStore())
+        client = TestClient(app)
+
+        first = client.post("/api/v1/chat", json={"prompt": "hello"})
+        session_id = _extract_session_id(first.text)
+        self.assertTrue(session_id)
+
+        second = client.post("/api/v1/chat", json={"prompt": "follow up", "session_id": session_id})
+        self.assertEqual(second.status_code, 200)
+        history = llm.last_history
+        self.assertIsNotNone(history)
+        self.assertIn("hello", [turn.content for turn in history])
+
+
+def _extract_session_id(content):
+    import json
+
+    for frame in content.split("\n\n"):
+        if "event: session" not in frame:
+            continue
+        for line in frame.splitlines():
+            if line.startswith("data:"):
+                data = json.loads(line.split("data:", 1)[1].strip())
+                return data["payload"]["session_id"]
+    return None
 
 
 async def _collect(async_iter):
