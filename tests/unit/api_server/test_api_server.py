@@ -27,9 +27,9 @@ assets:
     quantity_decimals: 5
     candles_timeframe: "MIN1"
     schedule: 1
-consensus:
-  buy: 1.3
-  sell: 0.5
+    consensus:
+      buy: 1.3
+      sell: 0.5
 """
 
 
@@ -102,7 +102,7 @@ class TestApiServerApp(unittest.TestCase):
             ),
             ConfigurationProposal(
                 summary="less conservative",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
         app = ChatApp.create(agent=build_gateway(llm))
@@ -176,7 +176,7 @@ class TestGatewayStreaming(unittest.TestCase):
             ),
             ConfigurationProposal(
                 summary="less conservative",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
         gateway = build_gateway(llm)
@@ -188,7 +188,7 @@ class TestGatewayStreaming(unittest.TestCase):
         self.assertTrue(any(block.type == "configuration_diff" for block in blocks))
         diff_block = next(b for b in blocks if b.type == "configuration_diff")
         self.assertEqual(diff_block.prefix, "Proposed changes")
-        self.assertEqual(diff_block.changes[0].path, "consensus.buy")
+        self.assertEqual(diff_block.changes[0].path, "assets.BTC_USD.consensus.buy")
 
 
 async def _collect(async_iter):

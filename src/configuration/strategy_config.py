@@ -15,12 +15,36 @@ class StrategyType(str, Enum):
 
 
 class StrategyConfig(BaseModel):
-    name: Optional[str] = None
-    type: StrategyType
-    action: Optional[TradeAction] = None
-    expression: Optional[str] = None
-    class_name: Optional[str] = Field(default=None, min_length=1)
-    enabled: bool = True
+    name: Optional[str] = Field(
+        default=None,
+        description="Unique identifier of the strategy within the asset.",
+        json_schema_extra={"mutable": False},
+    )
+    type: StrategyType = Field(
+        description="How the strategy is implemented: STATIC (built-in Python strategy) or DYNAMIC (expression).",
+        json_schema_extra={"mutable": True},
+    )
+    action: Optional[TradeAction] = Field(
+        default=None,
+        description="Direction the strategy votes for: BUY or SELL.",
+        json_schema_extra={"mutable": True},
+    )
+    expression: Optional[str] = Field(
+        default=None,
+        description="Expression evaluated by a DYNAMIC strategy. True means it votes in its direction. May reference market, position and indicator variables.",
+        json_schema_extra={"mutable": True},
+    )
+    class_name: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Fully-qualified class name for STATIC strategies.",
+        json_schema_extra={"mutable": True},
+    )
+    enabled: bool = Field(
+        default=True,
+        description="Whether the strategy is active in the consensus calculation.",
+        json_schema_extra={"mutable": True},
+    )
 
     @model_validator(mode="after")
     def _validate_strategy(self) -> StrategyConfig:

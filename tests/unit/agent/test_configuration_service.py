@@ -6,7 +6,7 @@ class TestConfigurationService:
     def test_loads_yaml(self, sample_config):
         service = ConfigurationService(sample_config)
         raw = service.load_raw_config()
-        assert raw["consensus"]["buy"] == 1.3
+        assert raw["assets"][0]["consensus"]["buy"] == 1.3
         assert raw["assets"][0]["base_ticker_symbol"] == "BTC"
 
     def test_valid_proposal(self, sample_config):
@@ -15,7 +15,7 @@ class TestConfigurationService:
             summary="Take more trades.",
             changes=[
                 ConfigChange(
-                    path="consensus.buy", old_value=1.3, new_value=1.1,
+                    path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1,
                     reason="Lower buy threshold allows more signals.",
                 )
             ],
@@ -51,18 +51,18 @@ class TestConfigurationService:
         proposal = ConfigurationProposal(
             summary="too aggressive",
             changes=[
-                ConfigChange(path="consensus.buy", old_value=1.3, new_value=15.0, reason="max aggressiveness"),
+                ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=15.0, reason="max aggressiveness"),
             ],
         )
         validation = service.validate_proposal(proposal)
         assert validation.valid is False
-        assert any("violates constraint" in error for error in validation.errors)
+        assert any("violates constraint" in error.lower() or "less than or equal to 10" in error for error in validation.errors)
 
     def test_rejects_type_mismatch(self, sample_config):
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="wrong type",
-            changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value="high", reason="x")],
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value="high", reason="x")],
         )
         validation = service.validate_proposal(proposal)
         assert validation.valid is False
@@ -84,7 +84,7 @@ class TestConfigurationService:
         proposal = ConfigurationProposal(
             summary="stale",
             changes=[
-                ConfigChange(path="consensus.buy", old_value=0.9, new_value=1.5, reason="x"),
+                ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=0.9, new_value=1.5, reason="x"),
             ],
         )
         _, warnings = service.apply_proposal(proposal)
@@ -95,12 +95,12 @@ class TestConfigurationService:
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="less conservative",
-            changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.05, reason="more trades")],
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.05, reason="more trades")],
             risks=["Noise"],
             expected_effect="more signals",
         )
         rendered = service.render_proposed_diff(proposal)
-        assert "consensus.buy: 1.3 -> 1.05" in rendered
+        assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.05" in rendered
         assert "Noise" in rendered
 
     def test_render_diff_with_warnings(self, sample_config):

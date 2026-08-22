@@ -14,7 +14,6 @@ from src.agent.configuration.models import (
 )
 from src.agent.configuration.schema import (
     ConfigField,
-    ConfigFieldSpec,
     ConfigurationSchema,
 )
 from src.agent.configuration.state import ConfigurationAgentState
@@ -24,7 +23,6 @@ __all__ = [
     "MAX_GENERATION_ATTEMPTS",
     "ConfigChange",
     "ConfigField",
-    "ConfigFieldSpec",
     "ConfigurationDiffBlock",
     "ConfigurationGoal",
     "ConfigurationGraph",

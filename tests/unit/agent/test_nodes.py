@@ -16,7 +16,7 @@ class TestLoadConfigurationNode:
     def test_renders_catalog(self, sample_config):
         node = LoadConfigurationNode(ConfigurationService(sample_config))
         result = node({"user_prompt": "x"})
-        assert "consensus.buy" in result["catalog_context"]
+        assert "assets.BTC_USD.consensus.buy" in result["catalog_context"]
 
 
 class TestGenerateProposalNode:
@@ -32,13 +32,13 @@ class TestGenerateProposalNode:
         result = node({
             "user_prompt": "x",
             "request": self._route(),
-            "catalog_context": "consensus.buy [editable, decimal] = 1.3",
+            "catalog_context": "assets.BTC_USD.consensus.buy [editable, decimal] = 1.3",
             "proposal_attempts": 0,
         })
         assert result["proposal"].summary == "s"
         assert result["proposal_attempts"] == 1
         prompt = llm.structured_calls[0][1]
-        assert "consensus.buy" in prompt
+        assert "assets.BTC_USD.consensus.buy" in prompt
         assert "take more trades" in prompt
 
     def test_goal_format_includes_target_asset(self, sample_config):
@@ -85,7 +85,7 @@ class TestValidateProposalNode:
         node = ValidateProposalNode(ConfigurationService(sample_config))
         proposal = ConfigurationProposal(
             summary="s",
-            changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
         )
         result = node({"proposal": proposal, "request": self._route()})
         assert result["validation"].valid is True
@@ -126,10 +126,10 @@ class TestPresentProposalNode:
         node = PresentProposalNode(ConfigurationService(sample_config))
         proposal = ConfigurationProposal(
             summary="less conservative",
-            changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
         )
         result = node({"proposal": proposal})
         presentation = result["presentation"]
         assert "less conservative" in presentation.markdown()
-        assert "consensus.buy: 1.3 -> 1.1" in presentation.markdown()
+        assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.1" in presentation.markdown()
         assert presentation.blocks[-1].type == "approval"

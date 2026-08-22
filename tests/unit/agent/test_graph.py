@@ -41,7 +41,7 @@ class TestConfigurationGraph:
         llm = FakeLlmAdapter([
             ConfigurationProposal(
                 summary="less conservative",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
             ),
         ])
         graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
@@ -83,7 +83,7 @@ class TestConfigurationGraph:
         llm = FakeLlmAdapter([
             ConfigurationProposal(
                 summary="less conservative",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="more signals")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more signals")],
                 expected_effect="more buy signals",
             ),
         ])
@@ -92,8 +92,8 @@ class TestConfigurationGraph:
 
         assert state["request"].goal.objective == "take more trades"
         assert state["validation"].valid is True
-        assert state["proposal"].changes[0].path == "consensus.buy"
-        assert "consensus.buy: 1.3 -> 1.1" in state["presentation"].markdown()
+        assert state["proposal"].changes[0].path == "assets.BTC_USD.consensus.buy"
+        assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.1" in state["presentation"].markdown()
 
     def test_invalid_then_regenerated_proposal(self, sample_config):
         llm = FakeLlmAdapter([
@@ -103,7 +103,7 @@ class TestConfigurationGraph:
             ),
             ConfigurationProposal(
                 summary="fixed",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="fixed")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="fixed")],
             ),
         ])
         graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field as dataclass_field
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, TypeAdapter
+
+from src.configuration.trading_config import TradingConfig
 
 
 class ConfigField(BaseModel):
@@ -19,140 +20,130 @@ class ConfigField(BaseModel):
     )
 
 
-@dataclass(frozen=True)
-class ConfigFieldSpec:
-    """A static (non-validated) field definition shared by all assets / sections."""
+TRADING_CONFIG_ADAPTER: TypeAdapter[TradingConfig] = TypeAdapter(TradingConfig)
+_TRADING_CONFIG_SCHEMA_CACHE: dict[str, Any] | None = None
 
-    path: str
-    description: str
-    type: str
-    mutable: bool = True
-    constraints: list[str] = dataclass_field(default_factory=list)
-
-
-GLOBAL_FIELD_SPECS: list[ConfigFieldSpec] = [
-    ConfigFieldSpec(
-        path="consensus.buy",
-        description="Consensus threshold that must be reached for a BUY signal.",
-        type="decimal", mutable=True, constraints=["value > 0", "value >= 0.05", "value <= 10.0"],
-    ),
-    ConfigFieldSpec(
-        path="consensus.sell",
-        description="Consensus threshold that must be reached for a SELL signal.",
-        type="decimal", mutable=True, constraints=["value > 0", "value >= 0.05", "value <= 10.0"],
-    ),
-    ConfigFieldSpec(
-        path="dynamic_quantity",
-        description="Expression computing the quantity to buy. May reference indicators and the symbol `eq`.",
-        type="string", mutable=True,
-        constraints=["value is a non-empty string"],
-    ),
-]
-
-STRATEGY_FIELD_SPECS: list[ConfigFieldSpec] = [
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.strategies.{{name}}.type",
-        description="How the strategy is implemented: STATIC (built-in Python strategy) or DYNAMIC "
-                    "(expression).",
-        type="enum", mutable=True, constraints=["value in {STATIC, DYNAMIC}"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.strategies.{{name}}.action",
-        description="Direction the strategy votes for: BUY or SELL.",
-        type="enum", mutable=True, constraints=["value in {BUY, SELL}"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.strategies.{{name}}.expression",
-        description="Expression evaluated by a DYNAMIC strategy. True means it votes in its "
-                    "direction. May reference market, position and indicator variables.",
-        type="string", mutable=True,
-        constraints=["value is a non-empty string"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.strategies.{{name}}.enabled",
-        description="Whether the strategy is active in the consensus calculation.",
-        type="bool", mutable=True, constraints=["value in {True, False}"],
-    ),
-]
-
-ASSET_FIELD_SPECS: list[ConfigFieldSpec] = [
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.name",
-        description="Human-readable display name of the asset.",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.base_ticker_symbol",
-        description="Base currency of the trading pair (e.g. BTC).",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.quote_ticker_symbol",
-        description="Quote currency of the trading pair (e.g. USD).",
-        type="string", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.exchange",
-        description="Exchange the asset is traded on.",
-        type="enum", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.min_quantity",
-        description="Minimum tradeable quantity for this asset.",
-        type="decimal", mutable=True, constraints=["value > 0"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.quote_decimals",
-        description="Number of decimals used for quote amounts.",
-        type="int", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.quantity_decimals",
-        description="Number of decimals used for quantities.",
-        type="int", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.candles_timeframe",
-        description="Candle timeframe used to feed the strategy (e.g. MIN1).",
-        type="enum", mutable=False,
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.schedule",
-        description="Trading cadence for this asset: 0=second, 1=minute, 2=hour, 3=day, 4=week, 5=month.",
-        type="int", mutable=True, constraints=["value in {0,1,2,3,4,5}"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.guard_config.max_drawdown_period",
-        description="Number of candles over which max drawdown is measured before trading halts.",
-        type="int", mutable=True, constraints=["value >= 1", "value <= 10000"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.guard_config.max_drawdown_percentage",
-        description="Maximum tolerated drawdown fraction (0.60 means 60%) before trading halts.",
-        type="decimal", mutable=True, constraints=["0 < value <= 1"],
-    ),
-    ConfigFieldSpec(
-        path="assets.{{symbol}}.guard_config.cooldown_timeout",
-        description="Seconds to wait after a drawdown halt before trading resumes.",
-        type="int", mutable=True, constraints=["value >= 0"],
-    ),
-]
-
-
-_RANGE_TEMPLATE = re.compile(
+_RANGE_CONSTRAINT_PATTERN = re.compile(
     r"^(?P<lo>[+-]?\d+(?:\.\d+)?)\s*<=\s*value\s*<=\s*(?P<hi>[+-]?\d+(?:\.\d+)?)$"
 )
-_COMPARISON_TEMPLATE = re.compile(
+_COMPARISON_CONSTRAINT_PATTERN = re.compile(
     r"^value\s*(?P<op><=|>=|<|>)\s*(?P<num>[+-]?\d+(?:\.\d+)?)$"
 )
-_SET_TEMPLATE = re.compile(r"^value\s+in\s+\{(.*)\}$")
-
-_COMPARISONS = {
-    "<": lambda a, b: a < b,
-    "<=": lambda a, b: a <= b,
-    ">": lambda a, b: a > b,
-    ">=": lambda a, b: a >= b,
+_SET_CONSTRAINT_PATTERN = re.compile(r"^value\s+in\s+\{(.*)\}$")
+_COMPARISON_OPERATORS = {
+    "<": lambda left, right: left < right,
+    "<=": lambda left, right: left <= right,
+    ">": lambda left, right: left > right,
+    ">=": lambda left, right: left >= right,
 }
+
+
+def get_trading_config_json_schema() -> dict[str, Any]:
+    global _TRADING_CONFIG_SCHEMA_CACHE
+    if _TRADING_CONFIG_SCHEMA_CACHE is None:
+        _TRADING_CONFIG_SCHEMA_CACHE = TRADING_CONFIG_ADAPTER.json_schema()
+    return _TRADING_CONFIG_SCHEMA_CACHE
+
+
+def _unwrap_optional(field_schema: dict[str, Any]) -> dict[str, Any]:
+    if "anyOf" in field_schema:
+        non_null_branch = None
+        for branch in field_schema["anyOf"]:
+            if branch.get("type") != "null":
+                non_null_branch = branch
+                break
+        if non_null_branch is not None:
+            merged_schema: dict[str, Any] = dict(non_null_branch)
+            for key, value in field_schema.items():
+                if key not in ("anyOf", "default") and key not in merged_schema:
+                    merged_schema[key] = value
+            return merged_schema
+    return field_schema
+
+
+def _resolve_ref(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> dict[str, Any]:
+    if "$ref" in field_schema:
+        ref_name = field_schema["$ref"].split("/")[-1]
+        referenced_schema = schema_defs.get(ref_name, {})
+        merged_schema: dict[str, Any] = dict(referenced_schema)
+        for key, value in field_schema.items():
+            if key != "$ref" and key not in merged_schema:
+                merged_schema[key] = value
+        return merged_schema
+    return field_schema
+
+
+def _effective_schema(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> dict[str, Any]:
+    unwrapped_schema = _unwrap_optional(field_schema)
+    if "$ref" in unwrapped_schema:
+        return _resolve_ref(unwrapped_schema, schema_defs)
+    return unwrapped_schema
+
+
+def _derive_type(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> str:
+    effective_schema = _effective_schema(field_schema, schema_defs)
+    if "enum" in effective_schema:
+        return "enum"
+    json_type = effective_schema.get("type")
+    if json_type == "number":
+        return "decimal"
+    if json_type == "integer":
+        return "int"
+    if json_type == "string":
+        return "string"
+    if json_type == "boolean":
+        return "bool"
+    return "string"
+
+
+def _derive_constraints(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> list[str]:
+    effective_schema = _effective_schema(field_schema, schema_defs)
+    constraints: list[str] = []
+
+    if "enum" in effective_schema:
+        allowed_values = ", ".join(str(value) for value in effective_schema["enum"])
+        constraints.append(f"value in {{{allowed_values}}}")
+        return constraints
+
+    if "exclusiveMinimum" in effective_schema:
+        constraints.append(f"value > {effective_schema['exclusiveMinimum']}")
+    elif "minimum" in effective_schema:
+        constraints.append(f"value >= {effective_schema['minimum']}")
+
+    if "exclusiveMaximum" in effective_schema:
+        constraints.append(f"value < {effective_schema['exclusiveMaximum']}")
+    elif "maximum" in effective_schema:
+        constraints.append(f"value <= {effective_schema['maximum']}")
+
+    if "minLength" in effective_schema:
+        if effective_schema["minLength"] == 1:
+            constraints.append("value is a non-empty string")
+        else:
+            constraints.append(f"value length >= {effective_schema['minLength']}")
+
+    return constraints
+
+
+def _derive_mutable(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> bool:
+    if "mutable" in field_schema:
+        return bool(field_schema["mutable"])
+    unwrapped_schema = _unwrap_optional(field_schema)
+    if "mutable" in unwrapped_schema:
+        return bool(unwrapped_schema["mutable"])
+    return False
+
+
+def _derive_description(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> str:
+    unwrapped_schema = _unwrap_optional(field_schema)
+    if "description" in unwrapped_schema:
+        return str(unwrapped_schema["description"])
+    if "description" in field_schema:
+        return str(field_schema["description"])
+    if "$ref" in unwrapped_schema:
+        referenced_schema = _resolve_ref(unwrapped_schema, schema_defs)
+        if "description" in referenced_schema:
+            return str(referenced_schema["description"])
+    return ""
 
 
 class ConfigurationSchema:
@@ -162,104 +153,179 @@ class ConfigurationSchema:
 
     @staticmethod
     def find_asset_entry(raw_config: dict, symbol: str) -> Optional[dict]:
-        for entry in raw_config.get("assets", []):
-            if ConfigurationSchema.asset_symbol(entry) == symbol:
-                return entry
+        for asset_entry in raw_config.get("assets", []):
+            if ConfigurationSchema.asset_symbol(asset_entry) == symbol:
+                return asset_entry
         return None
 
     @staticmethod
-    def find_asset_strategy_entry(asset_entry: dict, name: str) -> Optional[dict]:
-        for entry in asset_entry.get("strategies", []):
-            if entry.get("name") == name:
-                return entry
+    def find_asset_strategy_entry(asset_entry: dict, strategy_name: str) -> Optional[dict]:
+        for strategy_entry in asset_entry.get("strategies", []):
+            if strategy_entry.get("name") == strategy_name:
+                return strategy_entry
         return None
 
     @staticmethod
-    def _descend_path(current: dict, fragments: list[str]) -> Any:
-        value: Any = current
-        for fragment in fragments:
-            if not isinstance(value, dict) or fragment not in value:
+    def _descend_path(root: dict, path_parts: list[str]) -> Any:
+        current_value: Any = root
+        for part in path_parts:
+            if not isinstance(current_value, dict) or part not in current_value:
                 return None
-            value = value[fragment]
-        return value
+            current_value = current_value[part]
+        return current_value
 
     @staticmethod
     def get_value(raw_config: dict, path: str) -> Any:
-        fragments = path.split(".")
-        if fragments[0] == "assets" and len(fragments) >= 3:
-            entry = ConfigurationSchema.find_asset_entry(raw_config, fragments[1])
-            if entry is None:
+        path_parts = path.split(".")
+        if path_parts[0] == "assets" and len(path_parts) >= 3:
+            asset_entry = ConfigurationSchema.find_asset_entry(raw_config, path_parts[1])
+            if asset_entry is None:
                 return None
-            if fragments[2] == "strategies" and len(fragments) >= 5:
-                strategy = ConfigurationSchema.find_asset_strategy_entry(entry, fragments[3])
-                if strategy is None:
+            if path_parts[2] == "strategies" and len(path_parts) >= 5:
+                strategy_entry = ConfigurationSchema.find_asset_strategy_entry(asset_entry, path_parts[3])
+                if strategy_entry is None:
                     return None
-                return ConfigurationSchema._descend_path(strategy, fragments[4:])
-            return ConfigurationSchema._descend_path(entry, fragments[2:])
-        return ConfigurationSchema._descend_path(raw_config, fragments)
+                return ConfigurationSchema._descend_path(strategy_entry, path_parts[4:])
+            return ConfigurationSchema._descend_path(asset_entry, path_parts[2:])
+        return ConfigurationSchema._descend_path(raw_config, path_parts)
 
     @staticmethod
     def set_value(raw_config: dict, path: str, value: Any) -> bool:
-        fragments = path.split(".")
-        if fragments[0] == "assets" and len(fragments) >= 3:
-            entry = ConfigurationSchema.find_asset_entry(raw_config, fragments[1])
-            if entry is None:
+        path_parts = path.split(".")
+        if path_parts[0] == "assets" and len(path_parts) >= 3:
+            asset_entry = ConfigurationSchema.find_asset_entry(raw_config, path_parts[1])
+            if asset_entry is None:
                 return False
-            if fragments[2] == "strategies" and len(fragments) >= 5:
-                strategy = ConfigurationSchema.find_asset_strategy_entry(entry, fragments[3])
-                if strategy is None:
+            if path_parts[2] == "strategies" and len(path_parts) >= 5:
+                strategy_entry = ConfigurationSchema.find_asset_strategy_entry(asset_entry, path_parts[3])
+                if strategy_entry is None:
                     return False
-                return ConfigurationSchema._set_descend(strategy, fragments[4:], value)
-            return ConfigurationSchema._set_descend(entry, fragments[2:], value)
-        return ConfigurationSchema._set_descend(raw_config, fragments, value)
+                return ConfigurationSchema._set_descend(strategy_entry, path_parts[4:], value)
+            return ConfigurationSchema._set_descend(asset_entry, path_parts[2:], value)
+        return ConfigurationSchema._set_descend(raw_config, path_parts, value)
 
     @staticmethod
-    def _set_descend(current: dict, fragments: list[str], value: Any) -> bool:
-        target = current
-        for fragment in fragments[:-1]:
-            if not isinstance(target, dict) or fragment not in target:
+    def _set_descend(root: dict, path_parts: list[str], value: Any) -> bool:
+        target = root
+        for part in path_parts[:-1]:
+            if not isinstance(target, dict) or part not in target:
                 return False
-            target = target[fragment]
-        if not isinstance(target, dict) or fragments[-1] not in target:
+            target = target[part]
+        last_part = path_parts[-1]
+        if not isinstance(target, dict) or last_part not in target:
             return False
-        target[fragments[-1]] = value
+        target[last_part] = value
         return True
 
-    def build_field_catalog(self, raw_config: dict) -> list[ConfigField]:
-        fields: list[ConfigField] = []
-        for spec in GLOBAL_FIELD_SPECS:
-            fields.append(self._materialize(spec, raw_config, path=spec.path))
-
-        for entry in raw_config.get("assets", []):
-            symbol = self.asset_symbol(entry)
-            for spec in ASSET_FIELD_SPECS:
-                path = spec.path.replace("{{symbol}}", symbol)
-                fields.append(self._materialize(spec, raw_config, path=path))
-            for strategy in entry.get("strategies", []):
-                name = strategy.get("name")
-                if not name:
-                    continue
-                for spec in STRATEGY_FIELD_SPECS:
-                    path = spec.path.replace("{{symbol}}", symbol).replace("{{name}}", name)
-                    fields.append(self._materialize(spec, raw_config, path=path))
-        return fields
-
-    def _materialize(self, spec: ConfigFieldSpec, raw_config: dict, path: str) -> ConfigField:
+    def _build_config_field(self, raw_config: dict, path: str, field_schema: dict, schema_defs: dict) -> ConfigField:
         return ConfigField(
             path=path,
             value=self.get_value(raw_config, path),
-            description=spec.description,
-            type=spec.type,
-            mutable=spec.mutable,
-            constraints=spec.constraints,
+            description=_derive_description(field_schema, schema_defs),
+            type=_derive_type(field_schema, schema_defs),
+            mutable=_derive_mutable(field_schema, schema_defs),
+            constraints=_derive_constraints(field_schema, schema_defs),
         )
+
+    def _build_top_level_fields(self, raw_config: dict, schema_properties: dict, schema_defs: dict) -> list[ConfigField]:
+        fields: list[ConfigField] = []
+        for field_name, field_schema in schema_properties.items():
+            if field_name == "assets":
+                continue
+            fields.append(self._build_config_field(raw_config, field_name, field_schema, schema_defs))
+        return fields
+
+    def _build_strategy_fields(
+            self,
+            raw_config: dict,
+            asset_symbol: str,
+            field_name: str,
+            strategy_entries: list,
+            strategy_schema: dict,
+            schema_defs: dict,
+    ) -> list[ConfigField]:
+        fields: list[ConfigField] = []
+        for strategy_entry in strategy_entries or []:
+            if not isinstance(strategy_entry, dict):
+                continue
+            strategy_name = strategy_entry.get("name")
+            if not strategy_name:
+                continue
+            for strategy_field_name, strategy_field_schema in strategy_schema.get("properties", {}).items():
+                path = f"assets.{asset_symbol}.{field_name}.{strategy_name}.{strategy_field_name}"
+                fields.append(self._build_config_field(raw_config, path, strategy_field_schema, schema_defs))
+        return fields
+
+    def _build_nested_object_fields(
+            self,
+            raw_config: dict,
+            asset_symbol: str,
+            field_name: str,
+            nested_properties: dict,
+            schema_defs: dict,
+    ) -> list[ConfigField]:
+        fields: list[ConfigField] = []
+        for nested_field_name, nested_field_schema in nested_properties.items():
+            path = f"assets.{asset_symbol}.{field_name}.{nested_field_name}"
+            fields.append(self._build_config_field(raw_config, path, nested_field_schema, schema_defs))
+        return fields
+
+    def _build_asset_fields(self, raw_config: dict, asset_properties: dict, schema_defs: dict) -> list[ConfigField]:
+        fields: list[ConfigField] = []
+        for asset_entry in raw_config.get("assets", []):
+            asset_symbol = self.asset_symbol(asset_entry)
+            for field_name, field_schema in asset_properties.items():
+                effective_schema = _effective_schema(field_schema, schema_defs)
+
+                if effective_schema.get("type") == "array":
+                    item_schema = _effective_schema(effective_schema.get("items", {}), schema_defs)
+                    fields.extend(
+                        self._build_strategy_fields(
+                            raw_config,
+                            asset_symbol,
+                            field_name,
+                            asset_entry.get(field_name, []),
+                            item_schema,
+                            schema_defs,
+                        )
+                    )
+                    continue
+
+                if "properties" in effective_schema:
+                    fields.extend(
+                        self._build_nested_object_fields(
+                            raw_config,
+                            asset_symbol,
+                            field_name,
+                            effective_schema["properties"],
+                            schema_defs,
+                        )
+                    )
+                    continue
+
+                path = f"assets.{asset_symbol}.{field_name}"
+                fields.append(self._build_config_field(raw_config, path, field_schema, schema_defs))
+        return fields
+
+    def build_field_catalog(self, raw_config: dict) -> list[ConfigField]:
+        trading_config_schema = get_trading_config_json_schema()
+        schema_defs = trading_config_schema.get("$defs", {})
+        schema_properties = trading_config_schema.get("properties", {})
+
+        fields = self._build_top_level_fields(raw_config, schema_properties, schema_defs)
+
+        asset_schema = _effective_schema(schema_properties.get("assets", {}).get("items", {}), schema_defs)
+        asset_properties = asset_schema.get("properties", {})
+        fields.extend(self._build_asset_fields(raw_config, asset_properties, schema_defs))
+
+        return fields
 
     def render_catalog(self, fields: list[ConfigField]) -> str:
         lines = ["Current configuration fields available to change:"]
         for field in sorted(fields, key=lambda f: f.path):
-            mut = "editable" if field.mutable else "locked"
+            mutability_label = "editable" if field.mutable else "locked"
             lines.append(
-                f"- {field.path} [{mut}, {field.type}] = {field.value!r} "
+                f"- {field.path} [{mutability_label}, {field.type}] = {field.value!r} "
                 f"-- {field.description}"
             )
             for constraint in field.constraints:
@@ -275,26 +341,27 @@ class ConfigurationSchema:
 
     @staticmethod
     def check_constraint(value: Any, constraint: str) -> bool:
-        stripped = constraint.strip()
+        stripped_constraint = constraint.strip()
 
-        range_match = _RANGE_TEMPLATE.match(stripped)
+        range_match = _RANGE_CONSTRAINT_PATTERN.match(stripped_constraint)
         if range_match:
             number = ConfigurationSchema._as_number(value)
             if number is not None:
                 return float(range_match.group("lo")) <= number <= float(range_match.group("hi"))
 
-        comparison_match = _COMPARISON_TEMPLATE.match(stripped)
+        comparison_match = _COMPARISON_CONSTRAINT_PATTERN.match(stripped_constraint)
         if comparison_match:
             number = ConfigurationSchema._as_number(value)
             if number is not None:
-                return _COMPARISONS[comparison_match.group("op")](number, float(comparison_match.group("num")))
+                operator = _COMPARISON_OPERATORS[comparison_match.group("op")]
+                return operator(number, float(comparison_match.group("num")))
 
-        set_match = _SET_TEMPLATE.match(stripped)
+        set_match = _SET_CONSTRAINT_PATTERN.match(stripped_constraint)
         if set_match:
-            allowed = {item.strip() for item in set_match.group(1).split(",")}
-            return str(value) in allowed
+            allowed_values = {item.strip() for item in set_match.group(1).split(",")}
+            return str(value) in allowed_values
 
-        if stripped == "value is a non-empty string":
+        if stripped_constraint == "value is a non-empty string":
             return isinstance(value, str) and len(value.strip()) > 0
 
         return True

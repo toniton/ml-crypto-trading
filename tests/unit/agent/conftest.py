@@ -15,9 +15,9 @@ assets:
       max_drawdown_period: 8
       max_drawdown_percentage: 0.60
       cooldown_timeout: 5
-consensus:
-  buy: 1.3
-  sell: 0.5
+    consensus:
+      buy: 1.3
+      sell: 0.5
 dynamic_quantity: "max(min_qty, eq * 0.1)"
 """
 

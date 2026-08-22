@@ -28,14 +28,14 @@ class TestConfigurationPresentation:
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="s",
-            changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
         )
         original_changes = list(proposal.changes)
         presentation = service.build_presentation(proposal)
         assert proposal.changes == original_changes
         assert presentation.blocks[-1].type == "approval"
         diff_blocks = [b for b in presentation.blocks if b.type == "configuration_diff"]
-        assert diff_blocks[0].changes[0].path == "consensus.buy"
+        assert diff_blocks[0].changes[0].path == "assets.BTC_USD.consensus.buy"
 
     def test_build_presentation_includes_warnings(self, sample_config):
         service = ConfigurationService(sample_config)
@@ -54,7 +54,7 @@ class TestTypedResults:
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="s",
-            changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
         )
         presentation = service.build_presentation(proposal)
         result = ConfigurationResult(

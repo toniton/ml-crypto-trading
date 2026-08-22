@@ -32,7 +32,7 @@ class TestAgentGateway:
             self._config_route(),
             ConfigurationProposal(
                 summary="less conservative",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
         gateway = AgentGateway(llm, sample_config)
@@ -40,7 +40,7 @@ class TestAgentGateway:
         assert result.kind == "configuration"
         assert result.proposal is not None
         assert result.proposal.summary == "less conservative"
-        assert "consensus.buy: 1.3 -> 1.1" in result.presentation.markdown()
+        assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.1" in result.presentation.markdown()
         # one routing call in the router graph, one proposal call in the graph
         assert len(llm.structured_calls) == 2
 
@@ -49,7 +49,7 @@ class TestAgentGateway:
             self._config_route(objective="aggressive position sizing"),
             ConfigurationProposal(
                 summary="riskier sizing",
-                changes=[ConfigChange(path="consensus.buy", old_value=1.3, new_value=1.05, reason="riskier")],
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.05, reason="riskier")],
             ),
         ])
         gateway = AgentGateway(llm, sample_config)

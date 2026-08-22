@@ -3,9 +3,13 @@ from src.agent.configuration.schema import ConfigurationSchema
 
 class TestSchema:
     def test_get_value_root(self, sample_config):
-        raw = {"consensus": {"buy": 1.3}, "assets": []}
-        assert ConfigurationSchema.get_value(raw, "consensus.buy") == 1.3
+        raw = {"dynamic_quantity": "max(min_qty, eq * 0.1)", "assets": []}
+        assert ConfigurationSchema.get_value(raw, "dynamic_quantity") == "max(min_qty, eq * 0.1)"
         assert ConfigurationSchema.get_value(raw, "missing.field") is None
+
+    def test_get_value_consensus_per_asset(self, sample_config):
+        raw = {"assets": [{"base_ticker_symbol": "BTC", "quote_ticker_symbol": "USD", "consensus": {"buy": 1.3}}]}
+        assert ConfigurationSchema.get_value(raw, "assets.BTC_USD.consensus.buy") == 1.3
 
     def test_get_value_asset_symbol(self, sample_config):
         raw = {
@@ -33,11 +37,12 @@ class TestSchema:
     def test_catalog_contains_assets_and_globals(self, sample_config):
         schema = ConfigurationSchema()
         fields = schema.build_field_catalog(
-            {"assets": [{"base_ticker_symbol": "BTC", "quote_ticker_symbol": "USD"}], "consensus": {"buy": 1.3}}
+            {"assets": [{"base_ticker_symbol": "BTC", "quote_ticker_symbol": "USD", "consensus": {"buy": 1.3, "sell": 0.5}}], "dynamic_quantity": "max(min_qty, eq * 0.1)"}
         )
         paths = {field.path for field in fields}
-        assert "consensus.buy" in paths
+        assert "assets.BTC_USD.consensus.buy" in paths
         assert "assets.BTC_USD.guard_config.max_drawdown_percentage" in paths
+        assert "dynamic_quantity" in paths
 
     def test_get_value_asset_strategy_name(self, sample_config):
         raw = {
@@ -90,14 +95,16 @@ class TestSchema:
                 "assets": [{
                     "base_ticker_symbol": "BTC",
                     "quote_ticker_symbol": "USD",
+                    "consensus": {"buy": 1.3, "sell": 0.5},
                     "strategies": [{
                         "name": "Trend",
-                        "type": "BUY",
+                        "type": "DYNAMIC",
+                        "action": "BUY",
                         "expression": "close > 100",
                         "enabled": True,
                     }],
                 }],
-                "consensus": {"buy": 1.3},
+                "dynamic_quantity": "max(min_qty, eq * 0.1)",
             }
         )
         paths = {field.path for field in fields}
@@ -108,9 +115,9 @@ class TestSchema:
     def test_render_catalog_readable(self, sample_config):
         schema = ConfigurationSchema()
         rendered = schema.render_catalog(
-            schema.build_field_catalog({"consensus": {"buy": 1.3}, "assets": []})
+            schema.build_field_catalog({"assets": [{"base_ticker_symbol": "BTC", "quote_ticker_symbol": "USD", "consensus": {"buy": 1.3, "sell": 0.5}}], "dynamic_quantity": "max(min_qty, eq * 0.1)"})
         )
-        assert "consensus.buy" in rendered
+        assert "assets.BTC_USD.consensus.buy" in rendered
         assert "editable" in rendered
 
 

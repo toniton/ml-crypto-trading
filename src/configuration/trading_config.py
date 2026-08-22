@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.interfaces.asset import Asset
@@ -11,8 +11,16 @@ from src.configuration.helpers.yaml_config_settings_source import CustomYamlConf
 
 
 class TradingConfig(BaseSettings):
-    assets: list[Asset]
-    dynamic_quantity: Optional[str] = None
+    assets: list[Asset] = Field(
+        description="List of trading assets.",
+        json_schema_extra={"mutable": False},
+    )
+    dynamic_quantity: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        description="Expression computing the quantity to buy. May reference indicators and the symbol `eq`.",
+        json_schema_extra={"mutable": True},
+    )
 
     @field_validator("assets")
     @classmethod
