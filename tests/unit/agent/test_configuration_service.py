@@ -56,7 +56,7 @@ class TestConfigurationService:
         )
         validation = service.validate_proposal(proposal)
         assert validation.valid is False
-        assert any("violates constraint" in error.lower() or "less than or equal to 10" in error for error in validation.errors)
+        assert any("violates constraint" in error for error in validation.errors)
 
     def test_rejects_type_mismatch(self, sample_config):
         service = ConfigurationService(sample_config)
@@ -118,4 +118,131 @@ class TestConfigurationService:
     def test_proposal_without_changes_invalid(self, sample_config):
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(summary="nothing", changes=[])
+        assert service.validate_proposal(proposal).valid is False
+
+
+class TestValueNormalization:
+    def test_string_number_is_coerced_before_being_written(self, sample_config):
+        # The LLM may propose "1.1" for a float field. Validation accepts it, and
+        # without normalization the *string* lands in the YAML.
+        service = ConfigurationService(sample_config)
+        proposal = ConfigurationProposal(
+            summary="less conservative",
+            changes=[
+                ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value="1.1", reason="r"),
+            ],
+        )
+
+        validation = service.validate_proposal(proposal)
+        assert validation.valid is True
+        assert proposal.changes[0].new_value == 1.1
+        assert isinstance(proposal.changes[0].new_value, float)
+
+        patched, _ = service.apply_proposal(proposal)
+        assert patched["assets"][0]["consensus"]["buy"] == 1.1
+        assert isinstance(patched["assets"][0]["consensus"]["buy"], float)
+
+
+class TestPreExistingConfigErrors:
+    @staticmethod
+    def _config_with_stale_value(tmp_path, sample_config):
+        import yaml
+
+        raw = yaml.safe_load(open(sample_config, encoding="utf-8"))
+        raw["assets"][0]["guard_config"]["max_drawdown_percentage"] = 5.0
+        broken = tmp_path / "broken.yaml"
+        broken.write_text(yaml.safe_dump(raw), encoding="utf-8")
+        return str(broken)
+
+    def test_unrelated_stale_value_does_not_reject_the_proposal(self, tmp_path, sample_config):
+        # Validation is wholesale, so an already-invalid value elsewhere in the file
+        # must not make every proposal unfixable.
+        service = ConfigurationService(self._config_with_stale_value(tmp_path, sample_config))
+        proposal = ConfigurationProposal(
+            summary="less conservative",
+            changes=[
+                ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r"),
+            ],
+        )
+
+        validation = service.validate_proposal(proposal)
+        assert validation.valid is True
+        assert any("already invalid" in warning for warning in validation.warnings)
+
+    def test_stale_value_is_still_enforced_when_the_proposal_touches_it(self, tmp_path, sample_config):
+        service = ConfigurationService(self._config_with_stale_value(tmp_path, sample_config))
+        proposal = ConfigurationProposal(
+            summary="worse",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.guard_config.max_drawdown_percentage",
+                    old_value=5.0, new_value=9.0, reason="r",
+                ),
+            ],
+        )
+
+        validation = service.validate_proposal(proposal)
+        assert validation.valid is False
+        assert any("violates constraint" in error for error in validation.errors)
+
+
+class TestErrorMessages:
+    CONFIG_WITH_STRATEGY = """
+assets:
+  - name: "Bitcoin (Crypto.com)"
+    base_ticker_symbol: "BTC"
+    quote_ticker_symbol: "USD"
+    exchange: "CRYPTO_DOT_COM"
+    min_quantity: 0.00005
+    quote_decimals: 2
+    quantity_decimals: 5
+    candles_timeframe: "MIN1"
+    schedule: 1
+    consensus:
+      buy: 1.3
+      sell: 0.5
+    strategies:
+      - name: "Trend"
+        type: "DYNAMIC"
+        action: "BUY"
+        expression: "close > 100"
+        enabled: true
+dynamic_quantity: "max(min_qty, eq * 0.1)"
+"""
+
+    def test_model_level_error_reports_the_changed_leaf(self, tmp_path):
+        # Model validators report the whole model as their input; the message
+        # should still point at the value the agent actually proposed.
+        config_file = tmp_path / "with-strategy.yaml"
+        config_file.write_text(self.CONFIG_WITH_STRATEGY, encoding="utf-8")
+        service = ConfigurationService(str(config_file))
+        proposal = ConfigurationProposal(
+            summary="switch strategy type",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.strategies.Trend.type",
+                    old_value="DYNAMIC", new_value="STATIC", reason="r",
+                ),
+            ],
+        )
+
+        validation = service.validate_proposal(proposal)
+        assert validation.valid is False
+        assert any("value 'STATIC'" in error for error in validation.errors)
+        assert not any("{" in error for error in validation.errors)
+
+    def test_empty_expression_is_rejected(self, tmp_path):
+        config_file = tmp_path / "with-strategy.yaml"
+        config_file.write_text(self.CONFIG_WITH_STRATEGY, encoding="utf-8")
+        service = ConfigurationService(str(config_file))
+        proposal = ConfigurationProposal(
+            summary="blank the expression",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.strategies.Trend.expression",
+                    old_value="close > 100", new_value="", reason="r",
+                ),
+            ],
+        )
+
         assert service.validate_proposal(proposal).valid is False

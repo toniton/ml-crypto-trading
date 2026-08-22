@@ -133,3 +133,25 @@ class TestPresentProposalNode:
         assert "less conservative" in presentation.markdown()
         assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.1" in presentation.markdown()
         assert presentation.blocks[-1].type == "approval"
+
+    def test_valid_validation_keeps_approval(self, sample_config):
+        node = PresentProposalNode(ConfigurationService(sample_config))
+        proposal = ConfigurationProposal(
+            summary="less conservative",
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+        )
+        result = node({"proposal": proposal, "validation": ValidationResult.ok()})
+        presentation = result["presentation"]
+        assert any(block.type == "approval" for block in presentation.blocks)
+
+    def test_invalid_validation_omits_approval_and_shows_errors(self, sample_config):
+        node = PresentProposalNode(ConfigurationService(sample_config))
+        proposal = ConfigurationProposal(
+            summary="too aggressive",
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=15.0, reason="max aggressiveness")],
+        )
+        validation = ValidationResult.failed(["Field 'assets.BTC_USD.consensus.buy' value 15.0 violates constraint: too high"])
+        result = node({"proposal": proposal, "validation": validation})
+        presentation = result["presentation"]
+        assert not any(block.type == "approval" for block in presentation.blocks)
+        assert "too high" in presentation.markdown()

@@ -31,6 +31,7 @@ class StrategyConfig(BaseModel):
     )
     expression: Optional[str] = Field(
         default=None,
+        min_length=1,
         description="Expression evaluated by a DYNAMIC strategy. True means it votes in its direction. May reference market, position and indicator variables.",
         json_schema_extra={"mutable": True},
     )

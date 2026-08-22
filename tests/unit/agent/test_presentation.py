@@ -45,6 +45,24 @@ class TestConfigurationPresentation:
         assert "Warnings:" in markdown
         assert "global setting applies to all assets" in markdown
 
+    def test_build_presentation_with_errors_omits_approval(self, sample_config):
+        service = ConfigurationService(sample_config)
+        proposal = ConfigurationProposal(
+            summary="too aggressive",
+            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=15.0, reason="x")],
+        )
+        presentation = service.build_presentation(proposal, errors=["value must be <= 10.0"])
+        assert not any(block.type == "approval" for block in presentation.blocks)
+        markdown = presentation.markdown()
+        assert "rejected" in markdown
+        assert "value must be <= 10.0" in markdown
+
+    def test_build_presentation_without_errors_keeps_approval(self, sample_config):
+        service = ConfigurationService(sample_config)
+        proposal = ConfigurationProposal(summary="fine", changes=[])
+        presentation = service.build_presentation(proposal, errors=[])
+        assert presentation.blocks[-1].type == "approval"
+
 
 class TestTypedResults:
     def test_general_result_kind(self):

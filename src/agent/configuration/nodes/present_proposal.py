@@ -9,9 +9,10 @@ class PresentProposalNode:
         self._configuration_service = configuration_service
 
     def __call__(self, state: ConfigurationAgentState) -> dict:
-        warnings = []
         validation = state.get("validation")
-        if validation and validation.warnings:
-            warnings = validation.warnings
-        presentation = self._configuration_service.build_presentation(state["proposal"], warnings=warnings)
+        warnings = validation.warnings if validation else []
+        errors = validation.errors if validation and not validation.valid else []
+        presentation = self._configuration_service.build_presentation(
+            state["proposal"], warnings=warnings, errors=errors
+        )
         return {"presentation": presentation}

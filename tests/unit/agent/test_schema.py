@@ -1,4 +1,4 @@
-from src.agent.configuration.schema import ConfigurationSchema
+from src.agent.configuration.schema import ConfigurationSchema, find_fields_missing_mutability
 
 
 class TestSchema:
@@ -121,23 +121,40 @@ class TestSchema:
         assert "editable" in rendered
 
 
-class TestConstraintChecking:
-    def test_range(self):
-        assert ConfigurationSchema.check_constraint(0.66, "0.50 <= value <= 0.95")
-        assert not ConfigurationSchema.check_constraint(0.30, "0.50 <= value <= 0.95")
+class TestMutabilityFlags:
+    def test_every_config_field_declares_mutability(self):
+        # Mutability defaults to locked, so a field that forgets its
+        # json_schema_extra flag silently disappears from the agent's catalog.
+        assert find_fields_missing_mutability() == []
 
-    def test_comparisons(self):
-        assert ConfigurationSchema.check_constraint(5, "value > 0")
-        assert ConfigurationSchema.check_constraint(0.1, "value >= 0.05")
-        assert not ConfigurationSchema.check_constraint(0.01, "value >= 0.05")
 
-    def test_set(self):
-        assert ConfigurationSchema.check_constraint(2, "value in {0,1,2,3,4,5}")
-        assert not ConfigurationSchema.check_constraint(9, "value in {0,1,2,3,4,5}")
+class TestPathResolution:
+    RAW = {
+        "assets": [
+            {
+                "base_ticker_symbol": "BTC",
+                "quote_ticker_symbol": "USD",
+                "consensus": {"buy": 1.3, "sell": 0.5},
+                "strategies": [{"name": "Trend", "expression": "close > 100"}],
+            }
+        ],
+        "dynamic_quantity": "max(min_qty, eq * 0.1)",
+    }
 
-    def test_string(self):
-        assert ConfigurationSchema.check_constraint("a=1", "value is a non-empty string")
-        assert not ConfigurationSchema.check_constraint("", "value is a non-empty string")
+    def test_resolves_asset_by_symbol_and_strategy_by_name(self):
+        assert ConfigurationSchema.get_value(self.RAW, "assets.BTC_USD.consensus.buy") == 1.3
+        assert (
+            ConfigurationSchema.get_value(self.RAW, "assets.BTC_USD.strategies.Trend.expression")
+            == "close > 100"
+        )
 
-    def test_unknown_constraint_passes(self):
-        assert ConfigurationSchema.check_constraint(1, "some custom rule")
+    def test_unknown_segments_resolve_to_none(self):
+        assert ConfigurationSchema.get_value(self.RAW, "assets.NOPE_USD.consensus.buy") is None
+        assert ConfigurationSchema.get_value(self.RAW, "assets.BTC_USD.strategies.Missing.expression") is None
+
+    def test_set_value_refuses_to_create_new_keys(self):
+        raw = {"assets": [], "dynamic_quantity": "x"}
+        assert ConfigurationSchema.set_value(raw, "dynamic_quantity", "y") is True
+        assert raw["dynamic_quantity"] == "y"
+        assert ConfigurationSchema.set_value(raw, "not_a_field", 1) is False
+        assert "not_a_field" not in raw

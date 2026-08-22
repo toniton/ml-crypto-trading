@@ -21,6 +21,7 @@ from src.agent.configuration.schema import (
     ConfigurationSchema,
     TRADING_CONFIG_ADAPTER,
 )
+from src.configuration.trading_config import TradingConfig
 
 
 class ConfigurationService:
@@ -90,29 +91,68 @@ class ConfigurationService:
                 return change.path
         return None
 
+    def _preexisting_error_keys(self, raw_config: dict) -> set:
+        try:
+            TRADING_CONFIG_ADAPTER.validate_python(raw_config)
+        except ValidationError as validation_error:
+            return {
+                (tuple(pydantic_error.get("loc", ())), pydantic_error.get("type"))
+                for pydantic_error in validation_error.errors()
+            }
+        return set()
+
+    @staticmethod
+    def _reported_error_value(pydantic_error: dict, patched_config: dict, change_path: str) -> Any:
+        error_input = pydantic_error.get("input")
+        if isinstance(error_input, (dict, list)):
+            return ConfigurationSchema.get_value(patched_config, change_path)
+        return error_input
+
     def _collect_wholesale_validation_errors(
             self,
+            raw_config: dict,
             patched_config: dict,
             applied_changes: List[ConfigChange],
             errors: List[str],
-    ) -> None:
+            warnings: List[str],
+    ) -> Optional[TradingConfig]:
         try:
-            TRADING_CONFIG_ADAPTER.validate_python(patched_config)
+            return TRADING_CONFIG_ADAPTER.validate_python(patched_config)
         except ValidationError as validation_error:
+            preexisting_error_keys = self._preexisting_error_keys(raw_config)
+
             for pydantic_error in validation_error.errors():
-                error_loc = pydantic_error.get("loc", ())
+                error_loc = tuple(pydantic_error.get("loc", ()))
                 error_message = pydantic_error.get("msg", "invalid value")
                 error_dot_path = self._loc_to_dot_path(error_loc, patched_config)
-
                 matched_change_path = self._find_change_for_error_path(error_dot_path, applied_changes)
+
                 if matched_change_path:
+                    reported_value = self._reported_error_value(
+                        pydantic_error, patched_config, matched_change_path
+                    )
+                    location_hint = "" if error_dot_path == matched_change_path else f" (at {error_dot_path})"
                     errors.append(
-                        f"Field '{matched_change_path}' value {pydantic_error.get('input')!r} "
-                        f"violates constraint: {error_message} (loc: {error_dot_path})"
+                        f"Field '{matched_change_path}' value {reported_value!r} "
+                        f"violates constraint: {error_message}{location_hint}"
+                    )
+                elif (error_loc, pydantic_error.get("type")) in preexisting_error_keys:
+                    warnings.append(
+                        f"Field '{error_dot_path}' was already invalid before this proposal "
+                        f"({error_message}); these changes leave it untouched."
                     )
                 else:
-                    error_loc_str = ".".join(str(part) for part in error_loc) if error_loc else "root"
-                    errors.append(f"Field '{error_loc_str}' ({error_dot_path}): {error_message}")
+                    errors.append(f"Field '{error_dot_path}': {error_message}")
+
+            return None
+
+    @staticmethod
+    def _normalize_change_values(validated_config: TradingConfig, changes: List[ConfigChange]) -> None:
+        normalized_config = TRADING_CONFIG_ADAPTER.dump_python(validated_config, mode="json")
+        for change in changes:
+            normalized_value = ConfigurationSchema.get_value(normalized_config, change.path)
+            if normalized_value is not None:
+                change.new_value = normalized_value
 
     def validate_proposal(self, proposal: ConfigurationProposal) -> ValidationResult:
         if not proposal.changes:
@@ -129,62 +169,62 @@ class ConfigurationService:
         )
 
         if applied_changes:
-            self._collect_wholesale_validation_errors(patched_config, applied_changes, errors)
+            validated_config = self._collect_wholesale_validation_errors(
+                raw_config, patched_config, applied_changes, errors, warnings
+            )
+            if validated_config is not None:
+                self._normalize_change_values(validated_config, applied_changes)
+            elif not errors:
+                warnings.append(
+                    "Proposed values could not be type-normalized because the configuration has "
+                    "pre-existing validation errors; they will be written exactly as proposed."
+                )
 
         return ValidationResult(valid=not errors, errors=errors, warnings=warnings)
 
-    def _asset_error_dot_path(self, error_loc: Tuple[Any, ...], patched_config: dict) -> str:
-        asset_index = error_loc[1] if len(error_loc) > 1 and isinstance(error_loc[1], int) else None
-        if asset_index is None:
-            return ".".join(str(part) for part in error_loc)
-
-        assets = patched_config.get("assets", [])
-        if 0 <= asset_index < len(assets):
-            asset_symbol = ConfigurationSchema.asset_symbol(assets[asset_index])
-        else:
-            asset_symbol = str(asset_index)
-
-        if len(error_loc) == 2:
-            return f"assets.{asset_symbol}"
-        if len(error_loc) == 3:
-            return f"assets.{asset_symbol}.{error_loc[2]}"
-        if len(error_loc) >= 4 and error_loc[2] == "guard_config":
-            return f"assets.{asset_symbol}.guard_config.{error_loc[3]}"
-        if len(error_loc) >= 4 and error_loc[2] == "consensus":
-            return f"assets.{asset_symbol}.consensus.{error_loc[3]}"
-        if len(error_loc) >= 4 and error_loc[2] == "strategies":
-            strategy_index = error_loc[3] if isinstance(error_loc[3], int) else None
-            if strategy_index is not None:
-                strategy_entries = assets[asset_index].get("strategies", [])
-                strategy_entry = strategy_entries[strategy_index] if strategy_index < len(strategy_entries) else {}
-                strategy_name = strategy_entry.get("name", str(strategy_index))
-                if len(error_loc) >= 5:
-                    return f"assets.{asset_symbol}.strategies.{strategy_name}.{error_loc[4]}"
-                return f"assets.{asset_symbol}.strategies.{strategy_name}"
-
-        remaining_parts = ".".join(str(part) for part in error_loc[2:])
-        return f"assets.{asset_symbol}.{remaining_parts}"
-
     def _loc_to_dot_path(self, error_loc: Tuple[Any, ...], patched_config: dict) -> str:
-        if not error_loc:
-            return ""
-        if error_loc[0] != "assets":
-            return ".".join(str(part) for part in error_loc)
-        try:
-            return self._asset_error_dot_path(error_loc, patched_config)
-        except Exception:
-            return ".".join(str(part) for part in error_loc)
+        path_parts: List[str] = []
+        current_node: Any = patched_config
+
+        for loc_part in error_loc:
+            if isinstance(loc_part, int) and isinstance(current_node, list):
+                list_entry = current_node[loc_part] if 0 <= loc_part < len(current_node) else None
+                entry_key = ConfigurationSchema.entry_key(list_entry) if isinstance(list_entry, dict) else ""
+                path_parts.append(entry_key or str(loc_part))
+                current_node = list_entry
+                continue
+
+            path_parts.append(str(loc_part))
+            current_node = current_node.get(loc_part) if isinstance(current_node, dict) else None
+
+        return ".".join(path_parts)
 
     def apply_proposal(self, proposal: ConfigurationProposal) -> Tuple[dict, List[str]]:
-        raw_config = copy.deepcopy(self.load_raw_config())
+        raw_config = self.load_raw_config()
+        patched_config = copy.deepcopy(raw_config)
         warnings: List[str] = []
+
         for change in proposal.changes:
             if ConfigurationSchema.get_value(raw_config, change.path) != change.old_value:
                 warnings.append(
                     f"Field '{change.path}' was rebased from {change.old_value!r} to its current value."
                 )
-            ConfigurationSchema.set_value(raw_config, change.path, change.new_value)
-        return raw_config, warnings
+            ConfigurationSchema.set_value(patched_config, change.path, change.new_value)
+
+        try:
+            validated_config = TRADING_CONFIG_ADAPTER.validate_python(patched_config)
+        except ValidationError as validation_error:
+            warnings.append(
+                f"Applied configuration does not validate "
+                f"({validation_error.error_count()} error(s)); call validate_proposal first."
+            )
+            return patched_config, warnings
+
+        self._normalize_change_values(validated_config, proposal.changes)
+        for change in proposal.changes:
+            ConfigurationSchema.set_value(patched_config, change.path, change.new_value)
+
+        return patched_config, warnings
 
     def render_proposed_diff(self, proposal: ConfigurationProposal, warnings: Optional[List[str]] = None) -> str:
         lines = [proposal.summary]
@@ -205,6 +245,7 @@ class ConfigurationService:
             self,
             proposal: ConfigurationProposal,
             warnings: Optional[List[str]] = None,
+            errors: Optional[List[str]] = None,
     ) -> ConfigurationPresentation:
         blocks: list[UIBlock] = [MarkdownBlock.from_text(proposal.summary)]
         if proposal.changes:
@@ -220,5 +261,13 @@ class ConfigurationService:
             blocks.append(MarkdownBlock.from_text(f"Expected effect: {proposal.expected_effect}"))
         if warnings:
             blocks.append(MarkdownBlock.from_text("Warnings:\n" + "\n".join(f"- {w}" for w in warnings)))
-        blocks.append(ApprovalBlock.build())
+        if errors:
+            blocks.append(
+                MarkdownBlock.from_text(
+                    "This proposal was rejected because it fails validation:\n"
+                    + "\n".join(f"- {error}" for error in errors)
+                )
+            )
+        else:
+            blocks.append(ApprovalBlock.build())
         return ConfigurationPresentation(blocks=blocks)

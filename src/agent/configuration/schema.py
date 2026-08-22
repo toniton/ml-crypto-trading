@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import re
+import copy
 from typing import Any, Optional
 
 from pydantic import BaseModel, Field, TypeAdapter
@@ -23,26 +23,14 @@ class ConfigField(BaseModel):
 TRADING_CONFIG_ADAPTER: TypeAdapter[TradingConfig] = TypeAdapter(TradingConfig)
 _TRADING_CONFIG_SCHEMA_CACHE: dict[str, Any] | None = None
 
-_RANGE_CONSTRAINT_PATTERN = re.compile(
-    r"^(?P<lo>[+-]?\d+(?:\.\d+)?)\s*<=\s*value\s*<=\s*(?P<hi>[+-]?\d+(?:\.\d+)?)$"
-)
-_COMPARISON_CONSTRAINT_PATTERN = re.compile(
-    r"^value\s*(?P<op><=|>=|<|>)\s*(?P<num>[+-]?\d+(?:\.\d+)?)$"
-)
-_SET_CONSTRAINT_PATTERN = re.compile(r"^value\s+in\s+\{(.*)\}$")
-_COMPARISON_OPERATORS = {
-    "<": lambda left, right: left < right,
-    "<=": lambda left, right: left <= right,
-    ">": lambda left, right: left > right,
-    ">=": lambda left, right: left >= right,
-}
+MUTABILITY_KEY = "mutable"
 
 
 def get_trading_config_json_schema() -> dict[str, Any]:
     global _TRADING_CONFIG_SCHEMA_CACHE
     if _TRADING_CONFIG_SCHEMA_CACHE is None:
         _TRADING_CONFIG_SCHEMA_CACHE = TRADING_CONFIG_ADAPTER.json_schema()
-    return _TRADING_CONFIG_SCHEMA_CACHE
+    return copy.deepcopy(_TRADING_CONFIG_SCHEMA_CACHE)
 
 
 def _unwrap_optional(field_schema: dict[str, Any]) -> dict[str, Any]:
@@ -124,13 +112,32 @@ def _derive_constraints(field_schema: dict[str, Any], schema_defs: dict[str, Any
     return constraints
 
 
-def _derive_mutable(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> bool:
-    if "mutable" in field_schema:
-        return bool(field_schema["mutable"])
+def _has_mutability_flag(field_schema: dict[str, Any]) -> bool:
+    return MUTABILITY_KEY in field_schema or MUTABILITY_KEY in _unwrap_optional(field_schema)
+
+
+def _derive_mutable(field_schema: dict[str, Any]) -> bool:
+    if MUTABILITY_KEY in field_schema:
+        return bool(field_schema[MUTABILITY_KEY])
     unwrapped_schema = _unwrap_optional(field_schema)
-    if "mutable" in unwrapped_schema:
-        return bool(unwrapped_schema["mutable"])
-    return False
+    return bool(unwrapped_schema.get(MUTABILITY_KEY, False))
+
+
+def find_fields_missing_mutability() -> list[str]:
+    trading_config_schema = get_trading_config_json_schema()
+    missing_flags: list[str] = []
+
+    def collect_missing(owner_name: str, owner_schema: dict[str, Any]) -> None:
+        for field_name, field_schema in owner_schema.get("properties", {}).items():
+            if not _has_mutability_flag(field_schema):
+                missing_flags.append(f"{owner_name}.{field_name}")
+
+    collect_missing(trading_config_schema.get("title", "TradingConfig"), trading_config_schema)
+    for def_name, def_schema in trading_config_schema.get("$defs", {}).items():
+        if "properties" in def_schema:
+            collect_missing(def_name, def_schema)
+
+    return missing_flags
 
 
 def _derive_description(field_schema: dict[str, Any], schema_defs: dict[str, Any]) -> str:
@@ -166,9 +173,27 @@ class ConfigurationSchema:
         return None
 
     @staticmethod
+    def entry_key(list_entry: dict) -> str:
+        if "base_ticker_symbol" in list_entry or "quote_ticker_symbol" in list_entry:
+            return ConfigurationSchema.asset_symbol(list_entry)
+        return str(list_entry.get("name", ""))
+
+    @staticmethod
+    def _find_list_entry(list_entries: list, key: str) -> Optional[dict]:
+        for list_entry in list_entries:
+            if isinstance(list_entry, dict) and ConfigurationSchema.entry_key(list_entry) == key:
+                return list_entry
+        return None
+
+    @staticmethod
     def _descend_path(root: dict, path_parts: list[str]) -> Any:
         current_value: Any = root
         for part in path_parts:
+            if isinstance(current_value, list):
+                current_value = ConfigurationSchema._find_list_entry(current_value, part)
+                if current_value is None:
+                    return None
+                continue
             if not isinstance(current_value, dict) or part not in current_value:
                 return None
             current_value = current_value[part]
@@ -176,41 +201,12 @@ class ConfigurationSchema:
 
     @staticmethod
     def get_value(raw_config: dict, path: str) -> Any:
-        path_parts = path.split(".")
-        if path_parts[0] == "assets" and len(path_parts) >= 3:
-            asset_entry = ConfigurationSchema.find_asset_entry(raw_config, path_parts[1])
-            if asset_entry is None:
-                return None
-            if path_parts[2] == "strategies" and len(path_parts) >= 5:
-                strategy_entry = ConfigurationSchema.find_asset_strategy_entry(asset_entry, path_parts[3])
-                if strategy_entry is None:
-                    return None
-                return ConfigurationSchema._descend_path(strategy_entry, path_parts[4:])
-            return ConfigurationSchema._descend_path(asset_entry, path_parts[2:])
-        return ConfigurationSchema._descend_path(raw_config, path_parts)
+        return ConfigurationSchema._descend_path(raw_config, path.split("."))
 
     @staticmethod
     def set_value(raw_config: dict, path: str, value: Any) -> bool:
         path_parts = path.split(".")
-        if path_parts[0] == "assets" and len(path_parts) >= 3:
-            asset_entry = ConfigurationSchema.find_asset_entry(raw_config, path_parts[1])
-            if asset_entry is None:
-                return False
-            if path_parts[2] == "strategies" and len(path_parts) >= 5:
-                strategy_entry = ConfigurationSchema.find_asset_strategy_entry(asset_entry, path_parts[3])
-                if strategy_entry is None:
-                    return False
-                return ConfigurationSchema._set_descend(strategy_entry, path_parts[4:], value)
-            return ConfigurationSchema._set_descend(asset_entry, path_parts[2:], value)
-        return ConfigurationSchema._set_descend(raw_config, path_parts, value)
-
-    @staticmethod
-    def _set_descend(root: dict, path_parts: list[str], value: Any) -> bool:
-        target = root
-        for part in path_parts[:-1]:
-            if not isinstance(target, dict) or part not in target:
-                return False
-            target = target[part]
+        target = ConfigurationSchema._descend_path(raw_config, path_parts[:-1])
         last_part = path_parts[-1]
         if not isinstance(target, dict) or last_part not in target:
             return False
@@ -223,7 +219,7 @@ class ConfigurationSchema:
             value=self.get_value(raw_config, path),
             description=_derive_description(field_schema, schema_defs),
             type=_derive_type(field_schema, schema_defs),
-            mutable=_derive_mutable(field_schema, schema_defs),
+            mutable=_derive_mutable(field_schema),
             constraints=_derive_constraints(field_schema, schema_defs),
         )
 
@@ -235,25 +231,29 @@ class ConfigurationSchema:
             fields.append(self._build_config_field(raw_config, field_name, field_schema, schema_defs))
         return fields
 
-    def _build_strategy_fields(
+    def _build_list_item_fields(
             self,
             raw_config: dict,
             asset_symbol: str,
             field_name: str,
-            strategy_entries: list,
-            strategy_schema: dict,
+            list_entries: list,
+            item_schema: dict,
             schema_defs: dict,
     ) -> list[ConfigField]:
+        item_properties = item_schema.get("properties", {})
+        if not item_properties:
+            return []
+
         fields: list[ConfigField] = []
-        for strategy_entry in strategy_entries or []:
-            if not isinstance(strategy_entry, dict):
+        for list_entry in list_entries or []:
+            if not isinstance(list_entry, dict):
                 continue
-            strategy_name = strategy_entry.get("name")
-            if not strategy_name:
+            entry_key = ConfigurationSchema.entry_key(list_entry)
+            if not entry_key:
                 continue
-            for strategy_field_name, strategy_field_schema in strategy_schema.get("properties", {}).items():
-                path = f"assets.{asset_symbol}.{field_name}.{strategy_name}.{strategy_field_name}"
-                fields.append(self._build_config_field(raw_config, path, strategy_field_schema, schema_defs))
+            for item_field_name, item_field_schema in item_properties.items():
+                path = f"assets.{asset_symbol}.{field_name}.{entry_key}.{item_field_name}"
+                fields.append(self._build_config_field(raw_config, path, item_field_schema, schema_defs))
         return fields
 
     def _build_nested_object_fields(
@@ -280,7 +280,7 @@ class ConfigurationSchema:
                 if effective_schema.get("type") == "array":
                     item_schema = _effective_schema(effective_schema.get("items", {}), schema_defs)
                     fields.extend(
-                        self._build_strategy_fields(
+                        self._build_list_item_fields(
                             raw_config,
                             asset_symbol,
                             field_name,
@@ -331,37 +331,3 @@ class ConfigurationSchema:
             for constraint in field.constraints:
                 lines.append(f"    constraint: {constraint}")
         return "\n".join(lines)
-
-    @staticmethod
-    def _as_number(value: Any) -> Optional[float]:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def check_constraint(value: Any, constraint: str) -> bool:
-        stripped_constraint = constraint.strip()
-
-        range_match = _RANGE_CONSTRAINT_PATTERN.match(stripped_constraint)
-        if range_match:
-            number = ConfigurationSchema._as_number(value)
-            if number is not None:
-                return float(range_match.group("lo")) <= number <= float(range_match.group("hi"))
-
-        comparison_match = _COMPARISON_CONSTRAINT_PATTERN.match(stripped_constraint)
-        if comparison_match:
-            number = ConfigurationSchema._as_number(value)
-            if number is not None:
-                operator = _COMPARISON_OPERATORS[comparison_match.group("op")]
-                return operator(number, float(comparison_match.group("num")))
-
-        set_match = _SET_CONSTRAINT_PATTERN.match(stripped_constraint)
-        if set_match:
-            allowed_values = {item.strip() for item in set_match.group(1).split(",")}
-            return str(value) in allowed_values
-
-        if stripped_constraint == "value is a non-empty string":
-            return isinstance(value, str) and len(value.strip()) > 0
-
-        return True

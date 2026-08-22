@@ -133,3 +133,5 @@ class TestConfigurationGraph:
         assert state["validation"].valid is False
         assert state["validation"].errors
         assert llm.structured_calls[1][0] is ConfigurationProposal
+        assert not any(block.type == "approval" for block in state["presentation"].blocks)
+        assert "rejected" in state["presentation"].markdown()
