@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
-from src.database.dao.order_dao import OrderDao
+
 from api.interfaces.order import Order
+from api.interfaces.trade_action import OrderStatus
+from src.database.dao.order_dao import OrderDao
 
 
 class OrderDBVSEntityMapper:
@@ -14,7 +16,8 @@ class OrderDBVSEntityMapper:
             price=order_dao.price,
             quantity=order_dao.quantity,
             trade_action=order_dao.trade_action,
-            created_time=order_dao.created_timestamp.timestamp()
+            created_time=order_dao.created_timestamp.timestamp(),
+            status=OrderStatus(order_dao.status) if order_dao.status else OrderStatus.PENDING,
         )
 
     @staticmethod
