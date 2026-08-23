@@ -66,6 +66,67 @@ class ConfigurationDiffBlock(BaseModel):
     prefix: str = Field("", description="Optional heading rendered above the diff.")
 
 
+class StatCard(BaseModel):
+    label: str = Field(description="Caption above the value, e.g. 'Exchange'.")
+    value: str = Field(description="Display value, e.g. 'CRYPTO.COM'.")
+    tint: Literal["default", "buy", "sell"] = Field(
+        default="default",
+        description="Colour hint: 'buy'/'sell' for consensus thresholds, else 'default'.",
+    )
+
+
+class FieldRow(BaseModel):
+    name: str = Field(description="Short field name, e.g. 'buy'.")
+    path: str = Field(description="Full dot-separated path, e.g. 'assets.BTC_USD.consensus.buy'.")
+    value: Any = Field(description="Current value of the field.")
+    type: str = Field(description="Semantic type: decimal, int, bool, enum, or string.")
+    mutable: bool = Field(description="Whether the field may be changed without a restart.")
+    description: str = Field(default="", description="Plain-language explanation of the field's purpose.")
+    constraints: list[str] = Field(default_factory=list, description="Machine-checkable constraints.")
+    enum_values: list[str] = Field(
+        default_factory=list,
+        description="Allowed values for enum fields, rendered as chips.",
+    )
+
+
+class SectionCard(BaseModel):
+    title: str = Field(description="Heading shown on the collapsible card, e.g. 'Consensus thresholds'.")
+    path: str = Field(description="Config path that groups these fields.")
+    description: str = Field(default="", description="One-line context shown under the heading.")
+    fields: list[FieldRow] = Field(default_factory=list, description="The rows under this section.")
+
+
+class StrategyCard(BaseModel):
+    name: str = Field(description="Strategy identifier, e.g. 'RsiOversoldBuy'.")
+    path: str = Field(description="Config path for the strategy, e.g. 'assets.BTC_USD.strategies.RsiOversoldBuy'.")
+    action: str = Field(description="Vote direction: BUY or SELL.")
+    kind: str = Field(description="Implementation type: STATIC or DYNAMIC.")
+    enabled: Optional[bool] = Field(default=None, description="Active flag, or None when unset.")
+    expression: Optional[str] = Field(default=None, description="DYNAMIC strategy expression.")
+    class_name: Optional[str] = Field(default=None, description="STATIC strategy class name.")
+
+
+class SignalWindow(BaseModel):
+    min: float = Field(description="Left edge of the consensus scale.")
+    sell: float = Field(description="Sell threshold position on the scale.")
+    buy: float = Field(description="Buy threshold position on the scale.")
+    max: float = Field(description="Right edge of the consensus scale.")
+
+
+class ConfigurationViewBlock(BaseModel):
+    type: Literal["configuration_view"] = "configuration_view"
+    asset: str = Field(description="Market symbol shown in the header, e.g. 'BTC_USD'.")
+    name: str = Field(description="Human-readable asset name.")
+    base: str = Field(description="Base ticker symbol.")
+    quote: str = Field(description="Quote ticker symbol.")
+    stats: list[StatCard] = Field(default_factory=list, description="Top summary cards.")
+    sections: list[SectionCard] = Field(default_factory=list, description="Grouped field cards.")
+    strategies: list[StrategyCard] = Field(default_factory=list, description="Strategy stack cards.")
+    signal_window: Optional[SignalWindow] = Field(default=None, description="Consensus gauge if thresholds exist.")
+    editable_count: int = Field(default=0, description="Number of editable fields.")
+    field_count: int = Field(default=0, description="Total number of fields.")
+
+
 class ApprovalAction(BaseModel):
     id: str = Field(description="Stable identifier for the action, e.g. 'approve'.")
     label: str = Field(description="Human-readable label shown in the UI, e.g. 'Approve'.")
@@ -86,7 +147,7 @@ class ApprovalBlock(BaseModel):
         return cls()
 
 
-UIBlock = Union[MarkdownBlock, ConfigurationDiffBlock, ApprovalBlock]
+UIBlock = Union[MarkdownBlock, ConfigurationDiffBlock, ApprovalBlock, ConfigurationViewBlock]
 
 
 class ConfigurationPresentation(BaseModel):
@@ -108,14 +169,23 @@ class ConfigurationPresentation(BaseModel):
                     lines.append(f"    reason: {change.reason}")
             elif isinstance(block, ApprovalBlock):
                 lines.append(f"Actions: {', '.join(action.label for action in block.actions)}")
+            elif isinstance(block, ConfigurationViewBlock):
+                lines.append(f"# {block.base} / {block.quote} — {block.name}")
+                lines.append(f"`{block.asset}` · {block.field_count} fields · {block.editable_count} editable")
+                for section in block.sections:
+                    lines.append(f"\n## {section.title}")
+                    for field in section.fields:
+                        lines.append(f"- `{field.path}` [{field.type}] = {field.value!r}")
+                        if field.description:
+                            lines.append(f"    {field.description}")
         return "\n".join(line for line in lines if line)
 
 
 class ConfigurationResult(BaseModel):
     kind: Literal["configuration"] = "configuration"
     goal: AgentGoal
-    proposal: ConfigurationProposal
-    validation: ValidationResult
+    proposal: Optional[ConfigurationProposal] = None
+    validation: Optional[ValidationResult] = None
     presentation: ConfigurationPresentation
 
 

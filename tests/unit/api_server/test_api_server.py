@@ -12,7 +12,7 @@ from src.agent import (
     ConfigurationProposal,
 )
 from src.agent.configuration.configuration_service import ConfigurationService
-from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from src.server.app import ChatApp
 from src.server.server import ApiServer
 from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
@@ -205,6 +205,28 @@ class TestGatewayStreaming(unittest.TestCase):
         diff_block = next(b for b in blocks if b.type == "configuration_diff")
         self.assertEqual(diff_block.prefix, "Proposed changes")
         self.assertEqual(diff_block.changes[0].path, "assets.BTC_USD.consensus.buy")
+
+    def test_view_configuration_prompt_streams_view_block_without_approval(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(
+                intent=AgentIntent.CONFIGURATION,
+                action=ConfigurationAction.VIEW,
+                goal=AgentGoal(objective="show BTC_USD config", target_asset="BTC_USD"),
+            ),
+        ])
+        gateway = build_gateway(llm)
+        events = self.collect(gateway.stream("show me configuration for BTC_USD"))
+        blocks = [event.payload for event in events if event.type == "block"]
+        self.assertTrue(any(block.type == "configuration_view" for block in blocks))
+        self.assertFalse(any(block.type == "approval" for block in blocks))
+        self.assertFalse(any(block.type == "markdown" for block in blocks))
+        view = next(b for b in blocks if b.type == "configuration_view")
+        self.assertEqual(view.asset, "BTC_USD")
+        self.assertTrue(any(section.title == "Consensus thresholds" for section in view.sections))
+        self.assertIsNotNone(view.signal_window)
+        done = events[-1]
+        self.assertEqual(done.type, "done")
+        self.assertNotIn("proposal", done.payload)
 
 
 class TestConversationSessions(unittest.TestCase):

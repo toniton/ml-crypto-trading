@@ -5,7 +5,7 @@ from src.agent import (
     ConfigurationProposal,
     ValidationResult,
 )
-from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 
@@ -27,6 +27,19 @@ class TestRouteAfterValidation:
             "validation": ValidationResult.failed(["boom"]),
             "proposal_attempts": MAX_GENERATION_ATTEMPTS,
         }) == "present"
+
+
+class TestRouteByAction:
+    def test_view_action_routes_to_view(self):
+        route = AgentRoute(intent=AgentIntent.CONFIGURATION, action=ConfigurationAction.VIEW)
+        assert ConfigurationGraph.route_by_action({"request": route}) == "view"
+
+    def test_modify_action_routes_to_modify(self):
+        route = AgentRoute(intent=AgentIntent.CONFIGURATION, action=ConfigurationAction.MODIFY)
+        assert ConfigurationGraph.route_by_action({"request": route}) == "modify"
+
+    def test_missing_request_defaults_to_modify(self):
+        assert ConfigurationGraph.route_by_action({}) == "modify"
 
 
 class TestConfigurationGraph:
@@ -52,6 +65,47 @@ class TestConfigurationGraph:
         assert state["validation"].valid is True
         assert len(llm.structured_calls) == 1
         assert llm.structured_calls[0][0] is ConfigurationProposal
+
+    def test_view_request_presents_config_without_proposal(self, sample_config):
+        llm = FakeLlmAdapter([])
+        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        route = AgentRoute(
+            intent=AgentIntent.CONFIGURATION,
+            action=ConfigurationAction.VIEW,
+            goal=AgentGoal(objective="show BTC_USD config", target_asset="BTC_USD"),
+        )
+        state = graph.invoke({"user_prompt": "show me configuration for BTC_USD", "request": route})
+
+        assert "proposal" not in state
+        assert "validation" not in state
+        assert not llm.structured_calls
+        blocks = state["presentation"].blocks
+        assert len(blocks) == 1
+        assert blocks[0].type == "configuration_view"
+        view = blocks[0]
+        assert view.asset == "BTC_USD"
+        assert view.base == "BTC" and view.quote == "USD"
+        assert "dynamic_quantity" not in [field.path for section in view.sections for field in section.fields]
+        consensus = next(section for section in view.sections if section.title == "Consensus thresholds")
+        field_paths = [field.path for field in consensus.fields]
+        assert "assets.BTC_USD.consensus.buy" in field_paths
+        assert view.signal_window is not None
+        assert any(card.label == "Strategies" for card in view.stats)
+        assert view.signal_window.sell == 0.5 and view.signal_window.buy == 1.3
+
+    def test_view_request_without_asset_renders_full_catalog(self, sample_config):
+        llm = FakeLlmAdapter([])
+        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        route = AgentRoute(
+            intent=AgentIntent.CONFIGURATION,
+            action=ConfigurationAction.VIEW,
+            goal=AgentGoal(objective="show config"),
+        )
+        state = graph.invoke({"user_prompt": "show me my configuration", "request": route})
+
+        blocks = state["presentation"].blocks
+        assert blocks[0].type == "markdown"
+        assert "dynamic_quantity" in blocks[0].content
 
     def test_scoped_request_presentation_warns_about_global_field(self, sample_config):
         llm = FakeLlmAdapter([

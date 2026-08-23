@@ -87,6 +87,7 @@ class LoggingManager:
 
             self._setup_domain_logger(LogDomain.APPLICATION, self.log_level)
             self._setup_domain_logger(LogDomain.TRADING, self.log_level)
+            self._setup_domain_logger(LogDomain.AGENT, self.log_level)
             self._setup_audit_logger()
 
             self._setup_complete = True

@@ -46,6 +46,13 @@ class ResponseReconstructor:
             return "\n".join(lines)
         if block_type == "approval":
             return "Awaiting approval of the proposed configuration changes."
+        if block_type == "configuration_view":
+            lines = [f"# {block.base} / {block.quote} — {block.name}", f"`{block.asset}`"]
+            for section in getattr(block, "sections", []) or []:
+                lines.append(f"\n## {section.title}")
+                for field in getattr(section, "fields", []) or []:
+                    lines.append(f"- {field.path}: {field.value!r}")
+            return "\n".join(lines)
         if block_type == "clarification":
             return str(getattr(block, "content", "") or "")
         return ""

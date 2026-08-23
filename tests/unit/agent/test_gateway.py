@@ -5,7 +5,7 @@ from src.agent import (
     ConfigChange,
     ConfigurationProposal,
 )
-from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from src.core.interfaces.llm_adapter import ChatTurn
 from tests.unit.agent.fakes import FakeLlmAdapter
 
@@ -144,3 +144,22 @@ class TestAgentGateway:
         proposal_prompt = llm.structured_calls[1][1]
         assert "CONVERSATION HISTORY" in proposal_prompt
         assert "make the strategy less conservative" in proposal_prompt
+
+    def test_view_configuration_prompt_skips_proposal(self, sample_config):
+        llm = FakeLlmAdapter([
+            AgentRoute(
+                intent=AgentIntent.CONFIGURATION,
+                action=ConfigurationAction.VIEW,
+                goal=AgentGoal(objective="show BTC_USD config", target_asset="BTC_USD"),
+            ),
+        ])
+        gateway = AgentGateway(llm, sample_config)
+        result = gateway.handle("show me configuration for BTC_USD")
+        assert result.kind == "configuration"
+        assert result.proposal is None
+        assert result.validation is None
+        assert result.presentation is not None
+        assert "assets.BTC_USD.consensus.buy" in result.presentation.markdown()
+        assert any(block.type == "configuration_view" for block in result.presentation.blocks)
+        # only the router ran; no proposal LLM call was made
+        assert len(llm.structured_calls) == 1

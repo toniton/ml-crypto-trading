@@ -16,6 +16,11 @@ class AgentIntent(str, Enum):
     GENERAL = "general"
 
 
+class ConfigurationAction(str, Enum):
+    VIEW = "view"
+    MODIFY = "modify"
+
+
 class AgentGoal(BaseModel):
     objective: str = Field(description="One sentence describing what the user wants to achieve.")
     target_asset: Optional[str] = Field(
@@ -43,6 +48,10 @@ class AgentRoute(BaseModel):
     intent: AgentIntent = Field(
         default=AgentIntent.GENERAL,
         description="Which registered agent should handle this request.",
+    )
+    action: ConfigurationAction = Field(
+        default=ConfigurationAction.MODIFY,
+        description="For configuration requests: whether the user wants to view the config or modify it.",
     )
     goal: Optional[AgentGoal] = Field(
         default=None,

@@ -13,6 +13,7 @@ from src.agent.runtime.agent import AgentDefinition
 from src.agent.runtime.registry import AgentRegistry
 from src.agent.events import AIEvent
 from src.llm.math_normalizer import DelimiterStream
+from src.vcs.application.service import VCSService
 
 AgentResult = Union[ConfigurationResult, ClarificationResult, GeneralResult]
 
@@ -23,9 +24,10 @@ class AgentGateway:
             llm: LlmAdapter,
             config_filepath: str,
             registry: Optional[AgentRegistry] = None,
+            vcs: Optional["VCSService"] = None,
     ):
         self._llm = llm
-        self._registry = registry or self.build_default_registry(llm, config_filepath)
+        self._registry = registry or self.build_default_registry(llm, config_filepath, vcs=vcs)
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
@@ -43,8 +45,8 @@ class AgentGateway:
         state = definition.graph.invoke({"user_prompt": prompt, "request": route, "history": history or []})
         return ConfigurationResult(
             goal=route.goal,
-            proposal=state["proposal"],
-            validation=state["validation"],
+            proposal=state.get("proposal"),
+            validation=state.get("validation"),
             presentation=state["presentation"],
         )
 
@@ -120,7 +122,6 @@ class AgentGateway:
                 message_id,
                 agent=definition.name,
                 captures=captures,
-                presentation_node=definition.presentation_node,
             )
             if mapped is not None:
                 yield mapped
@@ -147,8 +148,9 @@ class AgentGateway:
     def build_default_registry(
         llm: LlmAdapter,
         config_filepath: str,
+        vcs: Optional["VCSService"] = None,
     ) -> AgentRegistry:
-        configuration_service = ConfigurationService(config_filepath)
+        configuration_service = ConfigurationService(config_filepath, vcs=vcs)
         definitions = [
             AgentDefinition(
                 name="configuration",
@@ -207,7 +209,6 @@ class AgentGateway:
             message_id: str,
             agent: str,
             captures: dict[str, Any],
-            presentation_node: Optional[str] = None,
     ) -> Optional[AIEvent]:
         node = event.get("metadata", {}).get("langgraph_node")
         if not node or node.startswith("__") or event.get("name") != node:
@@ -222,8 +223,8 @@ class AgentGateway:
                 captures["route"] = output.get("route")
             elif node == "route":
                 captures["agent"] = output.get("agent")
-            elif node == presentation_node:
-                captures["presentation"] = output.get("presentation")
+            if isinstance(output, dict) and "presentation" in output:
+                captures["presentation"] = output["presentation"]
             if isinstance(output, dict) and "proposal" in output:
                 captures["proposal"] = output["proposal"]
             return AIEvent(type="node_completed", message_id=message_id, agent=agent, payload={"node": node})

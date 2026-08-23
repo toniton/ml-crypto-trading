@@ -247,7 +247,11 @@ class Application(ApplicationLoggingMixin):
                 session_summary_tool,
             ]
             api_llm.bind_tools(llm_tools)
-            gateway = AgentGateway(api_llm, self._application_config.trading_config_filepath)
+            gateway = AgentGateway(
+                api_llm,
+                self._application_config.trading_config_filepath,
+                vcs=self._vcs,
+            )
             conversations = ConversationManager(self._db_manager)
             self._api_server = ApiServer(
                 agent=gateway,

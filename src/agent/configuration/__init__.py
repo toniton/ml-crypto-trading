@@ -8,10 +8,12 @@ from src.agent.configuration.models import (
     ConfigurationPresentation,
     ConfigurationProposal,
     ConfigurationResult,
+    ConfigurationViewBlock,
     GeneralResult,
     MarkdownBlock,
     ValidationResult,
 )
+from src.agent.configuration.nodes.present_configuration import PresentConfigurationNode
 from src.agent.configuration.schema import (
     ConfigField,
     ConfigurationSchema,
@@ -32,7 +34,9 @@ __all__ = [
     "ConfigurationSchema",
     "ConfigurationService",
     "ConfigurationAgentState",
+    "ConfigurationViewBlock",
     "GeneralResult",
     "MarkdownBlock",
+    "PresentConfigurationNode",
     "ValidationResult",
 ]

@@ -1,3 +1,5 @@
+import yaml
+
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent import ConfigChange, ConfigurationProposal
 
@@ -51,7 +53,10 @@ class TestConfigurationService:
         proposal = ConfigurationProposal(
             summary="too aggressive",
             changes=[
-                ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=15.0, reason="max aggressiveness"),
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3, new_value=15.0, reason="max aggressiveness",
+                ),
             ],
         )
         validation = service.validate_proposal(proposal)
@@ -77,9 +82,9 @@ class TestConfigurationService:
         )
         updated, warnings = service.apply_proposal(proposal)
         assert updated["assets"][0]["schedule"] == 2
-        assert warnings == []
+        assert not warnings
 
-    def test_apply_proposal_warns_on_stale_old_value(self, sample_config, tmp_path):
+    def test_apply_proposal_warns_on_stale_old_value(self, sample_config):
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="stale",
@@ -95,7 +100,9 @@ class TestConfigurationService:
         service = ConfigurationService(sample_config)
         proposal = ConfigurationProposal(
             summary="less conservative",
-            changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.05, reason="more trades")],
+            changes=[
+                ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.05, reason="more trades")
+            ],
             risks=["Noise"],
             expected_effect="more signals",
         )
@@ -105,7 +112,10 @@ class TestConfigurationService:
 
     def test_render_diff_with_warnings(self, sample_config):
         service = ConfigurationService(sample_config)
-        proposal = ConfigurationProposal(summary="aggro", changes=[ConfigChange(path="dynamic_quantity", old_value="a", new_value="b", reason="r")])
+        proposal = ConfigurationProposal(
+            summary="aggro",
+            changes=[ConfigChange(path="dynamic_quantity", old_value="a", new_value="b", reason="r")],
+        )
         rendered = service.render_proposed_diff(proposal, warnings=["global setting applies to all assets"])
         assert "Warnings:" in rendered
         assert "global setting applies to all assets" in rendered
@@ -114,6 +124,68 @@ class TestConfigurationService:
         service = ConfigurationService(sample_config)
         rendered = service.render_catalog()
         assert "assets.BTC_USD.guard_config.max_drawdown_percentage" in rendered
+
+    def test_build_configuration_view_groups_fields_and_strategies(self, sample_config):
+        service = ConfigurationService(sample_config)
+        view = service.build_configuration_view("BTC_USD")
+        assert view.asset == "BTC_USD"
+        assert view.base == "BTC" and view.quote == "USD"
+        assert view.name == "Bitcoin (Crypto.com)"
+        assert view.field_count > 0
+        assert view.editable_count > 0
+
+        section_titles = [section.title for section in view.sections]
+        assert "Asset identity" in section_titles
+        assert "Consensus thresholds" in section_titles
+        assert "Drawdown guard" in section_titles
+
+        consensus = next(section for section in view.sections if section.title == "Consensus thresholds")
+        consensus_paths = [field.path for field in consensus.fields]
+        assert "assets.BTC_USD.consensus.buy" in consensus_paths
+        assert "assets.BTC_USD.consensus.sell" in consensus_paths
+
+        buy_row = next(field for field in consensus.fields if field.name == "buy")
+        assert buy_row.type == "decimal"
+        assert buy_row.mutable is True
+        assert buy_row.value == 1.3
+        assert buy_row.enum_values == []
+
+        stat_labels = [card.label for card in view.stats]
+        assert "Exchange" in stat_labels
+        assert "Buy ≥" in stat_labels
+        assert "Strategies" in stat_labels
+        assert "Cadence" not in stat_labels
+        buy_stat = next(card for card in view.stats if card.label == "Buy ≥")
+        assert buy_stat.tint == "buy"
+
+        visible_paths = [field.path for section in view.sections for field in section.fields]
+        assert "assets.BTC_USD.quote_decimals" not in visible_paths
+        assert "assets.BTC_USD.quantity_decimals" not in visible_paths
+
+        # The edit catalog remains untouched — hidden fields are still addressable by proposals.
+        catalog_paths = {field.path for field in service.get_field_catalog()}
+        assert "assets.BTC_USD.quote_decimals" in catalog_paths
+        assert "assets.BTC_USD.quantity_decimals" in catalog_paths
+
+        assert view.signal_window is not None
+        # pydantic v2: astroid resolves model fields to FieldInfo at class level.
+        assert view.signal_window.min == 0.05 and view.signal_window.max == 10.0  # pylint: disable=no-member
+        assert view.signal_window.buy == 1.3 and view.signal_window.sell == 0.5  # pylint: disable=no-member
+
+    def test_build_configuration_view_includes_strategies(self):
+        service = ConfigurationService("examples/configurations/trading-config.yaml")
+        view = service.build_configuration_view("BTC_USD")
+
+        strategy_names = [card.name for card in view.strategies]
+        assert "RsiOversoldBuy" in strategy_names
+        assert "RsiOverboughtSell" in strategy_names
+        breakout = next(card for card in view.strategies if card.name == "BreakoutBuy")
+        assert breakout.action == "BUY"
+        assert breakout.kind == "DYNAMIC"
+        assert breakout.expression == "close > sma(50) and range_pct > 0.03"
+        hammer = next(card for card in view.strategies if card.name == "HammerAccumulationStrategy")
+        assert hammer.kind == "STATIC"
+        assert hammer.class_name == "HammerAccumulationStrategy"
 
     def test_proposal_without_changes_invalid(self, sample_config):
         service = ConfigurationService(sample_config)
@@ -146,9 +218,8 @@ class TestValueNormalization:
 class TestPreExistingConfigErrors:
     @staticmethod
     def _config_with_stale_value(tmp_path, sample_config):
-        import yaml
-
-        raw = yaml.safe_load(open(sample_config, encoding="utf-8"))
+        with open(sample_config, encoding="utf-8") as stream:
+            raw = yaml.safe_load(stream)
         raw["assets"][0]["guard_config"]["max_drawdown_percentage"] = 5.0
         broken = tmp_path / "broken.yaml"
         broken.write_text(yaml.safe_dump(raw), encoding="utf-8")

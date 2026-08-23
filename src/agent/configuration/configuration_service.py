@@ -12,7 +12,13 @@ from src.agent.configuration.models import (
     ConfigurationDiffBlock,
     ConfigurationPresentation,
     ConfigurationProposal,
+    ConfigurationViewBlock,
+    FieldRow,
     MarkdownBlock,
+    SectionCard,
+    SignalWindow,
+    StatCard,
+    StrategyCard,
     UIBlock,
     ValidationResult,
 )
@@ -22,10 +28,12 @@ from src.agent.configuration.schema import (
     TRADING_CONFIG_ADAPTER,
 )
 from src.configuration.trading_config import TradingConfig
+from src.logging.agent_logging_mixin import AgentLoggingMixin
 from src.vcs.application.service import VCSService
+from src.vcs.domain.exceptions import VcsError
 
 
-class ConfigurationService:
+class ConfigurationService(AgentLoggingMixin):
     def __init__(self, config_filepath: str, vcs: Optional["VCSService"] = None):
         self._config_filepath = config_filepath
         self._schema = ConfigurationSchema()
@@ -36,6 +44,14 @@ class ConfigurationService:
         return self._config_filepath
 
     def load_raw_config(self) -> dict:
+        if self._vcs is not None:
+            try:
+                return self._vcs.checkout("HEAD")
+            except VcsError:
+                self.agent_logger.warning(
+                    "No committed configuration at HEAD; falling back to on-disk file %s",
+                    self._config_filepath,
+                )
         with open(self._config_filepath, "r", encoding="utf-8") as stream:
             return yaml.safe_load(stream) or {}
 
@@ -44,6 +60,191 @@ class ConfigurationService:
 
     def render_catalog(self) -> str:
         return self._schema.render_catalog(self.get_field_catalog())
+
+    def render_configuration_view(self, target_asset: Optional[str] = None) -> str:
+        fields = self.get_field_catalog()
+        if target_asset:
+            prefix = f"assets.{target_asset}."
+            fields = [field for field in fields if field.path.startswith(prefix)]
+        return self._schema.render_catalog(fields)
+
+    @staticmethod
+    def _parse_enum_values(field: ConfigField) -> list[str]:
+        for constraint in field.constraints:
+            if constraint.startswith("value in {"):
+                inner = constraint[len("value in {") : -1]
+                return [item.strip() for item in inner.split(",") if item.strip()]
+        return []
+
+    @staticmethod
+    def _section_for_field(field: ConfigField) -> str:
+        """Returns a section key for a field based on its catalog path."""
+        path = field.path
+        if ".consensus." in path or path.endswith(".consensus"):
+            return "consensus"
+        if ".guard_config." in path or path.endswith(".guard_config"):
+            return "drawdown_guard"
+        if ".strategies." in path or path.endswith(".strategies"):
+            return "strategies"
+        if path.endswith(".base_ticker_symbol") or path.endswith(".quote_ticker_symbol"):
+            return "identity"
+        if path.endswith(".separator") or path.endswith(".exchange"):
+            return "identity"
+        if path.endswith(".quantity_decimals") or path.endswith(".quote_decimals"):
+            return "identity"
+        if path.endswith(".name"):
+            return "identity"
+        if path.endswith(".candles_timeframe") or path.endswith(".schedule"):
+            return "market_feed"
+        if path.endswith(".min_quantity"):
+            return "trade_sizing"
+        return "other"
+
+    _SECTION_DEFINITIONS: dict[str, tuple[str, str, str]] = {
+        "identity": ("Asset identity", "Fixed pair metadata. Locked at the exchange level — these values cannot be changed at runtime.", "assets.{asset}"),
+        "market_feed": ("Market feed", "How often candles stream in and how frequently the strategy loop ticks.", "assets.{asset}"),
+        "consensus": ("Consensus thresholds", "Weighted vote total required before the bot fires a signal. Strategies vote; consensus decides.", "assets.{asset}.consensus"),
+        "drawdown_guard": ("Drawdown guard", "Circuit breaker. Halts trading when losses breach the tolerated drawdown window.", "assets.{asset}.guard_config"),
+        "trade_sizing": ("Trade sizing", "Minimum executable order size on the exchange.", "assets.{asset}"),
+    }
+
+    _SCHEDULE_LABELS: dict = {0: "second", 1: "minute", 2: "hour", 3: "day", 4: "week", 5: "month"}
+
+    _HIDDEN_VIEW_FIELD_NAMES: frozenset[str] = frozenset({"quote_decimals", "quantity_decimals"})
+
+    def build_configuration_view(self, target_asset: str) -> ConfigurationViewBlock:
+        fields = self.get_field_catalog()
+        prefix = f"assets.{target_asset}."
+        asset_fields = [
+            field for field in fields
+            if field.path.startswith(prefix) and self._is_visible_in_view(field)
+        ]
+
+        non_strategy_sections = [
+            self._section_for_field(field) for field in asset_fields
+            if self._section_for_field(field) != "strategies"
+        ]
+        field_rows = [
+            self._to_field_row(field)
+            for field in asset_fields
+            if self._section_for_field(field) != "strategies"
+        ]
+
+        by_section: dict[str, list[FieldRow]] = {}
+        for section_key, row in zip(non_strategy_sections, field_rows):
+            by_section.setdefault(section_key, []).append(row)
+
+        sections: list[SectionCard] = []
+        for key, (title, description, path_template) in self._SECTION_DEFINITIONS.items():
+            rows = by_section.get(key)
+            if not rows:
+                continue
+            rows.sort(key=lambda row: row.path)
+            sections.append(
+                SectionCard(
+                    title=title,
+                    path=path_template.format(asset=target_asset),
+                    description=description,
+                    fields=rows,
+                )
+            )
+
+        strategies = self._build_strategy_cards(asset_fields, target_asset)
+
+        raw_config = self.load_raw_config()
+        asset_entry = ConfigurationSchema.find_asset_entry(raw_config, target_asset)
+        return self._assemble_view(asset_entry, sections, strategies, field_rows, target_asset)
+
+    @staticmethod
+    def _is_visible_in_view(field: ConfigField) -> bool:
+        return field.path.rsplit(".", 1)[-1] not in ConfigurationService._HIDDEN_VIEW_FIELD_NAMES
+
+    def _to_field_row(self, field: ConfigField) -> FieldRow:
+        return FieldRow(
+            name=field.path.rsplit(".", 1)[-1],
+            path=field.path,
+            value=field.value,
+            type=field.type,
+            mutable=field.mutable,
+            description=field.description,
+            constraints=list(field.constraints),
+            enum_values=self._parse_enum_values(field),
+        )
+
+    def _build_strategy_cards(self, asset_fields: list[ConfigField], asset_symbol: str) -> list[StrategyCard]:
+        grouping: dict[str, dict[str, ConfigField]] = {}
+        for field in asset_fields:
+            if self._section_for_field(field) != "strategies":
+                continue
+            parts = field.path.split(".")
+            strategy_name, field_name = parts[3], parts[4]
+            grouping.setdefault(strategy_name, {})[field_name] = field
+
+        cards: list[StrategyCard] = []
+        for name, components in grouping.items():
+            def value(field_name: str) -> Optional[Any]:
+                field = components.get(field_name)
+                return field.value if field is not None else None
+
+            cards.append(
+                StrategyCard(
+                    name=name,
+                    path=f"assets.{asset_symbol}.strategies.{name}",
+                    action=str(value("action")) if value("action") is not None else "",
+                    kind=str(value("type")) if value("type") is not None else "",
+                    enabled=value("enabled") if value("enabled") is not None else None,
+                    expression=value("expression") if value("expression") is not None else None,
+                    class_name=value("class_name") if value("class_name") is not None else None,
+                )
+            )
+        return sorted(cards, key=lambda card: card.name)
+
+    def _assemble_view(
+            self,
+            asset_entry: Optional[dict],
+            sections: list[SectionCard],
+            strategies: list[StrategyCard],
+            field_rows: list[FieldRow],
+            asset_symbol: str,
+    ) -> ConfigurationViewBlock:
+        stats = self._build_stat_cards(asset_entry)
+        signal_window = self._build_signal_window(asset_entry)
+        editable_count = sum(1 for row in field_rows if row.mutable)
+        return ConfigurationViewBlock(
+            asset=asset_symbol,
+            name=asset_entry.get("name", asset_symbol) if asset_entry else asset_symbol,
+            base=asset_entry.get("base_ticker_symbol", "") if asset_entry else "",
+            quote=asset_entry.get("quote_ticker_symbol", "") if asset_entry else "",
+            stats=stats,
+            sections=sections,
+            strategies=strategies,
+            signal_window=signal_window,
+            editable_count=editable_count,
+            field_count=len(field_rows),
+        )
+
+    def _build_stat_cards(self, asset_entry: Optional[dict]) -> list[StatCard]:
+        if not asset_entry:
+            return []
+        consensus = asset_entry.get("consensus") or {}
+        cards = [
+            StatCard(label="Exchange", value=str(asset_entry.get("exchange", "")).replace("_DOT_", ".")),
+            StatCard(label="Timeframe", value=str(asset_entry.get("candles_timeframe", ""))),
+        ]
+        if "buy" in consensus:
+            cards.append(StatCard(label="Buy ≥", value=str(consensus["buy"]), tint="buy"))
+        if "sell" in consensus:
+            cards.append(StatCard(label="Sell ≥", value=str(consensus["sell"]), tint="sell"))
+        cards.append(StatCard(label="Strategies", value=str(len(asset_entry.get("strategies") or []))))
+        return cards
+
+    def _build_signal_window(self, asset_entry: Optional[dict]) -> Optional[SignalWindow]:
+        if not asset_entry:
+            return None
+        consensus = asset_entry.get("consensus") or {}
+        if "buy" not in consensus or "sell" not in consensus:
+            return None
+        return SignalWindow(min=0.05, sell=consensus["sell"], buy=consensus["buy"], max=10.0)
 
     def current_value(self, path: str) -> Any:
         return ConfigurationSchema.get_value(self.load_raw_config(), path)

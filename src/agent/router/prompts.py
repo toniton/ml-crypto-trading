@@ -21,6 +21,10 @@ Known intents:
 
 Rules:
 - intent: pick the single best match above. Default to "general".
+- action: only meaningful for the "configuration" intent. Set "view" when the user only
+  wants to read, inspect, or display the current configuration (no changes requested).
+  Set "modify" when the user wants to change, update, or propose a configuration change.
+  For all other intents leave the default "modify".
 - goal: populate objective (and, when relevant, target_asset / desired_outcomes /
   constraints / ambiguities) whenever a goal is meaningful for the chosen intent.
   It may be null for pure "general" small talk.
