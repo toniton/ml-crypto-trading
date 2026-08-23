@@ -52,6 +52,18 @@ class PostgresConversationRepository(ConversationRepository):
         )
         return [self._to_message(row) for row in rows]
 
+    def get_by_message_id(self, message_id: str) -> Optional[ConversationMessage]:
+        row = (
+            self.database_session.query(ConversationMessageDao)
+            .filter(
+                ConversationMessageDao.message_id == message_id,
+                ConversationMessageDao.role == "assistant",
+            )
+            .order_by(ConversationMessageDao.id.desc())
+            .first()
+        )
+        return self._to_message(row) if row else None
+
     def list_sessions(self) -> List[SessionSummary]:
         message_count = func.count(ConversationMessageDao.id).label("message_count")  # pylint: disable=not-callable
         rows = (
@@ -114,4 +126,5 @@ class PostgresConversationRepository(ConversationRepository):
             content=row.content,
             payload=row.payload,
             created_at=row.created_at,
+            conversation_id=row.conversation_id,
         )

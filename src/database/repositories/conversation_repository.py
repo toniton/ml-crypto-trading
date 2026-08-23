@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import abc
-from typing import List
+from typing import List, Optional
 
 from src.core.interfaces.conversation_store import ConversationMessage, SessionSummary
 from src.core.interfaces.llm_adapter import ChatTurn
@@ -19,6 +19,10 @@ class ConversationRepository(BaseRepository[ConversationMessage]):
 
     @abc.abstractmethod
     def get_messages(self, session_id: str) -> List[ConversationMessage]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_by_message_id(self, message_id: str) -> Optional[ConversationMessage]:
         raise NotImplementedError()
 
     @abc.abstractmethod

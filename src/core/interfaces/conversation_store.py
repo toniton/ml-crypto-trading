@@ -16,6 +16,7 @@ class ConversationMessage(BaseModel):
     content: str
     payload: Optional[dict] = None
     created_at: Optional[datetime] = None
+    conversation_id: Optional[str] = None
 
 
 class SessionSummary(BaseModel):
@@ -40,6 +41,10 @@ class ConversationStore(ABC):
 
     @abstractmethod
     def messages(self, session_id: str) -> List[ConversationMessage]:
+        raise NotImplementedError()
+
+    @abstractmethod
+    def get_message(self, message_id: str) -> Optional[ConversationMessage]:
         raise NotImplementedError()
 
     @abstractmethod

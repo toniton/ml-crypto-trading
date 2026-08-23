@@ -61,6 +61,11 @@ class ConversationManager(ConversationStore):
             repository = uow.get_repository(PostgresConversationRepository)
             return repository.get_messages(session_id)
 
+    def get_message(self, message_id: str) -> Optional[ConversationMessage]:
+        with self._db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresConversationRepository)
+            return repository.get_by_message_id(message_id)
+
     def list_sessions(self) -> List[SessionSummary]:
         with self._db_manager.get_unit_of_work() as uow:
             repository = uow.get_repository(PostgresConversationRepository)

@@ -137,7 +137,11 @@ class AgentGateway:
                     payload=block,
                 )
 
-        yield AIEvent(type="done", message_id=message_id, agent=definition.name, payload={"kind": definition.name})
+        done_payload: dict[str, Any] = {"kind": definition.name}
+        proposal = captures.get("proposal")
+        if proposal is not None:
+            done_payload["proposal"] = proposal
+        yield AIEvent(type="done", message_id=message_id, agent=definition.name, payload=done_payload)
 
     @staticmethod
     def build_default_registry(
@@ -213,12 +217,15 @@ class AgentGateway:
             return AIEvent(type="node_started", message_id=message_id, agent=agent, payload={"node": node})
 
         if event["event"] == "on_chain_end":
+            output = event["data"].get("output") or {}
             if node == "understand_goal":
-                captures["route"] = event["data"]["output"].get("route")
+                captures["route"] = output.get("route")
             elif node == "route":
-                captures["agent"] = event["data"]["output"].get("agent")
+                captures["agent"] = output.get("agent")
             elif node == presentation_node:
-                captures["presentation"] = event["data"]["output"].get("presentation")
+                captures["presentation"] = output.get("presentation")
+            if isinstance(output, dict) and "proposal" in output:
+                captures["proposal"] = output["proposal"]
             return AIEvent(type="node_completed", message_id=message_id, agent=agent, payload={"node": node})
 
         return None

@@ -9,6 +9,7 @@ from src.agent.configuration.models import (
     ConfigurationResult,
     GeneralResult,
     MarkdownBlock,
+    ProposalDecision,
     ValidationResult,
 )
 from src.agent.configuration.nodes.generate_proposal import GenerateProposalNode
@@ -42,6 +43,7 @@ __all__ = [
     "GenerateProposalNode",
     "MarkdownBlock",
     "PresentProposalNode",
+    "ProposalDecision",
     "RouteNode",
     "UnderstandGoalNode",
     "ValidateProposalNode",

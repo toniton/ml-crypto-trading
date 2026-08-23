@@ -22,12 +22,14 @@ from src.agent.configuration.schema import (
     TRADING_CONFIG_ADAPTER,
 )
 from src.configuration.trading_config import TradingConfig
+from src.vcs.application.service import VCSService
 
 
 class ConfigurationService:
-    def __init__(self, config_filepath: str):
+    def __init__(self, config_filepath: str, vcs: Optional["VCSService"] = None):
         self._config_filepath = config_filepath
         self._schema = ConfigurationSchema()
+        self._vcs = vcs
 
     @property
     def config_filepath(self) -> str:
@@ -225,6 +227,25 @@ class ConfigurationService:
             ConfigurationSchema.set_value(patched_config, change.path, change.new_value)
 
         return patched_config, warnings
+
+    def apply_proposal_to_vcs(
+            self,
+            proposal: ConfigurationProposal,
+            author: str = "user",
+            ref: str = "HEAD",
+    ) -> Tuple[Any, List[str]]:
+        if self._vcs is None:
+            raise RuntimeError("ConfigurationService has no VCS backend configured.")
+
+        patched, warnings = self.apply_proposal(proposal)
+        validated_config = TradingConfig.model_validate(patched)
+        commit = self._vcs.commit(
+            validated_config,
+            author=author,
+            message=proposal.summary,
+            ref=ref,
+        )
+        return commit, warnings
 
     def render_proposed_diff(self, proposal: ConfigurationProposal, warnings: Optional[List[str]] = None) -> str:
         lines = [proposal.summary]

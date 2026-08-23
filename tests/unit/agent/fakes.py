@@ -64,6 +64,7 @@ class FakeConversationStore(ConversationStore):
         ]
 
     def append(self, session_id: str, message: ConversationMessage) -> None:
+        message.conversation_id = session_id
         messages = self._sessions.setdefault(session_id, [])
         messages.append(message)
         if len(messages) > self._max_turns:
@@ -71,6 +72,13 @@ class FakeConversationStore(ConversationStore):
 
     def messages(self, session_id: str) -> List[ConversationMessage]:
         return list(self._sessions.get(session_id, []))
+
+    def get_message(self, message_id: str) -> Optional[ConversationMessage]:
+        for messages in self._sessions.values():
+            for message in reversed(messages):
+                if message.message_id == message_id and message.role == "assistant":
+                    return message
+        return None
 
     def list_sessions(self) -> List[SessionSummary]:
         now = datetime.now(timezone.utc)

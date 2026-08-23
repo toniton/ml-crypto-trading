@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from enum import Enum
 from typing import Any, Literal, Optional, Union
 
 from pydantic import BaseModel, Field
@@ -8,6 +9,15 @@ from src.agent.router.models import AgentGoal, AgentIntent
 
 # Backwards-compatible alias: goal extraction now lives in the router.
 ConfigurationGoal = AgentGoal
+
+
+class ProposalDecision(str, Enum):
+    APPROVE = "approve"
+    REJECT = "reject"
+
+    @property
+    def label(self) -> str:
+        return "Approved" if self is ProposalDecision.APPROVE else "Rejected"
 
 
 class ConfigChange(BaseModel):

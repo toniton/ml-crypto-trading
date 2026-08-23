@@ -11,6 +11,7 @@ from src.agent import (
     ConfigChange,
     ConfigurationProposal,
 )
+from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
 from src.server.app import ChatApp
 from src.server.server import ApiServer
@@ -43,10 +44,18 @@ def build_gateway(llm):
     return AgentGateway(llm, _TEST_CONFIG_PATH)
 
 
+def build_app(llm, conversations=None):
+    return ChatApp.create(
+        agent=build_gateway(llm),
+        conversations=conversations or FakeConversationStore(),
+        configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
+    )
+
+
 class TestApiServerApp(unittest.TestCase):
     def setUp(self):
         self.llm = FakeLlmAdapter(chunks=["Token1 ", "Token2 ", "Token3"])
-        self.app = ChatApp.create(agent=build_gateway(self.llm), conversations=FakeConversationStore())
+        self.app = build_app(self.llm)
         self.client = TestClient(self.app)
 
     def test_chat_endpoint_streaming_success(self):
@@ -77,7 +86,7 @@ class TestApiServerApp(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_chat_endpoint_no_agent(self):
-        app_no_agent = ChatApp.create(agent=build_gateway(self.llm), conversations=FakeConversationStore())
+        app_no_agent = build_app(self.llm)
         app_no_agent.state.agent = None
         client = TestClient(app_no_agent)
         response = client.post("/api/v1/chat", json={"prompt": "Hello"})
@@ -89,6 +98,7 @@ class TestApiServerApp(unittest.TestCase):
         server = ApiServer(
             agent=build_gateway(self.llm),
             conversations=FakeConversationStore(),
+            configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
             host="127.0.0.1",
             port=9999,
         )
@@ -111,7 +121,7 @@ class TestApiServerApp(unittest.TestCase):
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
-        app = ChatApp.create(agent=build_gateway(llm), conversations=FakeConversationStore())
+        app = build_app(llm)
         client = TestClient(app)
         response = client.post("/api/v1/chat", json={"prompt": "make the strategy less conservative"})
         self.assertEqual(response.status_code, 200)
@@ -200,7 +210,7 @@ class TestGatewayStreaming(unittest.TestCase):
 class TestConversationSessions(unittest.TestCase):
     def test_session_event_emitted_with_id(self):
         llm = FakeLlmAdapter(chunks=["Token1 "])
-        app = ChatApp.create(agent=build_gateway(llm), conversations=FakeConversationStore())
+        app = build_app(llm)
         client = TestClient(app)
         response = client.post("/api/v1/chat", json={"prompt": "Analyze BTC"})
         self.assertEqual(response.status_code, 200)
@@ -209,7 +219,7 @@ class TestConversationSessions(unittest.TestCase):
 
     def test_history_reused_across_requests(self):
         llm = FakeLlmAdapter(chunks=["ok"])
-        app = ChatApp.create(agent=build_gateway(llm), conversations=FakeConversationStore())
+        app = build_app(llm)
         client = TestClient(app)
 
         first = client.post("/api/v1/chat", json={"prompt": "hello"})
@@ -223,7 +233,7 @@ class TestConversationSessions(unittest.TestCase):
         self.assertIn("hello", [turn.content for turn in history])
 
     def test_list_sessions_endpoint(self):
-        app = ChatApp.create(agent=build_gateway(FakeLlmAdapter(chunks=["ok"])), conversations=FakeConversationStore())
+        app = build_app(FakeLlmAdapter(chunks=["ok"]))
         client = TestClient(app)
         first = client.post("/api/v1/chat", json={"prompt": "hello"})
         session_id = _extract_session_id(first.text)
@@ -234,7 +244,7 @@ class TestConversationSessions(unittest.TestCase):
         self.assertTrue(any(session["id"] == session_id for session in sessions))
 
     def test_get_session_messages_endpoint(self):
-        app = ChatApp.create(agent=build_gateway(FakeLlmAdapter(chunks=["ok"])), conversations=FakeConversationStore())
+        app = build_app(FakeLlmAdapter(chunks=["ok"]))
         client = TestClient(app)
         first = client.post("/api/v1/chat", json={"prompt": "hello"})
         session_id = _extract_session_id(first.text)
@@ -266,7 +276,3 @@ def _extract_session_id(content):
 
 async def _collect(async_iter):
     return [chunk async for chunk in async_iter]
-
-
-if __name__ == "__main__":
-    unittest.main()

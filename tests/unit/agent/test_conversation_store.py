@@ -98,3 +98,28 @@ class TestConversationManager:
         assert len(sessions) == 1
         assert sessions[0].id == sid
         assert sessions[0].message_count == 2
+
+    def test_get_message_returns_assistant_by_message_id(self, mock_db_manager):
+        manager = ConversationManager(mock_db_manager)
+        sid = manager.get_or_create(None)
+        manager.append(sid, ConversationMessage(role="user", content="hi", message_id="m1"))
+        manager.append(
+            sid,
+            ConversationMessage(
+                role="assistant",
+                content="hello",
+                message_id="m1",
+                payload={"proposal": {"summary": "x"}},
+            ),
+        )
+
+        message = manager.get_message("m1")
+        assert message is not None
+        assert message.role == "assistant"
+        assert message.conversation_id == sid
+        assert message.payload["proposal"]["summary"] == "x"
+
+    def test_get_message_returns_none_for_unknown(self, mock_db_manager):
+        manager = ConversationManager(mock_db_manager)
+
+        assert manager.get_message("missing") is None

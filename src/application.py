@@ -200,7 +200,10 @@ class Application(ApplicationLoggingMixin):
 
         if not self._application_config.headless:
             api_llm = ModelFactory.create_model(self._llm_config)
-            configuration_service = ConfigurationService(self._application_config.trading_config_filepath)
+            configuration_service = ConfigurationService(
+                self._application_config.trading_config_filepath,
+                vcs=self._vcs,
+            )
             account_balance_tool = AccountBalanceTool(
                 account_manager=self._managers.account_manager,
                 assets=self._assets,
@@ -246,7 +249,11 @@ class Application(ApplicationLoggingMixin):
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(api_llm, self._application_config.trading_config_filepath)
             conversations = ConversationManager(self._db_manager)
-            self._api_server = ApiServer(agent=gateway, conversations=conversations)
+            self._api_server = ApiServer(
+                agent=gateway,
+                conversations=conversations,
+                configuration_service=configuration_service,
+            )
             self._api_server.start()
 
         self._trading_engine = TradingEngine(
