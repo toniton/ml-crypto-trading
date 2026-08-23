@@ -35,6 +35,9 @@ class TestApplicationHeadless(unittest.TestCase):
         from src.configuration.environment_config import EnvironmentConfig
         from src.configuration.llm_config import LlmConfig
         from src.configuration.trading_config import TradingConfig
+        from src.vcs.application.service import VCSService
+
+        mock_vcs.return_value = MagicMock(spec=VCSService)
 
         app_config = ApplicationConfig(trading_config_filepath="config.yaml", headless=False)
         env_config = MagicMock(spec=EnvironmentConfig)

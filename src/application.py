@@ -9,6 +9,7 @@ import src.configuration.providers
 import src.trading.protection.guards
 import src.exchange.clients
 from src.agent import AgentGateway
+from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.conversation_manager import ConversationManager
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
@@ -30,9 +31,17 @@ from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.managers.manager_container import ManagerContainer
 from src.llm.model_factory import ModelFactory
+from src.llm.tools.account_balance_tool import AccountBalanceTool
+from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
+from src.llm.tools.configuration_tool import ConfigurationTool
+from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
+from src.llm.tools.position_tool import PositionTool
+from src.llm.tools.recent_trades_tool import RecentTradesTool
+from src.llm.tools.session_summary_tool import SessionSummaryTool
+from src.llm.tools.strategy_votes_tool import StrategyVotesTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
@@ -103,6 +112,7 @@ class Application(ApplicationLoggingMixin):
 
     def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
         trading_journal = InMemoryTradingJournal()
+        self._trading_journal = trading_journal
         is_simulated = self._application_config.simulated
 
         websocket_manager = ClientFactory.create_websocket_manager(is_simulated)
@@ -190,7 +200,50 @@ class Application(ApplicationLoggingMixin):
 
         if not self._application_config.headless:
             api_llm = ModelFactory.create_model(self._llm_config)
-            api_llm.bind_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
+            configuration_service = ConfigurationService(self._application_config.trading_config_filepath)
+            account_balance_tool = AccountBalanceTool(
+                account_manager=self._managers.account_manager,
+                assets=self._assets,
+            )
+            position_tool = PositionTool(
+                session_manager=self._managers.session_manager,
+                assets=self._assets,
+            )
+            recent_trades_tool = RecentTradesTool(
+                trading_journal=self._trading_journal,
+                assets=self._assets,
+            )
+            consensus_tool = ConsensusTool(
+                consensus_manager=self._managers.consensus_manager,
+                session_manager=self._managers.session_manager,
+                market_data_manager=self._managers.market_data_manager,
+                assets=self._assets,
+            )
+            strategy_votes_tool = StrategyVotesTool(
+                consensus_manager=self._managers.consensus_manager,
+                session_manager=self._managers.session_manager,
+                market_data_manager=self._managers.market_data_manager,
+                assets=self._assets,
+            )
+            configuration_tool = ConfigurationTool(configuration_service=configuration_service)
+            configuration_history_tool = ConfigurationHistoryTool(vcs=self._vcs)
+            session_summary_tool = SessionSummaryTool(session_manager=self._managers.session_manager)
+
+            llm_tools = [
+                context_tool,
+                fees_tool,
+                market_stats_tool,
+                open_orders_tool,
+                account_balance_tool,
+                position_tool,
+                recent_trades_tool,
+                consensus_tool,
+                strategy_votes_tool,
+                configuration_tool,
+                configuration_history_tool,
+                session_summary_tool,
+            ]
+            api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(api_llm, self._application_config.trading_config_filepath)
             conversations = ConversationManager(self._db_manager)
             self._api_server = ApiServer(agent=gateway, conversations=conversations)
