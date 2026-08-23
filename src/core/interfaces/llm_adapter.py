@@ -27,4 +27,3 @@ class LlmAdapter(ABC):
     @abstractmethod
     def generate_structured(self, schema: Type[Structured], prompt: str, system_prompt: str) -> Structured:
         pass
-

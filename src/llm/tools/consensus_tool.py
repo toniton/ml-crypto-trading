@@ -46,7 +46,7 @@ class ConsensusTool(BaseTool, ApplicationLoggingMixin):
             assets=assets,
         )
 
-    def _run(self, ticker_symbol: str, action: str) -> str:
+    def _run(self, ticker_symbol: str, action: str) -> str:  # pylint: disable=arguments-differ
         target = ticker_symbol.strip()
         asset = next((a for a in self.assets if a.ticker_symbol == target), None)
         if not asset:

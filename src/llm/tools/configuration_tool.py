@@ -29,7 +29,7 @@ class ConfigurationTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, configuration_service: ConfigurationService):
         super().__init__(configuration_service=configuration_service)
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target = (ticker_symbol or "").strip()
         try:
             raw = self.configuration_service.load_raw_config()

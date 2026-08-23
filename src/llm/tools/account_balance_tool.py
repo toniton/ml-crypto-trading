@@ -29,7 +29,7 @@ class AccountBalanceTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, account_manager: AccountManager, assets: list):
         super().__init__(account_manager=account_manager, assets=assets)
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target = ticker_symbol.strip()
         asset = next((a for a in self.assets if a.ticker_symbol == target), None)
         if not asset:

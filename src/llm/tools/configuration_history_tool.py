@@ -28,7 +28,7 @@ class ConfigurationHistoryTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, vcs: VCSService):
         super().__init__(vcs=vcs)
 
-    def _run(self, limit: int = 20) -> str:
+    def _run(self, limit: int = 20) -> str:  # pylint: disable=arguments-differ
         try:
             commits = self.vcs.log("HEAD", limit=limit)
         except Exception as exc:  # pylint: disable=broad-except

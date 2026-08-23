@@ -222,6 +222,34 @@ class TestConversationSessions(unittest.TestCase):
         self.assertIsNotNone(history)
         self.assertIn("hello", [turn.content for turn in history])
 
+    def test_list_sessions_endpoint(self):
+        app = ChatApp.create(agent=build_gateway(FakeLlmAdapter(chunks=["ok"])), conversations=FakeConversationStore())
+        client = TestClient(app)
+        first = client.post("/api/v1/chat", json={"prompt": "hello"})
+        session_id = _extract_session_id(first.text)
+
+        response = client.get("/api/v1/sessions")
+        self.assertEqual(response.status_code, 200)
+        sessions = response.json()
+        self.assertTrue(any(session["id"] == session_id for session in sessions))
+
+    def test_get_session_messages_endpoint(self):
+        app = ChatApp.create(agent=build_gateway(FakeLlmAdapter(chunks=["ok"])), conversations=FakeConversationStore())
+        client = TestClient(app)
+        first = client.post("/api/v1/chat", json={"prompt": "hello"})
+        session_id = _extract_session_id(first.text)
+
+        response = client.get(f"/api/v1/sessions/{session_id}")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["session_id"], session_id)
+        messages = data["messages"]
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0]["role"], "user")
+        self.assertEqual(messages[0]["content"], "hello")
+        self.assertEqual(messages[1]["role"], "assistant")
+        self.assertEqual(messages[1]["payload"]["tokens"], "ok")
+
 
 def _extract_session_id(content):
     import json

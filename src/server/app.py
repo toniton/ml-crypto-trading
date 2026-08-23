@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from src.agent import AgentGateway
 from src.agent.events import AIEvent
-from src.core.interfaces.conversation_store import ConversationStore
+from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.server.response_reconstructor import ResponseReconstructor
 
@@ -65,17 +65,24 @@ class ChatApp:
 
             session_id = await asyncio.to_thread(store.get_or_create, chat_req.session_id)
             history: List[ChatTurn] = await asyncio.to_thread(store.history, session_id)
-            await asyncio.to_thread(store.append, session_id, ChatTurn(role="user", content=prompt_text))
             message_id = uuid.uuid4().hex
+            await asyncio.to_thread(
+                store.append,
+                session_id,
+                ConversationMessage(role="user", content=prompt_text, message_id=message_id),
+            )
 
             async def stream_generator() -> AsyncGenerator[str, None]:
                 reconstructor = ResponseReconstructor()
+                blocks: list = []
+                tokens: List[str] = []
                 try:
                     yield ChatApp.format_event(
                         AIEvent(type="session", message_id=message_id, payload={"session_id": session_id})
                     )
                     async for event in gateway.stream(prompt_text, history=history, message_id=message_id):
                         reconstructor.feed(event)
+                        ChatApp._capture(event, blocks, tokens)
                         yield ChatApp.format_event(event)
                 except Exception as exc:  # pylint: disable=broad-except
                     error_msg = str(exc).replace("\n", " ").replace("\r", " ")
@@ -83,11 +90,34 @@ class ChatApp:
                 finally:
                     assistant_text = reconstructor.reconstruct()
                     if assistant_text:
+                        payload = {"blocks": blocks, "tokens": "".join(tokens)} if blocks or tokens else None
                         await asyncio.to_thread(
-                            store.append, session_id, ChatTurn(role="assistant", content=assistant_text)
+                            store.append,
+                            session_id,
+                            ConversationMessage(
+                                role="assistant",
+                                content=assistant_text,
+                                message_id=message_id,
+                                payload=payload,
+                            ),
                         )
 
             return StreamingResponse(stream_generator(), media_type="text/event-stream")
+
+        @app.get("/api/v1/sessions")
+        async def list_sessions_endpoint(req: Request):
+            store: ConversationStore = req.app.state.conversations
+            sessions = await asyncio.to_thread(store.list_sessions)
+            return [session.model_dump(mode="json") for session in sessions]
+
+        @app.get("/api/v1/sessions/{session_id}")
+        async def get_session_endpoint(session_id: str, req: Request):
+            store: ConversationStore = req.app.state.conversations
+            messages = await asyncio.to_thread(store.messages, session_id)
+            return {
+                "session_id": session_id,
+                "messages": [message.model_dump(mode="json") for message in messages],
+            }
 
         return app
 
@@ -98,3 +128,21 @@ class ChatApp:
         if hasattr(event, "type"):
             name = event.type
         return f"event: {name}\ndata: {data}\n\n"
+
+    @staticmethod
+    def _capture(event, blocks: list, tokens: List[str]) -> None:
+        if event.type == "block":
+            payload = event.payload
+            blocks.append(payload.model_dump() if hasattr(payload, "model_dump") else payload)
+        elif event.type == "clarification":
+            payload = event.payload or {}
+            if isinstance(payload, dict):
+                blocks.append(
+                    {
+                        "type": "clarification",
+                        "content": payload.get("question", ""),
+                        "intent": payload.get("intent"),
+                    }
+                )
+        elif event.type == "token" and isinstance(event.payload, str):
+            tokens.append(event.payload)

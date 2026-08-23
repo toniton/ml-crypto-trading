@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func
 
+from src.database.dao.blob_dao import JSON_TYPE
 from src.database.database_manager import DatabaseManager
 
 
@@ -12,4 +13,6 @@ class ConversationMessageDao(DatabaseManager.BaseTableModel):
     conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(16), nullable=False)
     content = Column(Text, nullable=False)
+    message_id = Column(String(32), nullable=True)
+    payload = Column(JSON_TYPE, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)  # pylint: disable=not-callable

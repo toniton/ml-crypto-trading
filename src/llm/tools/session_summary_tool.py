@@ -26,7 +26,7 @@ class SessionSummaryTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, session_manager: SessionManager):
         super().__init__(session_manager=session_manager)
 
-    def _run(self) -> str:
+    def _run(self) -> str:  # pylint: disable=arguments-differ
         session = self.session_manager.current_session
         if not session:
             return "Error: No active trading session."

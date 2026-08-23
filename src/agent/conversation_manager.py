@@ -4,7 +4,7 @@ import threading
 import uuid
 from typing import List, Optional
 
-from src.core.interfaces.conversation_store import ConversationStore
+from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore, SessionSummary
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.database.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_conversation_repository import PostgresConversationRepository
@@ -46,12 +46,22 @@ class ConversationManager(ConversationStore):
             self._cache[session_id] = list(turns)
         return list(turns)
 
-    def append(self, session_id: str, turn: ChatTurn) -> None:
+    def append(self, session_id: str, message: ConversationMessage) -> None:
         with self._db_manager.get_unit_of_work() as uow:
             repository = uow.get_repository(PostgresConversationRepository)
-            repository.append(session_id, turn, self._persisted_max_turns)
+            repository.append(session_id, message, self._persisted_max_turns)
         with self._lock:
             turns = self._cache.setdefault(session_id, [])
-            turns.append(turn)
+            turns.append(ChatTurn(role=message.role, content=message.content))
             if len(turns) > self._memory_max_turns:
                 del turns[: len(turns) - self._memory_max_turns]
+
+    def messages(self, session_id: str) -> List[ConversationMessage]:
+        with self._db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresConversationRepository)
+            return repository.get_messages(session_id)
+
+    def list_sessions(self) -> List[SessionSummary]:
+        with self._db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresConversationRepository)
+            return repository.list_sessions()

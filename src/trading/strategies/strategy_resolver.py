@@ -1,6 +1,10 @@
 from __future__ import annotations
 
 from typing import Optional
+import importlib
+import pkgutil
+
+import src.trading.consensus.strategies as strategies_package
 
 from api.interfaces.asset import Asset
 from src.core.interfaces.trading_strategy import TradingStrategy
@@ -16,13 +20,6 @@ class StrategyResolver:
     @classmethod
     def _builtin_strategy_classes(cls) -> dict[str, type]:
         if cls._static_classes is None:
-            import importlib
-            import pkgutil
-
-            import src.trading.consensus.strategies as strategies_package
-            from src.core.interfaces.rule_based_trading_strategy import RuleBasedTradingStrategy
-            from src.trading.strategies.expression_strategy import ExpressionStrategy
-
             for (_, module_name, _) in pkgutil.iter_modules(strategies_package.__path__):
                 importlib.import_module(f"{strategies_package.__name__}.{module_name}")
 

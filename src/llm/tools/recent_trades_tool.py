@@ -30,7 +30,7 @@ class RecentTradesTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, trading_journal: TradingJournal, assets: list):
         super().__init__(trading_journal=trading_journal, assets=assets)
 
-    def _run(self, ticker_symbol: str, limit: int = 20) -> str:
+    def _run(self, ticker_symbol: str, limit: int = 20) -> str:  # pylint: disable=arguments-differ
         asset = next((a for a in self.assets if a.ticker_symbol == ticker_symbol.strip()), None)
         if not asset:
             return f"Error: Asset {ticker_symbol} not found."

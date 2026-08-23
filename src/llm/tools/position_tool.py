@@ -30,7 +30,7 @@ class PositionTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, session_manager: SessionManager, assets: list):
         super().__init__(session_manager=session_manager, assets=assets)
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         if not self.session_manager.current_session:
             return "Error: No active trading session."
 

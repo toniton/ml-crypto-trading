@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import AsyncIterator, List, Optional, Type
 
-from src.core.interfaces.conversation_store import ConversationStore
+from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore, SessionSummary
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
 from src.agent.router.models import AgentIntent, AgentRoute
 
@@ -48,7 +49,7 @@ class FakeConversationStore(ConversationStore):
     """In-memory ConversationStore fake used by transport-layer tests."""
 
     def __init__(self, max_turns: int = 10):
-        self._sessions: dict[str, List[ChatTurn]] = {}
+        self._sessions: dict[str, List[ConversationMessage]] = {}
         self._max_turns = max_turns
 
     def get_or_create(self, session_id: Optional[str] = None) -> str:
@@ -57,11 +58,23 @@ class FakeConversationStore(ConversationStore):
         return resolved
 
     def history(self, session_id: str) -> List[ChatTurn]:
-        return list(self._sessions.get(session_id, [])[-self._max_turns:])
+        return [
+            ChatTurn(role=message.role, content=message.content)
+            for message in self._sessions.get(session_id, [])[-self._max_turns:]
+        ]
 
-    def append(self, session_id: str, turn: ChatTurn) -> None:
-        turns = self._sessions.setdefault(session_id, [])
-        turns.append(turn)
-        if len(turns) > self._max_turns:
-            del turns[: len(turns) - self._max_turns]
+    def append(self, session_id: str, message: ConversationMessage) -> None:
+        messages = self._sessions.setdefault(session_id, [])
+        messages.append(message)
+        if len(messages) > self._max_turns:
+            del messages[: len(messages) - self._max_turns]
 
+    def messages(self, session_id: str) -> List[ConversationMessage]:
+        return list(self._sessions.get(session_id, []))
+
+    def list_sessions(self) -> List[SessionSummary]:
+        now = datetime.now(timezone.utc)
+        return [
+            SessionSummary(id=sid, created_at=now, updated_at=now, message_count=len(messages))
+            for sid, messages in self._sessions.items()
+        ]

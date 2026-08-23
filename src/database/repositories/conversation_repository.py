@@ -3,11 +3,12 @@ from __future__ import annotations
 import abc
 from typing import List
 
+from src.core.interfaces.conversation_store import ConversationMessage, SessionSummary
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.database.repositories.base_repository import BaseRepository
 
 
-class ConversationRepository(BaseRepository[ChatTurn]):
+class ConversationRepository(BaseRepository[ConversationMessage]):
     @abc.abstractmethod
     def get_or_create(self, session_id: str) -> str:
         raise NotImplementedError()
@@ -17,5 +18,13 @@ class ConversationRepository(BaseRepository[ChatTurn]):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def append(self, session_id: str, turn: ChatTurn, max_turns: int) -> None:
+    def get_messages(self, session_id: str) -> List[ConversationMessage]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def list_sessions(self) -> List[SessionSummary]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def append(self, session_id: str, message: ConversationMessage, max_turns: int) -> None:
         raise NotImplementedError()

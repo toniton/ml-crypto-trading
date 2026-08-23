@@ -72,4 +72,3 @@ class StrategyConfig(BaseModel):
             if self.name is None:
                 self.name = self.class_name
         return self
-
