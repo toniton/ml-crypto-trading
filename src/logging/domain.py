@@ -5,3 +5,4 @@ class LogDomain(str, Enum):
     APPLICATION = 'application'
     TRADING = 'trading'
     AUDIT = 'audit'
+    AGENT = 'agent'

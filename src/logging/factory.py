@@ -15,5 +15,9 @@ class LoggingFactory:
         return LoggingManager.get_instance().get_logger(LogDomain.TRADING, name)
 
     @staticmethod
+    def get_agent_logger(name: str) -> logging.Logger:
+        return LoggingManager.get_instance().get_logger(LogDomain.AGENT, name)
+
+    @staticmethod
     def get_audit_logger(asset: Optional[str] = None) -> logging.Logger:
         return LoggingManager.get_instance().get_logger(LogDomain.AUDIT, asset=asset)
