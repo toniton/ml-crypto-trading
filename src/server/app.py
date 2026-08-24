@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import AsyncGenerator, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request, status
+from fastapi import FastAPI, HTTPException, Request, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -13,8 +13,10 @@ from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.events import AIEvent
 from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
+from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
+from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
 
 
@@ -50,6 +52,7 @@ class ChatApp:
             agent: AgentGateway,
             conversations: ConversationStore,
             configuration_service: ConfigurationService,
+            event_bus: EventBus,
     ) -> FastAPI:
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0")
         app.state.agent = agent
@@ -64,6 +67,12 @@ class ChatApp:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        log_handler = LogWebSocketHandler(event_bus)
+
+        @app.websocket("/api/v1/logs/ws")
+        async def log_websocket(websocket: WebSocket) -> None:
+            await log_handler.handle(websocket)
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:

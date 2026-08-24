@@ -6,6 +6,7 @@ import uvicorn
 from src.agent import AgentGateway
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.conversation_store import ConversationStore
+from src.core.interfaces.event_bus import EventBus
 from src.server.app import ChatApp
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
@@ -16,6 +17,7 @@ class ApiServer(ApplicationLoggingMixin):
             agent: AgentGateway,
             conversations: ConversationStore,
             configuration_service: ConfigurationService,
+            event_bus: EventBus,
             host: str = "127.0.0.1",
             port: int = 8000,
     ):
@@ -26,6 +28,7 @@ class ApiServer(ApplicationLoggingMixin):
             agent=agent,
             conversations=conversations,
             configuration_service=configuration_service,
+            event_bus=event_bus,
         )
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None

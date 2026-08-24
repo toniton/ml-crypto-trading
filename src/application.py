@@ -28,7 +28,9 @@ from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.guard import Guard
 from src.core.interfaces.trading_scheduler import TradingScheduler
+from src.events.message_event_bus import MessageEventBus
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.manager import LoggingManager
 from src.trading.managers.manager_container import ManagerContainer
 from src.llm.model_factory import ModelFactory
 from src.llm.tools.account_balance_tool import AccountBalanceTool
@@ -71,6 +73,7 @@ class Application(ApplicationLoggingMixin):
         self.is_ready = Event()
         self._trading_engine = None
         self._api_server: Optional[ApiServer] = None
+        self._event_bus: Optional[MessageEventBus] = None
         self._backtest_scheduler = backtest_scheduler
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
@@ -253,10 +256,13 @@ class Application(ApplicationLoggingMixin):
                 vcs=self._vcs,
             )
             conversations = ConversationManager(self._db_manager)
+            self._event_bus = MessageEventBus()
+            LoggingManager.get_instance().set_event_bus(self._event_bus)
             self._api_server = ApiServer(
                 agent=gateway,
                 conversations=conversations,
                 configuration_service=configuration_service,
+                event_bus=self._event_bus,
             )
             self._api_server.start()
 
@@ -300,6 +306,9 @@ class Application(ApplicationLoggingMixin):
         if self._api_server:
             self._api_server.stop()
             self._api_server = None
+        if self._event_bus:
+            self._event_bus.close()
+            self._event_bus = None
         self._config_listener.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()

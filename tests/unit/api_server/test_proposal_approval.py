@@ -12,6 +12,7 @@ from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
 from src.database.database_manager import DatabaseManager
+from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
@@ -78,6 +79,7 @@ def _build_app(config_file, vcs):
         agent=gateway,
         conversations=conversations,
         configuration_service=ConfigurationService(config_file, vcs=vcs),
+        event_bus=MessageEventBus(),
     )
     return app
 
@@ -119,6 +121,7 @@ class TestProposalDecisionEndpoint:
             agent=AgentGateway(_configuration_llm(), config_file),
             conversations=conversations,
             configuration_service=ConfigurationService(config_file, vcs=vcs),
+            event_bus=MessageEventBus(),
         )
         client = TestClient(app)
         message_id = _stream_and_extract_message_id(client)
@@ -147,6 +150,7 @@ class TestProposalDecisionEndpoint:
             agent=AgentGateway(_configuration_llm(), config_file),
             conversations=conversations,
             configuration_service=ConfigurationService(config_file, vcs=vcs),
+            event_bus=MessageEventBus(),
         )
         client = TestClient(app)
         message_id = _stream_and_extract_message_id(client)
@@ -190,6 +194,7 @@ class TestProposalDecisionEndpoint:
             agent=AgentGateway(FakeLlmAdapter(), config_file),
             conversations=conversations,
             configuration_service=ConfigurationService(config_file, vcs=vcs),
+            event_bus=MessageEventBus(),
         )
         client = TestClient(app)
 

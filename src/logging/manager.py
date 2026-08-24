@@ -8,7 +8,9 @@ from datetime import datetime
 from typing import Optional
 
 from src.configuration.environment_config import EnvironmentConfig
+from src.core.interfaces.event_bus import EventBus
 from src.logging.domain import LogDomain
+from src.logging.event_bus_log_handler import EventBusLogHandler
 from src.logging.formatters import AuditCsvFormatter
 
 
@@ -27,6 +29,8 @@ class LoggingManager:
         self._setup_complete = False
         self._setup_lock = threading.Lock()
         self.active_loggers: set[str] = set()
+
+        self._event_bus_handler: Optional[EventBusLogHandler] = None
 
         os.makedirs(self.log_dir, exist_ok=True)
 
@@ -57,6 +61,14 @@ class LoggingManager:
         self.log_level = config.log_level or 'INFO'
         self._setup_complete = False
         os.makedirs(self.log_dir, exist_ok=True)
+
+    def set_event_bus(self, event_bus: EventBus) -> None:
+        with self._setup_lock:
+            self._event_bus_handler = EventBusLogHandler(event_bus)
+            for logger_name in list(self.active_loggers):
+                logger = logging.getLogger(logger_name)
+                if self._event_bus_handler not in logger.handlers:
+                    logger.addHandler(self._event_bus_handler)
 
     @classmethod
     def reset(cls) -> None:
@@ -119,6 +131,9 @@ class LoggingManager:
         console_handler.setFormatter(logging.Formatter(self.standard_format))
         logger.addHandler(console_handler)
 
+        if self._event_bus_handler is not None and self._event_bus_handler not in logger.handlers:
+            logger.addHandler(self._event_bus_handler)
+
         self.active_loggers.add(logger_name)
 
     def _setup_audit_logger(self, asset: Optional[str] = None) -> logging.Logger:
@@ -158,6 +173,9 @@ class LoggingManager:
         )
         file_handler.setFormatter(AuditCsvFormatter(header))
         logger.addHandler(file_handler)
+
+        if self._event_bus_handler is not None and self._event_bus_handler not in logger.handlers:
+            logger.addHandler(self._event_bus_handler)
 
         self.active_loggers.add(logger_name)
         return logger

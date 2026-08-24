@@ -15,6 +15,7 @@ from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from src.server.app import ChatApp
 from src.server.server import ApiServer
+from src.events.message_event_bus import MessageEventBus
 from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
 
 SAMPLE_CONFIG = """
@@ -49,6 +50,7 @@ def build_app(llm, conversations=None):
         agent=build_gateway(llm),
         conversations=conversations or FakeConversationStore(),
         configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
+        event_bus=MessageEventBus(),
     )
 
 
@@ -101,6 +103,7 @@ class TestApiServerApp(unittest.TestCase):
             configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
             host="127.0.0.1",
             port=9999,
+            event_bus=MessageEventBus(),
         )
         server.start()
         self.assertIsNotNone(server._thread)
