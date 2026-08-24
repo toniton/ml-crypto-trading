@@ -1,4 +1,5 @@
 import abc
+from datetime import datetime
 
 from api.interfaces.order import Order
 from src.database.repositories.base_repository import BaseRepository
@@ -16,6 +17,10 @@ class OrderRepository(BaseRepository[Order]):
 
     @abc.abstractmethod
     def get_by_date(self, date):
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_by_date_range(self, start: datetime, end: datetime) -> list[Order]:
         raise NotImplementedError()
 
     @abc.abstractmethod

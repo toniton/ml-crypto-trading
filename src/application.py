@@ -263,6 +263,7 @@ class Application(ApplicationLoggingMixin):
                 conversations=conversations,
                 configuration_service=configuration_service,
                 event_bus=self._event_bus,
+                db_manager=self._db_manager,
             )
             self._api_server.start()
 

@@ -16,8 +16,10 @@ from src.core.interfaces.conversation_store import ConversationMessage, Conversa
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
+from src.database.database_manager import DatabaseManager
 from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
+from src.server.services.order_heatmap_service import OrderHeatmapService
 
 
 class ChatRequest(BaseModel):
@@ -45,14 +47,13 @@ class ProposalDecisionRequest(BaseModel):
 
 
 class ChatApp:
-    """Builds and formats the FastAPI application exposing the agent gateway."""
-
     @staticmethod
     def create(
             agent: AgentGateway,
             conversations: ConversationStore,
             configuration_service: ConfigurationService,
             event_bus: EventBus,
+            db_manager: DatabaseManager,
     ) -> FastAPI:
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0")
         app.state.agent = agent
@@ -73,6 +74,17 @@ class ChatApp:
         @app.websocket("/api/v1/logs/ws")
         async def log_websocket(websocket: WebSocket) -> None:
             await log_handler.handle(websocket)
+
+        heatmap_service = OrderHeatmapService(db_manager)
+
+        @app.get("/api/v1/heatmap/orders/{year}/{month}")
+        async def order_heatmap_endpoint(year: int, month: int):
+            if month < 1 or month > 12:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="month must be between 1 and 12.",
+                )
+            return heatmap_service.daily_counts(year, month)
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:

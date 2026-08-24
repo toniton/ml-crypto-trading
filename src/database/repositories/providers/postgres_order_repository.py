@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import cast
 
 from sqlalchemy.dialects.postgresql import insert
@@ -61,6 +62,16 @@ class PostgresOrderRepository(OrderRepository):
 
     def get_by_date(self, date):
         pass
+
+    def get_by_date_range(self, start: datetime, end: datetime) -> list[Order]:
+        query = self.database_session.query(OrderDao).filter(
+            OrderDao.created_timestamp >= start,
+            OrderDao.created_timestamp < end,
+        )
+        return [
+            OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, row))
+            for row in query.all()
+        ]
 
     def get_by_status(self, status: OrderStatus):
         query = self.database_session.query(OrderDao)
