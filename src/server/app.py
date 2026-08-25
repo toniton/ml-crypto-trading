@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import AsyncGenerator, List, Optional
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, status
@@ -20,7 +20,9 @@ from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
 from src.server.services.configuration_service import ConfigurationService
 from src.server.services.conversation_service import ConversationService
+from src.server.services.order_by_day_service import OrderByDayService
 from src.server.services.order_heatmap_service import OrderHeatmapService
+from src.server.services.order_week_service import OrderWeekService
 
 
 class ChatRequest(BaseModel):
@@ -87,6 +89,19 @@ class ChatApp:
                     detail="month must be between 1 and 12.",
                 )
             return heatmap_service.daily_counts(year, month)
+
+        order_by_day_service = OrderByDayService(db_manager)
+        order_week_service = OrderWeekService(db_manager)
+
+        @app.get("/api/v1/orders/week/{year}/{month}/{day}")
+        async def order_week_endpoint(year: int, month: int, day: int):
+            ChatApp._validate_date(year, month, day)
+            return order_week_service.for_week(year, month, day)
+
+        @app.get("/api/v1/orders/{year}/{month}/{day}")
+        async def order_by_day_endpoint(year: int, month: int, day: int):
+            ChatApp._validate_date(year, month, day)
+            return order_by_day_service.for_date(year, month, day)
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:
@@ -213,6 +228,16 @@ class ChatApp:
             }
 
         return app
+
+    @staticmethod
+    def _validate_date(year: int, month: int, day: int) -> None:
+        try:
+            date(year, month, day)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Invalid date.",
+            ) from exc
 
     @staticmethod
     def format_event(event) -> str:
