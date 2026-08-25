@@ -6,11 +6,10 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
-from src.agent.configuration.configuration_service import ConfigurationService
 from src.database.database_manager import DatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
-from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
+from tests.unit.agent.fakes import FakeLlmAdapter
 
 SAMPLE_CONFIG = """
 assets:
@@ -37,8 +36,6 @@ with open(_TEST_CONFIG_PATH, "w", encoding="utf-8") as handle:
 def build_app(db_manager):
     return ChatApp.create(
         agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), _TEST_CONFIG_PATH),
-        conversations=FakeConversationStore(),
-        configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
         event_bus=MessageEventBus(),
         db_manager=db_manager,
     )
@@ -78,11 +75,6 @@ class TestOrderHeatmapEndpoint(unittest.TestCase):
         response = client.get("/api/v1/heatmap/orders/2026/13")
         self.assertEqual(response.status_code, 422)
         self.assertIn("month", response.json()["detail"])
-
-    def test_no_db_manager_returns_503(self):
-        client = TestClient(build_app(None))
-        response = client.get("/api/v1/heatmap/orders/2026/10")
-        self.assertEqual(response.status_code, 503)
 
 
 if __name__ == "__main__":

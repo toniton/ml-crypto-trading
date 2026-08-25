@@ -10,7 +10,6 @@ from pydantic import BaseModel, Field
 
 from src.agent import AgentGateway, ProposalDecision
 from src.agent.cache.cached_proposal_store import CachedProposalStore
-from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.events import AIEvent
 from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
 from src.core.interfaces.event_bus import EventBus
@@ -19,6 +18,8 @@ from src.core.interfaces.proposal_store import ProposalStore
 from src.database.database_manager import DatabaseManager
 from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
+from src.server.services.configuration_service import ConfigurationService
+from src.server.services.conversation_service import ConversationService
 from src.server.services.order_heatmap_service import OrderHeatmapService
 
 
@@ -50,16 +51,17 @@ class ChatApp:
     @staticmethod
     def create(
             agent: AgentGateway,
-            conversations: ConversationStore,
-            configuration_service: ConfigurationService,
             event_bus: EventBus,
             db_manager: DatabaseManager,
     ) -> FastAPI:
+        conversation_service = ConversationService(db_manager)
+        configuration_service = ConfigurationService(db_manager)
+
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0")
         app.state.agent = agent
-        app.state.conversations = conversations
+        app.state.conversation_service = conversation_service
         app.state.configuration_service = configuration_service
-        app.state.proposal_store = CachedProposalStore(conversations=conversations)
+        app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
 
         app.add_middleware(
             CORSMiddleware,
@@ -96,7 +98,7 @@ class ChatApp:
                 )
 
             prompt_text = chat_req.get_prompt_text()
-            store: ConversationStore = req.app.state.conversations
+            store: ConversationStore = req.app.state.conversation_service
             proposal_store: Optional[ProposalStore] = req.app.state.proposal_store
 
             session_id = await asyncio.to_thread(store.get_or_create, chat_req.session_id)
@@ -156,13 +158,13 @@ class ChatApp:
 
         @app.get("/api/v1/sessions")
         async def list_sessions_endpoint(req: Request):
-            store: ConversationStore = req.app.state.conversations
+            store: ConversationStore = req.app.state.conversation_service
             sessions = await asyncio.to_thread(store.list_sessions)
             return [session.model_dump(mode="json") for session in sessions]
 
         @app.get("/api/v1/sessions/{session_id}")
         async def get_session_endpoint(session_id: str, req: Request):
-            store: ConversationStore = req.app.state.conversations
+            store: ConversationStore = req.app.state.conversation_service
             messages = await asyncio.to_thread(store.messages, session_id)
             return {
                 "session_id": session_id,
@@ -173,7 +175,7 @@ class ChatApp:
         async def decide_proposal_endpoint(message_id: str, decision: ProposalDecisionRequest, req: Request):
             configuration_service: ConfigurationService = req.app.state.configuration_service
             proposal_store: ProposalStore = req.app.state.proposal_store
-            store: ConversationStore = req.app.state.conversations
+            store: ConversationStore = req.app.state.conversation_service
 
             proposal = await asyncio.to_thread(proposal_store.get, message_id)
             if proposal is None:

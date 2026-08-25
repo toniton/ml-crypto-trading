@@ -3,19 +3,18 @@ from __future__ import annotations
 import json
 
 import pytest
+import yaml
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from src.agent import AgentGateway, ConfigChange, ConfigurationProposal
-from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.cache.cached_proposal_store import CachedProposalStore
+from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
-from src.database.database_manager import DatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
+from tests.unit.api_server.helpers import make_db_manager
 
 SAMPLE_CONFIG = """
 assets:
@@ -43,16 +42,15 @@ def config_file(tmp_path):
 
 
 @pytest.fixture
-def vcs(tmp_path):
-    engine = create_engine(f"sqlite:///{tmp_path}/vcs.db", connect_args={"timeout": 30})
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine)
+def db_manager(tmp_path):
+    db_mgr = make_db_manager(str(tmp_path / "app.db"))
+    VCSService(db_mgr).seed_if_empty(yaml.safe_load(SAMPLE_CONFIG), author="test", message="seed")
+    return db_mgr
 
-    db_mgr = DatabaseManager()
-    db_mgr.engine = engine
-    db_mgr._session_factory = session_factory
 
-    return VCSService(db_mgr)
+@pytest.fixture
+def vcs(db_manager):
+    return VCSService(db_manager)
 
 
 def _configuration_llm():
@@ -72,16 +70,13 @@ def _configuration_llm():
     ])
 
 
-def _build_app(config_file, vcs):
-    conversations = FakeConversationStore()
+def _build_app(config_file, db_manager):
     gateway = AgentGateway(_configuration_llm(), config_file)
-    app = ChatApp.create(
+    return ChatApp.create(
         agent=gateway,
-        conversations=conversations,
-        configuration_service=ConfigurationService(config_file, vcs=vcs),
         event_bus=MessageEventBus(),
+        db_manager=db_manager,
     )
-    return app
 
 
 def _stream_and_extract_message_id(client):
@@ -98,8 +93,8 @@ def _stream_and_extract_message_id(client):
 
 
 class TestProposalDecisionEndpoint:
-    def test_approve_applies_and_commits_to_vcs(self, config_file, vcs):
-        client = TestClient(_build_app(config_file, vcs))
+    def test_approve_applies_and_commits_to_vcs(self, config_file, db_manager, vcs):
+        client = TestClient(_build_app(config_file, db_manager))
         message_id = _stream_and_extract_message_id(client)
 
         response = client.post(
@@ -115,14 +110,9 @@ class TestProposalDecisionEndpoint:
         assert vcs.head("HEAD").hash == body["commit_hash"]
         assert vcs.checkout("HEAD")["assets"][0]["consensus"]["buy"] == 1.1
 
-    def test_reject_records_decision_and_blocks_reapproval(self, config_file, vcs):
-        conversations = FakeConversationStore()
-        app = ChatApp.create(
-            agent=AgentGateway(_configuration_llm(), config_file),
-            conversations=conversations,
-            configuration_service=ConfigurationService(config_file, vcs=vcs),
-            event_bus=MessageEventBus(),
-        )
+    def test_reject_records_decision_and_blocks_reapproval(self, config_file, db_manager):
+        app = _build_app(config_file, db_manager)
+        conversations = app.state.conversation_service
         client = TestClient(app)
         message_id = _stream_and_extract_message_id(client)
 
@@ -144,14 +134,9 @@ class TestProposalDecisionEndpoint:
         )
         assert follow_up.status_code == 404
 
-    def test_approve_records_decision_message_with_commit_hash(self, config_file, vcs):
-        conversations = FakeConversationStore()
-        app = ChatApp.create(
-            agent=AgentGateway(_configuration_llm(), config_file),
-            conversations=conversations,
-            configuration_service=ConfigurationService(config_file, vcs=vcs),
-            event_bus=MessageEventBus(),
-        )
+    def test_approve_records_decision_message_with_commit_hash(self, config_file, db_manager):
+        app = _build_app(config_file, db_manager)
+        conversations = app.state.conversation_service
         client = TestClient(app)
         message_id = _stream_and_extract_message_id(client)
 
@@ -162,8 +147,8 @@ class TestProposalDecisionEndpoint:
         assert decision.payload["decision"]["commit_hash"]
         assert decision.content.startswith("Approved configuration change:")
 
-    def test_unknown_message_id_returns_not_found(self, config_file, vcs):
-        client = TestClient(_build_app(config_file, vcs))
+    def test_unknown_message_id_returns_not_found(self, config_file, db_manager):
+        client = TestClient(_build_app(config_file, db_manager))
 
         response = client.post(
             "/api/v1/proposals/nope/decision",
@@ -172,8 +157,9 @@ class TestProposalDecisionEndpoint:
 
         assert response.status_code == 404
 
-    def test_approve_invalid_proposal_returns_conflict(self, config_file, vcs):
-        conversations = FakeConversationStore()
+    def test_approve_invalid_proposal_returns_conflict(self, config_file, db_manager):
+        app = _build_app(config_file, db_manager)
+        conversations = app.state.conversation_service
         sid = conversations.get_or_create(None)
         invalid = ConfigurationProposal(
             summary="too aggressive",
@@ -189,12 +175,6 @@ class TestProposalDecisionEndpoint:
         conversations.append(
             sid,
             _assistant_message("m1", {"proposal": invalid.model_dump(mode="json")}),
-        )
-        app = ChatApp.create(
-            agent=AgentGateway(FakeLlmAdapter(), config_file),
-            conversations=conversations,
-            configuration_service=ConfigurationService(config_file, vcs=vcs),
-            event_bus=MessageEventBus(),
         )
         client = TestClient(app)
 

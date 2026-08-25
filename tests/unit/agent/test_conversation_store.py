@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.agent.conversation_manager import ConversationManager
+from src.server.services.conversation_service import ConversationService
 from src.core.interfaces.conversation_store import ConversationMessage
 from src.database.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_conversation_repository import PostgresConversationRepository
@@ -23,9 +23,9 @@ def mock_db_manager():
     return db_mgr
 
 
-class TestConversationManager:
+class TestConversationService:
     def test_round_trip(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager)
+        manager = ConversationService(mock_db_manager)
         sid = manager.get_or_create(None)
         assert manager.history(sid) == []
         manager.append(sid, ConversationMessage(role="user", content="hi"))
@@ -33,21 +33,21 @@ class TestConversationManager:
         assert [turn.content for turn in manager.history(sid)] == ["hi", "hello"]
 
     def test_resume_existing_session(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager)
+        manager = ConversationService(mock_db_manager)
         sid = manager.get_or_create(None)
         manager.append(sid, ConversationMessage(role="user", content="first"))
         assert manager.get_or_create(sid) == sid
         assert [turn.content for turn in manager.history(sid)] == ["first"]
 
     def test_memory_window_is_short(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager, memory_max_turns=2)
+        manager = ConversationService(mock_db_manager, memory_max_turns=2)
         sid = manager.get_or_create(None)
         for i in range(5):
             manager.append(sid, ConversationMessage(role="user", content=f"m{i}"))
         assert [turn.content for turn in manager.history(sid)] == ["m3", "m4"]
 
     def test_persisted_history_keeps_more_than_memory(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager, memory_max_turns=2, persisted_max_turns=100)
+        manager = ConversationService(mock_db_manager, memory_max_turns=2, persisted_max_turns=100)
         sid = manager.get_or_create(None)
         for i in range(5):
             manager.append(sid, ConversationMessage(role="user", content=f"m{i}"))
@@ -57,7 +57,7 @@ class TestConversationManager:
         assert len(persisted) == 5
 
     def test_persisted_cap_enforced(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager, memory_max_turns=2, persisted_max_turns=3)
+        manager = ConversationService(mock_db_manager, memory_max_turns=2, persisted_max_turns=3)
         sid = manager.get_or_create(None)
         for i in range(6):
             manager.append(sid, ConversationMessage(role="user", content=f"m{i}"))
@@ -67,16 +67,16 @@ class TestConversationManager:
         assert [turn.content for turn in persisted] == ["m3", "m4", "m5"]
 
     def test_cache_hydrates_from_db_on_miss(self, mock_db_manager):
-        first = ConversationManager(mock_db_manager, memory_max_turns=3)
+        first = ConversationService(mock_db_manager, memory_max_turns=3)
         sid = first.get_or_create(None)
         first.append(sid, ConversationMessage(role="user", content="a"))
         first.append(sid, ConversationMessage(role="user", content="b"))
 
-        second = ConversationManager(mock_db_manager, memory_max_turns=3)
+        second = ConversationService(mock_db_manager, memory_max_turns=3)
         assert [turn.content for turn in second.history(sid)] == ["a", "b"]
 
     def test_messages_returns_full_transcript_with_payload(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager, memory_max_turns=2)
+        manager = ConversationService(mock_db_manager, memory_max_turns=2)
         sid = manager.get_or_create(None)
         payload = {"blocks": [{"type": "markdown", "content": "hello"}], "tokens": ""}
         manager.append(sid, ConversationMessage(role="user", content="hi", message_id="m1"))
@@ -89,7 +89,7 @@ class TestConversationManager:
         assert messages[1].message_id == "m1"
 
     def test_list_sessions_counts_messages(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager)
+        manager = ConversationService(mock_db_manager)
         sid = manager.get_or_create(None)
         manager.append(sid, ConversationMessage(role="user", content="hi"))
         manager.append(sid, ConversationMessage(role="assistant", content="hello"))
@@ -100,7 +100,7 @@ class TestConversationManager:
         assert sessions[0].message_count == 2
 
     def test_get_message_returns_assistant_by_message_id(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager)
+        manager = ConversationService(mock_db_manager)
         sid = manager.get_or_create(None)
         manager.append(sid, ConversationMessage(role="user", content="hi", message_id="m1"))
         manager.append(
@@ -120,6 +120,6 @@ class TestConversationManager:
         assert message.payload["proposal"]["summary"] == "x"
 
     def test_get_message_returns_none_for_unknown(self, mock_db_manager):
-        manager = ConversationManager(mock_db_manager)
+        manager = ConversationService(mock_db_manager)
 
         assert manager.get_message("missing") is None

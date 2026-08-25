@@ -10,7 +10,6 @@ import src.trading.protection.guards
 import src.exchange.clients
 from src.agent import AgentGateway
 from src.agent.configuration.configuration_service import ConfigurationService
-from src.agent.conversation_manager import ConversationManager
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
 from src.vcs.application.events import RefChangedEvent
@@ -255,13 +254,10 @@ class Application(ApplicationLoggingMixin):
                 self._application_config.trading_config_filepath,
                 vcs=self._vcs,
             )
-            conversations = ConversationManager(self._db_manager)
             self._event_bus = MessageEventBus()
             LoggingManager.get_instance().set_event_bus(self._event_bus)
             self._api_server = ApiServer(
                 agent=gateway,
-                conversations=conversations,
-                configuration_service=configuration_service,
                 event_bus=self._event_bus,
                 db_manager=self._db_manager,
             )

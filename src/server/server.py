@@ -4,8 +4,6 @@ from typing import Optional
 import uvicorn
 
 from src.agent import AgentGateway
-from src.agent.configuration.configuration_service import ConfigurationService
-from src.core.interfaces.conversation_store import ConversationStore
 from src.core.interfaces.event_bus import EventBus
 from src.database.database_manager import DatabaseManager
 from src.server.app import ChatApp
@@ -16,8 +14,6 @@ class ApiServer(ApplicationLoggingMixin):
     def __init__(
             self,
             agent: AgentGateway,
-            conversations: ConversationStore,
-            configuration_service: ConfigurationService,
             event_bus: EventBus,
             db_manager: DatabaseManager,
             host: str = "127.0.0.1",
@@ -28,8 +24,6 @@ class ApiServer(ApplicationLoggingMixin):
         self.agent = agent
         self.app = ChatApp.create(
             agent=agent,
-            conversations=conversations,
-            configuration_service=configuration_service,
             event_bus=event_bus,
             db_manager=db_manager,
         )

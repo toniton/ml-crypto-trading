@@ -2,15 +2,16 @@ import logging
 import os
 import tempfile
 import unittest
+from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
-from src.agent.configuration.configuration_service import ConfigurationService
+from src.database.database_manager import DatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.logging.log_event import LogEvent, LogEventPayload
 from src.server.app import ChatApp
-from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
+from tests.unit.agent.fakes import FakeLlmAdapter
 
 SAMPLE_CONFIG = """
 assets:
@@ -50,9 +51,8 @@ def make_event(domain="trading", levelno=logging.INFO, asset=None, message="hell
 def build_client(bus):
     app = ChatApp.create(
         agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), _TEST_CONFIG_PATH),
-        conversations=FakeConversationStore(),
-        configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
         event_bus=bus,
+        db_manager=MagicMock(spec=DatabaseManager),
     )
     return TestClient(app)
 

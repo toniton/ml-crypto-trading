@@ -17,7 +17,6 @@ from src.agent.configuration.nodes.generate_proposal import GenerateProposalNode
 from src.agent.configuration.nodes.present_configuration import PresentConfigurationNode
 from src.agent.configuration.nodes.present_proposal import PresentProposalNode
 from src.agent.configuration.nodes.validate_proposal import ValidateProposalNode
-from src.agent.conversation_manager import ConversationManager
 from src.agent.events import AIEvent
 from src.core.interfaces.conversation_store import ConversationStore
 from src.agent.gateway import AgentGateway, AgentResult
@@ -45,7 +44,6 @@ __all__ = [
     "ConfigurationProposal",
     "ConfigurationResult",
     "ConfigurationViewBlock",
-    "ConversationManager",
     "ConversationStore",
     "GeneralResult",
     "GenerateProposalNode",

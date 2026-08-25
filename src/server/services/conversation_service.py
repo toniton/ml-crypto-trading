@@ -9,11 +9,11 @@ from src.core.interfaces.llm_adapter import ChatTurn
 from src.database.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_conversation_repository import PostgresConversationRepository
 
-DEFAULT_MEMORY_MAX_TURNS = 10
-DEFAULT_PERSISTED_MAX_TURNS = 100
 
+class ConversationService(ConversationStore):
+    DEFAULT_MEMORY_MAX_TURNS = 10
+    DEFAULT_PERSISTED_MAX_TURNS = 100
 
-class ConversationManager(ConversationStore):
     def __init__(
             self,
             db_manager: DatabaseManager,

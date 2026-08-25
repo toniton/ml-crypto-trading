@@ -11,12 +11,12 @@ from src.agent import (
     ConfigChange,
     ConfigurationProposal,
 )
-from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from src.server.app import ChatApp
 from src.server.server import ApiServer
 from src.events.message_event_bus import MessageEventBus
-from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
+from tests.unit.agent.fakes import FakeLlmAdapter
+from tests.unit.api_server.helpers import make_temp_db_manager
 
 SAMPLE_CONFIG = """
 assets:
@@ -45,12 +45,11 @@ def build_gateway(llm):
     return AgentGateway(llm, _TEST_CONFIG_PATH)
 
 
-def build_app(llm, conversations=None):
+def build_app(llm):
     return ChatApp.create(
         agent=build_gateway(llm),
-        conversations=conversations or FakeConversationStore(),
-        configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
         event_bus=MessageEventBus(),
+        db_manager=make_temp_db_manager(),
     )
 
 
@@ -99,11 +98,10 @@ class TestApiServerApp(unittest.TestCase):
     def test_api_server_lifecycle(self, mock_uvicorn_run):
         server = ApiServer(
             agent=build_gateway(self.llm),
-            conversations=FakeConversationStore(),
-            configuration_service=ConfigurationService(_TEST_CONFIG_PATH),
+            event_bus=MessageEventBus(),
+            db_manager=make_temp_db_manager(),
             host="127.0.0.1",
             port=9999,
-            event_bus=MessageEventBus(),
         )
         server.start()
         self.assertIsNotNone(server._thread)
