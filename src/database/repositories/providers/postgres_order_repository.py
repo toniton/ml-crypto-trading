@@ -83,6 +83,12 @@ class PostgresOrderRepository(OrderRepository):
         results = list(map(OrderDBVSEntityMapper.map_to_entity, filtered_query.all()))
         return results
 
+    def get_non_terminal(self) -> list[Order]:
+        query = self.database_session.query(OrderDao)
+        filtered_query = query.filter(OrderDao.status.notin_(self.TERMINAL_STATUSES))
+        results = list(map(OrderDBVSEntityMapper.map_to_entity, filtered_query.all()))
+        return results
+
     def get_by_price(self, ticker_symbol: str, price: str) -> list[Order]:
         result = []
         query = self.database_session.query(OrderDao)

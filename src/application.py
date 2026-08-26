@@ -51,6 +51,7 @@ from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.trading.llm_oracle_scheduler import LlmOracleScheduler
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
+from src.trading.orders.order_reconciler import OrderReconciler
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
@@ -120,10 +121,14 @@ class Application(ApplicationLoggingMixin):
         websocket_manager = ClientFactory.create_websocket_manager(is_simulated)
         rest_manager = ClientFactory.create_rest_manager(is_simulated)
 
+        order_manager = OrderManager(db_manager, trading_journal, rest_manager, websocket_manager)
+        self._order_reconciler = OrderReconciler(order_manager)
+        websocket_manager.set_reconnect_callback(self._order_reconciler.trigger)
+
         return ManagerContainer(
             account_manager=AccountManager(self._assets, rest_manager, websocket_manager),
             fees_manager=FeesManager(self._assets, rest_manager),
-            order_manager=OrderManager(db_manager, trading_journal, rest_manager, websocket_manager),
+            order_manager=order_manager,
             market_data_manager=MarketDataManager(rest_manager, websocket_manager),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),
@@ -267,6 +272,7 @@ class Application(ApplicationLoggingMixin):
             trading_scheduler, trading_executor, oracle_scheduler, trading_oracle
         )
         self._trading_engine.start_application()
+        self._order_reconciler.start()
         self.is_ready.set()
 
     def register_client(self, rest_service: ExchangeRestService, websocket_service: ExchangeWebSocketService):
@@ -307,6 +313,8 @@ class Application(ApplicationLoggingMixin):
             self._event_bus.close()
             self._event_bus = None
         self._config_listener.stop()
+        if self._order_reconciler:
+            self._order_reconciler.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()
         self.is_running.clear()

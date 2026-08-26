@@ -20,6 +20,10 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
         super().__init__()
         self._lock = threading.Lock()
         self._subscriptions: dict[str, dict[str, tuple[ExchangeWebSocketBuilder, Callable]]] = {}
+        self._on_reconnect: Callable | None = None
+
+    def set_reconnect_callback(self, callback: Callable) -> None:
+        self._on_reconnect = callback
 
     def register_service(self, service: ExchangeWebSocketService):
         super().register_service(service)
@@ -30,6 +34,7 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
     def connect(self):
         for service_name in self.get_registered_services():
             service = self.get_service(service_name)
+            service.set_reconnect_callback(self._on_reconnect)
             service.connect(self._handle_incoming_message)
 
     def _handle_incoming_message(self, exchange: str, visibility: SubscriptionVisibility, data: dict):

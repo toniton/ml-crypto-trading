@@ -70,7 +70,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertTrue(self.mock_uow.__exit__.called)
 
     def test_get_closing_orders_uses_isolated_unit_of_work(self):
-        self.order_manager._get_pending_orders()
+        self.order_manager._get_non_terminal_orders()
 
         self.assertEqual(self.mock_db_manager.get_unit_of_work.call_count, 1)
         self.assertTrue(self.mock_uow.__enter__.called)
@@ -123,20 +123,88 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager._save_orders_to_database.assert_not_called()
         self.assertEqual(updated, [])
 
-    def test_update_pending_orders_updates_database(self):
+    def test_reconcile_pending_orders_updates_database(self):
+        pending_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
+                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                              created_time=time.time(), status=OrderStatus.PENDING)
         exchange_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
                                trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                               created_time=time.time(), status=OrderStatus.PENDING)
-        mock_asset = MagicMock()
-        mock_asset.ticker_symbol = "BTC"
-        mock_asset.exchange.value = "p1"
-        self.order_manager._assets = [mock_asset]
-        self.order_manager._rest_manager.get_open_orders.return_value = [exchange_order]
+                               created_time=time.time(), status=OrderStatus.COMPLETED)
+        self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
+        self.order_manager.get_order = MagicMock(return_value=exchange_order)
         self.order_manager._save_orders_to_database = MagicMock()
 
-        self.order_manager._update_pending_orders()
+        self.order_manager.reconcile_pending_orders()
 
+        self.order_manager.get_order.assert_called_once_with("p1", "5")
         self.order_manager._save_orders_to_database.assert_called_once_with([exchange_order])
+
+    def test_reconcile_marks_missing_order_as_reconciliation_required(self):
+        pending_order = Order(uuid="6", price="104", quantity="1", provider_name="p1",
+                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                              created_time=time.time(), status=OrderStatus.PENDING)
+        self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
+        self.order_manager.get_order = MagicMock(return_value=None)
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        self.order_manager.reconcile_pending_orders()
+
+        self.assertEqual(pending_order.status, OrderStatus.RECONCILIATION_REQUIRED)
+        self.order_manager._save_orders_to_database.assert_called_once_with([pending_order])
+
+    def test_reconcile_marks_unknown_status_as_reconciliation_required(self):
+        pending_order = Order(uuid="7", price="104", quantity="1", provider_name="p1",
+                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                              created_time=time.time(), status=OrderStatus.PENDING)
+        unknown_order = Order(uuid="7", price="104", quantity="1", provider_name="p1",
+                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                              created_time=time.time(), status=None)
+        self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
+        self.order_manager.get_order = MagicMock(return_value=unknown_order)
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        self.order_manager.reconcile_pending_orders()
+
+        self.assertEqual(pending_order.status, OrderStatus.RECONCILIATION_REQUIRED)
+        self.order_manager._save_orders_to_database.assert_called_once_with([pending_order])
+
+    def test_reconcile_leaves_order_on_transient_error(self):
+        pending_order = Order(uuid="8", price="104", quantity="1", provider_name="p1",
+                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                              created_time=time.time(), status=OrderStatus.PENDING)
+        self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
+        self.order_manager.get_order = MagicMock(side_effect=RuntimeError("network down"))
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        self.order_manager.reconcile_pending_orders()
+
+        self.assertEqual(pending_order.status, OrderStatus.PENDING)
+        self.order_manager._save_orders_to_database.assert_not_called()
+
+    def test_cancel_order_updates_database(self):
+        self.mock_rest_manager.cancel_order.return_value = None
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        order = Order(uuid="9", price="103", quantity="1", provider_name="p1",
+                      trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                      created_time=time.time(), status=OrderStatus.PENDING)
+
+        self.order_manager._cancel_order(order)
+
+        self.mock_rest_manager.cancel_order.assert_called_once_with("p1", order.uuid)
+        self.assertEqual(order.status, OrderStatus.CANCELLED)
+        self.order_manager._save_orders_to_database.assert_called_once_with([order])
+
+    def test_cancel_open_orders_swallows_cancel_failures(self):
+        order = Order(uuid="10", price="103", quantity="1", provider_name="p1",
+                      trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                      created_time=time.time(), status=OrderStatus.PROCESSING)
+        self.order_manager._get_non_terminal_orders = MagicMock(return_value=[order])
+        self.order_manager._cancel_order = MagicMock(side_effect=RuntimeError("cancel failed"))
+
+        self.order_manager._cancel_open_orders()
+
+        self.order_manager._cancel_order.assert_called_once_with(order)
 
     def test_cancel_order_calls_provider(self):
         self.mock_rest_manager.cancel_order.return_value = None

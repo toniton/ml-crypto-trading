@@ -116,6 +116,15 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
                 self._authenticated_connections.add(conn_id)
                 self.app_logger.info(f"Sent auth request for {conn_id}")
 
+        self._notify_reconnect()
+
+    def _notify_reconnect(self):
+        if self._on_reconnect:
+            try:
+                self._on_reconnect()
+            except Exception as e:
+                self.app_logger.warning(f"Reconnect callback failed for {self._provider}: {e}")
+
     def subscribe(self, builder: ExchangeWebSocketBuilder):
         sub_data = builder.get_subscription_data()
         key = builder.key

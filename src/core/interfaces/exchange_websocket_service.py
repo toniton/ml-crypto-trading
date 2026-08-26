@@ -10,6 +10,7 @@ from src.core.interfaces.subscription_data import SubscriptionVisibility
 
 
 class ExchangeWebSocketService(ABC):
+    _on_reconnect: Optional[Callable] = None
 
     @abstractmethod
     def get_provider_name(self) -> str:
@@ -38,6 +39,9 @@ class ExchangeWebSocketService(ABC):
     @abstractmethod
     def connect(self, callback: Callable):
         pass
+
+    def set_reconnect_callback(self, callback: Optional[Callable]) -> None:
+        self._on_reconnect = callback
 
     @abstractmethod
     def subscribe(self, builder: ExchangeWebSocketBuilder):

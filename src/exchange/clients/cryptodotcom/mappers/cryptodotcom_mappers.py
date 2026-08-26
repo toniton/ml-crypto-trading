@@ -126,7 +126,11 @@ class CryptoDotComOrderMapper(Mapper[CryptoDotComResponseOrderGetDto, Order], Cr
             ticker_symbol=result.instrument_name,
             price=Decimal(result.limit_price),
             created_time=int(result.create_time_ns) / self.NANOSECONDS_PER_SECOND,
-            executed_time=float(result.update_time) if status == OrderStatus.COMPLETED and result.update_time else None,
+            executed_time=(
+                float(result.update_time) / self.MILLISECONDS_PER_SECOND
+                if status == OrderStatus.COMPLETED and result.update_time
+                else None
+            ),
             status=status,
         )
 
@@ -147,7 +151,7 @@ class CryptoDotComOrdersMapper(Mapper[CryptoDotComResponseOrderUpdateDto, list[O
                 price=Decimal(order.limit_price),
                 created_time=int(order.create_time_ns) / self.NANOSECONDS_PER_SECOND,
                 executed_time=(
-                    float(order.update_time)
+                    float(order.update_time) / self.MILLISECONDS_PER_SECOND
                     if self.from_exchange_status(order.status) == OrderStatus.COMPLETED and order.update_time
                     else None
                 ),

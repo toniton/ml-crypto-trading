@@ -28,5 +28,9 @@ class OrderRepository(BaseRepository[Order]):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def get_non_terminal(self) -> list[Order]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def get_by_price(self, ticker_symbol: str, price: str):
         raise NotImplementedError()

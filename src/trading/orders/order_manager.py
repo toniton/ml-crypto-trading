@@ -17,6 +17,11 @@ from src.exchange.managers.websocket_manager import WebSocketManager
 
 
 class OrderManager(ApplicationLoggingMixin):
+    OPEN_STATUSES = {
+        OrderStatus.PENDING,
+        OrderStatus.PROCESSING,
+    }
+
     def __init__(
             self, database_manager: DatabaseManager, trading_journal: TradingJournal,
             rest_manager: RestManager, websocket_manager: WebSocketManager
@@ -86,7 +91,7 @@ class OrderManager(ApplicationLoggingMixin):
     def initialize(self, assets: list[Asset]):
         self._assets = assets
         self._init_websocket(assets)
-        self._update_pending_orders()
+        self.reconcile_pending_orders()
 
     def _init_websocket(self, assets: list[Asset]):
         for asset in assets:
@@ -109,16 +114,42 @@ class OrderManager(ApplicationLoggingMixin):
             raise RuntimeError("Unable to fetch open orders:", exchange) from exc
         return open_orders
 
-    def _update_pending_orders(self):
-        for asset in self._assets:
-            exchange = asset.exchange.value
-            ticker_symbol = asset.ticker_symbol
+    def reconcile_pending_orders(self):
+        try:
+            non_terminal_orders = self._get_non_terminal_orders()
+        except Exception as exc:
+            self.app_logger.warning(f"Unable to load non-terminal orders for reconciliation: {exc}")
+            return
+
+        for order in non_terminal_orders:
             try:
-                open_orders = self.get_open_orders(exchange, ticker_symbol)
-                if open_orders:
-                    self._save_orders_to_database(open_orders)
+                exchange_order = self.get_order(order.provider_name, order.uuid)
             except Exception as exc:
-                self.app_logger.warning(f"Unable to reconcile pending orders with exchanges: {exc}", exc_info=True)
+                self._mark_reconciliation_required(order)
+                self.app_logger.warning(
+                    f"Unable to reconcile order {order.uuid} on {order.provider_name}: {exc}"
+                )
+                continue
+
+            if exchange_order is None or exchange_order.status is None:
+                self._mark_reconciliation_required(order)
+                continue
+
+            try:
+                self._save_orders_to_database([exchange_order])
+            except Exception as exc:
+                self.app_logger.warning(
+                    f"Failed to persist reconciled order {order.uuid}: {exc}"
+                )
+
+    def _mark_reconciliation_required(self, order: Order) -> None:
+        order.status = OrderStatus.RECONCILIATION_REQUIRED
+        try:
+            self._save_orders_to_database([order])
+        except Exception as exc:
+            self.app_logger.warning(
+                f"Failed to mark order {order.uuid} as reconciliation-required: {exc}"
+            )
 
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
@@ -156,22 +187,38 @@ class OrderManager(ApplicationLoggingMixin):
     def _cancel_order(self, open_order: Order) -> None:
         try:
             self._rest_manager.cancel_order(open_order.provider_name, open_order.uuid)
+            open_order.status = OrderStatus.CANCELLED
+            self._save_orders_to_database([open_order])
         except Exception as exc:
             raise RuntimeError("Unable to cancel order:", open_order) from exc
 
-    def _get_pending_orders(self) -> list[Order]:
+    def _get_non_terminal_orders(self) -> list[Order]:
         with self._database_manager.get_unit_of_work() as uow:
             order_repository = uow.get_repository(PostgresOrderRepository)
-            return order_repository.get_by_status(OrderStatus.PENDING)
+            return order_repository.get_non_terminal()
 
-    def _cancel_pending_orders(self):
-        pending_orders = self._get_pending_orders()
-        for order in pending_orders:
-            self._cancel_order(order)
+    def _cancel_open_orders(self):
+        try:
+            open_orders = [
+                order for order in self._get_non_terminal_orders()
+                if order.status in self.OPEN_STATUSES
+            ]
+        except Exception as exc:
+            self.app_logger.warning(f"Unable to load open orders for cancellation: {exc}")
+            return
+
+        for order in open_orders:
+            try:
+                self._cancel_order(order)
+            except Exception as exc:
+                self.app_logger.warning(
+                    f"Unable to cancel order {order.uuid} on {order.provider_name}: {exc}"
+                )
 
     def shutdown(self):
         self._stop_order_executions()
-        self._cancel_pending_orders()
+        self.reconcile_pending_orders()
+        self._cancel_open_orders()
         for asset in self._assets:
             self._websocket_manager.unsubscribe_order_update(
                 exchange=asset.exchange.value,

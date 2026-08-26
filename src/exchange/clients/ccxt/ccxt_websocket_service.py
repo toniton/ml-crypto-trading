@@ -111,6 +111,7 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
 
         provider_name = self.get_provider_name()
 
+        disconnected = False
         while self._is_running:
             try:
                 data = None
@@ -124,6 +125,10 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
                 elif sub_type == 'orders':
                     data = await self._exchange.watch_orders(symbol)
 
+                if disconnected:
+                    disconnected = False
+                    self._notify_reconnect()
+
                 if data and self._callback:
                     # Pass wrapped data to the central callback to ensure proper matching
                     wrapped_data = {
@@ -134,8 +139,18 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
                     self._callback(provider_name, sub.visibility, wrapped_data)
 
             except Exception as e:
+                disconnected = True
                 self.app_logger.error(f"CCXT Watch error for {self._provider.value} {sub_type} {symbol}: {e}")
                 await asyncio.sleep(5)
+
+    def _notify_reconnect(self):
+        if self._on_reconnect:
+            try:
+                self._on_reconnect()
+            except Exception as e:
+                self.app_logger.warning(
+                    f"Reconnect callback failed for {self._provider.value}: {e}"
+                )
 
     def subscribe(self, builder: ExchangeWebSocketBuilder) -> None:
         sub_data = builder.get_subscription_data()
