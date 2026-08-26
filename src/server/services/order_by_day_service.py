@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -18,6 +19,7 @@ class OrderDetail(BaseModel):
     quantity: str
     status: str
     created_time: float
+    latency_ms: Optional[float] = None
 
 
 class OrderByDayResponse(BaseModel):
@@ -46,6 +48,9 @@ class OrderByDayService:
 
     @staticmethod
     def _to_detail(order: Order) -> OrderDetail:
+        latency_ms = None
+        if order.executed_time is not None:
+            latency_ms = (order.executed_time - order.created_time) * 1000
         return OrderDetail(
             uuid=order.uuid,
             ticker_symbol=order.ticker_symbol,
@@ -55,4 +60,5 @@ class OrderByDayService:
             quantity=order.quantity,
             status=order.status.value if hasattr(order.status, "value") else order.status,
             created_time=order.created_time,
+            latency_ms=latency_ms,
         )

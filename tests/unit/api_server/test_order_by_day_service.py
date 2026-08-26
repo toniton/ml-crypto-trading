@@ -9,7 +9,7 @@ from src.database.database_manager import DatabaseManager
 from src.server.services.order_by_day_service import OrderByDayService
 
 
-def order_on(day_iso: str, action: TradeAction, status=OrderStatus.COMPLETED, hour=10):
+def order_on(day_iso: str, action: TradeAction, status=OrderStatus.COMPLETED, hour=10, executed_offset_seconds=0.5):
     dt = datetime.fromisoformat(day_iso).replace(hour=hour, tzinfo=timezone.utc)
     return Order(
         uuid=f"u-{day_iso}-{action.value}",
@@ -19,6 +19,7 @@ def order_on(day_iso: str, action: TradeAction, status=OrderStatus.COMPLETED, ho
         quantity="0.00005",
         trade_action=action,
         created_time=dt.timestamp(),
+        executed_time=dt.timestamp() + executed_offset_seconds if status == OrderStatus.COMPLETED else None,
         status=status,
     )
 
@@ -43,6 +44,20 @@ class TestOrderByDayService(unittest.TestCase):
         self.assertEqual([o.trade_action for o in result.orders], ["BUY", "SELL"])
         self.assertEqual(result.orders[0].price, "42500.50")
         self.assertEqual(result.orders[0].status, "COMPLETED")
+
+    def test_latency_ms_populated_for_completed_orders(self):
+        self.repo.get_by_date_range.return_value = [
+            order_on("2026-08-08", TradeAction.BUY, executed_offset_seconds=0.3),
+        ]
+        result = self.service.for_date(2026, 8, 8)
+        self.assertAlmostEqual(result.orders[0].latency_ms, 300.0, places=1)
+
+    def test_latency_ms_none_for_non_completed_orders(self):
+        self.repo.get_by_date_range.return_value = [
+            order_on("2026-08-08", TradeAction.BUY, status=OrderStatus.PENDING),
+        ]
+        result = self.service.for_date(2026, 8, 8)
+        self.assertIsNone(result.orders[0].latency_ms)
 
     def test_uses_half_open_day_range(self):
         self.repo.get_by_date_range.return_value = []

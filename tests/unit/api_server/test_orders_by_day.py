@@ -57,6 +57,7 @@ class TestOrdersEndpoint(unittest.TestCase):
                     "quantity": "0.00005",
                     "status": "COMPLETED",
                     "created_time": 1754697600.0,
+                    "latency_ms": 150.0,
                 }
             ],
         }
@@ -71,6 +72,7 @@ class TestOrdersEndpoint(unittest.TestCase):
         self.assertEqual(data["date"], "2026-08-08")
         self.assertEqual(data["count"], 1)
         self.assertEqual(data["orders"][0]["trade_action"], "BUY")
+        self.assertEqual(data["orders"][0]["latency_ms"], 150.0)
 
     def test_returns_week_counts(self):
         db_manager = MagicMock(spec=DatabaseManager)
