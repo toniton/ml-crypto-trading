@@ -1,3 +1,4 @@
+import time
 from collections import abc
 from decimal import Decimal
 from typing import Optional
@@ -81,3 +82,4 @@ class SimulatedAccount:
             self.update_balance(quote, total_quote)
 
         order.status = OrderStatus.COMPLETED
+        order.executed_time = time.time()

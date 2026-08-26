@@ -135,6 +135,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
                 self.account.balance_usd += total_value
 
         with self._lock:
+            executed_at = self.clock.now(ticker_symbol)
             order = Order(
                 uuid=order_uuid,
                 ticker_symbol=ticker_symbol,
@@ -143,7 +144,8 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
                 status=OrderStatus.COMPLETED,
                 provider_name=self.get_provider_name(),
                 trade_action=trade_action,
-                created_time=self.clock.now(ticker_symbol)
+                created_time=executed_at,
+                executed_time=executed_at
             )
             self.account.orders.append(order)
 

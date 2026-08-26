@@ -9,6 +9,7 @@ from src.database.dao.order_dao import OrderDao
 from src.database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
 
 CREATED_AT = datetime(2026, 8, 22, 9, 14, 3, tzinfo=timezone.utc)
+EXECUTED_AT = datetime(2026, 8, 22, 9, 14, 5, tzinfo=timezone.utc)
 
 
 def build_dao(**overrides) -> OrderDao:
@@ -52,6 +53,46 @@ class TestMapToEntity:
         assert entity.trade_action is TradeAction.BUY
         assert entity.created_time == CREATED_AT.timestamp()
 
+    def test_null_executed_timestamp_maps_to_none(self):
+        entity = OrderDBVSEntityMapper.map_to_entity(build_dao(executed_timestamp=None))
+        assert entity.executed_time is None
+
+    def test_executed_timestamp_maps_to_epoch(self):
+        entity = OrderDBVSEntityMapper.map_to_entity(build_dao(executed_timestamp=EXECUTED_AT))
+        assert entity.executed_time == EXECUTED_AT.timestamp()
+
+
+class TestMapToDb:
+    def test_null_executed_time_maps_to_none(self):
+        order = Order(
+            uuid="92121e15-0000-4000-8000-000000000003",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63208.0"),
+            quantity="0.001",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            executed_time=None,
+            status=OrderStatus.PENDING,
+        )
+        dao = OrderDBVSEntityMapper.map_to_db(order)
+        assert dao.executed_timestamp is None
+
+    def test_executed_time_maps_to_datetime(self):
+        order = Order(
+            uuid="92121e15-0000-4000-8000-000000000004",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63208.0"),
+            quantity="0.001",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            executed_time=EXECUTED_AT.timestamp(),
+            status=OrderStatus.COMPLETED,
+        )
+        dao = OrderDBVSEntityMapper.map_to_db(order)
+        assert dao.executed_timestamp == EXECUTED_AT
+
 
 class TestRoundTrip:
     @pytest.mark.parametrize("status", list(OrderStatus))
@@ -73,3 +114,35 @@ class TestRoundTrip:
         assert restored.uuid == original.uuid
         assert restored.trade_action is original.trade_action
         assert restored.created_time == original.created_time
+
+    def test_null_executed_time_survives_round_trip(self):
+        original = Order(
+            uuid="92121e15-0000-4000-8000-000000000005",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="ETH_USD",
+            price=Decimal("2450.10"),
+            quantity="0.01",
+            trade_action=TradeAction.SELL,
+            created_time=CREATED_AT.timestamp(),
+            executed_time=None,
+            status=OrderStatus.PENDING,
+        )
+
+        restored = OrderDBVSEntityMapper.map_to_entity(OrderDBVSEntityMapper.map_to_db(original))
+        assert restored.executed_time is None
+
+    def test_executed_time_survives_round_trip(self):
+        original = Order(
+            uuid="92121e15-0000-4000-8000-000000000006",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="ETH_USD",
+            price=Decimal("2450.10"),
+            quantity="0.01",
+            trade_action=TradeAction.SELL,
+            created_time=CREATED_AT.timestamp(),
+            executed_time=EXECUTED_AT.timestamp(),
+            status=OrderStatus.COMPLETED,
+        )
+
+        restored = OrderDBVSEntityMapper.map_to_entity(OrderDBVSEntityMapper.map_to_db(original))
+        assert restored.executed_time == original.executed_time

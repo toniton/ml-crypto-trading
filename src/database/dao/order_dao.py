@@ -15,3 +15,4 @@ class OrderDao(DatabaseManager.BaseTableModel):
     trade_action = Column(String(4))
     last_updated_timestamp = Column(TIMESTAMP)
     created_timestamp = Column(TIMESTAMP)
+    executed_timestamp = Column(TIMESTAMP)

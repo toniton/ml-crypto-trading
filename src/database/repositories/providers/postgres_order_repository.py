@@ -40,17 +40,21 @@ class PostgresOrderRepository(OrderRepository):
             trade_action=order_dao.trade_action,
             status=order_dao.status,
             last_updated_timestamp=order_dao.last_updated_timestamp,
-            created_timestamp=order_dao.created_timestamp
+            created_timestamp=order_dao.created_timestamp,
+            executed_timestamp=order_dao.executed_timestamp,
         )
+        set_values = {
+            OrderDao.price: order_dao.price,
+            OrderDao.ticker_symbol: order_dao.ticker_symbol,
+            OrderDao.status: order_dao.status,
+            OrderDao.last_updated_timestamp: order_dao.last_updated_timestamp,
+        }
+        if order_dao.executed_timestamp is not None:
+            set_values[OrderDao.executed_timestamp] = order_dao.executed_timestamp
         upsert_statement = insert_statement.on_conflict_do_update(
             index_elements=["uuid"],
             where=OrderDao.status.notin_(self.TERMINAL_STATUSES),
-            set_={
-                OrderDao.price: order_dao.price,
-                OrderDao.ticker_symbol: order_dao.ticker_symbol,
-                OrderDao.status: order_dao.status,
-                OrderDao.last_updated_timestamp: order_dao.last_updated_timestamp
-            },
+            set_=set_values,
         )
         self.database_session.execute(upsert_statement)
 

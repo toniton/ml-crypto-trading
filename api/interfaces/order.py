@@ -17,6 +17,7 @@ class Order:
     quantity: str
     trade_action: TradeAction
     created_time: float
+    executed_time: Optional[float] = None
     status: Optional[OrderStatus] = OrderStatus.PENDING
 
     def model_dump_json(self) -> str:

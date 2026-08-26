@@ -117,6 +117,7 @@ class CryptoDotComOrderMapper(Mapper[CryptoDotComResponseOrderGetDto, Order], Cr
     def map(self, source: dict) -> Order:
         dto = CryptoDotComResponseOrderGetDto(**source)
         result = dto.result
+        status = self.from_exchange_status(result.status)
         return Order(
             uuid=result.client_oid,
             trade_action=TradeAction.BUY if result.side == "BUY" else TradeAction.SELL,
@@ -125,7 +126,8 @@ class CryptoDotComOrderMapper(Mapper[CryptoDotComResponseOrderGetDto, Order], Cr
             ticker_symbol=result.instrument_name,
             price=Decimal(result.limit_price),
             created_time=int(result.create_time_ns) / self.NANOSECONDS_PER_SECOND,
-            status=self.from_exchange_status(result.status)
+            executed_time=float(result.update_time) if status == OrderStatus.COMPLETED and result.update_time else None,
+            status=status,
         )
 
 
@@ -144,7 +146,12 @@ class CryptoDotComOrdersMapper(Mapper[CryptoDotComResponseOrderUpdateDto, list[O
                 ticker_symbol=order.instrument_name,
                 price=Decimal(order.limit_price),
                 created_time=int(order.create_time_ns) / self.NANOSECONDS_PER_SECOND,
-                status=self.from_exchange_status(order.status)
+                executed_time=(
+                    float(order.update_time)
+                    if self.from_exchange_status(order.status) == OrderStatus.COMPLETED and order.update_time
+                    else None
+                ),
+                status=self.from_exchange_status(order.status),
             )
             for order in dto.result.data
         ]

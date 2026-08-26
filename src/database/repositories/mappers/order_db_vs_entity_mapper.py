@@ -17,12 +17,22 @@ class OrderDBVSEntityMapper:
             quantity=order_dao.quantity,
             trade_action=order_dao.trade_action,
             created_time=order_dao.created_timestamp.timestamp(),
+            executed_time=(
+                order_dao.executed_timestamp.timestamp()
+                if order_dao.executed_timestamp
+                else None
+            ),
             status=OrderStatus(order_dao.status) if order_dao.status else OrderStatus.PENDING,
         )
 
     @staticmethod
     def map_to_db(order: Order) -> OrderDao:
         created_datetime = datetime.fromtimestamp(order.created_time, tz=timezone.utc)
+        executed_datetime = (
+            datetime.fromtimestamp(order.executed_time, tz=timezone.utc)
+            if order.executed_time is not None
+            else None
+        )
         return OrderDao(
             uuid=order.uuid,
             provider_name=order.provider_name,
@@ -32,5 +42,6 @@ class OrderDBVSEntityMapper:
             trade_action=order.trade_action.value,
             status=order.status.value,
             last_updated_timestamp=datetime.now(timezone.utc),
-            created_timestamp=created_datetime
+            created_timestamp=created_datetime,
+            executed_timestamp=executed_datetime,
         )

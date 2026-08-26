@@ -45,6 +45,7 @@ class TestBacktestRestService:
         order = provider.account.orders[-1]
         assert order.status == OrderStatus.COMPLETED
         assert order.ticker_symbol == "btc-usd"
+        assert order.executed_time == 1234567890.0
         assert provider.account.balance_usd == Decimal("10000.0") - (Decimal("50000.0") * Decimal("0.1"))
 
     def test_insufficient_balance(self, provider):

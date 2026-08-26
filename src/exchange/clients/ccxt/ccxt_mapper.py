@@ -91,6 +91,7 @@ class CCXTOrderMapper(Mapper[Dict[str, Any], Order], CCXTBaseMapper):
         self._provider_name = provider_name
 
     def map(self, source: Dict[str, Any]) -> Order:
+        status = self._map_status(source.get('status'))
         return Order(
             uuid=source.get('clientOrderId') or source.get('id'),
             provider_name=self._provider_name,
@@ -99,7 +100,12 @@ class CCXTOrderMapper(Mapper[Dict[str, Any], Order], CCXTBaseMapper):
             quantity=str(source.get('amount', 0)),
             trade_action=TradeAction(source.get('side').upper()),
             created_time=source.get('timestamp', 0) / 1000.0,
-            status=self._map_status(source.get('status'))
+            executed_time=(
+                source.get('timestamp', 0) / 1000.0
+                if status == OrderStatus.COMPLETED and source.get('timestamp')
+                else None
+            ),
+            status=status,
         )
 
 

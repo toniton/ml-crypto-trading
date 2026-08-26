@@ -46,6 +46,8 @@ class TestSimulatedRestManager(unittest.TestCase):
         self.assertEqual(order.trade_action, TradeAction.BUY)
         # Check if status is COMPLETED (the simulated manager executes immediately)
         self.assertEqual(order.status, OrderStatus.COMPLETED)
+        # Simulated fills are instant, so executed_time should be populated
+        self.assertIsNotNone(order.executed_time)
 
     def test_cancel_order(self):
         uuid = "order-to-cancel"
