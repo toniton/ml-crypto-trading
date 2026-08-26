@@ -16,9 +16,9 @@ class OrderDBVSEntityMapper:
             price=order_dao.price,
             quantity=order_dao.quantity,
             trade_action=order_dao.trade_action,
-            created_time=order_dao.created_timestamp.timestamp(),
+            created_time=order_dao.created_timestamp.replace(tzinfo=timezone.utc).timestamp(),
             executed_time=(
-                order_dao.executed_timestamp.timestamp()
+                order_dao.executed_timestamp.replace(tzinfo=timezone.utc).timestamp()
                 if order_dao.executed_timestamp
                 else None
             ),
