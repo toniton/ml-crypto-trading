@@ -125,7 +125,6 @@ class OrderManager(ApplicationLoggingMixin):
             try:
                 exchange_order = self.get_order(order.provider_name, order.uuid)
             except Exception as exc:
-                self._mark_reconciliation_required(order)
                 self.app_logger.warning(
                     f"Unable to reconcile order {order.uuid} on {order.provider_name}: {exc}"
                 )
