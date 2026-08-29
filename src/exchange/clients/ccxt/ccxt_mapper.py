@@ -92,6 +92,8 @@ class CCXTOrderMapper(Mapper[Dict[str, Any], Order], CCXTBaseMapper):
 
     def map(self, source: Dict[str, Any]) -> Order:
         status = self._map_status(source.get('status'))
+        fee = source.get('fee')
+        fees = Decimal(str(fee.get('cost', 0))) if fee and fee.get('cost') is not None else None
         return Order(
             uuid=source.get('clientOrderId') or source.get('id'),
             provider_name=self._provider_name,
@@ -106,6 +108,7 @@ class CCXTOrderMapper(Mapper[Dict[str, Any], Order], CCXTBaseMapper):
                 else None
             ),
             status=status,
+            fees=fees,
         )
 
 

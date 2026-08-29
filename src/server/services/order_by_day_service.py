@@ -15,11 +15,13 @@ class OrderDetail(BaseModel):
     ticker_symbol: str
     provider_name: str
     trade_action: str
+    order_type: str
     price: str
     quantity: str
     status: str
     created_time: float
     latency_ms: Optional[float] = None
+    fees: Optional[float] = None
 
 
 class OrderByDayResponse(BaseModel):
@@ -56,9 +58,11 @@ class OrderByDayService:
             ticker_symbol=order.ticker_symbol,
             provider_name=order.provider_name,
             trade_action=order.trade_action.value if hasattr(order.trade_action, "value") else order.trade_action,
+            order_type="LIMIT",
             price=str(order.price),
             quantity=order.quantity,
             status=order.status.value if hasattr(order.status, "value") else order.status,
             created_time=order.created_time,
             latency_ms=latency_ms,
+            fees=float(order.fees) if order.fees is not None else None,
         )

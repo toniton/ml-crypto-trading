@@ -114,9 +114,11 @@ class CryptoDotComInstrumentFeesMapper(Mapper[CryptoDotComInstrumentFeesResponse
 
 
 class CryptoDotComOrderMapper(Mapper[CryptoDotComResponseOrderGetDto, Order], CryptoDotComBaseMapper):
-    def map(self, source: dict) -> Order:
+    def map(self, source: dict) -> Optional[Order]:
         dto = CryptoDotComResponseOrderGetDto(**source)
         result = dto.result
+        if result is None or result.status is None:
+            return None
         status = self.from_exchange_status(result.status)
         return Order(
             uuid=result.client_oid,
@@ -132,6 +134,7 @@ class CryptoDotComOrderMapper(Mapper[CryptoDotComResponseOrderGetDto, Order], Cr
                 else None
             ),
             status=status,
+            fees=Decimal(str(result.cumulative_fee)) if result.cumulative_fee is not None else None,
         )
 
 
@@ -156,6 +159,7 @@ class CryptoDotComOrdersMapper(Mapper[CryptoDotComResponseOrderUpdateDto, list[O
                     else None
                 ),
                 status=self.from_exchange_status(order.status),
+                fees=Decimal(str(order.cumulative_fee)) if order.cumulative_fee is not None else None,
             )
             for order in dto.result.data
         ]

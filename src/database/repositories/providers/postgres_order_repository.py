@@ -39,6 +39,7 @@ class PostgresOrderRepository(OrderRepository):
             quantity=order_dao.quantity,
             trade_action=order_dao.trade_action,
             status=order_dao.status,
+            fees=order_dao.fees,
             last_updated_timestamp=order_dao.last_updated_timestamp,
             created_timestamp=order_dao.created_timestamp,
             executed_timestamp=order_dao.executed_timestamp,
@@ -49,6 +50,8 @@ class PostgresOrderRepository(OrderRepository):
             OrderDao.status: order_dao.status,
             OrderDao.last_updated_timestamp: order_dao.last_updated_timestamp,
         }
+        if order_dao.fees is not None:
+            set_values[OrderDao.fees] = order_dao.fees
         if order_dao.executed_timestamp is not None:
             set_values[OrderDao.executed_timestamp] = order_dao.executed_timestamp
         upsert_statement = insert_statement.on_conflict_do_update(

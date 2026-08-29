@@ -19,6 +19,7 @@ class Order:
     created_time: float
     executed_time: Optional[float] = None
     status: Optional[OrderStatus] = OrderStatus.PENDING
+    fees: Optional[Decimal] = None
 
     def model_dump_json(self) -> str:
         return RootModel[Order](self).model_dump_json()
