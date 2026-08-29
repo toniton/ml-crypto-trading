@@ -14,6 +14,7 @@ class OrderDao(DatabaseManager.BaseTableModel):
     status = Column(String)
     trade_action = Column(String(4))
     fees = Column(String, nullable=True)
+    fill_price = Column(String, nullable=True)
     last_updated_timestamp = Column(TIMESTAMP)
     created_timestamp = Column(TIMESTAMP)
     executed_timestamp = Column(TIMESTAMP)

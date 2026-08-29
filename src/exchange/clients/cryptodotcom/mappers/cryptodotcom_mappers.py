@@ -135,6 +135,7 @@ class CryptoDotComOrderMapper(Mapper[CryptoDotComResponseOrderGetDto, Order], Cr
             ),
             status=status,
             fees=Decimal(str(result.cumulative_fee)) if result.cumulative_fee is not None else None,
+            fill_price=Decimal(str(result.avg_price)) if result.avg_price is not None else None,
         )
 
 
@@ -160,6 +161,7 @@ class CryptoDotComOrdersMapper(Mapper[CryptoDotComResponseOrderUpdateDto, list[O
                 ),
                 status=self.from_exchange_status(order.status),
                 fees=Decimal(str(order.cumulative_fee)) if order.cumulative_fee is not None else None,
+                fill_price=Decimal(str(order.avg_price)) if order.avg_price is not None else None,
             )
             for order in dto.result.data
         ]

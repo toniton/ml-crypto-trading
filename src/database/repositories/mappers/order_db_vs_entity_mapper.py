@@ -26,6 +26,7 @@ class OrderDBVSEntityMapper:
             ),
             status=OrderStatus(order_dao.status) if order_dao.status else OrderStatus.PENDING,
             fees=Decimal(order_dao.fees) if order_dao.fees is not None else None,
+            fill_price=Decimal(order_dao.fill_price) if order_dao.fill_price is not None else None,
         )
 
     @staticmethod
@@ -45,6 +46,7 @@ class OrderDBVSEntityMapper:
             trade_action=order.trade_action.value,
             status=order.status.value,
             fees=str(order.fees) if order.fees is not None else None,
+            fill_price=str(order.fill_price) if order.fill_price is not None else None,
             last_updated_timestamp=datetime.now(timezone.utc),
             created_timestamp=created_datetime,
             executed_timestamp=executed_datetime,

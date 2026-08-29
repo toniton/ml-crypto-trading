@@ -22,6 +22,7 @@ class OrderDetail(BaseModel):
     created_time: float
     latency_ms: Optional[float] = None
     fees: Optional[float] = None
+    slippage: Optional[float] = None
 
 
 class OrderByDayResponse(BaseModel):
@@ -53,6 +54,9 @@ class OrderByDayService:
         latency_ms = None
         if order.executed_time is not None:
             latency_ms = (order.executed_time - order.created_time) * 1000
+        slippage = None
+        if order.fill_price is not None and order.price and order.price != 0:
+            slippage = float((order.fill_price - order.price) / order.price * 100)
         return OrderDetail(
             uuid=order.uuid,
             ticker_symbol=order.ticker_symbol,
@@ -65,4 +69,5 @@ class OrderByDayService:
             created_time=order.created_time,
             latency_ms=latency_ms,
             fees=float(order.fees) if order.fees is not None else None,
+            slippage=slippage,
         )
