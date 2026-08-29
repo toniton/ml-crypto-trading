@@ -22,6 +22,7 @@ from src.server.services.configuration_service import ConfigurationService
 from src.server.services.conversation_service import ConversationService
 from src.server.services.order_by_day_service import OrderByDayService
 from src.server.services.order_heatmap_service import OrderHeatmapService
+from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
 
 
@@ -92,6 +93,16 @@ class ChatApp:
 
         order_by_day_service = OrderByDayService(db_manager)
         order_week_service = OrderWeekService(db_manager)
+        order_latency_service = OrderLatencyService(db_manager)
+
+        @app.get("/api/v1/orders/latency/{year}/{month}")
+        async def order_latency_endpoint(year: int, month: int):
+            if month < 1 or month > 12:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="month must be between 1 and 12.",
+                )
+            return order_latency_service.for_month(year, month)
 
         @app.get("/api/v1/orders/week/{year}/{month}/{day}")
         async def order_week_endpoint(year: int, month: int, day: int):
