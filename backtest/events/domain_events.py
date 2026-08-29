@@ -29,7 +29,16 @@ class CandlesEvent(Event):
 
 
 @dataclass
-class OrderFillEvent(Event):
+class OrderFilledEvent(Event):
+    order: Order
+
+
+# Backward-compatible alias
+OrderFillEvent = OrderFilledEvent
+
+
+@dataclass
+class OrderCancelledEvent(Event):
     order: Order
 
 

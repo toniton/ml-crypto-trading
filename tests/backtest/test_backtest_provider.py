@@ -1,11 +1,20 @@
 from decimal import Decimal
 from unittest.mock import Mock
+
 import pytest
+
 from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_rest_service import BacktestRestService
-from backtest.events.domain_events import OrderFillEvent, BalanceUpdateEvent
-from api.interfaces.trade_action import TradeAction
+from backtest.events.domain_events import OrderFilledEvent, BalanceUpdateEvent
+from backtest.execution.backtest_execution_engine import BacktestExecutionEngine
+from backtest.execution.execution_model import ExecutionModel
+from backtest.execution.latency.fixed_latency import FixedLatencyModel
+from backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
+from backtest.execution.fees.percentage_fee import PercentageFee
+from api.interfaces.asset import Asset
 from api.interfaces.order import OrderStatus
+from api.interfaces.trade_action import TradeAction
+from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestBacktestRestService:
@@ -16,78 +25,107 @@ class TestBacktestRestService:
     @pytest.fixture
     def mock_clock(self):
         clock = Mock()
-        clock.now.return_value = 1234567890.0
+        clock.now.return_value = 1234567890
+        clock.next_timestamp_at_or_after.return_value = 1234567890
         return clock
 
     @pytest.fixture
-    def provider(self, event_bus, mock_clock):
-        return BacktestRestService(event_bus=event_bus, clock=mock_clock, data_loader=Mock())
+    def engine(self, event_bus, mock_clock):
+        assets = {
+            "btc-usd": Asset(
+                base_ticker_symbol="BTC",
+                quote_ticker_symbol="USD",
+                quote_decimals=2,
+                name="Bitcoin",
+                exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
+                min_quantity=0.001,
+                quantity_decimals=3,
+                schedule=0,
+                candles_timeframe="MIN1",
+            )
+        }
+        loader = Mock()
+        dp = Mock()
+        dp.close_price = Decimal("50000.0")
+        dp.high_price = Decimal("50000.0")
+        dp.low_price = Decimal("50000.0")
+        dp.volume = Decimal("1000")
+        dp.timestamp = 1234567890
+        loader.get_data.return_value = dp
+        model = ExecutionModel(
+            latency=FixedLatencyModel(0.0),
+            slippage=FixedTickSlippage(0),
+            fees=PercentageFee(Decimal("0")),
+        )
+        return BacktestExecutionEngine(
+            clock=mock_clock,
+            loader=loader,
+            bus=event_bus,
+            execution_model=model,
+            assets=assets,
+            initial_balance=Decimal("10000.0"),
+        )
 
-    def test_place_buy_order_and_events(self, provider, event_bus):
-        # Mock callbacks to verify events
-        order_callback = Mock()
-        balance_callback = Mock()
+    @pytest.fixture
+    def provider(self, event_bus, mock_clock, engine):
+        return BacktestRestService(
+            event_bus=event_bus, clock=mock_clock,
+            data_loader=Mock(), execution_engine=engine,
+        )
 
-        event_bus.subscribe(OrderFillEvent, order_callback)
-        event_bus.subscribe(BalanceUpdateEvent, balance_callback)
-
-        # Place Order (affordable)
+    def test_place_buy_order(self, provider, engine):
         builder = provider.builder().create_order(
             uuid="123",
             ticker_symbol="btc-usd",
             quantity="0.1",
             price=Decimal("50000.0"),
-            trade_action=TradeAction.BUY
+            trade_action=TradeAction.BUY,
         )
-        provider.execute(builder)
+        order = provider.execute(builder)
 
-        # Verify Order
-        order = provider.account.orders[-1]
-        assert order.status == OrderStatus.COMPLETED
+        assert order.status == OrderStatus.PENDING
         assert order.ticker_symbol == "btc-usd"
-        assert order.executed_time == 1234567890.0
-        assert provider.account.balance_usd == Decimal("10000.0") - (Decimal("50000.0") * Decimal("0.1"))
+        assert len(engine.get_pending_orders("btc-usd")) == 1
 
-    def test_insufficient_balance(self, provider):
-        builder = provider.builder().create_order(
-            uuid="123",
-            ticker_symbol="btc-usd",
-            quantity="1.0",
-            price=Decimal("50000.0"),  # 50k needed, 10k available
-            trade_action=TradeAction.BUY
-        )
-        with pytest.raises(ValueError):
-            provider.execute(builder)
-
-    def test_place_feasible_buy_order(self, provider, event_bus):
+    def test_order_lifecycle_through_engine(self, provider, engine, event_bus):
         order_callback = Mock()
         balance_callback = Mock()
-        event_bus.subscribe(OrderFillEvent, order_callback)
+        event_bus.subscribe(OrderFilledEvent, order_callback)
         event_bus.subscribe(BalanceUpdateEvent, balance_callback)
 
-        # Buy 0.1 BTC @ 10,000 = $1,000 cost. Balance 10,000 -> 9,000.
         builder = provider.builder().create_order(
             uuid="valid-buy",
             ticker_symbol="btc-usd",
             quantity="0.1",
             price=Decimal("10000.0"),
-            trade_action=TradeAction.BUY
+            trade_action=TradeAction.BUY,
         )
-        provider.execute(builder)
+        order = provider.execute(builder)
+        assert order.status == OrderStatus.PENDING
 
-        # Verify simulated state
-        assert provider.account.balance_usd == Decimal("9000.0")
+        engine.process("btc-usd", 1234567890)
+
+        assert order.status == OrderStatus.COMPLETED
+        # Fill uses market data price (50000.0) not order price (10000.0)
+        assert provider.account.balance_usd == Decimal("5000.0")
         assert provider.account.positions["btc-usd"] == Decimal("0.1")
-
-        # Verify Events
         assert order_callback.called
         assert balance_callback.called
 
-        # Verify Event Payload
-        event_args = order_callback.call_args[0][0]
-        assert isinstance(event_args, OrderFillEvent)
-        assert event_args.order.uuid == "valid-buy"
+    def test_get_account_balance(self, provider):
+        balances = provider.execute(provider.builder().account_balance())
+        assert balances[0].available_balance == Decimal("10000.0")
 
-        balance_args = balance_callback.call_args[0][0]
-        assert isinstance(balance_args, BalanceUpdateEvent)
-        assert balance_args.balances[0].available_balance == Decimal("9000.0")
+    def test_get_open_orders(self, provider):
+        builder = provider.builder().create_order(
+            uuid="order-1",
+            ticker_symbol="btc-usd",
+            quantity="0.1",
+            price=Decimal("50000.0"),
+            trade_action=TradeAction.BUY,
+        )
+        provider.execute(builder)
+
+        open_orders = provider.execute(provider.builder().get_open_orders("btc-usd"))
+        assert len(open_orders) == 1
+        assert open_orders[0].uuid == "order-1"

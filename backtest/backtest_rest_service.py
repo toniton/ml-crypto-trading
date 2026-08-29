@@ -1,7 +1,5 @@
-import threading
-from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Any, Dict, List
+from typing import Any
 from uuid import uuid4
 
 from api.interfaces.account_balance import AccountBalance
@@ -15,18 +13,10 @@ from backtest.backtest_clock import BacktestClock
 from backtest.backtest_data_loader import BacktestDataLoader
 from backtest.backtest_event_bus import BacktestEventBus
 from backtest.backtest_rest_builder import BacktestRestBuilder
-from backtest.events.domain_events import BalanceUpdateEvent, OrderFillEvent
-from src.configuration.application_config import ApplicationConfig
+from backtest.execution.backtest_execution_engine import BacktestExecutionEngine
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
-
-
-@dataclass
-class SimulatedAccount:
-    balance_usd: Decimal = Decimal("10000.0")
-    positions: Dict[str, Decimal] = field(default_factory=dict)
-    orders: List[Order] = field(default_factory=list)
 
 
 class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
@@ -35,15 +25,13 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             clock: BacktestClock,
             event_bus: BacktestEventBus,
             data_loader: BacktestDataLoader,
-            config: ApplicationConfig = None
+            execution_engine: BacktestExecutionEngine,
     ):
         self.clock = clock
         self.loader = data_loader
         self.bus = event_bus
-        self.account = SimulatedAccount(
-            balance_usd=config.backtest_initial_balance if config else Decimal("10000.0")
-        )
-        self._lock = threading.Lock()
+        self.execution_engine = execution_engine
+        self.account = execution_engine.account
 
     def get_provider_name(self) -> str:
         return ExchangeProvidersEnum.BACKTEST.value
@@ -52,10 +40,13 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
         return BacktestRestBuilder()
 
     def execute(self, builder: BacktestRestBuilder) -> Any:
-        method = getattr(self, f"_handle_{builder.method_name}", None)
-        if not method or not callable(method):
-            raise NotImplementedError(f"BacktestRestService does not support {builder.method_name}")
-        return method(**builder.params)  # pylint: disable=not-callable
+        try:
+            handler = getattr(self, f"_handle_{builder.method_name}")
+        except AttributeError as exc:
+            raise NotImplementedError(
+                f"BacktestRestService does not support {builder.method_name}"
+            ) from exc
+        return handler(**builder.params)
 
     def _handle_market_data(self, ticker_symbol: str) -> MarketData:
         current = self.clock.now(ticker_symbol)
@@ -67,116 +58,67 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             volume=data.volume,
             low_price=data.low_price,
             high_price=data.high_price,
-            close_price=data.close_price
+            close_price=data.close_price,
         )
 
     def _handle_account_balance(self) -> list[AccountBalance]:
-        with self._lock:
-            balances = [
-                AccountBalance(
-                    currency="USD",
-                    available_balance=self.account.balance_usd,
-                )
-            ]
-            for ticker, qty in self.account.positions.items():
-                # Ticker is usually BASE_QUOTE, we need BASE
-                base_currency = ticker.split("_")[0]
-                balances.append(
-                    AccountBalance(
-                        currency=base_currency,
-                        available_balance=qty
-                    )
-                )
-            return balances
+        return self.execution_engine.get_balances_snapshot()
 
-    def _handle_account_fees(self, provider_name: str = None) -> Fees:
+    def _handle_account_fees(self, provider_name: str = None) -> Fees:  # pylint: disable=unused-argument
         return Fees(
             maker_fee_pct=Decimal("0.0"),
-            taker_fee_pct=Decimal("0.0")
+            taker_fee_pct=Decimal("0.0"),
         )
 
-    def _handle_instrument_fees(self, ticker_symbol: str, provider_name: str = None) -> Fees:
+    def _handle_instrument_fees(self, ticker_symbol: str, provider_name: str = None) -> Fees:  # pylint: disable=unused-argument
         return Fees(
             maker_fee_pct=Decimal("0.0"),
-            taker_fee_pct=Decimal("0.0")
+            taker_fee_pct=Decimal("0.0"),
         )
 
     def _handle_create_order(
-            self,
-            uuid: str,
-            ticker_symbol: str,
-            quantity: str,
-            price: str,
-            trade_action: TradeAction
-    ) -> None:
-        order_uuid = uuid or str(uuid4())
-        qty = Decimal(quantity)
-        p = Decimal(price)
-        total_value = qty * p
-
-        if trade_action == TradeAction.BUY:
-            with self._lock:
-                if self.account.balance_usd < total_value:
-                    raise ValueError(
-                        f"Insufficient balance: {self.account.balance_usd} < {total_value}"
-                    )
-                self.account.balance_usd -= total_value
-                self.account.positions[ticker_symbol] = (
-                        self.account.positions.get(ticker_symbol, Decimal("0")) + qty
-                )
-        else:
-            with self._lock:
-                current_position = self.account.positions.get(ticker_symbol, Decimal("0"))
-                if current_position < qty:
-                    raise ValueError(
-                        f"Insufficient position: {current_position} < {qty}"
-                    )
-                self.account.positions[ticker_symbol] -= qty
-                self.account.balance_usd += total_value
-
-        with self._lock:
-            executed_at = self.clock.now(ticker_symbol)
-            order = Order(
-                uuid=order_uuid,
-                ticker_symbol=ticker_symbol,
-                quantity=quantity,
-                price=p,
-                status=OrderStatus.COMPLETED,
-                provider_name=self.get_provider_name(),
-                trade_action=trade_action,
-                created_time=executed_at,
-                executed_time=executed_at
-            )
-            self.account.orders.append(order)
+        self,
+        uuid: str,
+        ticker_symbol: str,
+        quantity: str,
+        price: str,
+        trade_action: TradeAction,
+    ) -> Order:
+        executed_at = self.clock.now(ticker_symbol)
+        order = Order(
+            uuid=uuid or str(uuid4()),
+            ticker_symbol=ticker_symbol,
+            quantity=quantity,
+            price=Decimal(price),
+            status=OrderStatus.PENDING,
+            provider_name=self.get_provider_name(),
+            trade_action=trade_action,
+            created_time=executed_at,
+        )
+        self.account.orders.append(order)
+        self.execution_engine.submit(order, ticker_symbol)
 
         self.app_logger.info(
-            f"BacktestRestService: {trade_action.name} {quantity} {ticker_symbol} @ {price} "
-            f"(Balance: ${self.account.balance_usd})"
+            f"Order submitted: {trade_action.name} {quantity} {ticker_symbol} "
+            f"@ {price} (pending execution)"
         )
-
-        self.bus.publish(OrderFillEvent(order=order))
-        balances = self._handle_account_balance()
-        self.bus.publish(BalanceUpdateEvent(balances=balances))
+        return order
 
     def _handle_get_order(self, uuid: str) -> Order:
-        try:
-            return next(o for o in self.account.orders if o.uuid == uuid)
-        except StopIteration as exc:
-            raise RuntimeWarning(f"Order {uuid} not found") from exc
+        for order in self.account.orders:
+            if order.uuid == uuid:
+                return order
+        raise RuntimeWarning(f"Order {uuid} not found")
 
     def _handle_get_open_orders(self, ticker_symbol: str = None) -> list[Order]:
-        open_orders = [
-            o for o in self.account.orders
-            if o.status not in (OrderStatus.COMPLETED, OrderStatus.CANCELLED)
-        ]
-        if ticker_symbol:
-            open_orders = [o for o in open_orders if o.ticker_symbol == ticker_symbol]
-        return open_orders
+        return self.execution_engine.get_pending_orders(ticker_symbol)
 
     def _handle_cancel_order(self, uuid: str) -> None:
-        self.account.orders = [o for o in self.account.orders if o.uuid != uuid]
+        for order in self.account.orders:
+            if order.uuid == uuid and order.status == OrderStatus.PENDING:
+                order.status = OrderStatus.CANCELLED
 
-    def _handle_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:
+    def _handle_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:  # pylint: disable=unused-argument
         market_data = self._handle_market_data(ticker_symbol)
         return [
             Candle(
@@ -184,6 +126,6 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
                 high=market_data.high_price,
                 low=market_data.low_price,
                 close=market_data.close_price,
-                start_time=float(market_data.timestamp)
+                start_time=float(market_data.timestamp),
             )
         ]

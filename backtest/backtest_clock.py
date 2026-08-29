@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 from threading import Lock
+from typing import Optional
+
+import bisect
 
 
 @dataclass
@@ -67,3 +70,14 @@ class BacktestClock:
     def total_ticks(self, key: str) -> int:
         clock_data = self._asset_clock_indexes[key]
         return len(clock_data.timestamps)
+
+    def next_timestamp_at_or_after(self, key: str, target_ts: float) -> Optional[int]:
+        """Return first timestamp >= target_ts, or None if past end of data."""
+        with self._lock:
+            clock_data = self._asset_clock_indexes.get(key)
+            if not clock_data or not clock_data.timestamps:
+                return None
+            idx = bisect.bisect_left(clock_data.timestamps, target_ts)
+            if idx >= len(clock_data.timestamps):
+                return None
+            return clock_data.timestamps[idx]

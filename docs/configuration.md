@@ -20,12 +20,15 @@ These properties control the fundamental behavior of the bot and its connection 
 
 These properties are specifically for running the bot in backtest mode using historical data.
 
-| Property        | CLI Argument        | Description                             | Default   |
-|-----------------|---------------------|-----------------------------------------|-----------|
-| Backtest Mode   | `--backtest-mode`   | Enable historical data simulation       | `false`   |
-| Backtest Source | `--backtest-source` | Path to historical CSV data directory   | -         |
-| Initial Balance | -                   | Starting balance for simulation         | `10000.0` |
-| Tick Delay      | -                   | Artificial delay between backtest ticks | `0.0`     |
+| Property        | CLI Argument            | Description                                      | Default   |
+|-----------------|-------------------------|--------------------------------------------------|-----------|
+| Backtest Mode   | `--backtest-mode`       | Enable historical data simulation                | `false`   |
+| Backtest Source | `--backtest-source`     | Path to historical CSV data directory            | -         |
+| Initial Balance | -                       | Starting balance for simulation                  | `10000.0` |
+| Tick Delay      | -                       | Artificial delay between backtest ticks          | `0.0`     |
+| Latency         | `--backtest-latency-ms` | Execution latency in milliseconds                | `500.0`   |
+| Slippage        | `--backtest-slippage-ticks` | Slippage in exchange tick increments         | `2`       |
+| Fee Rate        | `--backtest-fee-rate`   | Fee rate as decimal (e.g. `0.001` = 0.1%)       | `0.001`   |
 
 ---
 

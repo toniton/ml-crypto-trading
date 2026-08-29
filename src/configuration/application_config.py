@@ -15,6 +15,9 @@ class ApplicationConfig(BaseSettings):
     historical_data_dir_path: Optional[str] = Field(default=None, alias="backtest-source")
     simulated: bool = Field(default=False, alias="simulated")
     headless: bool = Field(default=False, alias="headless")
+    backtest_latency_ms: float = Field(default=500.0, alias="backtest-latency-ms")
+    backtest_slippage_ticks: int = Field(default=2, alias="backtest-slippage-ticks")
+    backtest_fee_rate: float = Field(default=0.001, alias="backtest-fee-rate")
 
     model_config = SettingsConfigDict(
         cli_parse_args=True,

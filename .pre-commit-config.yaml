@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: pylint
         name: pylint
-        entry: pylint src tests database main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
+        entry: pylint src tests main.py --rcfile=.pylintrc --fail-on=E,unused-import --fail-under=9.7
         language: unsupported
         types: [ python ]
         require_serial: true

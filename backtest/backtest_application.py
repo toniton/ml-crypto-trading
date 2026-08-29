@@ -43,7 +43,10 @@ class BacktestApplication:
                                trading_config=self._trading_config, llm_config=self._llm_config,
                                is_backtest_mode=self._is_backtest_mode,
                                backtest_scheduler=scheduler)
-        self.backtest_engine = BacktestEngine(self.app, loader, clock, scheduler, bus, self._application_config)
+        self.backtest_engine = BacktestEngine(
+            self.app, loader, clock, scheduler, bus,
+            self._trading_config.assets, self._application_config
+        )
         self.app_thread = threading.Thread(target=self.app.startup, name="BacktestApplication", daemon=True)
         self.app_thread.start()
         if not self.app.is_ready.wait(timeout=10):
