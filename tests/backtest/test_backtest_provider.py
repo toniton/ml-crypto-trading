@@ -44,14 +44,15 @@ class TestBacktestRestService:
                 candles_timeframe="MIN1",
             )
         }
-        loader = Mock()
+        dataset = Mock()
         dp = Mock()
         dp.close_price = Decimal("50000.0")
         dp.high_price = Decimal("50000.0")
         dp.low_price = Decimal("50000.0")
         dp.volume = Decimal("1000")
         dp.timestamp = 1234567890
-        loader.get_data.return_value = dp
+        dataset.get.return_value = dp
+        datasets = {"btc-usd": dataset}
         model = ExecutionModel(
             latency=FixedLatencyModel(0.0),
             slippage=FixedTickSlippage(0),
@@ -59,7 +60,7 @@ class TestBacktestRestService:
         )
         return BacktestExecutionEngine(
             clock=mock_clock,
-            loader=loader,
+            datasets=datasets,
             bus=event_bus,
             execution_model=model,
             assets=assets,
@@ -70,7 +71,7 @@ class TestBacktestRestService:
     def provider(self, event_bus, mock_clock, engine):
         return BacktestRestService(
             event_bus=event_bus, clock=mock_clock,
-            data_loader=Mock(), execution_engine=engine,
+            datasets={}, execution_engine=engine,
         )
 
     def test_place_buy_order(self, provider, engine):

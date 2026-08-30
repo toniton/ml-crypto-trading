@@ -26,7 +26,7 @@ def generate_session_id() -> str:
 
 class BacktestSession(BaseModel):
     id: str = Field(default_factory=generate_session_id)
-    asset: str
+    ticker_symbol: str
     request: BacktestRequest
     status: BacktestSessionStatus = BacktestSessionStatus.CREATED
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))

@@ -34,9 +34,9 @@ class ApplicationConfig(BaseSettings):
             raise ValueError('backtest-source is required when backtest-mode is enabled')
 
         if self.simulated:
-            # Ignore backtest related fields if simulated is enabled
+            # Simulated mode is not backtest mode, but keep the backtest data
+            # source so the agent can run backtests on demand.
             self.backtest_mode = False
-            self.historical_data_dir_path = None
             self.backtest_tick_delay = 0.0
 
         return self

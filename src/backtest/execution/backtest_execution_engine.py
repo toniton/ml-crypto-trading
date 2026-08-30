@@ -6,8 +6,8 @@ from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.backtest.backtest_clock import BacktestClock
-from src.backtest.backtest_data_loader import BacktestDataLoader
 from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.data.backtest_data_set import BacktestDataSet
 from src.backtest.events.domain_events import (
     OrderFilledEvent,
     OrderCancelledEvent,
@@ -31,14 +31,14 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
     def __init__(
             self,
             clock: BacktestClock,
-            loader: BacktestDataLoader,
+            datasets: dict[str, BacktestDataSet],
             bus: BacktestEventBus,
             execution_model: ExecutionModel,
             assets: dict[str, Asset],
             initial_balance: Decimal = Decimal("10000.0"),
     ):
         self._clock = clock
-        self._loader = loader
+        self._datasets = datasets
         self._bus = bus
         self._model = execution_model
         self._assets = assets
@@ -81,19 +81,20 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
     def process(self, ticker_symbol: str, current_timestamp: float) -> None:
         pending_list = self._pending.get(ticker_symbol, [])
         due = [
-            p for p in pending_list
-            if p.execution_timestamp is not None and p.execution_timestamp <= current_timestamp
+            pending for pending in pending_list
+            if pending.execution_timestamp is not None and pending.execution_timestamp <= current_timestamp
         ]
         self._pending[ticker_symbol] = [
-            p for p in pending_list
-            if p.execution_timestamp is None or p.execution_timestamp > current_timestamp
+            pending for pending in pending_list
+            if pending.execution_timestamp is None or pending.execution_timestamp > current_timestamp
         ]
 
         for pending in due:
             self._fill_order(pending)
 
     def _fill_order(self, pending: PendingOrder) -> None:
-        data = self._loader.get_data(pending.ticker_symbol, pending.execution_timestamp)
+        dataset = self._datasets.get(pending.ticker_symbol)
+        data = dataset.get(pending.execution_timestamp) if dataset else None
         if not data:
             self._cancel_order(pending, "no_market_data_at_tick")
             return
@@ -221,15 +222,15 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
         for symbol, pending_list in self._pending.items():
             if ticker_symbol and symbol != ticker_symbol:
                 continue
-            for p in pending_list:
+            for pending in pending_list:
                 orders.append(Order(
-                    uuid=p.order_uuid,
+                    uuid=pending.order_uuid,
                     provider_name=ExchangeProvidersEnum.BACKTEST.value,
-                    ticker_symbol=p.ticker_symbol,
-                    price=p.requested_price,
-                    quantity=str(p.quantity),
-                    trade_action=p.trade_action,
-                    created_time=p.signal_at,
+                    ticker_symbol=pending.ticker_symbol,
+                    price=pending.requested_price,
+                    quantity=str(pending.quantity),
+                    trade_action=pending.trade_action,
+                    created_time=pending.signal_at,
                     status=OrderStatus.PENDING,
                 ))
         return orders

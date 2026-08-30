@@ -47,7 +47,7 @@ class PortfolioSnapshot:
 @dataclass
 class BacktestResult:
     session_id: str
-    asset: str
+    ticker_symbol: str
     initial_balance: Decimal
     final_balance: Decimal
     final_equity: Decimal

@@ -24,7 +24,7 @@ class BacktestEngine(TradingEngine):
         if infrastructure is not None:
             self._simulator = BacktestSimulator(
                 clock=infrastructure.clock,
-                loader=infrastructure.loader,
+                datasets=infrastructure.datasets,
                 execution_engine=infrastructure.execution_engine,
                 bus=infrastructure.bus,
                 strategy=self._trigger_trading_cycle,

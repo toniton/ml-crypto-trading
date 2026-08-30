@@ -7,8 +7,9 @@ from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from src.backtest.backtest_clock import BacktestClock
-from src.backtest.backtest_data_loader import BacktestDataLoader, HistoricalDataPoint
+from src.backtest.backtest_data_loader import HistoricalDataPoint
 from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.data.backtest_data_set import BacktestDataSet
 from src.backtest.domain.result import MarketDataPoint, PortfolioSnapshot
 from src.backtest.events.domain_events import (
     CandlesEvent,
@@ -26,13 +27,13 @@ class BacktestSimulator:
     def __init__(
             self,
             clock: BacktestClock,
-            loader: BacktestDataLoader,
+            datasets: dict[str, BacktestDataSet],
             execution_engine: BacktestExecutionEngine,
             bus: BacktestEventBus,
             strategy: Optional[StrategyCallback] = None,
     ):
         self._clock = clock
-        self._loader = loader
+        self._datasets = datasets
         self._execution_engine = execution_engine
         self._bus = bus
         self._strategy = strategy
@@ -50,7 +51,8 @@ class BacktestSimulator:
     def step(self, asset: Asset) -> None:
         symbol = asset.ticker_symbol
         timestamp = self._clock.now(symbol)
-        data_point = self._loader.get_data(symbol, timestamp)
+        dataset = self._datasets.get(symbol)
+        data_point = dataset.get(timestamp) if dataset else None
         market_data = self._to_market_data(data_point)
         candles = self._candles.setdefault(symbol, [])
 

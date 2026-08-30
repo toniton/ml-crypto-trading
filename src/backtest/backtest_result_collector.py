@@ -50,7 +50,7 @@ class BacktestResultCollector:
 
         return BacktestResult(
             session_id=session.id,
-            asset=request.asset,
+            ticker_symbol=request.ticker_symbol,
             initial_balance=initial_balance,
             final_balance=final_balance,
             final_equity=final_equity,

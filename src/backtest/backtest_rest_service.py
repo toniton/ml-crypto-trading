@@ -10,9 +10,9 @@ from api.interfaces.order import Order, OrderStatus
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
 from src.backtest.backtest_clock import BacktestClock
-from src.backtest.backtest_data_loader import BacktestDataLoader
 from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.backtest_rest_builder import BacktestRestBuilder
+from src.backtest.data.backtest_data_set import BacktestDataSet
 from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -24,11 +24,11 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             self,
             clock: BacktestClock,
             event_bus: BacktestEventBus,
-            data_loader: BacktestDataLoader,
+            datasets: dict[str, BacktestDataSet],
             execution_engine: BacktestExecutionEngine,
     ):
         self.clock = clock
-        self.loader = data_loader
+        self.datasets = datasets
         self.bus = event_bus
         self.execution_engine = execution_engine
         self.account = execution_engine.account
@@ -50,7 +50,8 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
 
     def _handle_market_data(self, ticker_symbol: str) -> MarketData:
         current = self.clock.now(ticker_symbol)
-        data = self.loader.get_data(ticker_symbol, current)
+        dataset = self.datasets.get(ticker_symbol)
+        data = dataset.get(current) if dataset else None
         if not data:
             raise ValueError(f"No market data for {ticker_symbol} at {current}")
         return MarketData(

@@ -8,7 +8,7 @@ from typing import List
 import pandas as pd
 
 
-@dataclass
+@dataclass(frozen=True)
 class HistoricalDataPoint:
     timestamp: int
     open_price: Decimal
@@ -44,14 +44,14 @@ class BacktestDataLoader:
             f"audit-{base_name.replace('-', '_').upper()}",
         }
         potential_filenames = []
-        for f in potential_names:
-            potential_filenames.append(f"{f}.csv")
-            potential_filenames.append(f"{f}.log")
+        for name in potential_names:
+            potential_filenames.append(f"{name}.csv")
+            potential_filenames.append(f"{name}.log")
             # Support for dated audit logs like audit-BTC_USD-2026-01.log
             # We can use glob to find these if we want, but let's stick to a few more patterns
-            potential_filenames.append(f"{f}-*.log")
-            potential_filenames.append(f"{f}*.log")
-            potential_filenames.append(f"{f}*.csv")
+            potential_filenames.append(f"{name}-*.log")
+            potential_filenames.append(f"{name}*.log")
+            potential_filenames.append(f"{name}*.csv")
 
         import glob
         file_path = None
@@ -129,7 +129,7 @@ class BacktestDataLoader:
 
         data_points.sort(key=lambda x: x.timestamp)
 
-        self._data_index[ticker_symbol] = {dp.timestamp: dp for dp in data_points}
+        self._data_index[ticker_symbol] = {data_point.timestamp: data_point for data_point in data_points}
 
         return data_points
 

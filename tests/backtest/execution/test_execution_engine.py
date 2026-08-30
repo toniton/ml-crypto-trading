@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock
 
@@ -5,8 +6,9 @@ from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction, OrderStatus
 from src.backtest.backtest_clock import BacktestClock
-from src.backtest.backtest_data_loader import BacktestDataLoader, HistoricalDataPoint
+from src.backtest.backtest_data_loader import HistoricalDataPoint
 from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.data.backtest_data_set import BacktestDataSet
 from src.backtest.events.domain_events import OrderFilledEvent, OrderCancelledEvent
 from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
 from src.backtest.execution.execution_model import ExecutionModel
@@ -30,14 +32,12 @@ def _make_asset(quote_decimals: int = 2) -> Asset:
     )
 
 
-def _make_data_loader(data: dict[str, list[tuple[int, str]]]) -> BacktestDataLoader:
-    """Create a loader with pre-loaded data. data = {symbol: [(timestamp, close_price), ...]}"""
-    loader = Mock(spec=BacktestDataLoader)
-    index = {}
-    for symbol, points in data.items():
-        index[symbol] = {}
-        for ts, close in points:
-            dp = HistoricalDataPoint(
+def _make_datasets(data: dict[str, list[tuple[int, str]]]) -> dict[str, BacktestDataSet]:
+    """Create per-asset datasets. data = {symbol: [(timestamp, close_price), ...]}"""
+    datasets: dict[str, BacktestDataSet] = {}
+    for symbol, rows in data.items():
+        historical_points = tuple(
+            HistoricalDataPoint(
                 timestamp=ts,
                 open_price=Decimal(close),
                 high_price=Decimal(close),
@@ -46,9 +46,17 @@ def _make_data_loader(data: dict[str, list[tuple[int, str]]]) -> BacktestDataLoa
                 volume=Decimal("1000"),
                 market_cap=Decimal("0"),
             )
-            index[symbol][ts] = dp
-    loader.get_data.side_effect = lambda s, t: index.get(s, {}).get(t)
-    return loader
+            for ts, close in rows
+        )
+        timestamps = [data_point.timestamp for data_point in historical_points]
+        datasets[symbol] = BacktestDataSet(
+            dataset_id=f"csv:/tmp/{symbol}",
+            ticker_symbol=symbol,
+            start_time=datetime.fromtimestamp(min(timestamps), tz=timezone.utc),
+            end_time=datetime.fromtimestamp(max(timestamps), tz=timezone.utc),
+            data_points=historical_points,
+        )
+    return datasets
 
 
 def _make_engine(
@@ -62,8 +70,8 @@ def _make_engine(
 ) -> tuple[BacktestExecutionEngine, BacktestClock, BacktestEventBus]:
     clock = BacktestClock(timestamps)
     bus = BacktestEventBus()
-    loader = _make_data_loader(data)
-    assets = {s: _make_asset(quote_decimals) for s in data.keys()}
+    datasets = _make_datasets(data)
+    assets = {symbol: _make_asset(quote_decimals) for symbol in data.keys()}
     model = ExecutionModel(
         latency=FixedLatencyModel(latency_ms),
         slippage=FixedTickSlippage(slippage_ticks),
@@ -71,7 +79,7 @@ def _make_engine(
     )
     engine = BacktestExecutionEngine(
         clock=clock,
-        loader=loader,
+        datasets=datasets,
         bus=bus,
         execution_model=model,
         assets=assets,

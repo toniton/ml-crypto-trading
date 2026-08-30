@@ -1,7 +1,8 @@
 from api.interfaces.backtest_request import (
+    BacktestDataSourceRequest,
+    BacktestDataSourceType,
     BacktestRequest,
     ExecutionConfiguration,
-    MarketDataConfiguration,
 )
 from src.backtest.domain.result import (
     BacktestFill,
@@ -16,9 +17,10 @@ from src.backtest.domain.session import (
 )
 
 __all__ = [
+    "BacktestDataSourceRequest",
+    "BacktestDataSourceType",
     "BacktestRequest",
     "ExecutionConfiguration",
-    "MarketDataConfiguration",
     "BacktestFill",
     "BacktestResult",
     "MarketDataPoint",

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import atexit
-from datetime import datetime, timezone
 from decimal import Decimal
 from queue import Queue
 from threading import Event
@@ -11,11 +10,13 @@ import src.configuration.providers
 import src.trading.protection.guards
 import src.exchange.clients
 from api.interfaces.backtest_request import (
+    BacktestDataSourceRequest,
+    BacktestDataSourceType,
     BacktestRequest,
     ExecutionConfiguration,
-    MarketDataConfiguration,
 )
 from src.agent import AgentGateway
+from src.agent.backtest.backtest_service import BacktestService
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.oracle import (
     AnalyzeTradingStateTool,
@@ -24,7 +25,6 @@ from src.agent.oracle import (
     OracleService,
     summary_interval_for,
 )
-from src.backtest.backtest_data_loader import BacktestDataLoader
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
@@ -48,6 +48,7 @@ from src.trading.managers.manager_container import ManagerContainer
 from src.trading.managers.manager_factory import ManagerFactory
 from src.llm.model_factory import ModelFactory
 from src.llm.tools.account_balance_tool import AccountBalanceTool
+from src.llm.tools.backtest_tool import BacktestTool
 from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
 from src.llm.tools.configuration_tool import ConfigurationTool
 from src.llm.tools.consensus_tool import ConsensusTool
@@ -257,6 +258,7 @@ class Application(ApplicationLoggingMixin):
             session_summary_tool = SessionSummaryTool(session_manager=self._managers.session_manager)
             get_trading_summary_tool = GetTradingSummaryTool(oracle_service=self._oracle_service)
             analyze_trading_state_tool = AnalyzeTradingStateTool(oracle_service=self._oracle_service)
+            backtest_tool = BacktestTool(backtest_service=self._build_backtest_service())
 
             llm_tools = [
                 context_tool,
@@ -273,6 +275,7 @@ class Application(ApplicationLoggingMixin):
                 session_summary_tool,
                 get_trading_summary_tool,
                 analyze_trading_state_tool,
+                backtest_tool,
             ]
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(
@@ -292,33 +295,46 @@ class Application(ApplicationLoggingMixin):
     def run_backtest(self) -> None:
         """Drive the backtest simulation(s) via a BacktestRunner."""
 
-        runner = BacktestRunner(
-            self._db_manager,
-            {a.ticker_symbol: a for a in self._assets},
-            self._strategies_registry,
-            self._activity_queue,
-            self._dynamic_quantity,
-        )
         requests = [self._build_backtest_request(asset) for asset in self._assets]
-        results = runner.run(requests)
+        results = self._build_backtest_runner().run(requests)
         for result in results:
             self.app_logger.info(
-                f"Backtest {result.session_id} for {result.asset}: "
+                f"Backtest {result.session_id} for {result.ticker_symbol}: "
                 f"initial={result.initial_balance} final_equity={result.final_equity} "
                 f"fills={len(result.fills)} orders={len(result.orders)}"
             )
 
+    def _build_backtest_runner(self) -> BacktestRunner:
+        return BacktestRunner(
+            self._db_manager,
+            {asset.ticker_symbol: asset for asset in self._assets},
+            self._strategies_registry,
+            self._activity_queue,
+            self._dynamic_quantity,
+        )
+
+    def _build_backtest_service(self) -> BacktestService:
+        data_source_request = BacktestDataSourceRequest(
+            source_type=BacktestDataSourceType.CSV,
+            path=self._application_config.historical_data_dir_path,
+        )
+        return BacktestService(
+            self._build_backtest_runner(),
+            data_source_request=data_source_request,
+            initial_balance=self._application_config.backtest_initial_balance,
+            execution=ExecutionConfiguration(
+                latency_ms=self._application_config.backtest_latency_ms,
+                slippage_ticks=self._application_config.backtest_slippage_ticks,
+                fee_rate=Decimal(str(self._application_config.backtest_fee_rate)),
+            ),
+        )
+
     def _build_backtest_request(self, asset) -> BacktestRequest:
-        loader = BacktestDataLoader(self._application_config.historical_data_dir_path)
-        points = loader.load(asset.ticker_symbol)
-        start = datetime.fromtimestamp(min(p.timestamp for p in points), tz=timezone.utc)
-        end = datetime.fromtimestamp(max(p.timestamp for p in points), tz=timezone.utc)
         return BacktestRequest(
-            asset=asset.ticker_symbol,
-            start_time=start,
-            end_time=end,
-            market_data=MarketDataConfiguration(
-                data_source=self._application_config.historical_data_dir_path
+            ticker_symbol=asset.ticker_symbol,
+            data_source=BacktestDataSourceRequest(
+                source_type=BacktestDataSourceType.CSV,
+                path=self._application_config.historical_data_dir_path,
             ),
             initial_balance=self._application_config.backtest_initial_balance,
             execution=ExecutionConfiguration(

@@ -3,8 +3,10 @@ from decimal import Decimal
 from api.interfaces.asset import Asset
 from api.interfaces.trade_action import TradeAction
 
+from src.backtest.execution.slippage.slippage_model import SlippageModel
 
-class FixedTickSlippage:
+
+class FixedTickSlippage(SlippageModel):
     def __init__(self, ticks: int = 2):
         self._ticks = Decimal(str(ticks))
 

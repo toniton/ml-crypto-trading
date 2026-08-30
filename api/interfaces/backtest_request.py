@@ -3,7 +3,8 @@ from __future__ import annotations
 from dataclasses import field
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from enum import Enum
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
@@ -15,18 +16,23 @@ class ExecutionConfiguration:
     fee_rate: Decimal = Decimal("0.001")
 
 
+class BacktestDataSourceType(str, Enum):
+    CSV = "csv"
+    MARKET_DATA = "market_data"
+
+
 @dataclass(frozen=True)
-class MarketDataConfiguration:
-    data_source: str
-    data_interval: str = "1s"
+class BacktestDataSourceRequest:
+    source_type: BacktestDataSourceType = BacktestDataSourceType.CSV
+    source_id: Optional[str] = None
+    path: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class BacktestRequest:
-    asset: str
-    start_time: datetime
-    end_time: datetime
-    market_data: MarketDataConfiguration
-    configuration: dict[str, Any] = field(default_factory=dict)
+    ticker_symbol: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    data_source: BacktestDataSourceRequest = field(default_factory=BacktestDataSourceRequest)
     initial_balance: Decimal = Decimal("10000.0")
     execution: ExecutionConfiguration = field(default_factory=ExecutionConfiguration)
