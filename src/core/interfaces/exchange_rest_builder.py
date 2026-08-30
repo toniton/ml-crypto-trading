@@ -56,7 +56,8 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
-            trade_action
+            trade_action,
+            created_time: Optional[float] = None,
     ) -> 'ExchangeRestBuilder[T, None]':
         raise NotImplementedError()
 

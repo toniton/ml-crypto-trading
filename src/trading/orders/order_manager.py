@@ -2,6 +2,7 @@ import queue
 import threading
 from decimal import Decimal
 from queue import Queue
+from typing import Optional
 from uuid import uuid4
 
 from api.interfaces.asset import Asset
@@ -24,7 +25,8 @@ class OrderManager(ApplicationLoggingMixin):
 
     def __init__(
             self, database_manager: DatabaseManager, trading_journal: TradingJournal,
-            rest_manager: RestManager, websocket_manager: WebSocketManager
+            rest_manager: RestManager, websocket_manager: WebSocketManager,
+            is_backtest: bool = False,
     ):
         self._database_manager = database_manager
         self._rest_manager = rest_manager
@@ -32,6 +34,7 @@ class OrderManager(ApplicationLoggingMixin):
         self._order_queue = Queue()
         self._trading_journal = trading_journal
         self._assets = []
+        self._is_backtest = is_backtest
         self._stop_event = threading.Event()
         self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
         self._execute_thread.start()
@@ -43,10 +46,11 @@ class OrderManager(ApplicationLoggingMixin):
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
-            trade_action: TradeAction
+            trade_action: TradeAction,
+            created_time: Optional[float] = None,
     ) -> None:
         self._rest_manager.place_order(
-            exchange, uuid, ticker_symbol, quantity, price, trade_action
+            exchange, uuid, ticker_symbol, quantity, price, trade_action, created_time
         )
 
     def get_order(self, exchange: str, uuid: str) -> Order:
@@ -91,7 +95,8 @@ class OrderManager(ApplicationLoggingMixin):
     def initialize(self, assets: list[Asset]):
         self._assets = assets
         self._init_websocket(assets)
-        self.reconcile_pending_orders()
+        if not self._is_backtest:
+            self.reconcile_pending_orders()
 
     def _init_websocket(self, assets: list[Asset]):
         for asset in assets:
@@ -121,7 +126,11 @@ class OrderManager(ApplicationLoggingMixin):
             self.app_logger.warning(f"Unable to load non-terminal orders for reconciliation: {exc}")
             return
 
+        registered_providers = set(self._rest_manager.get_registered_services())
         for order in non_terminal_orders:
+            if order.provider_name not in registered_providers:
+                continue
+
             try:
                 exchange_order = self.get_order(order.provider_name, order.uuid)
             except Exception as exc:
@@ -164,7 +173,10 @@ class OrderManager(ApplicationLoggingMixin):
             ticker_symbol=ticker_symbol,
             created_time=timestamp
         )
-        self._order_queue.put(order)
+        if self._is_backtest:
+            self.execute_order(order)
+        else:
+            self._order_queue.put(order)
         return order
 
     def execute_order(self, order: Order):
@@ -175,7 +187,8 @@ class OrderManager(ApplicationLoggingMixin):
                 order.ticker_symbol,
                 order.quantity,
                 order.price,
-                order.trade_action
+                order.trade_action,
+                order.created_time,
             )
             with self._database_manager.get_unit_of_work() as uow:
                 order_repository = uow.get_repository(PostgresOrderRepository)

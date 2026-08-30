@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Any, List
+from typing import Any, List, Optional
 from urllib.error import HTTPError
 
 from cachetools import cached, TTLCache
@@ -66,11 +66,12 @@ class RestManager(ExchangeRestManager, RestRegistry):
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
-            trade_action: TradeAction
+            trade_action: TradeAction,
+            created_time: Optional[float] = None,
     ) -> None:
         service = self.get_service(exchange)
         builder = service.builder().create_order(
-            uuid, ticker_symbol, quantity, price, trade_action
+            uuid, ticker_symbol, quantity, price, trade_action, created_time
         )
         service.execute(builder)
 

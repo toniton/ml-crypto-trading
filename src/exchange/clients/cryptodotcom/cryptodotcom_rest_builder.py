@@ -156,7 +156,8 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
-            trade_action: TradeAction
+            trade_action: TradeAction,
+            created_time: Optional[float] = None,  # pylint: disable=unused-argument
     ) -> CryptoDotComRestBuilder[None]:
         endpoint = Endpoint(
             path="private/create-order",

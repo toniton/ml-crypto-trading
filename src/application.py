@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import atexit
+from datetime import datetime, timezone
+from decimal import Decimal
 from queue import Queue
 from threading import Event
 from typing import Optional
@@ -8,14 +10,20 @@ from typing import Optional
 import src.configuration.providers
 import src.trading.protection.guards
 import src.exchange.clients
+from api.interfaces.backtest_request import (
+    BacktestRequest,
+    ExecutionConfiguration,
+    MarketDataConfiguration,
+)
 from src.agent import AgentGateway
 from src.agent.configuration.configuration_service import ConfigurationService
+from src.backtest.backtest_data_loader import BacktestDataLoader
+from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
 from src.vcs.application.events import RefChangedEvent
 from src.vcs.application.listener import RefChangeListener
 from src.vcs.application.service import VCSService
-from src.exchange.factories.client_factory import ClientFactory
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
 from src.configuration.llm_config import LlmConfig
@@ -26,11 +34,11 @@ from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.guard import Guard
-from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.events.message_event_bus import MessageEventBus
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.manager import LoggingManager
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.managers.manager_factory import ManagerFactory
 from src.llm.model_factory import ModelFactory
 from src.llm.tools.account_balance_tool import AccountBalanceTool
 from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
@@ -44,17 +52,9 @@ from src.llm.tools.recent_trades_tool import RecentTradesTool
 from src.llm.tools.session_summary_tool import SessionSummaryTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
 from src.llm.tools.trading_context_tool import TradingContextTool
-from src.trading.accounts.account_manager import AccountManager
-from src.trading.consensus.consensus_manager import ConsensusManager
-from src.trading.fees.fees_manager import FeesManager
 from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.trading.llm_oracle_scheduler import LlmOracleScheduler
-from src.trading.markets.market_data_manager import MarketDataManager
-from src.trading.orders.order_manager import OrderManager
 from src.trading.orders.order_reconciler import OrderReconciler
-from src.trading.protection.protection_manager import ProtectionManager
-from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
-from src.trading.session.session_manager import SessionManager
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
@@ -67,14 +67,12 @@ class Application(ApplicationLoggingMixin):
             trading_config: TradingConfig, llm_config: LlmConfig,
             activity_queue: Queue = Queue(),
             is_backtest_mode: bool = False,
-            backtest_scheduler: TradingScheduler = None,
     ):
         self.is_running = Event()
         self.is_ready = Event()
         self._trading_engine = None
         self._api_server: Optional[ApiServer] = None
         self._event_bus: Optional[MessageEventBus] = None
-        self._backtest_scheduler = backtest_scheduler
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -114,28 +112,16 @@ class Application(ApplicationLoggingMixin):
             cls(self._environment_config)
 
     def _create_managers(self, db_manager: DatabaseManager) -> ManagerContainer:
-        trading_journal = InMemoryTradingJournal()
-        self._trading_journal = trading_journal
         is_simulated = self._application_config.simulated
 
-        websocket_manager = ClientFactory.create_websocket_manager(is_simulated)
-        rest_manager = ClientFactory.create_rest_manager(is_simulated)
-
-        order_manager = OrderManager(db_manager, trading_journal, rest_manager, websocket_manager)
-        self._order_reconciler = OrderReconciler(order_manager)
-        websocket_manager.set_reconnect_callback(self._order_reconciler.trigger)
-
-        return ManagerContainer(
-            account_manager=AccountManager(self._assets, rest_manager, websocket_manager),
-            fees_manager=FeesManager(self._assets, rest_manager),
-            order_manager=order_manager,
-            market_data_manager=MarketDataManager(rest_manager, websocket_manager),
-            consensus_manager=ConsensusManager(),
-            protection_manager=ProtectionManager(),
-            session_manager=SessionManager(),
-            websocket_manager=websocket_manager,
-            rest_manager=rest_manager
+        container, trading_journal = ManagerFactory.build_manager_container(
+            db_manager, self._assets, is_simulated
         )
+        self._trading_journal = trading_journal
+        self._order_reconciler = OrderReconciler(container.order_manager)
+        container.websocket_manager.set_reconnect_callback(self._order_reconciler.trigger)
+
+        return container
 
     def _register_with_managers(self, instance: ExchangeRestService | ExchangeWebSocketService):
         if not isinstance(instance, (ExchangeRestService, ExchangeWebSocketService)):
@@ -175,19 +161,26 @@ class Application(ApplicationLoggingMixin):
             return
         self.app_logger.info("Starting Application...")
         self.is_running.set()
-        if not self._is_backtest_mode:
-            self._ensure_config_store_seeded()
-            self._config_listener.start()
-        trading_scheduler = self._backtest_scheduler if self._is_backtest_mode else LiveTradingScheduler()
+        if self._is_backtest_mode:
+            self.is_ready.set()
+            return
+
+        self._ensure_config_store_seeded()
+        self._config_listener.start()
+
+        trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
             strategies_registry=self._strategies_registry
         )
-        oracle_scheduler = LlmOracleScheduler(self._llm_config)
-        oracle_scheduler.register_assets(self._assets, self._llm_config.schedule)
-        llm = ModelFactory.create_model(self._llm_config)
-        trading_oracle = TradingOracle(llm)
+        self._setup_live_engine(trading_scheduler, trading_executor)
+
+        self._trading_engine.start_application()
+        self._order_reconciler.start()
+        self.is_ready.set()
+
+    def _setup_live_engine(self, trading_scheduler, trading_executor):
         context_tool = TradingContextTool(
             session_manager=self._managers.session_manager
         )
@@ -203,7 +196,16 @@ class Application(ApplicationLoggingMixin):
             order_manager=self._managers.order_manager,
             assets=self._assets
         )
+
+        oracle_scheduler = LlmOracleScheduler(self._llm_config)
+        oracle_scheduler.register_assets(self._assets, self._llm_config.schedule)
+        llm = ModelFactory.create_model(self._llm_config)
+        trading_oracle = TradingOracle(llm)
         trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
+
+        self._trading_engine = TradingEngine(
+            trading_scheduler, trading_executor, oracle_scheduler, trading_oracle
+        )
 
         if not self._application_config.headless:
             api_llm = ModelFactory.create_model(self._llm_config)
@@ -268,12 +270,44 @@ class Application(ApplicationLoggingMixin):
             )
             self._api_server.start()
 
-        self._trading_engine = TradingEngine(
-            trading_scheduler, trading_executor, oracle_scheduler, trading_oracle
+    def run_backtest(self) -> None:
+        """Drive the backtest simulation(s) via a BacktestRunner."""
+
+        runner = BacktestRunner(
+            self._db_manager,
+            {a.ticker_symbol: a for a in self._assets},
+            self._strategies_registry,
+            self._activity_queue,
+            self._dynamic_quantity,
         )
-        self._trading_engine.start_application()
-        self._order_reconciler.start()
-        self.is_ready.set()
+        requests = [self._build_backtest_request(asset) for asset in self._assets]
+        results = runner.run(requests)
+        for result in results:
+            self.app_logger.info(
+                f"Backtest {result.session_id} for {result.asset}: "
+                f"initial={result.initial_balance} final_equity={result.final_equity} "
+                f"fills={len(result.fills)} orders={len(result.orders)}"
+            )
+
+    def _build_backtest_request(self, asset) -> BacktestRequest:
+        loader = BacktestDataLoader(self._application_config.historical_data_dir_path)
+        points = loader.load(asset.ticker_symbol)
+        start = datetime.fromtimestamp(min(p.timestamp for p in points), tz=timezone.utc)
+        end = datetime.fromtimestamp(max(p.timestamp for p in points), tz=timezone.utc)
+        return BacktestRequest(
+            asset=asset.ticker_symbol,
+            start_time=start,
+            end_time=end,
+            market_data=MarketDataConfiguration(
+                data_source=self._application_config.historical_data_dir_path
+            ),
+            initial_balance=self._application_config.backtest_initial_balance,
+            execution=ExecutionConfiguration(
+                latency_ms=self._application_config.backtest_latency_ms,
+                slippage_ticks=self._application_config.backtest_slippage_ticks,
+                fee_rate=Decimal(str(self._application_config.backtest_fee_rate)),
+            ),
+        )
 
     def register_client(self, rest_service: ExchangeRestService, websocket_service: ExchangeWebSocketService):
         self._register_with_managers(rest_service)

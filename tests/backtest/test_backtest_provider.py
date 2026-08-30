@@ -3,14 +3,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.backtest_rest_service import BacktestRestService
-from backtest.events.domain_events import OrderFilledEvent, BalanceUpdateEvent
-from backtest.execution.backtest_execution_engine import BacktestExecutionEngine
-from backtest.execution.execution_model import ExecutionModel
-from backtest.execution.latency.fixed_latency import FixedLatencyModel
-from backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
-from backtest.execution.fees.percentage_fee import PercentageFee
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.backtest_rest_service import BacktestRestService
+from src.backtest.events.domain_events import OrderFilledEvent, BalanceUpdateEvent
+from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
+from src.backtest.execution.execution_model import ExecutionModel
+from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
+from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
+from src.backtest.execution.fees.percentage_fee import PercentageFee
 from api.interfaces.asset import Asset
 from api.interfaces.order import OrderStatus
 from api.interfaces.trade_action import TradeAction
@@ -90,8 +90,8 @@ class TestBacktestRestService:
     def test_order_lifecycle_through_engine(self, provider, engine, event_bus):
         order_callback = Mock()
         balance_callback = Mock()
-        event_bus.subscribe(OrderFilledEvent, order_callback)
-        event_bus.subscribe(BalanceUpdateEvent, balance_callback)
+        event_bus.subscribe_callback(OrderFilledEvent, order_callback)
+        event_bus.subscribe_callback(BalanceUpdateEvent, balance_callback)
 
         builder = provider.builder().create_order(
             uuid="valid-buy",

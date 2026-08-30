@@ -1,6 +1,6 @@
 import time
 from decimal import Decimal
-from typing import Any, List
+from typing import Any, List, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.fees import Fees
@@ -40,7 +40,8 @@ class SimulatedRestManager(RestManager):
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
-            trade_action: TradeAction
+            trade_action: TradeAction,
+            created_time: Optional[float] = None,
     ) -> None:
         order = Order(
             uuid=uuid,
@@ -49,7 +50,7 @@ class SimulatedRestManager(RestManager):
             quantity=quantity,
             price=price,
             trade_action=trade_action,
-            created_time=time.time(),
+            created_time=created_time if created_time is not None else time.time(),
             status=OrderStatus.PENDING
         )
         self._account.add_order(order)

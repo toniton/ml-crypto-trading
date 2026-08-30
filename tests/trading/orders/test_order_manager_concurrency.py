@@ -21,6 +21,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_journal = MagicMock(spec=TradingJournal)
         self.mock_websocket_manager = MagicMock()
         self.mock_rest_manager = MagicMock()
+        self.mock_rest_manager.get_registered_services.return_value = ["p1"]
         self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal, self.mock_rest_manager, self.mock_websocket_manager)
 
     def tearDown(self):
@@ -167,6 +168,19 @@ class TestOrderManagerConcurrency(unittest.TestCase):
 
         self.assertEqual(pending_order.status, OrderStatus.RECONCILIATION_REQUIRED)
         self.order_manager._save_orders_to_database.assert_called_once_with([pending_order])
+
+    def test_reconcile_skips_unregistered_provider(self):
+        pending_order = Order(uuid="11", price="104", quantity="1", provider_name="UNREGISTERED",
+                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
+                              created_time=time.time(), status=OrderStatus.PENDING)
+        self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
+        self.order_manager.get_order = MagicMock()
+        self.order_manager._save_orders_to_database = MagicMock()
+
+        self.order_manager.reconcile_pending_orders()
+
+        self.order_manager.get_order.assert_not_called()
+        self.order_manager._save_orders_to_database.assert_not_called()
 
     def test_reconcile_leaves_order_on_transient_error(self):
         pending_order = Order(uuid="8", price="104", quantity="1", provider_name="p1",

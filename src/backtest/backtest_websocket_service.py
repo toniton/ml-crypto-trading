@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Optional
 
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.backtest_websocket_builder import BacktestWebSocketBuilder
-from backtest.events.domain_events import (
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.backtest_websocket_builder import BacktestWebSocketBuilder
+from src.backtest.events.domain_events import (
     BalanceUpdateEvent,
     CandlesEvent,
-    Event,
+    BacktestEvent,
     MarketDataEvent,
     OrderFillEvent,
 )
@@ -26,9 +26,9 @@ class BacktestWebSocketService(ExchangeWebSocketService):
     def __init__(self, event_bus: BacktestEventBus):
         self.bus = event_bus
         self._callback: Optional[Callable] = None
-        self._subscriptions: dict[str, tuple[SubscriptionData, type[Event] | None]] = {}
-        self._bus_subscriptions: dict[type[Event], int] = {}
-        self._event_handlers: dict[type[Event], Callable[[Any], None]] = {
+        self._subscriptions: dict[str, tuple[SubscriptionData, type[BacktestEvent] | None]] = {}
+        self._bus_subscriptions: dict[type[BacktestEvent], int] = {}
+        self._event_handlers: dict[type[BacktestEvent], Callable[[Any], None]] = {
             MarketDataEvent: self._handle_market_data_event,
             CandlesEvent: self._handle_candles_event,
             OrderFillEvent: self._handle_order_fill_event,
@@ -65,7 +65,7 @@ class BacktestWebSocketService(ExchangeWebSocketService):
         if event_class and event_class not in self._bus_subscriptions:
             handler = self._event_handlers.get(event_class)
             if handler:
-                sub_id = self.bus.subscribe(event_class, handler)
+                sub_id = self.bus.subscribe_callback(event_class, handler)
                 self._bus_subscriptions[event_class] = sub_id
 
     def unsubscribe(self, builder: ExchangeWebSocketBuilder):

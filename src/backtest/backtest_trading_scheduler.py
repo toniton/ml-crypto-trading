@@ -3,7 +3,7 @@ from typing import Callable
 
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
-from backtest.backtest_clock import BacktestClock
+from src.backtest.backtest_clock import BacktestClock
 from src.core.interfaces.trading_scheduler import TradingScheduler
 
 

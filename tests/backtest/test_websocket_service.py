@@ -10,9 +10,9 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order, OrderStatus
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.backtest_websocket_service import BacktestWebSocketService
-from backtest.events.domain_events import (
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.backtest_websocket_service import BacktestWebSocketService
+from src.backtest.events.domain_events import (
     BalanceUpdateEvent,
     MarketDataEvent,
     OrderFillEvent,

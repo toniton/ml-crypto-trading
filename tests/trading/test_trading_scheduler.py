@@ -4,7 +4,7 @@ from unittest.mock import Mock, call
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from src.trading.live_trading_scheduler import LiveTradingScheduler
-from backtest.backtest_trading_scheduler import BacktestTradingScheduler
+from src.backtest.backtest_trading_scheduler import BacktestTradingScheduler
 
 
 class TestLiveTradingScheduler(unittest.TestCase):

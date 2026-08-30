@@ -1,4 +1,4 @@
-from backtest.backtest_clock import BacktestClock
+from src.backtest.backtest_clock import BacktestClock
 
 
 class TestBacktestClock:

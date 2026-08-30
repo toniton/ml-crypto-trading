@@ -3,6 +3,7 @@ from __future__ import annotations
 import abc
 from abc import ABC
 from enum import Enum
+from typing import Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
@@ -47,7 +48,8 @@ class ExchangeRestManager(ABC):
             ticker_symbol: str,
             quantity: str,
             price: str,
-            trade_action: TradeAction
+            trade_action: TradeAction,
+            created_time: Optional[float] = None,
     ) -> None:
         raise NotImplementedError()
 

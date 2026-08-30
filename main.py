@@ -1,6 +1,5 @@
 import time
 
-from backtest.backtest_application import BacktestApplication
 from src.application import Application
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import EnvironmentConfig
@@ -16,15 +15,17 @@ def main():
     llm_config = LlmConfig()
 
     is_backtest_mode = application_config.backtest_mode is True
+    app = Application(
+        application_config=application_config, environment_config=environment_config,
+        trading_config=trading_config, llm_config=llm_config,
+        is_backtest_mode=is_backtest_mode,
+    )
+    app.startup()
+
     if is_backtest_mode:
-        runner = BacktestApplication(
-            application_config=application_config, environment_config=environment_config,
-            trading_config=trading_config, llm_config=llm_config, is_backtest_mode=is_backtest_mode)
-        runner.startup()
+        app.run_backtest()
+        app.shutdown()
     else:
-        app = Application(application_config=application_config, environment_config=environment_config,
-                          trading_config=trading_config, llm_config=llm_config)
-        app.startup()
         try:
             while app.is_running.is_set():
                 time.sleep(1)

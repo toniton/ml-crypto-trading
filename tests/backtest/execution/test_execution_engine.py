@@ -4,15 +4,15 @@ from unittest.mock import Mock
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction, OrderStatus
-from backtest.backtest_clock import BacktestClock
-from backtest.backtest_data_loader import BacktestDataLoader, HistoricalDataPoint
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.events.domain_events import OrderFilledEvent, OrderCancelledEvent
-from backtest.execution.backtest_execution_engine import BacktestExecutionEngine
-from backtest.execution.execution_model import ExecutionModel
-from backtest.execution.latency.fixed_latency import FixedLatencyModel
-from backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
-from backtest.execution.fees.percentage_fee import PercentageFee
+from src.backtest.backtest_clock import BacktestClock
+from src.backtest.backtest_data_loader import BacktestDataLoader, HistoricalDataPoint
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.events.domain_events import OrderFilledEvent, OrderCancelledEvent
+from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
+from src.backtest.execution.execution_model import ExecutionModel
+from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
+from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
+from src.backtest.execution.fees.percentage_fee import PercentageFee
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
@@ -113,7 +113,7 @@ class TestExecutionEngineSubmit:  # pylint: disable=protected-access
         pending = engine._pending["BTC_USD"][0]
         assert pending.order_uuid == "test-order-1"
         assert pending.eligible_at == 1000.0
-        assert pending.execution_tick == 1000
+        assert pending.execution_timestamp == 1000
 
     def test_submit_with_latency_resolves_tick(self):
         engine, _, _ = _make_engine(
@@ -126,7 +126,7 @@ class TestExecutionEngineSubmit:  # pylint: disable=protected-access
 
         pending = engine._pending["BTC_USD"][0]
         assert pending.eligible_at == 1000.0 + 1.5
-        assert pending.execution_tick == 2000
+        assert pending.execution_timestamp == 2000
 
     def test_submit_past_end_resolves_none(self):
         engine, _, _ = _make_engine(
@@ -138,7 +138,7 @@ class TestExecutionEngineSubmit:  # pylint: disable=protected-access
         engine.submit(order, "BTC_USD")
 
         pending = engine._pending["BTC_USD"][0]
-        assert pending.execution_tick is None
+        assert pending.execution_timestamp is None
 
 
 class TestExecutionEngineProcess:
@@ -299,7 +299,7 @@ class TestExecutionEngineProcess:
             fee_rate="0",
         )
         fill_callback = Mock()
-        bus.subscribe(OrderFilledEvent, fill_callback)
+        bus.subscribe_callback(OrderFilledEvent, fill_callback)
 
         order = _make_order()
         engine.submit(order, "BTC_USD")
@@ -317,7 +317,7 @@ class TestExecutionEngineProcess:
             initial_balance="50.0",
         )
         cancel_callback = Mock()
-        bus.subscribe(OrderCancelledEvent, cancel_callback)
+        bus.subscribe_callback(OrderCancelledEvent, cancel_callback)
 
         order = _make_order(quantity="1.0", price="100.00")
         engine.submit(order, "BTC_USD")
@@ -392,3 +392,67 @@ class TestExecutionEnginePendingOrders:
         btc_pending = engine.get_pending_orders("BTC_USD")
         assert len(btc_pending) == 1
         assert btc_pending[0].uuid == "order-1"
+
+
+class TestExecutionEngineNoLookahead:
+    def test_fill_uses_signal_tick_data_not_next_tick(self):
+        # Signal at 1000 (zero latency); tick 2000 has a far higher price. The fill
+        # must read tick 1000's data, never 2000's.
+        engine, _, _ = _make_engine(
+            timestamps={"BTC_USD": [1000, 2000]},
+            data={"BTC_USD": [(1000, "100"), (2000, "999")]},
+            latency_ms=0.0,
+            slippage_ticks=0,
+            fee_rate="0",
+        )
+        order = _make_order(created_time=1000.0, price="100.00")
+        engine.submit(order, "BTC_USD")
+        engine.process("BTC_USD", 2000)
+
+        result = engine.results[0]
+        assert result.executed_at == 1000.0
+        assert result.market_price == Decimal("100")
+        assert result.execution_price == Decimal("100")
+
+    def test_zero_assumptions_deterministic_baseline(self):
+        engine, _, _ = _make_engine(
+            timestamps={"BTC_USD": [1000]},
+            data={"BTC_USD": [(1000, "100")]},
+            latency_ms=0.0,
+            slippage_ticks=0,
+            fee_rate="0",
+        )
+        order = _make_order(quantity="1.0", price="100.00")
+        engine.submit(order, "BTC_USD")
+        engine.process("BTC_USD", 1000)
+
+        result = engine.results[0]
+        assert result.execution_price == Decimal("100")
+        assert result.market_price == Decimal("100")
+        assert result.slippage_cost == Decimal("0")
+        assert result.fee == Decimal("0")
+        assert engine.account.balance_usd == Decimal("9900.0")
+
+    def test_latency_changes_execution_outcome(self):
+        def run(latency_ms):
+            engine, _, _ = _make_engine(
+                timestamps={"BTC_USD": [1000, 2000]},
+                data={"BTC_USD": [(1000, "100"), (2000, "110")]},
+                latency_ms=latency_ms,
+                slippage_ticks=0,
+                fee_rate="0",
+            )
+            order = _make_order(created_time=1000.0)
+            engine.submit(order, "BTC_USD")
+            engine.process("BTC_USD", 1000)
+            engine.process("BTC_USD", 2000)
+            return engine.results[0]
+
+        zero_latency = run(0.0)
+        with_latency = run(1500.0)
+
+        assert zero_latency.executed_at == 1000.0
+        assert zero_latency.market_price == Decimal("100")
+        assert with_latency.executed_at == 2000.0
+        assert with_latency.market_price == Decimal("110")
+        assert with_latency.market_price != zero_latency.market_price

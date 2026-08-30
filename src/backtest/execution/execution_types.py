@@ -15,12 +15,14 @@ class PendingOrder:
     signal_at: float
     submitted_at: float
     eligible_at: float
-    execution_tick: Optional[int] = None
+    execution_timestamp: Optional[int] = None
 
 
 @dataclass
 class ExecutionResult:  # pylint: disable=too-many-instance-attributes
     order_uuid: str
+    ticker_symbol: str
+    trade_action: TradeAction
     status: OrderStatus
     requested_price: Decimal
     market_price: Decimal

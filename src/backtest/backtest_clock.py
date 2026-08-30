@@ -13,6 +13,22 @@ class AssetClockData:
 
 
 class BacktestClock:
+    """Deterministic simulation clock over a per-asset list of historical timestamps.
+
+    Timestamp semantics (backtest invariant)
+    ----------------------------------------
+    * Timestamps are integer epoch seconds.
+    * Each timestamp is the moment at which a market observation (candle close)
+      is *known*: a strategy reacting to tick ``T`` may only act on data at ``T``.
+    * ``next_timestamp_at_or_after`` resolves a latency deadline (``eligible_at``)
+      to the first historical tick ``>= eligible_at``. With zero latency this is the
+      signal tick itself, so the fill reads the signal tick's market data — never
+      future data (no look-ahead).
+
+    The clock only knows "historical time -> historical position". It knows nothing
+    about orders, fees, or slippage.
+    """
+
     def __init__(self, timestamps: dict[str, list[int]], tick_delay: float = 1.0):
         self._lock = Lock()
         self._tick_delay = tick_delay
@@ -72,7 +88,11 @@ class BacktestClock:
         return len(clock_data.timestamps)
 
     def next_timestamp_at_or_after(self, key: str, target_ts: float) -> Optional[int]:
-        """Return first timestamp >= target_ts, or None if past end of data."""
+        """Return first historical timestamp >= ``target_ts``, or None if past the end.
+
+        This is the single point where a simulated latency deadline is mapped onto
+        historical time. It never returns a timestamp earlier than ``target_ts``.
+        """
         with self._lock:
             clock_data = self._asset_clock_indexes.get(key)
             if not clock_data or not clock_data.timestamps:

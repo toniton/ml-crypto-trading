@@ -48,6 +48,6 @@ class TestRestManager(unittest.TestCase):
         )
 
         mock_builder.create_order.assert_called_once_with(
-            "uuid1", "BTC/USDT", "1.0", Decimal("50000"), TradeAction.BUY
+            "uuid1", "BTC/USDT", "1.0", Decimal("50000"), TradeAction.BUY, None
         )
         self.mock_service.execute.assert_called_once()

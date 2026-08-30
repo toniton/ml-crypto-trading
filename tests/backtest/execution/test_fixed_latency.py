@@ -1,4 +1,4 @@
-from backtest.execution.latency.fixed_latency import FixedLatencyModel
+from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
 
 
 class TestFixedLatencyModel:

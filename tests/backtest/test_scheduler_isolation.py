@@ -2,8 +2,8 @@ import unittest
 from unittest.mock import MagicMock
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
-from backtest.backtest_clock import BacktestClock
-from backtest.backtest_trading_scheduler import BacktestTradingScheduler
+from src.backtest.backtest_clock import BacktestClock
+from src.backtest.backtest_trading_scheduler import BacktestTradingScheduler
 
 
 class TestSchedulerIsolation(unittest.TestCase):

@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any, Optional
 
 from api.interfaces.timeframe import Timeframe
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.events.domain_events import (
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.events.domain_events import (
     BalanceUpdateEvent,
     CandlesEvent,
-    Event,
+    BacktestEvent,
     MarketDataEvent,
     OrderFillEvent,
 )
@@ -68,7 +68,7 @@ class BacktestWebSocketBuilder(ExchangeWebSocketBuilder):
         return self
 
     @property
-    def event_class(self) -> type[Event] | None:
+    def event_class(self) -> type[BacktestEvent] | None:
         if not self._current_subscription:
             return None
         return self._current_subscription.get("event_class")

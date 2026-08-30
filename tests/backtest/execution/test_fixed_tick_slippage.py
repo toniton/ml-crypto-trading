@@ -2,7 +2,7 @@ from decimal import Decimal
 
 from api.interfaces.asset import Asset
 from api.interfaces.trade_action import TradeAction
-from backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
+from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 

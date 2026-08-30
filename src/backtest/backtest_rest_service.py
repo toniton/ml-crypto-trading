@@ -1,5 +1,5 @@
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from api.interfaces.account_balance import AccountBalance
@@ -9,11 +9,11 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order, OrderStatus
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
-from backtest.backtest_clock import BacktestClock
-from backtest.backtest_data_loader import BacktestDataLoader
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.backtest_rest_builder import BacktestRestBuilder
-from backtest.execution.backtest_execution_engine import BacktestExecutionEngine
+from src.backtest.backtest_clock import BacktestClock
+from src.backtest.backtest_data_loader import BacktestDataLoader
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.backtest_rest_builder import BacktestRestBuilder
+from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
@@ -77,14 +77,15 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
         )
 
     def _handle_create_order(
-        self,
-        uuid: str,
-        ticker_symbol: str,
-        quantity: str,
-        price: str,
-        trade_action: TradeAction,
+            self,
+            uuid: str,
+            ticker_symbol: str,
+            quantity: str,
+            price: str,
+            trade_action: TradeAction,
+            created_time: Optional[float] = None,
     ) -> Order:
-        executed_at = self.clock.now(ticker_symbol)
+        executed_at = created_time if created_time is not None else self.clock.now(ticker_symbol)
         order = Order(
             uuid=uuid or str(uuid4()),
             ticker_symbol=ticker_symbol,

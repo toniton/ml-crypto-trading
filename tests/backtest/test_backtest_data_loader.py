@@ -1,6 +1,6 @@
 from decimal import Decimal
 import pytest
-from backtest.backtest_data_loader import BacktestDataLoader
+from src.backtest.backtest_data_loader import BacktestDataLoader
 
 
 class TestBacktestDataLoader:

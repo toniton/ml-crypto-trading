@@ -5,12 +5,17 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
-from backtest.backtest_clock import BacktestClock
-from backtest.backtest_data_loader import BacktestDataLoader
-from backtest.backtest_event_bus import BacktestEventBus
-from backtest.events.domain_events import OrderFilledEvent, OrderCancelledEvent, BalanceUpdateEvent
-from backtest.execution.execution_types import PendingOrder, ExecutionResult
-from backtest.execution.execution_model import ExecutionModel
+from src.backtest.backtest_clock import BacktestClock
+from src.backtest.backtest_data_loader import BacktestDataLoader
+from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.events.domain_events import (
+    OrderFilledEvent,
+    OrderCancelledEvent,
+    OrderSubmittedEvent,
+    BalanceUpdateEvent,
+)
+from src.backtest.execution.execution_types import PendingOrder, ExecutionResult
+from src.backtest.execution.execution_model import ExecutionModel
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
@@ -24,13 +29,13 @@ class SimulatedAccount:
 
 class BacktestExecutionEngine(ApplicationLoggingMixin):
     def __init__(
-        self,
-        clock: BacktestClock,
-        loader: BacktestDataLoader,
-        bus: BacktestEventBus,
-        execution_model: ExecutionModel,
-        assets: dict[str, Asset],
-        initial_balance: Decimal = Decimal("10000.0"),
+            self,
+            clock: BacktestClock,
+            loader: BacktestDataLoader,
+            bus: BacktestEventBus,
+            execution_model: ExecutionModel,
+            assets: dict[str, Asset],
+            initial_balance: Decimal = Decimal("10000.0"),
     ):
         self._clock = clock
         self._loader = loader
@@ -45,7 +50,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
         latency = self._model.latency.get_latency(order, ticker_symbol)
         eligible_at = order.created_time + latency
 
-        execution_tick = self._clock.next_timestamp_at_or_after(
+        execution_timestamp = self._clock.next_timestamp_at_or_after(
             ticker_symbol, eligible_at
         )
 
@@ -58,7 +63,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
             signal_at=order.created_time,
             submitted_at=order.created_time,
             eligible_at=eligible_at,
-            execution_tick=execution_tick,
+            execution_timestamp=execution_timestamp,
         )
 
         self._pending.setdefault(ticker_symbol, []).append(pending)
@@ -66,27 +71,29 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
         if not self._find_order(order.uuid):
             self.account.orders.append(order)
 
+        self._bus.publish(OrderSubmittedEvent(order=order))
+
         self.app_logger.debug(
             f"Order submitted: {order.uuid} {ticker_symbol} "
-            f"eligible_at={eligible_at} execution_tick={execution_tick}"
+            f"eligible_at={eligible_at} execution_timestamp={execution_timestamp}"
         )
 
     def process(self, ticker_symbol: str, current_timestamp: float) -> None:
         pending_list = self._pending.get(ticker_symbol, [])
         due = [
             p for p in pending_list
-            if p.execution_tick is not None and p.execution_tick <= current_timestamp
+            if p.execution_timestamp is not None and p.execution_timestamp <= current_timestamp
         ]
         self._pending[ticker_symbol] = [
             p for p in pending_list
-            if p.execution_tick is None or p.execution_tick > current_timestamp
+            if p.execution_timestamp is None or p.execution_timestamp > current_timestamp
         ]
 
         for pending in due:
             self._fill_order(pending)
 
     def _fill_order(self, pending: PendingOrder) -> None:
-        data = self._loader.get_data(pending.ticker_symbol, pending.execution_tick)
+        data = self._loader.get_data(pending.ticker_symbol, pending.execution_timestamp)
         if not data:
             self._cancel_order(pending, "no_market_data_at_tick")
             return
@@ -112,7 +119,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
         order = self._find_order(pending.order_uuid)
         if order:
             order.status = OrderStatus.COMPLETED
-            order.executed_time = float(pending.execution_tick)
+            order.executed_time = float(pending.execution_timestamp)
             order.fee = fee
 
         slippage_per_unit = executed_price - market_price
@@ -120,6 +127,8 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
 
         result = ExecutionResult(
             order_uuid=pending.order_uuid,
+            ticker_symbol=pending.ticker_symbol,
+            trade_action=pending.trade_action,
             status=OrderStatus.COMPLETED,
             requested_price=pending.requested_price,
             market_price=market_price,
@@ -132,19 +141,19 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
             signal_at=pending.signal_at,
             submitted_at=pending.submitted_at,
             eligible_at=pending.eligible_at,
-            executed_at=float(pending.execution_tick),
+            executed_at=float(pending.execution_timestamp),
         )
         self._results.append(result)
 
         if order:
-            self._bus.publish(OrderFilledEvent(order=order))
+            self._bus.publish(OrderFilledEvent(order=order, execution=result))
         balances = self.get_balances_snapshot()
         self._bus.publish(BalanceUpdateEvent(balances=balances))
 
         self.app_logger.info(
             f"Fill: {pending.trade_action.name} {pending.quantity} "
-            f"{pending.ticker_symbol} @ {executed_price} "
-            f"(market={market_price}, slippage={slippage_per_unit}, fee={fee})"
+            f"{pending.ticker_symbol} @ {executed_price:f} "
+            f"(market={market_price:f}, slippage={slippage_per_unit:f}, fee={fee:f})"
         )
 
     def _apply_to_account(self, pending: PendingOrder, price: Decimal, fee: Decimal) -> bool:
@@ -156,8 +165,8 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
                 return False
             self.account.balance_usd -= cost
             self.account.positions[pending.ticker_symbol] = (
-                self.account.positions.get(pending.ticker_symbol, Decimal("0"))
-                + pending.quantity
+                    self.account.positions.get(pending.ticker_symbol, Decimal("0"))
+                    + pending.quantity
             )
         else:
             position = self.account.positions.get(pending.ticker_symbol, Decimal("0"))

@@ -53,7 +53,8 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
-            trade_action
+            trade_action,
+            created_time: Optional[float] = None,
     ) -> 'BacktestRestBuilder[T, None]':
         self.method_name = "create_order"
         self.params = {
@@ -61,7 +62,8 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
             "ticker_symbol": ticker_symbol,
             "quantity": quantity,
             "price": str(price),
-            "trade_action": trade_action
+            "trade_action": trade_action,
+            "created_time": created_time,
         }
         return self
 
