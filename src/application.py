@@ -17,6 +17,13 @@ from api.interfaces.backtest_request import (
 )
 from src.agent import AgentGateway
 from src.agent.configuration.configuration_service import ConfigurationService
+from src.agent.oracle import (
+    AnalyzeTradingStateTool,
+    GetTradingSummaryTool,
+    OracleContext,
+    OracleService,
+    summary_interval_for,
+)
 from src.backtest.backtest_data_loader import BacktestDataLoader
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
@@ -53,12 +60,10 @@ from src.llm.tools.session_summary_tool import SessionSummaryTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.live_trading_scheduler import LiveTradingScheduler
-from src.trading.llm_oracle_scheduler import LlmOracleScheduler
 from src.trading.orders.order_reconciler import OrderReconciler
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
-from src.trading.trading_oracle import TradingOracle
 
 
 class Application(ApplicationLoggingMixin):
@@ -73,6 +78,8 @@ class Application(ApplicationLoggingMixin):
         self._trading_engine = None
         self._api_server: Optional[ApiServer] = None
         self._event_bus: Optional[MessageEventBus] = None
+        self._trading_event_bus: Optional[MessageEventBus] = None
+        self._oracle_service: Optional[OracleService] = None
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -170,9 +177,11 @@ class Application(ApplicationLoggingMixin):
 
         trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
+        self._trading_event_bus = MessageEventBus()
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
-            strategies_registry=self._strategies_registry
+            strategies_registry=self._strategies_registry,
+            event_bus=self._trading_event_bus,
         )
         self._setup_live_engine(trading_scheduler, trading_executor)
 
@@ -197,15 +206,21 @@ class Application(ApplicationLoggingMixin):
             assets=self._assets
         )
 
-        oracle_scheduler = LlmOracleScheduler(self._llm_config)
-        oracle_scheduler.register_assets(self._assets, self._llm_config.schedule)
         llm = ModelFactory.create_model(self._llm_config)
-        trading_oracle = TradingOracle(llm)
-        trading_oracle.register_tools([context_tool, fees_tool, market_stats_tool, open_orders_tool])
-
-        self._trading_engine = TradingEngine(
-            trading_scheduler, trading_executor, oracle_scheduler, trading_oracle
+        oracle_context = OracleContext(
+            summary_interval=summary_interval_for(self._llm_config.schedule),
         )
+        oracle_service = OracleService(
+            llm,
+            oracle_context,
+            publish_bus=self._trading_event_bus,
+            model=self._llm_config.default_model.name,
+            model_version=self._llm_config.default_model.model_name,
+        )
+        oracle_service.subscribe(self._trading_event_bus)
+        self._oracle_service = oracle_service
+
+        self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
 
         if not self._application_config.headless:
             api_llm = ModelFactory.create_model(self._llm_config)
@@ -240,6 +255,8 @@ class Application(ApplicationLoggingMixin):
             configuration_tool = ConfigurationTool(configuration_service=configuration_service)
             configuration_history_tool = ConfigurationHistoryTool(vcs=self._vcs)
             session_summary_tool = SessionSummaryTool(session_manager=self._managers.session_manager)
+            get_trading_summary_tool = GetTradingSummaryTool(oracle_service=self._oracle_service)
+            analyze_trading_state_tool = AnalyzeTradingStateTool(oracle_service=self._oracle_service)
 
             llm_tools = [
                 context_tool,
@@ -254,6 +271,8 @@ class Application(ApplicationLoggingMixin):
                 configuration_tool,
                 configuration_history_tool,
                 session_summary_tool,
+                get_trading_summary_tool,
+                analyze_trading_state_tool,
             ]
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(
@@ -346,6 +365,10 @@ class Application(ApplicationLoggingMixin):
         if self._event_bus:
             self._event_bus.close()
             self._event_bus = None
+        if self._trading_event_bus:
+            self._trading_event_bus.close()
+            self._trading_event_bus = None
+        self._oracle_service = None
         self._config_listener.stop()
         if self._order_reconciler:
             self._order_reconciler.stop()

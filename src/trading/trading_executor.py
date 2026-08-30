@@ -13,10 +13,18 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_session import TradingSession
 from api.interfaces.trading_context import TradingContext
+from src.core.interfaces.event import Event
+from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.trading_strategy import TradingStrategy
 from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.events import (
+    BalanceChanged,
+    MarketStateChanged,
+    OrderSubmitted,
+    PositionChanged,
+)
 from src.trading.factories.trading_expression_factory import TradingExpressionFactory
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
@@ -34,9 +42,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             manager_container: ManagerContainer,
             activity_queue: Queue,
             dynamic_quantity: Optional[str] = None,
-            strategies_registry: Optional[StrategyRegistry] = None
+            strategies_registry: Optional[StrategyRegistry] = None,
+            event_bus: Optional[EventBus] = None
     ):
         self.assets = assets
+        self.event_bus = event_bus
         self._dynamic_quantity = dynamic_quantity
         self._dynamic_quantity_parser = ExpressionParser(dynamic_quantity) if dynamic_quantity else None
         self.account_manager = manager_container.account_manager
@@ -129,6 +139,17 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         fees = self.fees_manager.get_instrument_fees(asset.exchange.value, asset.ticker_symbol)
         candles = self.market_data_manager.get_candles(asset)
 
+        self._publish_event(MarketStateChanged(
+            symbol=asset.ticker_symbol,
+            price=market_data.close_price,
+            market_timestamp=market_data.timestamp,
+        ))
+        self._publish_event(BalanceChanged(
+            symbol=asset.ticker_symbol,
+            currency=asset.quote_ticker_symbol,
+            balance=quote_balance.available_balance,
+        ))
+
         return quote_balance, market_data, candles, fees
 
     def create_buy_order(self, assets: list[Asset]):
@@ -173,6 +194,19 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     asset.key, market_data, TradeAction.BUY,
                     quantity=Decimal(quantity), price=price
                 )
+
+                self._publish_event(OrderSubmitted(
+                    symbol=asset.ticker_symbol,
+                    order=buy_order,
+                ))
+                self._publish_event(PositionChanged(
+                    symbol=asset.ticker_symbol,
+                    action=TradeAction.BUY.value,
+                    quantity=Decimal(quantity),
+                    price=price,
+                    position_qty=trading_context.position_qty,
+                    realized_pnl=trading_context.realized_pnl,
+                ))
 
                 self.trading_logger.info(f"Order opened: {asset.ticker_symbol} BUY {quantity} @ {price}")
 
@@ -233,6 +267,19 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         quantity=Decimal(quantity), price=price
                     )
 
+                    self._publish_event(OrderSubmitted(
+                        symbol=asset.ticker_symbol,
+                        order=sell_order,
+                    ))
+                    self._publish_event(PositionChanged(
+                        symbol=asset.ticker_symbol,
+                        action=TradeAction.SELL.value,
+                        quantity=Decimal(quantity),
+                        price=price,
+                        position_qty=trading_context.position_qty,
+                        realized_pnl=trading_context.realized_pnl,
+                    ))
+
                     self.trading_logger.info(
                         f"Order closed: {asset.ticker_symbol} SELL {quantity} @ {price}")
 
@@ -247,6 +294,14 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             except Exception as exc:
                 self.app_logger.error(f"Error finalizing asset {asset}: {exc}", exc_info=True)
         self.app_logger.debug("Check unclosed orders completed")
+
+    def _publish_event(self, event: Event) -> None:
+        if self.event_bus is None:
+            return
+        try:
+            self.event_bus.publish(event)
+        except Exception:  # pylint: disable=broad-except
+            self.app_logger.exception(f"Failed to publish {event.type}")
 
     def stop(self):
         self.market_data_manager.shutdown()

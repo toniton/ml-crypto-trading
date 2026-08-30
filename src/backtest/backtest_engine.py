@@ -8,7 +8,6 @@ from src.backtest.backtest_simulator import BacktestSimulator
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
-from src.trading.trading_oracle import TradingOracle
 
 
 class BacktestEngine(TradingEngine):
@@ -16,12 +15,10 @@ class BacktestEngine(TradingEngine):
             self,
             trading_scheduler: TradingScheduler,
             trading_executor: Optional[TradingExecutor] = None,
-            oracle_scheduler: Optional[TradingScheduler] = None,
-            trading_oracle: Optional[TradingOracle] = None,
             infrastructure: Optional[BacktestInfrastructure] = None,
             assets: Optional[list[Asset]] = None,
     ):
-        super().__init__(trading_scheduler, trading_executor, oracle_scheduler, trading_oracle)
+        super().__init__(trading_scheduler, trading_executor)
         self._assets = assets or []
         self._simulator = None
         if infrastructure is not None:
@@ -41,12 +38,6 @@ class BacktestEngine(TradingEngine):
         # inline instead of dispatching to the live bot's thread pool.
         self._trading_executor.create_buy_order(assets)
         self._trading_executor.create_sell_order(assets)
-
-    def _start_oracle_cycle(self):
-        pass
-
-    def _stop_oracle_cycle(self):
-        pass
 
     def start_application(self):
         if self._trading_executor is not None:
