@@ -5,6 +5,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.backtest_request import BacktestDataSourceType
 from src.agent.backtest.backtest_service import BacktestService
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
@@ -12,6 +13,13 @@ from src.logging.application_logging_mixin import ApplicationLoggingMixin
 class BacktestInput(BaseModel):
     ticker_symbol: str = Field(
         description="Ticker symbol of the asset to backtest (e.g., 'BTC_USD')."
+    )
+    data_source: BacktestDataSourceType = Field(
+        default=BacktestDataSourceType.CSV,
+        description=(
+            "Historical data source: 'csv' (configured CSV history) or "
+            "'market_data' (recently recorded live market data)."
+        ),
     )
 
 
@@ -34,8 +42,12 @@ class BacktestTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, backtest_service: BacktestService):
         super().__init__(backtest_service=backtest_service)
 
-    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
-        summary = self.backtest_service.run_asset(ticker_symbol)
+    def _run(  # pylint: disable=arguments-differ
+            self,
+            ticker_symbol: str,
+            data_source: BacktestDataSourceType = BacktestDataSourceType.CSV,
+    ) -> str:
+        summary = self.backtest_service.run_asset(ticker_symbol, source_type=data_source)
         self.app_logger.info(f"Backtest for {ticker_symbol} requested by LLM: session={summary.session_id}")
         return (
             f"Backtest {summary.ticker_symbol} (session {summary.session_id}):\n"

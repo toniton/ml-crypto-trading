@@ -25,6 +25,7 @@ from src.agent.oracle import (
     OracleService,
     summary_interval_for,
 )
+from src.backtest.analysis.drift_detector import BacktestDriftDetector
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
@@ -51,6 +52,7 @@ from src.trading.managers.manager_container import ManagerContainer
 from src.trading.managers.manager_factory import ManagerFactory
 from src.llm.model_factory import ModelFactory
 from src.llm.tools.account_balance_tool import AccountBalanceTool
+from src.llm.tools.backtest_drift_tool import BacktestDriftTool
 from src.llm.tools.backtest_tool import BacktestTool
 from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
 from src.llm.tools.configuration_tool import ConfigurationTool
@@ -263,7 +265,11 @@ class Application(ApplicationLoggingMixin):
             session_summary_tool = SessionSummaryTool(session_manager=self._managers.session_manager)
             get_trading_summary_tool = GetTradingSummaryTool(oracle_service=self._oracle_service)
             analyze_trading_state_tool = AnalyzeTradingStateTool(oracle_service=self._oracle_service)
-            backtest_tool = BacktestTool(backtest_service=self._build_backtest_service())
+            backtest_service = self._build_backtest_service()
+            backtest_tool = BacktestTool(backtest_service=backtest_service)
+            backtest_drift_tool = BacktestDriftTool(
+                drift_detector=BacktestDriftDetector(backtest_service, self._trading_journal)
+            )
 
             llm_tools = [
                 context_tool,
@@ -281,6 +287,7 @@ class Application(ApplicationLoggingMixin):
                 get_trading_summary_tool,
                 analyze_trading_state_tool,
                 backtest_tool,
+                backtest_drift_tool,
             ]
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(

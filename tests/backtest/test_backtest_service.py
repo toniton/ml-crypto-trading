@@ -34,6 +34,14 @@ class TestBacktestService:
         assert request.end_time is None
         assert request.initial_balance == Decimal("10000.0")
 
+    def test_build_request_with_market_data_source(self):
+        service = _make_service()
+
+        request = service.build_request("BTC_USD", source_type=BacktestDataSourceType.MARKET_DATA)
+
+        assert request.data_source.source_type == BacktestDataSourceType.MARKET_DATA
+        assert request.data_source.path is None
+
     def test_run_is_canonical_and_stores_session(self):
         runner = Mock()
         result = object()

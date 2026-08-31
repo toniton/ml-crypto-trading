@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from api.interfaces.backtest_request import (
     BacktestDataSourceRequest,
+    BacktestDataSourceType,
     BacktestRequest,
     ExecutionConfiguration,
 )
@@ -69,16 +70,36 @@ class BacktestService(AgentLoggingMixin):
         metrics = self._calculator.calculate(self.result(session_id))
         return self._calculator.summarize(session, metrics)
 
-    def run_asset(self, ticker_symbol: str) -> BacktestSummary:
+    def run_asset(
+            self,
+            ticker_symbol: str,
+            source_type: BacktestDataSourceType | None = None,
+    ) -> BacktestSummary:
         """Run a backtest for a single asset and return its compact summary."""
 
-        result = self.run(self.build_request(ticker_symbol))
+        result = self.run(self.build_request(ticker_symbol, source_type))
         return self.summary(result.session_id)
 
-    def build_request(self, ticker_symbol: str) -> BacktestRequest:
+    def build_request(
+            self,
+            ticker_symbol: str,
+            source_type: BacktestDataSourceType | None = None,
+    ) -> BacktestRequest:
         return BacktestRequest(
             ticker_symbol=ticker_symbol,
-            data_source=self._data_source_request,
+            data_source=self._data_source_request_for(source_type),
             initial_balance=self._initial_balance,
             execution=self._execution,
         )
+
+    def _data_source_request_for(
+            self,
+            source_type: BacktestDataSourceType | None,
+    ) -> BacktestDataSourceRequest:
+        if source_type is None or source_type == BacktestDataSourceType.CSV:
+            return self._data_source_request
+        if source_type == BacktestDataSourceType.MARKET_DATA:
+            return BacktestDataSourceRequest(
+                source_type=BacktestDataSourceType.MARKET_DATA
+            )
+        raise ValueError(f"Unsupported data source type: {source_type}")
