@@ -137,7 +137,7 @@ class TestBacktestRunner:
             _make_request(tmp_path, end_time=datetime.fromtimestamp(T0 + 1000, tz=timezone.utc))
         )
 
-        assert [point.timestamp for point in result.market_series] == [T0, T0 + 1000]
+        assert [int(data.timestamp) for data in result.market_series] == [T0, T0 + 1000]
 
 
 class TestBacktestRunnerFills:

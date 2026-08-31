@@ -5,9 +5,8 @@ from uuid import uuid4
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
-from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
-from src.backtest.domain.result import MarketDataPoint, PortfolioSnapshot
+from src.backtest.domain.result import PortfolioSnapshot
 from src.backtest.execution.execution_types import ExecutionResult
 from src.core.interfaces.event import Event
 
@@ -54,18 +53,6 @@ class BacktestEvent(Event):
 @dataclass
 class TickEvent(BacktestEvent):
     tick_time: int
-
-
-@dataclass
-class MarketDataEvent(BacktestEvent):
-    market_data: MarketData
-    ticker_symbol: str
-
-
-@dataclass
-class MarketDataPointEvent(BacktestEvent):
-    point: MarketDataPoint
-    ticker_symbol: str
 
 
 @dataclass

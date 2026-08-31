@@ -16,13 +16,13 @@ from src.trading.session.session_manager import SessionManager
 
 class ManagerFactory:
     @staticmethod
-    def build_manager_container(database_manager, assets, is_simulated: bool = False, is_backtest: bool = False) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
-        """Build a :class:`ManagerContainer` wired to live/simulated exchange clients.
-
-        The backtest runner registers its own backtest rest/websocket services onto the
-        returned managers before running.
-        """
-
+    def build_manager_container(
+            database_manager,
+            assets,
+            is_simulated: bool = False,
+            is_backtest: bool = False,
+            event_bus=None,
+    ) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
         trading_journal = InMemoryTradingJournal()
         websocket_manager = ClientFactory.create_websocket_manager(is_simulated)
         rest_manager = ClientFactory.create_rest_manager(is_simulated)
@@ -34,7 +34,7 @@ class ManagerFactory:
             account_manager=AccountManager(assets, rest_manager, websocket_manager),
             fees_manager=FeesManager(assets, rest_manager),
             order_manager=order_manager,
-            market_data_manager=MarketDataManager(rest_manager, websocket_manager),
+            market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),
             session_manager=SessionManager(),

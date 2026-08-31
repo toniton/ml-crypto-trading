@@ -7,20 +7,29 @@ from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
 from api.interfaces.timeframe import Timeframe
+from src.core.interfaces.event_bus import EventBus
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.events import MarketDataEvent
 
 
 class MarketDataManager(ApplicationLoggingMixin):
     MAX_CANDLES = 50
 
-    def __init__(self, rest_manager: RestManager, websocket_manager: WebSocketManager):
+    def __init__(
+            self,
+            rest_manager: RestManager,
+            websocket_manager: WebSocketManager,
+            event_bus: EventBus | None = None,
+    ):
         self._rest_manager = rest_manager
         self._websocket_manager = websocket_manager
+        self._event_bus = event_bus
         self._assets: list[Asset] = []
         self._market_data: dict[int, MarketData | None] = {}
         self._candles: dict[int, list[Candle]] = {}
+        self._ticker_symbols: dict[int, str] = {}
         self._lock = threading.Lock()
 
     def get_rest_market_data(self, exchange: str, ticker_symbol: str) -> MarketData:
@@ -34,6 +43,7 @@ class MarketDataManager(ApplicationLoggingMixin):
         for asset in assets:
             self._market_data[asset.key] = None
             self._candles[asset.key] = []
+            self._ticker_symbols[asset.key] = asset.ticker_symbol
             (key, ticker_symbol, exchange,
              timeframe) = asset.key, asset.ticker_symbol, asset.exchange, asset.candles_timeframe
             self.get_candles(asset)
@@ -69,6 +79,7 @@ class MarketDataManager(ApplicationLoggingMixin):
         return _on_marketdata_update
 
     def _update_market_data(self, asset_key: int, new_market_data: MarketData):
+        ticker_symbol = self._ticker_symbols.get(asset_key)
         with self._lock:
             current_market_data = self._market_data.get(asset_key)
             is_newer = current_market_data is None or current_market_data.timestamp < new_market_data.timestamp
@@ -78,6 +89,12 @@ class MarketDataManager(ApplicationLoggingMixin):
                 self.app_logger.debug(f"Market data updated - Asset: {asset_key}, Price: {new_market_data.close_price}")
             else:
                 self.app_logger.debug(f"Market data ignored (outdated) - Asset: {asset_key}")
+
+        if is_newer and self._event_bus is not None and ticker_symbol:
+            self._event_bus.publish(MarketDataEvent(
+                ticker_symbol=ticker_symbol,
+                market_data=new_market_data,
+            ))
 
     def get_market_data(self, asset: Asset) -> MarketData:
         with self._lock:

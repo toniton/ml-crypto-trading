@@ -1,36 +1,36 @@
 from __future__ import annotations
 
+from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.domain.result import (
     BacktestFill,
     BacktestResult,
-    MarketDataPoint,
     PortfolioSnapshot,
 )
 from src.backtest.domain.session import BacktestSession
 from src.backtest.events.domain_events import (
-    MarketDataPointEvent,
     OrderFilledEvent,
     OrderSubmittedEvent,
     PortfolioSnapshotEvent,
 )
+from src.trading.events import MarketDataEvent
 
 
 class BacktestResultCollector:
     def __init__(self, bus: BacktestEventBus):
-        self._market_series: list[MarketDataPoint] = []
+        self._market_series: list[MarketData] = []
         self._snapshots: list[PortfolioSnapshot] = []
         self._orders: list[Order] = []
         self._fills: list[BacktestFill] = []
 
-        bus.subscribe_callback(MarketDataPointEvent, self._on_market_data_point)
+        bus.subscribe_callback(MarketDataEvent, self._on_market_data)
         bus.subscribe_callback(PortfolioSnapshotEvent, self._on_snapshot)
         bus.subscribe_callback(OrderSubmittedEvent, self._on_order_submitted)
         bus.subscribe_callback(OrderFilledEvent, self._on_fill)
 
-    def _on_market_data_point(self, event: MarketDataPointEvent) -> None:
-        self._market_series.append(event.point)
+    def _on_market_data(self, event: MarketDataEvent) -> None:
+        self._market_series.append(event.market_data)
 
     def _on_snapshot(self, event: PortfolioSnapshotEvent) -> None:
         self._snapshots.append(event.snapshot)

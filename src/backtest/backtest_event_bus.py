@@ -3,20 +3,16 @@ from __future__ import annotations
 from typing import Callable
 from uuid import uuid4
 
-from src.backtest.events import BacktestEvent
+from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.event_subscription import EventSubscription
 
 
 class BacktestCallbackSubscription(EventSubscription):
-    def __init__(self, callback: Callable[[BacktestEvent], None]) -> None:
+    def __init__(self, callback: Callable[[Event], None]) -> None:
         self._callback = callback
 
-    def put(self, event: BacktestEvent) -> None:
-        if not isinstance(event, BacktestEvent):
-            raise TypeError(
-                f"Expected a BacktestEvent, got {type(event).__name__}"
-            )
+    def put(self, event: Event) -> None:
         self._callback(event)
 
     def close(self) -> None:
@@ -38,12 +34,7 @@ class BacktestEventBus(EventBus):
                 del subscribers[subscription_id]
                 return
 
-    def publish(self, event: BacktestEvent) -> None:
-        if not isinstance(event, BacktestEvent):
-            raise TypeError(
-                f"BacktestEventBus only publishes BacktestEvent instances, "
-                f"got {type(event).__name__}"
-            )
+    def publish(self, event: Event) -> None:
         subscribers = list(self._subscriptions.get(event.type, {}).values())
         for subscription in subscribers:
             subscription.put(event)
@@ -53,11 +44,11 @@ class BacktestEventBus(EventBus):
 
     def subscribe_callback(
             self,
-            event_class: type[BacktestEvent],
-            callback: Callable[[BacktestEvent], None],
+            event_class: type[Event],
+            callback: Callable[[Event], None],
     ) -> str:
-        if not (isinstance(event_class, type) and issubclass(event_class, BacktestEvent)):
+        if not (isinstance(event_class, type) and issubclass(event_class, Event)):
             raise TypeError(
-                f"subscribe_callback requires a BacktestEvent subclass, got {event_class!r}"
+                f"subscribe_callback requires an Event subclass, got {event_class!r}"
             )
         return self.subscribe(event_class.__name__, BacktestCallbackSubscription(callback))

@@ -7,16 +7,16 @@ from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.events.domain_events import (
     BalanceUpdateEvent,
     CandlesEvent,
-    BacktestEvent,
-    MarketDataEvent,
     OrderFillEvent,
 )
 from src.core.interfaces.auth_handler import AuthHandler
+from src.core.interfaces.event import Event
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.subscription_data import (
     SubscriptionData,
     SubscriptionVisibility,
 )
+from src.trading.events import MarketDataEvent
 
 
 class BacktestAuthHandler(AuthHandler):
@@ -68,7 +68,7 @@ class BacktestWebSocketBuilder(ExchangeWebSocketBuilder):
         return self
 
     @property
-    def event_class(self) -> type[BacktestEvent] | None:
+    def event_class(self) -> type[Event] | None:
         if not self._current_subscription:
             return None
         return self._current_subscription.get("event_class")

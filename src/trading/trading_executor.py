@@ -21,6 +21,7 @@ from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.events import (
     BalanceChanged,
+    MarketDataEvent,
     MarketStateChanged,
     OrderSubmitted,
     PositionChanged,
@@ -143,6 +144,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             symbol=asset.ticker_symbol,
             price=market_data.close_price,
             market_timestamp=market_data.timestamp,
+        ))
+        self._publish_event(MarketDataEvent(
+            ticker_symbol=asset.ticker_symbol,
+            market_data=market_data,
         ))
         self._publish_event(BalanceChanged(
             symbol=asset.ticker_symbol,

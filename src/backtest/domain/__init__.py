@@ -7,7 +7,6 @@ from api.interfaces.backtest_request import (
 from src.backtest.domain.result import (
     BacktestFill,
     BacktestResult,
-    MarketDataPoint,
     PortfolioSnapshot,
 )
 from src.backtest.domain.session import (
@@ -23,7 +22,6 @@ __all__ = [
     "ExecutionConfiguration",
     "BacktestFill",
     "BacktestResult",
-    "MarketDataPoint",
     "PortfolioSnapshot",
     "BacktestSession",
     "BacktestSessionStatus",

@@ -25,6 +25,7 @@ from src.agent.oracle import (
     OracleService,
     summary_interval_for,
 )
+from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
@@ -42,6 +43,8 @@ from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.guard import Guard
 from src.events.message_event_bus import MessageEventBus
+from src.recorder.market_data_recorder import MarketDataRecorder
+from src.recorder.market_data_store import MarketDataStore
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.manager import LoggingManager
 from src.trading.managers.manager_container import ManagerContainer
@@ -79,12 +82,14 @@ class Application(ApplicationLoggingMixin):
         self._trading_engine = None
         self._api_server: Optional[ApiServer] = None
         self._event_bus: Optional[MessageEventBus] = None
-        self._trading_event_bus: Optional[MessageEventBus] = None
+        self._trading_event_bus = MessageEventBus()
         self._oracle_service: Optional[OracleService] = None
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
         self._activity_queue = activity_queue
+        self._market_data_store = MarketDataStore()
+        self._market_data_recorder = MarketDataRecorder(self._market_data_store)
         self._setup_configuration()
 
         db_manager = DatabaseManager()
@@ -123,7 +128,7 @@ class Application(ApplicationLoggingMixin):
         is_simulated = self._application_config.simulated
 
         container, trading_journal = ManagerFactory.build_manager_container(
-            db_manager, self._assets, is_simulated
+            db_manager, self._assets, is_simulated, event_bus=self._trading_event_bus
         )
         self._trading_journal = trading_journal
         self._order_reconciler = OrderReconciler(container.order_manager)
@@ -178,7 +183,7 @@ class Application(ApplicationLoggingMixin):
 
         trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
-        self._trading_event_bus = MessageEventBus()
+        self._market_data_recorder.subscribe(self._trading_event_bus)
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
             strategies_registry=self._strategies_registry,
@@ -311,6 +316,7 @@ class Application(ApplicationLoggingMixin):
             self._strategies_registry,
             self._activity_queue,
             self._dynamic_quantity,
+            data_source_resolver=BacktestDataSourceResolver(self._market_data_store),
         )
 
     def _build_backtest_service(self) -> BacktestService:

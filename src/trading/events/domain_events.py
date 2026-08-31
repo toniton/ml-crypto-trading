@@ -3,8 +3,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal
 
+from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from src.events.trading_event import TradingEvent
+
+
+@dataclass
+class MarketDataEvent(TradingEvent):
+    ticker_symbol: str
+    market_data: MarketData
 
 
 @dataclass

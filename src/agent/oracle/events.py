@@ -38,7 +38,6 @@ BACKTEST_EVENT_TYPES = (
     "BalanceUpdateEvent",
     "PortfolioSnapshotEvent",
     "MarketDataEvent",
-    "MarketDataPointEvent",
 )
 
 ORACLE_EVENT_TYPES = LIVE_EVENT_TYPES + BACKTEST_EVENT_TYPES

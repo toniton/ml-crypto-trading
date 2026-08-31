@@ -10,15 +10,14 @@ from src.backtest.backtest_clock import BacktestClock
 from src.backtest.backtest_data_loader import HistoricalDataPoint
 from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.data.backtest_data_set import BacktestDataSet
-from src.backtest.domain.result import MarketDataPoint, PortfolioSnapshot
+from src.backtest.domain.result import PortfolioSnapshot
 from src.backtest.events.domain_events import (
     CandlesEvent,
-    MarketDataEvent,
-    MarketDataPointEvent,
     PortfolioSnapshotEvent,
     TickEvent,
 )
 from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
+from src.trading.events import MarketDataEvent
 
 StrategyCallback = Callable[[Asset, int, Optional[MarketData], list[Candle]], None]
 
@@ -61,9 +60,6 @@ class BacktestSimulator:
             candles.append(candle)
             self._bus.publish(MarketDataEvent(market_data=market_data, ticker_symbol=symbol))
             self._bus.publish(CandlesEvent(candles=[candle], ticker_symbol=symbol))
-            self._bus.publish(
-                MarketDataPointEvent(point=self._to_market_point(data_point), ticker_symbol=symbol)
-            )
 
         self._execution_engine.process(symbol, timestamp)
 
@@ -100,17 +96,6 @@ class BacktestSimulator:
             low=data_point.low_price,
             close=data_point.close_price,
             start_time=float(data_point.timestamp),
-        )
-
-    @staticmethod
-    def _to_market_point(data_point: HistoricalDataPoint) -> MarketDataPoint:
-        return MarketDataPoint(
-            timestamp=data_point.timestamp,
-            open=data_point.open_price,
-            high=data_point.high_price,
-            low=data_point.low_price,
-            close=data_point.close_price,
-            volume=data_point.volume,
         )
 
     def _snapshot(

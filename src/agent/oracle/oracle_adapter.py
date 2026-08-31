@@ -10,7 +10,7 @@ from src.agent.oracle.oracle_context import (
 )
 from src.core.interfaces.event import Event
 
-_MARKET_TYPES = {"MarketStateChanged", "MarketDataEvent", "MarketDataPointEvent"}
+_MARKET_TYPES = {"MarketStateChanged", "MarketDataEvent"}
 _ORDER_SUBMITTED_TYPES = {"OrderSubmitted", "OrderSubmittedEvent"}
 _ORDER_FILLED_TYPES = {"OrderExecuted", "OrderFilledEvent"}
 _ORDER_CANCELLED_TYPES = {"OrderCancelled", "OrderCancelledEvent"}
@@ -81,10 +81,6 @@ class OracleEventAdapter:
         market_data = getattr(event, "market_data", None)
         if price is None and market_data is not None:
             price = getattr(market_data, "close_price", None)
-
-        point = getattr(event, "point", None)
-        if price is None and point is not None:
-            price = getattr(point, "close", None)
 
         price = _to_decimal(price)
         if symbol and price is not None:

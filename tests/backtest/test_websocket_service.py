@@ -14,11 +14,11 @@ from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.backtest_websocket_service import BacktestWebSocketService
 from src.backtest.events.domain_events import (
     BalanceUpdateEvent,
-    MarketDataEvent,
     OrderFillEvent,
 )
 from src.core.interfaces.subscription_data import SubscriptionVisibility
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.trading.events import MarketDataEvent
 
 
 class TestBacktestWebSocketService:

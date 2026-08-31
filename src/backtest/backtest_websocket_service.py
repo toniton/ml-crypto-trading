@@ -7,11 +7,10 @@ from src.backtest.backtest_websocket_builder import BacktestWebSocketBuilder
 from src.backtest.events.domain_events import (
     BalanceUpdateEvent,
     CandlesEvent,
-    BacktestEvent,
-    MarketDataEvent,
     OrderFillEvent,
 )
 from src.core.interfaces.auth_handler import AuthHandler
+from src.core.interfaces.event import Event
 from src.core.interfaces.exchange_websocket_builder import ExchangeWebSocketBuilder
 from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
 from src.core.interfaces.heartbeat_handler import HeartbeatHandler
@@ -20,15 +19,16 @@ from src.core.interfaces.subscription_data import (
     SubscriptionVisibility,
 )
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.trading.events import MarketDataEvent
 
 
 class BacktestWebSocketService(ExchangeWebSocketService):
     def __init__(self, event_bus: BacktestEventBus):
         self.bus = event_bus
         self._callback: Optional[Callable] = None
-        self._subscriptions: dict[str, tuple[SubscriptionData, type[BacktestEvent] | None]] = {}
-        self._bus_subscriptions: dict[type[BacktestEvent], int] = {}
-        self._event_handlers: dict[type[BacktestEvent], Callable[[Any], None]] = {
+        self._subscriptions: dict[str, tuple[SubscriptionData, type[Event] | None]] = {}
+        self._bus_subscriptions: dict[type[Event], int] = {}
+        self._event_handlers: dict[type[Event], Callable[[Any], None]] = {
             MarketDataEvent: self._handle_market_data_event,
             CandlesEvent: self._handle_candles_event,
             OrderFillEvent: self._handle_order_fill_event,

@@ -13,11 +13,11 @@ from src.backtest.execution.fees.percentage_fee import PercentageFee
 from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
 from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
 from src.backtest.events.domain_events import (
-    MarketDataPointEvent,
     PortfolioSnapshotEvent,
     TickEvent,
 )
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.trading.events import MarketDataEvent
 
 T0 = 1_700_000_000
 
@@ -82,19 +82,19 @@ def _make_engine(tmp_path, ticker_symbol: str = "BTC_USD") -> tuple[BacktestSimu
 class TestBacktestSimulator:
     def test_run_emits_market_snapshot_and_tick_events(self, tmp_path):
         engine, bus, asset = _make_engine(tmp_path)
-        market_points = []
+        market_data_points = []
         snapshots = []
         ticks = []
-        bus.subscribe_callback(MarketDataPointEvent, lambda e: market_points.append(e.point))
+        bus.subscribe_callback(MarketDataEvent, lambda e: market_data_points.append(e.market_data))
         bus.subscribe_callback(PortfolioSnapshotEvent, lambda e: snapshots.append(e.snapshot))
         bus.subscribe_callback(TickEvent, lambda e: ticks.append(e.tick_time))
 
         engine.run([asset])
 
-        assert len(market_points) == 3
+        assert len(market_data_points) == 3
         assert len(snapshots) == 3
         assert len(ticks) == 3
-        assert [point.close for point in market_points] == [Decimal("100"), Decimal("101"), Decimal("102")]
+        assert [data.close_price for data in market_data_points] == [Decimal("100"), Decimal("101"), Decimal("102")]
 
     def test_step_emits_one_snapshot_per_tick(self, tmp_path):
         engine, bus, asset = _make_engine(tmp_path)

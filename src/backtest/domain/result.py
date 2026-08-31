@@ -5,6 +5,7 @@ from decimal import Decimal
 
 from pydantic.dataclasses import dataclass
 
+from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.backtest_request import ExecutionConfiguration
@@ -27,16 +28,6 @@ class BacktestFill:
 
 
 @dataclass(frozen=True)
-class MarketDataPoint:
-    timestamp: int
-    open: Decimal
-    high: Decimal
-    low: Decimal
-    close: Decimal
-    volume: Decimal
-
-
-@dataclass(frozen=True)
 class PortfolioSnapshot:
     timestamp: int
     cash: Decimal
@@ -55,4 +46,4 @@ class BacktestResult:
     orders: list[Order] = field(default_factory=list)
     fills: list[BacktestFill] = field(default_factory=list)
     portfolio_snapshots: list[PortfolioSnapshot] = field(default_factory=list)
-    market_series: list[MarketDataPoint] = field(default_factory=list)
+    market_series: list[MarketData] = field(default_factory=list)
