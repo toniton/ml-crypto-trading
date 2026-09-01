@@ -16,6 +16,12 @@ from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
 from src.database.database_manager import DatabaseManager
+from src.metrics.api.metric_routes import create_metric_router
+from src.metrics.collectors.request_metrics_collector import (
+    RequestMetricsCollector,
+    RequestMetricsMiddleware,
+)
+from src.metrics.services.metric_service import MetricService
 from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
 from src.server.services.configuration_service import ConfigurationService
@@ -73,6 +79,11 @@ class ChatApp:
             allow_methods=["*"],
             allow_headers=["*"],
         )
+
+        metric_service = MetricService(db_manager)
+        request_collector = RequestMetricsCollector(metric_service)
+        app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
+        app.include_router(create_metric_router(metric_service))
 
         log_handler = LogWebSocketHandler(event_bus)
 

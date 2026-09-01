@@ -30,6 +30,10 @@ from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceRe
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
+from src.metrics.collectors.event_metric_collector import EventMetricCollector
+from src.metrics.services.metric_service import MetricService
+from src.metrics.services.retention_engine import RetentionEngine
+from src.metrics.services.retention_scheduler import RetentionScheduler
 from src.vcs.application.events import RefChangedEvent
 from src.vcs.application.listener import RefChangeListener
 from src.vcs.application.service import VCSService
@@ -97,6 +101,10 @@ class Application(ApplicationLoggingMixin):
         db_manager = DatabaseManager()
         db_manager.initialize()
         self._db_manager = db_manager
+        self._metric_service = MetricService(db_manager)
+        self._retention_engine = RetentionEngine(db_manager)
+        self._retention_scheduler = RetentionScheduler(self._retention_engine)
+        self._event_metric_collector = EventMetricCollector(self._metric_service)
         self._assets = trading_config.assets
         self._dynamic_quantity = trading_config.dynamic_quantity
         self._llm_config = llm_config
@@ -186,6 +194,8 @@ class Application(ApplicationLoggingMixin):
         trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
         self._market_data_recorder.subscribe(self._trading_event_bus)
+        self._event_metric_collector.subscribe(self._trading_event_bus)
+        self._retention_scheduler.start()
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
             strategies_registry=self._strategies_registry,
@@ -399,6 +409,7 @@ class Application(ApplicationLoggingMixin):
             self._trading_event_bus = None
         self._oracle_service = None
         self._config_listener.stop()
+        self._retention_scheduler.stop()
         if self._order_reconciler:
             self._order_reconciler.stop()
         if self._trading_engine:
