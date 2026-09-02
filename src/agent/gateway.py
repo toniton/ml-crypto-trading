@@ -8,6 +8,7 @@ from src.agent.backtest.graph import BacktestGraph
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.graph import ConfigurationGraph
 from src.agent.configuration.models import ClarificationResult, ConfigurationResult, GeneralResult
+from src.agent.performance_analysis.graph import PerformanceAnalysisGraph
 from src.agent.router.graph import RouterGraph
 from src.agent.router.models import AgentIntent, AgentRoute
 from src.agent.runtime.agent import AgentDefinition
@@ -167,9 +168,12 @@ class AgentGateway:
             ),
             AgentDefinition(
                 name="performance_analysis",
-                description="Analyzes trading performance and why strategies behaved a certain way",
-                capabilities=frozenset({"reports.read", "logs.read", "trading_config.read"}),
+                description="Analyzes trading performance, system and analytical metrics",
+                graph=PerformanceAnalysisGraph(llm).build(),
+                presentation_node="present_analysis",
+                capabilities=frozenset({"metrics.read", "reports.read", "logs.read", "trading_config.read"}),
             ),
+
             AgentDefinition(
                 name="risk_analysis",
                 description="Analyzes exposure, drawdown, position sizing, and risk-adjusted returns",

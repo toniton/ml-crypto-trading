@@ -46,3 +46,4 @@ class EventMetricCollector:
         metric_name = self._event_metric_map.get(event.type)
         if metric_name:
             self._metric_service.increment(metric_name)
+            self._metric_service.flush()

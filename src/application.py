@@ -63,6 +63,7 @@ from src.llm.tools.configuration_tool import ConfigurationTool
 from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
+from src.llm.tools.metrics_tool import MetricsTool
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
 from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
@@ -207,7 +208,7 @@ class Application(ApplicationLoggingMixin):
         self._order_reconciler.start()
         self.is_ready.set()
 
-    def _setup_live_engine(self, trading_scheduler, trading_executor):
+    def _setup_live_engine(self, trading_scheduler, trading_executor):  # pylint: disable=too-many-locals
         context_tool = TradingContextTool(
             session_manager=self._managers.session_manager
         )
@@ -280,6 +281,7 @@ class Application(ApplicationLoggingMixin):
             backtest_drift_tool = BacktestDriftTool(
                 drift_detector=BacktestDriftDetector(backtest_service, self._trading_journal)
             )
+            metrics_tool = MetricsTool(metric_service=self._metric_service)
 
             llm_tools = [
                 context_tool,
@@ -298,6 +300,7 @@ class Application(ApplicationLoggingMixin):
                 analyze_trading_state_tool,
                 backtest_tool,
                 backtest_drift_tool,
+                metrics_tool,
             ]
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(

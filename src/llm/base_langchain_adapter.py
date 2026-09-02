@@ -23,6 +23,7 @@ SYSTEM_PROMPT = """
             - `get_trading_context`: Returns current balances, positions, entry/exit prices, and realized PnL for a single asset.
             - `get_exchange_fees`: Returns exchange fee schedules (maker/taker fees) for a single asset.
             - `get_market_statistics`: Returns the latest market statistics (close, high, low, 24h volume) for a single asset.
+            - `query_metrics`: Query historical time-series metrics (counters, gauges, histograms) or discover registered metric names for performance and system analysis.
             
             Guidelines:
             - Use these tools whenever additional information is needed to complete the task.

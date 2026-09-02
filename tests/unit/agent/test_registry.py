@@ -37,7 +37,6 @@ class TestDefaultRegistry:
     def test_specialized_agents_registered_as_stubs(self, sample_config):
         registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
         for intent in (
-            AgentIntent.PERFORMANCE_ANALYSIS,
             AgentIntent.RISK_ANALYSIS,
             AgentIntent.MARKET_ANALYSIS,
             AgentIntent.REPORTING,
@@ -46,6 +45,7 @@ class TestDefaultRegistry:
             definition = registry.get(intent)
             assert definition.graph is None
             assert definition.name == intent.value
+
 
     def test_general_agent_registered(self, sample_config):
         registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)

@@ -15,8 +15,11 @@ from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, Configur
 from src.server.app import ChatApp
 from src.server.server import ApiServer
 from src.events.message_event_bus import MessageEventBus
+from src.llm.tools.metrics_tool import MetricsTool
+from src.metrics.services.metric_service import MetricService
 from tests.unit.agent.fakes import FakeLlmAdapter
 from tests.unit.api_server.helpers import make_temp_db_manager
+
 
 SAMPLE_CONFIG = """
 assets:
@@ -282,6 +285,25 @@ class TestConversationSessions(unittest.TestCase):
         self.assertEqual(messages[0]["content"], "hello")
         self.assertEqual(messages[1]["role"], "assistant")
         self.assertEqual(messages[1]["payload"]["tokens"], "ok")
+
+    def test_metrics_recorded_by_middleware_and_queried_by_tool(self):
+        db = make_temp_db_manager()
+        app = ChatApp.create(
+            agent=build_gateway(FakeLlmAdapter()),
+            event_bus=MessageEventBus(),
+            db_manager=db,
+        )
+        client = TestClient(app)
+        client.get("/api/v1/sessions")
+        client.get("/api/v1/sessions")
+
+        tool_metric_service = MetricService(db)
+        tool = MetricsTool(metric_service=tool_metric_service)
+        res = tool.invoke({"metric_names": ["http.requests"]})
+        self.assertIn("Metric: http.requests", res)
+        self.assertIn("sum=2.0000", res)
+
+
 
 
 def _extract_session_id(content):

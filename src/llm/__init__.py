@@ -7,6 +7,7 @@ from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
 from src.llm.tools.configuration_tool import ConfigurationTool
 from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
+from src.llm.tools.metrics_tool import MetricsTool
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
 from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
@@ -25,6 +26,7 @@ __all__ = [
     "LangChainGeminiAdapter",
     "LangChainGroqAdapter",
     "LangChainOllamaAdapter",
+    "MetricsTool",
     "ModelFactory",
     "PositionTool",
     "RecentTradesTool",
@@ -33,3 +35,4 @@ __all__ = [
     "TradingContextTool",
     "format_decimal",
 ]
+

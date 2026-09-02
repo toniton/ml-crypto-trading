@@ -33,10 +33,11 @@ class TestAgentGateway:
         assert len(llm.structured_calls) == 1
 
     def test_analysis_intent_falls_back_to_general_without_a_graph(self, sample_config):
-        llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.PERFORMANCE_ANALYSIS)])
+        llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.RISK_ANALYSIS)])
         gateway = AgentGateway(llm, sample_config)
-        result = gateway.handle("Why did BTC strategy perform badly last week?")
+        result = gateway.handle("Why did BTC exposure spike last week?")
         assert result.kind == "general"
+
 
     def test_configuration_prompt_runs_graph(self, sample_config):
         llm = FakeLlmAdapter([

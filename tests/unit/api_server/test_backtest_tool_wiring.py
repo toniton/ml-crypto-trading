@@ -3,6 +3,8 @@ from unittest.mock import MagicMock, patch
 
 from src.configuration.application_config import ApplicationConfig
 from src.llm.tools.backtest_tool import BacktestTool
+from src.llm.tools.metrics_tool import MetricsTool
+
 
 
 class TestBacktestToolWiring(unittest.TestCase):
@@ -54,5 +56,10 @@ class TestBacktestToolWiring(unittest.TestCase):
             any(isinstance(tool, BacktestTool) for tool in bound_tools),
             "BacktestTool is not bound to the agent LLM",
         )
+        self.assertTrue(
+            any(isinstance(tool, MetricsTool) for tool in bound_tools),
+            "MetricsTool is not bound to the agent LLM",
+        )
 
         app.shutdown()
+

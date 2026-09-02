@@ -31,6 +31,7 @@ class RequestMetricsCollector:
         self._metric_service.observe("http.request.duration", duration_ms, labels=labels)
         if status_code >= 400:
             self._metric_service.increment("http.errors", labels=labels)
+        self._metric_service.flush()
 
 
 class RequestMetricsMiddleware(BaseHTTPMiddleware):
