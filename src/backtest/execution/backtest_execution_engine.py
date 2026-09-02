@@ -121,7 +121,8 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
         if order:
             order.status = OrderStatus.COMPLETED
             order.executed_time = float(pending.execution_timestamp)
-            order.fee = fee
+            order.fees = fee
+            order.fill_price = executed_price
 
         slippage_per_unit = executed_price - market_price
         slippage_cost = slippage_per_unit * pending.quantity

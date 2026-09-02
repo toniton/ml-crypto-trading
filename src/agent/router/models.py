@@ -13,6 +13,7 @@ class AgentIntent(str, Enum):
     MARKET_ANALYSIS = "market_analysis"
     REPORTING = "reporting"
     SYSTEM_HELP = "system_help"
+    BACKTEST = "backtest"
     GENERAL = "general"
 
 

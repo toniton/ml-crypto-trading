@@ -4,6 +4,7 @@ import uuid
 from typing import Any, AsyncIterator, List, Optional, Union
 
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
+from src.agent.backtest.graph import BacktestGraph
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.graph import ConfigurationGraph
 from src.agent.configuration.models import ClarificationResult, ConfigurationResult, GeneralResult
@@ -31,7 +32,7 @@ class AgentGateway:
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
-        route = self._route(prompt)
+        route = self._route(prompt, history=history)
         if route.requires_clarification:
             return ClarificationResult(
                 question=route.clarification_question or "",
@@ -50,8 +51,8 @@ class AgentGateway:
             presentation=state["presentation"],
         )
 
-    def _route(self, prompt: str) -> AgentRoute:
-        state = self._router.invoke({"user_prompt": prompt})
+    def _route(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentRoute:
+        state = self._router.invoke({"user_prompt": prompt, "history": history or []})
         return state.get("route") or AgentRoute(intent=AgentIntent.GENERAL)
 
     async def stream(  # pylint: disable=too-many-locals
@@ -64,7 +65,7 @@ class AgentGateway:
         captures: dict[str, Any] = {}
 
         async for event in self._router.astream_events(
-            {"user_prompt": prompt},
+            {"user_prompt": prompt, "history": history or []},
             version="v2",
         ):
             mapped = self._map_stream_event(event, message_id, agent="router", captures=captures)
@@ -189,16 +190,27 @@ class AgentGateway:
                 description="Explains what the bot can do and how to use it",
                 capabilities=frozenset(),
             ),
+            AgentDefinition(
+                name="backtest",
+                description="Runs and analyzes historical trading strategy backtests",
+                graph=BacktestGraph(llm).build(),
+                presentation_node="present_result",
+                capabilities=frozenset(
+                    {"backtest.run", "trading_config.read", "market_data.read"}
+                ),
+            ),
         ]
+
         registry = AgentRegistry(definitions)
         for intent, name in (
-            (AgentIntent.CONFIGURATION, "configuration"),
-            (AgentIntent.PERFORMANCE_ANALYSIS, "performance_analysis"),
-            (AgentIntent.RISK_ANALYSIS, "risk_analysis"),
-            (AgentIntent.MARKET_ANALYSIS, "market_analysis"),
-            (AgentIntent.REPORTING, "reporting"),
-            (AgentIntent.SYSTEM_HELP, "system_help"),
-            (AgentIntent.GENERAL, "general"),
+                (AgentIntent.CONFIGURATION, "configuration"),
+                (AgentIntent.PERFORMANCE_ANALYSIS, "performance_analysis"),
+                (AgentIntent.RISK_ANALYSIS, "risk_analysis"),
+                (AgentIntent.MARKET_ANALYSIS, "market_analysis"),
+                (AgentIntent.REPORTING, "reporting"),
+                (AgentIntent.SYSTEM_HELP, "system_help"),
+                (AgentIntent.GENERAL, "general"),
+                (AgentIntent.BACKTEST, "backtest"),
         ):
             registry.register(intent, name)
         return registry

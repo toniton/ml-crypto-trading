@@ -55,6 +55,9 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
         }
         self._bound_model = self._model.bind_tools(tools)
 
+    def get_tool(self, name: str) -> BaseTool | None:
+        return self._tool_lookup.get(name.lower())
+
     def _execute_tool_calls(self, tool_calls: List[ToolCall], messages: List[BaseMessage]) -> None:
         """Executes a list of tool calls and appends corresponding ToolMessages to messages."""
         for tool_call in tool_calls:

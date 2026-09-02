@@ -16,11 +16,17 @@ Known intents:
   or risk-adjusted returns.
 - "market_analysis": the user asks about the market, news, or sentiment.
 - "reporting": the user asks for a report or a summary of activity.
+- "backtest": the user asks to run, replay, or analyze a historical backtest
+  (e.g. "run a backtest for BTC over the last 5 minutes", "backtest this
+  strategy", "replay yesterday's market").
 - "system_help": the user asks what the bot can do or how to use it.
 - "general": anything else that does not clearly belong to a specialized agent.
 
 Rules:
 - intent: pick the single best match above. Default to "general".
+- When CONVERSATION HISTORY shows a recent backtest request and the current message is an
+  answer supplying its execution parameters (e.g. "fee rate: ...", "slippage: ...",
+  "latency ..."), keep the "backtest" intent rather than switching to "configuration".
 - action: only meaningful for the "configuration" intent. Set "view" when the user only
   wants to read, inspect, or display the current configuration (no changes requested).
   Set "modify" when the user wants to change, update, or propose a configuration change.

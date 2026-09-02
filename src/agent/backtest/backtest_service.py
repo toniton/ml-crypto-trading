@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from api.interfaces.backtest_request import (
@@ -84,12 +85,17 @@ class BacktestService(AgentLoggingMixin):
             self,
             ticker_symbol: str,
             source_type: BacktestDataSourceType | None = None,
+            start_time: datetime | None = None,
+            end_time: datetime | None = None,
+            execution: ExecutionConfiguration | None = None,
     ) -> BacktestRequest:
         return BacktestRequest(
             ticker_symbol=ticker_symbol,
+            start_time=start_time,
+            end_time=end_time,
             data_source=self._data_source_request_for(source_type),
             initial_balance=self._initial_balance,
-            execution=self._execution,
+            execution=execution or self._execution,
         )
 
     def _data_source_request_for(

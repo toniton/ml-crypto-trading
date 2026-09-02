@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import AsyncIterator, List, Optional, Type
+from typing import Any, AsyncIterator, List, Optional, Type
 
 from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore, SessionSummary
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
@@ -17,12 +17,16 @@ class FakeLlmAdapter(LlmAdapter):
             structured_results: Optional[list] = None,
             text: str = "ok",
             chunks: Optional[list] = None,
+            tools: Optional[list] = None,
     ):
         self.structured_results = list(structured_results or [])
         self.structured_calls: List[tuple] = []
         self.text = text
         self.chunks = chunks if chunks is not None else [text]
         self.last_history: Optional[list] = None
+        self._tools: dict[str, Any] = {}
+        if tools:
+            self.bind_tools(tools)
 
     def generate(self, prompt: str, history: Optional[list] = None) -> str:
         self.last_history = history
@@ -34,7 +38,14 @@ class FakeLlmAdapter(LlmAdapter):
             yield chunk
 
     def bind_tools(self, tools) -> None:
-        pass
+        self._tools = {
+            (getattr(tool, "name", None) or str(tool)).lower(): tool
+            for tool in tools
+        }
+
+    def get_tool(self, name: str) -> Optional[Any]:
+        return self._tools.get(name.lower())
+
 
     def generate_structured(self, schema: Type, prompt: str, system_prompt: str):
         self.structured_calls.append((schema, prompt, system_prompt))

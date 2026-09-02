@@ -239,6 +239,22 @@ class TestExecutionEngineProcess:
         assert result.fee == Decimal("0.100")
         assert engine.account.balance_usd == Decimal("10000.0") - Decimal("100.0") - Decimal("0.100")
 
+    def test_order_fees_and_fill_price_populated_on_fill(self):
+        engine, _, _ = _make_engine(
+            timestamps={"BTC_USD": [1000]},
+            data={"BTC_USD": [(1000, "100")]},
+            latency_ms=0.0,
+            slippage_ticks=2,
+            fee_rate="0.001",
+            quote_decimals=2,
+        )
+        order = _make_order(quantity="1.0", price="100.00")
+        engine.submit(order, "BTC_USD")
+        engine.process("BTC_USD", 1000)
+
+        assert order.fees == Decimal("0.10002")
+        assert order.fill_price == Decimal("100.02")
+
     def test_fee_deducted_on_sell(self):
         engine, _, _ = _make_engine(
             timestamps={"BTC_USD": [1000]},

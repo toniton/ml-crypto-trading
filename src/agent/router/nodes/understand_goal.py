@@ -13,7 +13,17 @@ class UnderstandGoalNode:
     def __call__(self, state: RouterState) -> dict:
         route: AgentRoute = self._llm.generate_structured(
             schema=AgentRoute,
-            prompt=state["user_prompt"],
+            prompt=self._build_prompt(state),
             system_prompt=ROUTER_PROMPT,
         )
         return {"route": route}
+
+    @staticmethod
+    def _build_prompt(state: RouterState) -> str:
+        lines = ["USER REQUEST", state["user_prompt"]]
+        history = state.get("history", [])
+        if history:
+            lines.append("CONVERSATION HISTORY")
+            for turn in history:
+                lines.append(f"{turn.role}: {turn.content}")
+        return "\n".join(lines)

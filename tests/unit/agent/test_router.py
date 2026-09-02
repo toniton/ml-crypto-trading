@@ -2,6 +2,7 @@ from src.agent.router.graph import RouterGraph
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
 from src.agent import RouteNode
 from src.agent import UnderstandGoalNode
+from src.core.interfaces.llm_adapter import ChatTurn
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 
@@ -18,6 +19,20 @@ class TestUnderstandGoalNode:
         assert result["route"].intent == AgentIntent.CONFIGURATION
         assert result["route"].goal.objective == "Take more trades"
         assert llm.structured_calls[0][0] is AgentRoute
+
+    def test_includes_conversation_history_in_prompt(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(intent=AgentIntent.BACKTEST),
+        ])
+        node = UnderstandGoalNode(llm)
+        history = [
+            ChatTurn(role="user", content="Run a backtest for DOGE_USD over the last 1 minute."),
+            ChatTurn(role="assistant", content="Please provide the execution costs."),
+        ]
+        node({"user_prompt": "fee rate: 0.0001, slippage: 3, latency 700ms", "history": history})
+        prompt = llm.structured_calls[0][1]
+        assert "Run a backtest for DOGE_USD" in prompt
+        assert "fee rate: 0.0001, slippage: 3, latency 700ms" in prompt
 
 
 class TestRouteNode:

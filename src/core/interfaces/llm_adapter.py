@@ -25,5 +25,10 @@ class LlmAdapter(ABC):
         pass
 
     @abstractmethod
+    def get_tool(self, name: str) -> Optional[Any]:
+        pass
+
+    @abstractmethod
     def generate_structured(self, schema: Type[Structured], prompt: str, system_prompt: str) -> Structured:
         pass
+
