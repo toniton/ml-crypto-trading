@@ -5,17 +5,20 @@ You are the query understanding step of an analytical quantitative platform.
 Translate the user's analytical or performance query into a structured MetricQueryIntent.
 
 Available standard metrics:
-- HTTP API / Request Performance: 'http.requests', 'http.request.duration', 'http.errors'
+- HTTP API / Inbound Requests: 'http.requests', 'http.request.duration', 'http.errors'
+- Exchange & Outbound Requests: 'exchange.requests', 'exchange.request.duration', 'exchange.errors', 'circuit_breaker.tripped'
 - Orders & Trading: 'orders.submitted', 'orders.executed', 'orders.cancelled'
 
 Guidelines:
-- When the user asks about request performance (e.g. "how are my requests performing?", "show request latency"), populate metric_names with: ['http.requests', 'http.request.duration', 'http.errors'].
+- When the user asks about exchange health, outbound API calls, authentication errors, or circuit breaker trips, populate metric_names with: ['exchange.requests', 'exchange.request.duration', 'exchange.errors', 'circuit_breaker.tripped'].
+- When the user asks about API/HTTP request performance, populate metric_names with: ['http.requests', 'http.request.duration', 'http.errors', 'exchange.requests', 'exchange.errors'].
 - When the user asks about order activity, populate metric_names with: ['orders.submitted', 'orders.executed'].
 - ONLY leave metric_names empty if the user explicitly asks to list or discover what metrics exist (e.g. "what metrics exist?", "list available metrics").
 - Infer lookback_seconds from time expressions (e.g., 'last 5 minutes' -> 300, 'last hour' / '1 hour' -> 3600, 'last 24 hours' -> 86400). Default is 3600.
 - Set interval_seconds appropriately for the window (e.g. 60 for an hour, 300 for 24 hours).
 - Identify any requested aggregation function (e.g. sum, avg, max, min, count, last).
 """
+
 
 
 ANALYZE_METRICS_PROMPT = """

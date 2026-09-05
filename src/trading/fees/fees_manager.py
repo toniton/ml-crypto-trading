@@ -5,9 +5,10 @@ import threading
 from api.interfaces.asset import Asset
 from api.interfaces.fees import Fees
 from src.exchange.managers.rest_manager import RestManager
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
-class FeesManager:
+class FeesManager(ApplicationLoggingMixin):
 
     def __init__(self, assets: list[Asset], rest_manager: RestManager):
         self.assets = assets
@@ -20,7 +21,13 @@ class FeesManager:
         for asset in self.assets:
             exchange = asset.exchange.value
             if exchange not in requested_exchanges:
-                self.get_account_fees(exchange)
+                try:
+                    self.get_account_fees(exchange)
+                except Exception:
+                    self.app_logger.error(
+                        f"Unable to initialize account fees for {exchange}",
+                        exc_info=True,
+                    )
                 requested_exchanges.add(exchange)
 
     def get_account_fees(self, provider_name: str) -> Fees | None:

@@ -17,8 +17,6 @@ from src.exchange.registries.rest_registry import RestRegistry
 
 
 class RestManager(ExchangeRestManager, RestRegistry):
-    def __init__(self):
-        super().__init__()
 
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
     def get_market_data(self, exchange: str, ticker_symbol: str) -> MarketData:

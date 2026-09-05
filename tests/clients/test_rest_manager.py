@@ -33,9 +33,6 @@ class TestRestManager(unittest.TestCase):
         self.assertEqual(self.mock_service.execute.call_count, 1)
 
     def test_circuit_breaker_on_error(self):
-        # We need to test if the circuit breaker triggers after failures.
-        # This is tricky because the circuitbreaker library might keep state.
-        # But we can at least verify it raises the expected error.
         self.mock_service.execute.side_effect = RuntimeError("Service Down")
 
         with self.assertRaises(RuntimeError):
