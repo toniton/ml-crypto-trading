@@ -31,6 +31,7 @@ from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
+from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
 from src.metrics.services.metric_service import MetricService
 from src.metrics.services.retention_engine import RetentionEngine
 from src.metrics.services.retention_scheduler import RetentionScheduler
@@ -106,6 +107,7 @@ class Application(ApplicationLoggingMixin):
         self._retention_engine = RetentionEngine(db_manager)
         self._retention_scheduler = RetentionScheduler(self._retention_engine)
         self._event_metric_collector = EventMetricCollector(self._metric_service)
+        self._runtime_metrics_collector = RuntimeMetricsCollector(self._metric_service)
         self._assets = trading_config.assets
         self._dynamic_quantity = trading_config.dynamic_quantity
         self._llm_config = llm_config
@@ -417,6 +419,8 @@ class Application(ApplicationLoggingMixin):
         self._oracle_service = None
         self._config_listener.stop()
         self._retention_scheduler.stop()
+        if self._runtime_metrics_collector:
+            self._runtime_metrics_collector.stop_monitoring()
         if self._order_reconciler:
             self._order_reconciler.stop()
         if self._trading_engine:

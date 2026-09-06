@@ -80,3 +80,17 @@ class TestMetricService:
         service.increment("http.errors")
 
         assert service.registered_names() == ["http.errors", "http.requests"]
+
+    def test_register_is_idempotent(self, db_manager):
+        service1 = MetricService(db_manager)
+        def1 = service1.register("runtime.uptime", metric_type=MetricType.GAUGE)
+
+        # Same service instance register call
+        def2 = service1.register("runtime.uptime", metric_type=MetricType.GAUGE)
+        assert def1.id == def2.id
+
+        # New service instance against same database (simulating process restart)
+        service2 = MetricService(db_manager)
+        def3 = service2.register("runtime.uptime", metric_type=MetricType.GAUGE)
+        assert def1.id == def3.id
+

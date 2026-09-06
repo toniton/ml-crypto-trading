@@ -32,16 +32,25 @@ class MetricService:
             aggregation: Optional[AggregationType] = None,
             retention_seconds: int = 30 * 24 * 3600,
     ) -> MetricDefinition:
-        definition = MetricDefinition(
-            name=name,
-            metric_type=metric_type,
-            unit=unit,
-            description=description,
-            aggregation=aggregation or default_aggregation(metric_type),
-            retention_seconds=retention_seconds,
-        )
+        existing = self._definitions.get(name)
+        if existing is not None:
+            return existing
+
         with self._database_manager.get_unit_of_work() as uow:
             repository = uow.get_repository(PostgresMetricRepository)
+            existing = repository.get_definition(name)
+            if existing is not None:
+                self._definitions[name] = existing
+                return existing
+
+            definition = MetricDefinition(
+                name=name,
+                metric_type=metric_type,
+                unit=unit,
+                description=description,
+                aggregation=aggregation or default_aggregation(metric_type),
+                retention_seconds=retention_seconds,
+            )
             repository.save_definition(definition)
             self._definitions[name] = definition
             return definition
@@ -142,13 +151,7 @@ class MetricService:
     def _ensure_definition(self, name: str, metric_type: MetricType) -> MetricDefinition:
         definition = self._definitions.get(name)
         if definition is None:
-            with self._database_manager.get_unit_of_work() as uow:
-                repository = uow.get_repository(PostgresMetricRepository)
-                definition = repository.get_definition(name)
-            if definition is None:
-                definition = self.register(name, metric_type=metric_type)
-            else:
-                self._definitions[name] = definition
+            definition = self.register(name, metric_type=metric_type)
         return definition
 
     def _resolve_definition(self, name: str) -> Optional[MetricDefinition]:
@@ -194,16 +197,27 @@ class MetricService:
 
     @staticmethod
     def _aggregate_values(values: list[float], aggregation: AggregationType) -> float:
-        if aggregation == AggregationType.SUM:
-            return sum(values)
-        if aggregation == AggregationType.AVG:
-            return sum(values) / len(values)
-        if aggregation == AggregationType.MIN:
-            return min(values)
-        if aggregation == AggregationType.MAX:
-            return max(values)
-        if aggregation == AggregationType.LAST:
-            return values[-1]
-        if aggregation == AggregationType.COUNT:
-            return float(len(values))
-        raise ValueError(f"Unsupported aggregation: {aggregation}")
+        aggregators = {
+            AggregationType.SUM: sum,
+            AggregationType.AVG: lambda v: sum(v) / len(v),
+            AggregationType.MIN: min,
+            AggregationType.MAX: max,
+            AggregationType.LAST: lambda v: v[-1],
+            AggregationType.COUNT: lambda v: float(len(v)),
+            AggregationType.P50: lambda v: MetricService._percentile(v, 0.50),
+            AggregationType.P90: lambda v: MetricService._percentile(v, 0.90),
+            AggregationType.P95: lambda v: MetricService._percentile(v, 0.95),
+            AggregationType.P99: lambda v: MetricService._percentile(v, 0.99),
+        }
+        func = aggregators.get(aggregation)
+        if func is None:
+            raise ValueError(f"Unsupported aggregation: {aggregation}")
+        return float(func(values))
+
+    @staticmethod
+    def _percentile(values: list[float], pct: float) -> float:
+        if not values:
+            return 0.0
+        sorted_vals = sorted(values)
+        index = int(round(pct * (len(sorted_vals) - 1)))
+        return sorted_vals[index]

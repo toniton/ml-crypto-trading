@@ -51,4 +51,3 @@ class ManagerFactory:
             rest_manager=rest_manager,
         )
         return container, trading_journal
-

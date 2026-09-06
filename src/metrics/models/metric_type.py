@@ -14,6 +14,10 @@ class AggregationType(str, Enum):
     MAX = "max"
     LAST = "last"
     COUNT = "count"
+    P50 = "p50"
+    P90 = "p90"
+    P95 = "p95"
+    P99 = "p99"
 
 
 def default_aggregation(metric_type: MetricType) -> AggregationType:

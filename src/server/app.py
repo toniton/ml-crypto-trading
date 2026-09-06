@@ -1,4 +1,5 @@
 import asyncio
+from contextlib import asynccontextmanager
 import uuid
 from datetime import date, datetime, timezone
 from typing import AsyncGenerator, List, Optional
@@ -21,6 +22,7 @@ from src.metrics.collectors.request_metrics_collector import (
     RequestMetricsCollector,
     RequestMetricsMiddleware,
 )
+from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
 from src.metrics.services.metric_service import MetricService
 from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
@@ -66,11 +68,25 @@ class ChatApp:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
 
-        app = FastAPI(title="ml-stocks-trading API", version="1.0.0")
+        metric_service = MetricService(db_manager)
+        request_collector = RequestMetricsCollector(metric_service)
+        runtime_collector = RuntimeMetricsCollector(metric_service)
+
+        @asynccontextmanager
+        async def lifespan(_app_instance: FastAPI):
+            try:
+                await runtime_collector.start_monitoring()
+            except RuntimeError:
+                pass
+            yield
+            runtime_collector.stop_monitoring()
+
+        app = FastAPI(title="ml-stocks-trading API", version="1.0.0", lifespan=lifespan)
         app.state.agent = agent
         app.state.conversation_service = conversation_service
         app.state.configuration_service = configuration_service
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
+        app.state.runtime_collector = runtime_collector
 
         app.add_middleware(
             CORSMiddleware,
@@ -80,10 +96,18 @@ class ChatApp:
             allow_headers=["*"],
         )
 
-        metric_service = MetricService(db_manager)
-        request_collector = RequestMetricsCollector(metric_service)
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
+
+        @app.get("/api/v1/runtime")
+        async def runtime_health_endpoint():
+            collector: Optional[RuntimeMetricsCollector] = getattr(app.state, "runtime_collector", None)
+            if not collector:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Runtime collector is not initialized.",
+                )
+            return collector.collect_and_record()
 
         log_handler = LogWebSocketHandler(event_bus)
 

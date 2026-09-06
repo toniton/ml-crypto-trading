@@ -303,6 +303,28 @@ class TestConversationSessions(unittest.TestCase):
         self.assertIn("Metric: http.requests", res)
         self.assertIn("sum=2.0000", res)
 
+    def test_runtime_health_endpoint(self):
+        db = make_temp_db_manager()
+        app = ChatApp.create(
+            agent=build_gateway(FakeLlmAdapter()),
+            event_bus=MessageEventBus(),
+            db_manager=db,
+        )
+        client = TestClient(app)
+        res = client.get("/api/v1/runtime")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("status", data)
+        self.assertIn("uptime_seconds", data)
+        self.assertIn("memory_rss_mb", data)
+        self.assertIn("cpu_percent", data)
+        self.assertIn("threads_count", data)
+        self.assertIn("event_loop_lag", data)
+        self.assertIn("p50_ms", data["event_loop_lag"])
+        self.assertIn("p95_ms", data["event_loop_lag"])
+        self.assertIn("p99_ms", data["event_loop_lag"])
+        self.assertIn("max_ms", data["event_loop_lag"])
+
 
 
 

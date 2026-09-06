@@ -74,3 +74,21 @@ class TestMetricRoutes:
         assert res_trip.status_code == 200
         assert res_trip.json()["metric"] == "circuit_breaker.tripped"
 
+    def test_percentile_aggregation_query(self, db_manager):
+        service = MetricService(db_manager)
+        service.observe("runtime.event_loop_lag", 2.0)
+        service.observe("runtime.event_loop_lag", 8.0)
+        service.observe("runtime.event_loop_lag", 41.0)
+        service.observe("runtime.event_loop_lag", 812.0)
+        service.flush()
+
+        app = FastAPI()
+        app.include_router(create_metric_router(service))
+        client = TestClient(app)
+
+        res = client.get("/metrics/runtime.event_loop_lag?interval=60&aggregation=p95")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["metric"] == "runtime.event_loop_lag"
+        assert len(data["series"]) == 1
+        assert data["series"][0]["value"] >= 41.0

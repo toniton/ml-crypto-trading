@@ -3,6 +3,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from api.interfaces.asset import Asset
+from api.interfaces.order import OrderStatus
+from api.interfaces.trade_action import TradeAction
 from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.backtest_rest_service import BacktestRestService
 from src.backtest.events.domain_events import OrderFilledEvent, BalanceUpdateEvent
@@ -11,9 +14,6 @@ from src.backtest.execution.execution_model import ExecutionModel
 from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
 from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
 from src.backtest.execution.fees.percentage_fee import PercentageFee
-from api.interfaces.asset import Asset
-from api.interfaces.order import OrderStatus
-from api.interfaces.trade_action import TradeAction
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
