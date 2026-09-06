@@ -52,6 +52,8 @@ class ConfigurationService(AgentLoggingMixin):
                     "No committed configuration at HEAD; falling back to on-disk file %s",
                     self._config_filepath,
                 )
+        if not self._config_filepath:
+            return {}
         with open(self._config_filepath, "r", encoding="utf-8") as stream:
             return yaml.safe_load(stream) or {}
 
@@ -72,7 +74,7 @@ class ConfigurationService(AgentLoggingMixin):
     def _parse_enum_values(field: ConfigField) -> list[str]:
         for constraint in field.constraints:
             if constraint.startswith("value in {"):
-                inner = constraint[len("value in {") : -1]
+                inner = constraint[len("value in {"): -1]
                 return [item.strip() for item in inner.split(",") if item.strip()]
         return []
 
@@ -92,7 +94,7 @@ class ConfigurationService(AgentLoggingMixin):
             return "identity"
         if path.endswith(".quantity_decimals") or path.endswith(".quote_decimals"):
             return "identity"
-        if path.endswith(".name"):
+        if path.endswith(".name") or path.endswith(".enabled"):
             return "identity"
         if path.endswith(".candles_timeframe") or path.endswith(".schedule"):
             return "market_feed"
@@ -101,10 +103,17 @@ class ConfigurationService(AgentLoggingMixin):
         return "other"
 
     _SECTION_DEFINITIONS: dict[str, tuple[str, str, str]] = {
-        "identity": ("Asset identity", "Fixed pair metadata. Locked at the exchange level — these values cannot be changed at runtime.", "assets.{asset}"),
-        "market_feed": ("Market feed", "How often candles stream in and how frequently the strategy loop ticks.", "assets.{asset}"),
-        "consensus": ("Consensus thresholds", "Weighted vote total required before the bot fires a signal. Strategies vote; consensus decides.", "assets.{asset}.consensus"),
-        "drawdown_guard": ("Drawdown guard", "Circuit breaker. Halts trading when losses breach the tolerated drawdown window.", "assets.{asset}.guard_config"),
+        "identity": ("Asset identity",
+                     "Fixed pair metadata. Locked at the exchange level — these values cannot be changed at runtime.",
+                     "assets.{asset}"),
+        "market_feed": ("Market feed", "How often candles stream in and how frequently the strategy loop ticks.",
+                        "assets.{asset}"),
+        "consensus": ("Consensus thresholds",
+                      "Weighted vote total required before the bot fires a signal. Strategies vote; consensus decides.",
+                      "assets.{asset}.consensus"),
+        "drawdown_guard": ("Drawdown guard",
+                           "Circuit breaker. Halts trading when losses breach the tolerated drawdown window.",
+                           "assets.{asset}.guard_config"),
         "trade_sizing": ("Trade sizing", "Minimum executable order size on the exchange.", "assets.{asset}"),
     }
 

@@ -58,6 +58,13 @@ class ProposalDecisionRequest(BaseModel):
     action: ProposalDecision = Field(description="Decision to take on the pending proposal.")
 
 
+class ConfigCommitRequest(BaseModel):
+    assets: list[dict] = Field(description="List of asset configurations.")
+    dynamic_quantity: Optional[str] = Field(default=None, description="Dynamic quantity expression.")
+    message: Optional[str] = Field(default="Update bot configuration", description="Commit message.")
+    author: Optional[str] = Field(default="user", description="Author of the commit.")
+
+
 class ChatApp:
     @staticmethod
     def create(
@@ -65,8 +72,9 @@ class ChatApp:
             event_bus: EventBus,
             db_manager: DatabaseManager,
     ) -> FastAPI:
+        config_filepath = getattr(agent, "config_filepath", None)
         conversation_service = ConversationService(db_manager)
-        configuration_service = ConfigurationService(db_manager)
+        configuration_service = ConfigurationService(db_manager, config_filepath=config_filepath)
 
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
@@ -272,6 +280,44 @@ class ChatApp:
                 "summary": proposal.summary,
                 "warnings": warnings,
             }
+
+        @app.get("/api/v1/config")
+        @app.get("/api/v1/configuration")
+        async def get_config_endpoint(req: Request):
+            _configuration_service: ConfigurationService = req.app.state.configuration_service
+            return await asyncio.to_thread(_configuration_service.get_config)
+
+        @app.get("/api/v1/config/options")
+        @app.get("/api/v1/configuration/options")
+        async def get_config_options_endpoint(req: Request):
+            _configuration_service: ConfigurationService = req.app.state.configuration_service
+            return await asyncio.to_thread(_configuration_service.get_options)
+
+        @app.post("/api/v1/config")
+        @app.post("/api/v1/configuration")
+        async def commit_config_endpoint(payload: ConfigCommitRequest, req: Request):
+            _configuration_service: ConfigurationService = req.app.state.configuration_service
+            config_data = {
+                "assets": payload.assets,
+                "dynamic_quantity": payload.dynamic_quantity,
+            }
+            try:
+                commit = await asyncio.to_thread(
+                    _configuration_service.commit_config,
+                    config_data=config_data,
+                    author=payload.author or "user",
+                    message=payload.message or "Update bot configuration",
+                )
+                return {
+                    "commit_hash": commit.hash,
+                    "summary": commit.message,
+                    "status": "committed",
+                }
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(exc),
+                ) from exc
 
         return app
 

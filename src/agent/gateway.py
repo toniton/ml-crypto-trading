@@ -29,8 +29,14 @@ class AgentGateway:
             vcs: Optional["VCSService"] = None,
     ):
         self._llm = llm
+        self._config_filepath = config_filepath
         self._registry = registry or self.build_default_registry(llm, config_filepath, vcs=vcs)
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
+
+    @property
+    def config_filepath(self) -> str:
+        return self._config_filepath
+
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
         route = self._route(prompt, history=history)

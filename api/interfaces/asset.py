@@ -77,6 +77,11 @@ class Asset:
         description="Consensus thresholds for this asset.",
         json_schema_extra={"mutable": True},
     )
+    enabled: bool = Field(
+        default=True,
+        description="Whether this asset is active in live trading.",
+        json_schema_extra={"mutable": True},
+    )
 
     @computed_field
     @property
