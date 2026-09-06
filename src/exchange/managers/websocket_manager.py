@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import Callable
+from typing import Callable, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
@@ -13,17 +13,24 @@ from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketServ
 from src.core.interfaces.subscription_data import SubscriptionVisibility
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.exchange.registries.websocket_registry import WebSocketRegistry
+from src.metrics.collectors.exchange_metrics_collector import ExchangeMetricsCollector
 
 
 class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
-    def __init__(self):
+    def __init__(self, metrics_collector: Optional[ExchangeMetricsCollector] = None):
         super().__init__()
         self._lock = threading.Lock()
         self._subscriptions: dict[str, dict[str, tuple[ExchangeWebSocketBuilder, Callable]]] = {}
         self._on_reconnect: Callable | None = None
+        self._metrics_collector = metrics_collector
 
     def set_reconnect_callback(self, callback: Callable) -> None:
-        self._on_reconnect = callback
+        def on_reconnect_wrapper(*args, **kwargs):
+            if self._metrics_collector:
+                self._metrics_collector.record_websocket_reconnect("all")
+            return callback(*args, **kwargs)
+
+        self._on_reconnect = on_reconnect_wrapper
 
     def register_service(self, service: ExchangeWebSocketService):
         super().register_service(service)
@@ -38,6 +45,9 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
             service.connect(self._handle_incoming_message)
 
     def _handle_incoming_message(self, exchange: str, visibility: SubscriptionVisibility, data: dict):
+        if self._metrics_collector:
+            self._metrics_collector.record_websocket_message(exchange, visibility.value)
+
         callbacks_to_call = []
         with self._lock:
             if exchange not in self._subscriptions:
@@ -55,6 +65,8 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
                 if parsed_data:
                     callback(parsed_data)
             except Exception as e:
+                if self._metrics_collector:
+                    self._metrics_collector.record_websocket_error(exchange, key, type(e).__name__)
                 self.app_logger.error(
                     f"Error parsing/executing callback for {key} on {exchange}: {e}",
                     exc_info=True

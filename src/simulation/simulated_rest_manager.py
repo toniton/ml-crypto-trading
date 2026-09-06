@@ -7,12 +7,13 @@ from api.interfaces.fees import Fees
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.exchange.managers.rest_manager import RestManager
+from src.metrics.collectors.exchange_metrics_collector import ExchangeMetricsCollector
 from src.simulation.simulated_account import SimulatedAccount
 
 
 class SimulatedRestManager(RestManager):
-    def __init__(self, account: SimulatedAccount):
-        super().__init__()
+    def __init__(self, account: SimulatedAccount, metrics_collector: Optional[ExchangeMetricsCollector] = None):
+        super().__init__(metrics_collector=metrics_collector)
         self._account = account
 
     def get_account_balance(self, exchange: str) -> List[AccountBalance]:

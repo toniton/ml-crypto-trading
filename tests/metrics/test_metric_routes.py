@@ -49,3 +49,28 @@ class TestMetricRoutes:
         response = client.get("/metrics/does.not.exist")
 
         assert response.status_code == 404
+
+    def test_exchange_health_metrics_queries(self, db_manager):
+        service = MetricService(db_manager)
+        service.increment("exchange.requests", labels={"exchange": "BINANCE", "operation": "get_candles"})
+        service.increment("exchange.errors", labels={"exchange": "BINANCE", "operation": "get_candles"})
+        service.increment("circuit_breaker.tripped", labels={"exchange": "BINANCE", "operation": "get_candles"})
+        service.flush()
+
+        app = FastAPI()
+        app.include_router(create_metric_router(service))
+        client = TestClient(app)
+
+        res_req = client.get("/metrics/exchange.requests?interval=60")
+        assert res_req.status_code == 200
+        assert res_req.json()["metric"] == "exchange.requests"
+        assert len(res_req.json()["series"]) == 1
+
+        res_err = client.get("/metrics/exchange.errors?interval=60")
+        assert res_err.status_code == 200
+        assert res_err.json()["metric"] == "exchange.errors"
+
+        res_trip = client.get("/metrics/circuit_breaker.tripped?interval=60")
+        assert res_trip.status_code == 200
+        assert res_trip.json()["metric"] == "circuit_breaker.tripped"
+

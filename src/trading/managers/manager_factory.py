@@ -1,8 +1,8 @@
-from __future__ import annotations
-
-from typing import Tuple
+from typing import Optional, Tuple
 
 from src.exchange.factories.client_factory import ClientFactory
+from src.metrics.collectors.exchange_metrics_collector import ExchangeMetricsCollector
+from src.metrics.services.metric_service import MetricService
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.fees.fees_manager import FeesManager
@@ -22,10 +22,19 @@ class ManagerFactory:
             is_simulated: bool = False,
             is_backtest: bool = False,
             event_bus=None,
+            metric_service: Optional[MetricService] = None,
+            metrics_collector: Optional[ExchangeMetricsCollector] = None,
     ) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
         trading_journal = InMemoryTradingJournal()
-        websocket_manager = ClientFactory.create_websocket_manager(is_simulated)
-        rest_manager = ClientFactory.create_rest_manager(is_simulated)
+        collector = metrics_collector or (
+            ExchangeMetricsCollector(metric_service) if metric_service else None
+        )
+        websocket_manager = ClientFactory.create_websocket_manager(
+            is_simulated, metrics_collector=collector
+        )
+        rest_manager = ClientFactory.create_rest_manager(
+            is_simulated, metrics_collector=collector
+        )
         order_manager = OrderManager(
             database_manager, trading_journal, rest_manager, websocket_manager, is_backtest
         )
@@ -42,3 +51,4 @@ class ManagerFactory:
             rest_manager=rest_manager,
         )
         return container, trading_journal
+

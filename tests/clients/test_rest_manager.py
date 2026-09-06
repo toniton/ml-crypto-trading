@@ -38,6 +38,45 @@ class TestRestManager(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             self.rest_manager.get_market_data("TEST_EXCHANGE", "BTC/USDT")
 
+    def test_metrics_collection_on_success(self):
+        mock_collector = MagicMock()
+        manager = RestManager(metrics_collector=mock_collector)
+        manager.register_service(self.mock_service)
+
+        manager.get_market_data("TEST_EXCHANGE", "BTC/USDT")
+
+        mock_collector.record_request.assert_called_once_with("TEST_EXCHANGE", "get_market_data")
+        mock_collector.record_duration.assert_called_once()
+        self.assertEqual(mock_collector.record_duration.call_args[0][:2], ("TEST_EXCHANGE", "get_market_data"))
+
+    def test_metrics_collection_on_error(self):
+        mock_collector = MagicMock()
+        manager = RestManager(metrics_collector=mock_collector)
+        manager.register_service(self.mock_service)
+        self.mock_service.execute.side_effect = RuntimeError("Network Failed")
+
+        with self.assertRaises(RuntimeError):
+            manager.get_market_data("TEST_EXCHANGE", "BTC/USDT")
+
+        mock_collector.record_request.assert_called_once_with("TEST_EXCHANGE", "get_market_data")
+        mock_collector.record_error.assert_called_once_with("TEST_EXCHANGE", "get_market_data", "RuntimeError")
+        mock_collector.record_duration.assert_called_once()
+        self.assertEqual(mock_collector.record_duration.call_args[0][:2], ("TEST_EXCHANGE", "get_market_data"))
+
+    def test_metrics_collection_on_circuit_trip(self):
+        mock_collector = MagicMock()
+        manager = RestManager(metrics_collector=mock_collector)
+        manager.register_service(self.mock_service)
+        self.mock_service.execute.side_effect = RuntimeError("Service Down")
+
+        for _ in range(5):
+            try:
+                manager.get_candles("TEST_EXCHANGE", "BTC/USDT", MagicMock())
+            except Exception:
+                pass
+
+        mock_collector.record_circuit_trip.assert_called_with("TEST_EXCHANGE", "get_candles")
+
     def test_place_order_encapsulation(self):
         mock_builder = self.mock_service.builder.return_value
         self.rest_manager.place_order(
@@ -48,3 +87,4 @@ class TestRestManager(unittest.TestCase):
             "uuid1", "BTC/USDT", "1.0", Decimal("50000"), TradeAction.BUY, None
         )
         self.mock_service.execute.assert_called_once()
+

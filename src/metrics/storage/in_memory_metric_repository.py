@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import List, Optional
 
+from sqlalchemy.orm import Session
+
 from src.database.repositories.base_repository import T
 from src.metrics.models.metric import MetricDefinition
 from src.metrics.models.metric_sample import MetricSample
@@ -12,7 +14,8 @@ from src.metrics.storage.metric_repository import MetricRepository
 class InMemoryMetricRepository(MetricRepository):
     """In-memory implementation, useful for tests and lightweight deployments."""
 
-    def __init__(self) -> None:
+    def __init__(self, database_session: Session) -> None:
+        super().__init__(database_session)
         self._definitions: dict[str, MetricDefinition] = {}
         self._samples_by_metric: dict[str, list[MetricSample]] = {}
 

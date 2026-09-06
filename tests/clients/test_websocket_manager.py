@@ -110,3 +110,40 @@ class TestWebSocketManager(unittest.TestCase):
 
         mock_service.unsubscribe.assert_called_once_with(mock_builder)
         self.assertNotIn("MARKET_BTC-USD", self.websocket_manager._subscriptions["BINANCE"])
+
+    def test_metrics_collection_on_incoming_message(self):
+        mock_collector = MagicMock()
+        manager = WebSocketManager(metrics_collector=mock_collector)
+
+        manager._handle_incoming_message("BINANCE", SubscriptionVisibility.PUBLIC, {"type": "ticker"})
+
+        mock_collector.record_websocket_message.assert_called_once_with("BINANCE", "public")
+
+    def test_metrics_collection_on_callback_error(self):
+        mock_collector = MagicMock()
+        manager = WebSocketManager(metrics_collector=mock_collector)
+        mock_builder = MagicMock(spec=ExchangeWebSocketBuilder)
+        sub_data = SubscriptionData(
+            payload={"type": "ticker"},
+            visibility=SubscriptionVisibility.PUBLIC,
+            parser=lambda x: x["data"],
+            filter=lambda x: True
+        )
+        mock_builder.get_subscription_data.return_value = sub_data
+        manager._subscriptions["TEST"] = {"key1": (mock_builder, MagicMock(side_effect=ValueError("Bad data")))}
+
+        manager._handle_incoming_message("TEST", SubscriptionVisibility.PUBLIC, {"data": "val"})
+
+        mock_collector.record_websocket_error.assert_called_once_with("TEST", "key1", "ValueError")
+
+    def test_metrics_collection_on_reconnect(self):
+        mock_collector = MagicMock()
+        manager = WebSocketManager(metrics_collector=mock_collector)
+        mock_reconnect_target = MagicMock()
+
+        manager.set_reconnect_callback(mock_reconnect_target)
+        manager._on_reconnect()
+
+        mock_collector.record_websocket_reconnect.assert_called_once_with("all")
+        mock_reconnect_target.assert_called_once()
+

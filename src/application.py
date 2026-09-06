@@ -139,7 +139,11 @@ class Application(ApplicationLoggingMixin):
         is_simulated = self._application_config.simulated
 
         container, trading_journal = ManagerFactory.build_manager_container(
-            db_manager, self._assets, is_simulated, event_bus=self._trading_event_bus
+            db_manager,
+            self._assets,
+            is_simulated,
+            event_bus=self._trading_event_bus,
+            metric_service=self._metric_service,
         )
         self._trading_journal = trading_journal
         self._order_reconciler = OrderReconciler(container.order_manager)
