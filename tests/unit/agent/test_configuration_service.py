@@ -5,14 +5,14 @@ from src.agent import ConfigChange, ConfigurationProposal
 
 
 class TestConfigurationService:
-    def test_loads_yaml(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_loads_yaml(self, vcs):
+        service = ConfigurationService(vcs)
         raw = service.load_raw_config()
         assert raw["assets"][0]["consensus"]["buy"] == 1.3
         assert raw["assets"][0]["base_ticker_symbol"] == "BTC"
 
-    def test_valid_proposal(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_valid_proposal(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="Take more trades.",
             changes=[
@@ -28,8 +28,8 @@ class TestConfigurationService:
         assert validation.valid is True
         assert validation.errors == []
 
-    def test_rejects_unknown_path(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_rejects_unknown_path(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="bad",
             changes=[ConfigChange(path="does.not.exist", old_value=None, new_value=1, reason="nope")],
@@ -38,8 +38,8 @@ class TestConfigurationService:
         assert validation.valid is False
         assert any("Unknown configuration path" in error for error in validation.errors)
 
-    def test_rejects_llm_path_as_unknown(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_rejects_llm_path_as_unknown(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="leak",
             changes=[ConfigChange(path="llm.api_key", old_value="super-secret", new_value="hacked", reason="x")],
@@ -48,8 +48,8 @@ class TestConfigurationService:
         assert validation.valid is False
         assert any("Unknown configuration path" in error for error in validation.errors)
 
-    def test_rejects_constraint_violation(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_rejects_constraint_violation(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="too aggressive",
             changes=[
@@ -63,8 +63,8 @@ class TestConfigurationService:
         assert validation.valid is False
         assert any("violates constraint" in error for error in validation.errors)
 
-    def test_rejects_type_mismatch(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_rejects_type_mismatch(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="wrong type",
             changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value="high", reason="x")],
@@ -72,8 +72,8 @@ class TestConfigurationService:
         validation = service.validate_proposal(proposal)
         assert validation.valid is False
 
-    def test_apply_proposal_returns_patched_copy(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_apply_proposal_returns_patched_copy(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="update schedule",
             changes=[
@@ -84,8 +84,8 @@ class TestConfigurationService:
         assert updated["assets"][0]["schedule"] == 2
         assert not warnings
 
-    def test_apply_proposal_warns_on_stale_old_value(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_apply_proposal_warns_on_stale_old_value(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="stale",
             changes=[
@@ -96,8 +96,8 @@ class TestConfigurationService:
         assert len(warnings) == 1
         assert "rebased" in warnings[0]
 
-    def test_render_diff(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_render_diff(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="less conservative",
             changes=[
@@ -110,8 +110,8 @@ class TestConfigurationService:
         assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.05" in rendered
         assert "Noise" in rendered
 
-    def test_render_diff_with_warnings(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_render_diff_with_warnings(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="aggro",
             changes=[ConfigChange(path="dynamic_quantity", old_value="a", new_value="b", reason="r")],
@@ -120,13 +120,13 @@ class TestConfigurationService:
         assert "Warnings:" in rendered
         assert "global setting applies to all assets" in rendered
 
-    def test_render_catalog(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_render_catalog(self, vcs):
+        service = ConfigurationService(vcs)
         rendered = service.render_catalog()
         assert "assets.BTC_USD.guard_config.max_drawdown_percentage" in rendered
 
-    def test_build_configuration_view_groups_fields_and_strategies(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_build_configuration_view_groups_fields_and_strategies(self, vcs):
+        service = ConfigurationService(vcs)
         view = service.build_configuration_view("BTC_USD")
         assert view.asset == "BTC_USD"
         assert view.base == "BTC" and view.quote == "USD"
@@ -173,7 +173,17 @@ class TestConfigurationService:
         assert view.signal_window.buy == 1.3 and view.signal_window.sell == 0.5  # pylint: disable=no-member
 
     def test_build_configuration_view_includes_strategies(self):
-        service = ConfigurationService("examples/configurations/trading-config.yaml")
+        from src.vcs.application.service import VCSService
+        from tests.unit.api_server.helpers import make_temp_db_manager
+
+        with open("examples/configurations/trading-config.yaml", encoding="utf-8") as stream:
+            content = yaml.safe_load(stream)
+
+        db_mgr = make_temp_db_manager()
+        vcs = VCSService(db_mgr)
+        vcs.commit(content, author="test", message="seed")
+
+        service = ConfigurationService(vcs)
         view = service.build_configuration_view("BTC_USD")
 
         strategy_names = [card.name for card in view.strategies]
@@ -187,17 +197,15 @@ class TestConfigurationService:
         assert hammer.kind == "STATIC"
         assert hammer.class_name == "HammerAccumulationStrategy"
 
-    def test_proposal_without_changes_invalid(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_proposal_without_changes_invalid(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(summary="nothing", changes=[])
         assert service.validate_proposal(proposal).valid is False
 
 
 class TestValueNormalization:
-    def test_string_number_is_coerced_before_being_written(self, sample_config):
-        # The LLM may propose "1.1" for a float field. Validation accepts it, and
-        # without normalization the *string* lands in the YAML.
-        service = ConfigurationService(sample_config)
+    def test_string_number_is_coerced_before_being_written(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="less conservative",
             changes=[
@@ -217,18 +225,20 @@ class TestValueNormalization:
 
 class TestPreExistingConfigErrors:
     @staticmethod
-    def _config_with_stale_value(tmp_path, sample_config):
-        with open(sample_config, encoding="utf-8") as stream:
-            raw = yaml.safe_load(stream)
-        raw["assets"][0]["guard_config"]["max_drawdown_percentage"] = 5.0
-        broken = tmp_path / "broken.yaml"
-        broken.write_text(yaml.safe_dump(raw), encoding="utf-8")
-        return str(broken)
+    def _vcs_with_stale_value():
+        from tests.unit.agent.conftest import SAMPLE_CONFIG
+        from src.vcs.application.service import VCSService
+        from tests.unit.api_server.helpers import make_temp_db_manager
 
-    def test_unrelated_stale_value_does_not_reject_the_proposal(self, tmp_path, sample_config):
-        # Validation is wholesale, so an already-invalid value elsewhere in the file
-        # must not make every proposal unfixable.
-        service = ConfigurationService(self._config_with_stale_value(tmp_path, sample_config))
+        db_mgr = make_temp_db_manager()
+        vcs = VCSService(db_mgr)
+        raw = yaml.safe_load(SAMPLE_CONFIG)
+        raw["assets"][0]["guard_config"]["max_drawdown_percentage"] = 5.0
+        vcs.commit(raw, author="test", message="stale seed")
+        return vcs
+
+    def test_unrelated_stale_value_does_not_reject_the_proposal(self):
+        service = ConfigurationService(self._vcs_with_stale_value())
         proposal = ConfigurationProposal(
             summary="less conservative",
             changes=[
@@ -240,8 +250,8 @@ class TestPreExistingConfigErrors:
         assert validation.valid is True
         assert any("already invalid" in warning for warning in validation.warnings)
 
-    def test_stale_value_is_still_enforced_when_the_proposal_touches_it(self, tmp_path, sample_config):
-        service = ConfigurationService(self._config_with_stale_value(tmp_path, sample_config))
+    def test_stale_value_is_still_enforced_when_the_proposal_touches_it(self):
+        service = ConfigurationService(self._vcs_with_stale_value())
         proposal = ConfigurationProposal(
             summary="worse",
             changes=[
@@ -281,12 +291,15 @@ assets:
 dynamic_quantity: "max(min_qty, eq * 0.1)"
 """
 
-    def test_model_level_error_reports_the_changed_leaf(self, tmp_path):
-        # Model validators report the whole model as their input; the message
-        # should still point at the value the agent actually proposed.
-        config_file = tmp_path / "with-strategy.yaml"
-        config_file.write_text(self.CONFIG_WITH_STRATEGY, encoding="utf-8")
-        service = ConfigurationService(str(config_file))
+    def test_model_level_error_reports_the_changed_leaf(self):
+        from src.vcs.application.service import VCSService
+        from tests.unit.api_server.helpers import make_temp_db_manager
+
+        db_mgr = make_temp_db_manager()
+        vcs = VCSService(db_mgr)
+        vcs.commit(yaml.safe_load(self.CONFIG_WITH_STRATEGY), author="test", message="seed")
+
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="switch strategy type",
             changes=[
@@ -302,10 +315,15 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
         assert any("value 'STATIC'" in error for error in validation.errors)
         assert not any("{" in error for error in validation.errors)
 
-    def test_empty_expression_is_rejected(self, tmp_path):
-        config_file = tmp_path / "with-strategy.yaml"
-        config_file.write_text(self.CONFIG_WITH_STRATEGY, encoding="utf-8")
-        service = ConfigurationService(str(config_file))
+    def test_empty_expression_is_rejected(self):
+        from src.vcs.application.service import VCSService
+        from tests.unit.api_server.helpers import make_temp_db_manager
+
+        db_mgr = make_temp_db_manager()
+        vcs = VCSService(db_mgr)
+        vcs.commit(yaml.safe_load(self.CONFIG_WITH_STRATEGY), author="test", message="seed")
+
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="blank the expression",
             changes=[
@@ -317,3 +335,4 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
         )
 
         assert service.validate_proposal(proposal).valid is False
+

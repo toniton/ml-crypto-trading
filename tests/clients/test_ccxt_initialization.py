@@ -24,10 +24,15 @@ class TestCCXTInitialization(unittest.TestCase):
         self.trading_config.assets = []
         self.trading_config.dynamic_quantity = None
 
+    @patch('src.application.Application._setup_configuration')
     @patch('src.application.DatabaseManager')
-    def test_application_initializes_all_ccxt_providers(self, mock_db):
-        # We need to ensure the modules are imported so subclasses are known
-
+    @patch('src.application.VCSService')
+    @patch('src.application.RefChangeListener')
+    @patch('src.application.TradingEngine')
+    @patch('src.application.ModelFactory')
+    def test_application_initializes_all_ccxt_providers(
+            self, mock_model_factory, mock_engine, mock_ref_listener, mock_vcs, mock_db, mock_setup_config
+    ):
         with patch('src.exchange.clients.ccxt.ccxt_rest_service.CCXTExchangeRestService.__init__',
                    autospec=True) as mock_rest_init, \
                 patch('src.exchange.clients.ccxt.ccxt_websocket_service.CCXTExchangeWebSocketService.__init__',
@@ -43,12 +48,14 @@ class TestCCXTInitialization(unittest.TestCase):
 
             mock_ws_init.side_effect = ws_side_effect
 
+            self.app_config.headless = True
             app = Application(
                 application_config=self.app_config,
                 environment_config=self.env_config,
                 trading_config=self.trading_config,
                 llm_config=LlmConfig()
             )
+            app.startup()
 
         # Supported providers: 'binance', 'kraken', 'coinbase', 'bybit', 'kucoin' (5) + 'cryptodotcom' (1)
         ccxt_providers = CCXTExchangeRestService.get_supported_providers()

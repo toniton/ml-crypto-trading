@@ -95,40 +95,28 @@ class Application(ApplicationLoggingMixin):
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
+        self._seed_trading_config = trading_config
+        self._trading_config: Optional[TradingConfig] = None
+        self._llm_config = llm_config
         self._activity_queue = activity_queue
         self._market_data_store = MarketDataStore()
         self._market_data_recorder = MarketDataRecorder(self._market_data_store)
-        self._setup_configuration()
-
-        db_manager = DatabaseManager()
-        db_manager.initialize()
-        self._db_manager = db_manager
-        self._metric_service = MetricService(db_manager)
-        self._retention_engine = RetentionEngine(db_manager)
-        self._retention_scheduler = RetentionScheduler(self._retention_engine)
-        self._event_metric_collector = EventMetricCollector(self._metric_service)
-        self._runtime_metrics_collector = RuntimeMetricsCollector(self._metric_service)
-        self._assets = trading_config.assets
-        self._dynamic_quantity = trading_config.dynamic_quantity
-        self._llm_config = llm_config
-        self._trading_config = trading_config
-        self._strategies_config = StrategiesConfig()
-        self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
-
+        self._db_manager: Optional[DatabaseManager] = None
+        self._metric_service: Optional[MetricService] = None
+        self._retention_engine: Optional[RetentionEngine] = None
+        self._retention_scheduler: Optional[RetentionScheduler] = None
+        self._event_metric_collector: Optional[EventMetricCollector] = None
+        self._runtime_metrics_collector: Optional[RuntimeMetricsCollector] = None
+        self._strategies_config: Optional[StrategiesConfig] = None
+        self._strategies_registry: Optional[StrategyRegistry] = None
         self._vcs_ref = "HEAD"
-        self._vcs = VCSService(db_manager)
-        self._config_listener = RefChangeListener(
-            db_manager=db_manager,
-            on_event_callback=self._on_vcs_ref_change,
-            config_vcs=self._vcs,
-        )
-
-        self._managers = self._create_managers(db_manager)
-
-        if not self._is_backtest_mode:
-            self._setup_clients()
-
-        self._setup_protections()
+        self._vcs: Optional[VCSService] = None
+        self._assets = []
+        self._dynamic_quantity = None
+        self._config_listener: Optional[RefChangeListener] = None
+        self._managers: Optional[ManagerContainer] = None
+        self._trading_journal = None
+        self._order_reconciler: Optional[OrderReconciler] = None
 
         atexit.register(self.shutdown)
 
@@ -191,11 +179,54 @@ class Application(ApplicationLoggingMixin):
             return
         self.app_logger.info("Starting Application...")
         self.is_running.set()
+
+        self._setup_configuration()
+
+        db_manager = DatabaseManager()
+        db_manager.initialize()
+        self._db_manager = db_manager
+        self._metric_service = MetricService(db_manager)
+        self._retention_engine = RetentionEngine(db_manager)
+        self._retention_scheduler = RetentionScheduler(self._retention_engine)
+        self._event_metric_collector = EventMetricCollector(self._metric_service)
+        self._runtime_metrics_collector = RuntimeMetricsCollector(self._metric_service)
+        self._strategies_config = StrategiesConfig()
+        self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
+
+        self._vcs_ref = "HEAD"
+        self._vcs = VCSService(db_manager)
+
+        active_config = self._resolve_active_config()
+        self._assets = active_config.assets
+        self._dynamic_quantity = active_config.dynamic_quantity
+        self._trading_config = active_config
+
         if self._is_backtest_mode:
             self.is_ready.set()
             return
 
-        self._ensure_config_store_seeded()
+        self._startup_live(db_manager)
+
+    def _resolve_active_config(self) -> TradingConfig:
+        if self._is_backtest_mode:
+            return self._seed_trading_config
+
+        self._ensure_config_store_seeded(self._seed_trading_config)
+        try:
+            raw_config = self._vcs.checkout(self._vcs_ref)
+            return TradingConfig.model_validate(raw_config)
+        except Exception:
+            return self._seed_trading_config
+
+    def _startup_live(self, db_manager: DatabaseManager) -> None:
+        self._config_listener = RefChangeListener(
+            db_manager=db_manager,
+            on_event_callback=self._on_vcs_ref_change,
+            config_vcs=self._vcs,
+        )
+        self._managers = self._create_managers(db_manager)
+        self._setup_clients()
+        self._setup_protections()
         self._config_listener.start()
 
         trading_scheduler = LiveTradingScheduler()
@@ -249,10 +280,7 @@ class Application(ApplicationLoggingMixin):
 
         if not self._application_config.headless:
             api_llm = ModelFactory.create_model(self._llm_config)
-            configuration_service = ConfigurationService(
-                self._application_config.trading_config_filepath,
-                vcs=self._vcs,
-            )
+            configuration_service = ConfigurationService(vcs=self._vcs)
             account_balance_tool = AccountBalanceTool(
                 account_manager=self._managers.account_manager,
                 assets=self._assets,
@@ -311,7 +339,6 @@ class Application(ApplicationLoggingMixin):
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(
                 api_llm,
-                self._application_config.trading_config_filepath,
                 vcs=self._vcs,
             )
             self._event_bus = MessageEventBus()
@@ -380,9 +407,9 @@ class Application(ApplicationLoggingMixin):
         self._register_with_managers(rest_service)
         self._register_with_managers(websocket_service)
 
-    def _ensure_config_store_seeded(self) -> None:
+    def _ensure_config_store_seeded(self, seed_config: TradingConfig) -> None:
         self._vcs.seed_if_empty(
-            self._trading_config,
+            seed_config,
             author="application-bootstrap",
             message="Initial configuration committed at application start",
         )
@@ -417,8 +444,12 @@ class Application(ApplicationLoggingMixin):
             self._trading_event_bus.close()
             self._trading_event_bus = None
         self._oracle_service = None
-        self._config_listener.stop()
-        self._retention_scheduler.stop()
+        if self._config_listener:
+            self._config_listener.stop()
+            self._config_listener = None
+        if self._retention_scheduler:
+            self._retention_scheduler.stop()
+            self._retention_scheduler = None
         if self._runtime_metrics_collector:
             self._runtime_metrics_collector.stop_monitoring()
         if self._order_reconciler:

@@ -1,12 +1,13 @@
-import os
-import tempfile
 import unittest
+import yaml
 
 from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
+from src.configuration.trading_config import TradingConfig
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
+from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
 from tests.unit.api_server.helpers import make_temp_db_manager
 
@@ -39,13 +40,14 @@ dynamic_quantity: "max(min_qty, 1.0)"
 
 class TestConfigEndpoints(unittest.TestCase):
     def setUp(self):
-        self.temp_dir = tempfile.mkdtemp(prefix="config-test-")
-        self.config_path = os.path.join(self.temp_dir, "trading-config.yaml")
-        with open(self.config_path, "w", encoding="utf-8") as handle:
-            handle.write(SAMPLE_CONFIG)
-
         self.db = make_temp_db_manager()
-        self.agent = AgentGateway(FakeLlmAdapter(), self.config_path)
+        self.vcs = VCSService(self.db)
+        self.vcs.seed_if_empty(
+            TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)),
+            author="test",
+            message="seed",
+        )
+        self.agent = AgentGateway(FakeLlmAdapter(), vcs=self.vcs)
         self.app = ChatApp.create(
             agent=self.agent,
             event_bus=MessageEventBus(),

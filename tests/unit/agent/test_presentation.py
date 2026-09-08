@@ -24,8 +24,8 @@ class TestConfigurationPresentation:
     def test_empty_presentation(self):
         assert ConfigurationPresentation.empty().markdown() == ""
 
-    def test_presented_blocks_never_mutate_proposal(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_presented_blocks_never_mutate_proposal(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="s",
             changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
@@ -37,16 +37,16 @@ class TestConfigurationPresentation:
         diff_blocks = [b for b in presentation.blocks if b.type == "configuration_diff"]
         assert diff_blocks[0].changes[0].path == "assets.BTC_USD.consensus.buy"
 
-    def test_build_presentation_includes_warnings(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_build_presentation_includes_warnings(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(summary="aggro", changes=[])
         presentation = service.build_presentation(proposal, warnings=["global setting applies to all assets"])
         markdown = presentation.markdown()
         assert "Warnings:" in markdown
         assert "global setting applies to all assets" in markdown
 
-    def test_build_presentation_with_errors_omits_approval(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_build_presentation_with_errors_omits_approval(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="too aggressive",
             changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=15.0, reason="x")],
@@ -57,8 +57,8 @@ class TestConfigurationPresentation:
         assert "rejected" in markdown
         assert "value must be <= 10.0" in markdown
 
-    def test_build_presentation_without_errors_keeps_approval(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_build_presentation_without_errors_keeps_approval(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(summary="fine", changes=[])
         presentation = service.build_presentation(proposal, errors=[])
         assert presentation.blocks[-1].type == "approval"
@@ -68,8 +68,8 @@ class TestTypedResults:
     def test_general_result_kind(self):
         assert GeneralResult().kind == "general"
 
-    def test_configuration_result_carries_typed_fields(self, sample_config):
-        service = ConfigurationService(sample_config)
+    def test_configuration_result_carries_typed_fields(self, vcs):
+        service = ConfigurationService(vcs)
         proposal = ConfigurationProposal(
             summary="s",
             changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],

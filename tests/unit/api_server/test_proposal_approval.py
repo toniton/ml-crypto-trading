@@ -71,7 +71,7 @@ def _configuration_llm():
 
 
 def _build_app(config_file, db_manager):
-    gateway = AgentGateway(_configuration_llm(), config_file)
+    gateway = AgentGateway(_configuration_llm(), vcs=VCSService(db_manager))
     return ChatApp.create(
         agent=gateway,
         event_bus=MessageEventBus(),
@@ -219,7 +219,7 @@ class TestCachedProposalStore:
 
 class TestConfigurationServiceApplyToVcs:
     def test_applies_and_commits(self, config_file, vcs):
-        service = ConfigurationService(config_file, vcs=vcs)
+        service = ConfigurationService(vcs=vcs)
         proposal = ConfigurationProposal(
             summary="less conservative",
             changes=[
@@ -239,22 +239,6 @@ class TestConfigurationServiceApplyToVcs:
         assert vcs.checkout("HEAD")["assets"][0]["consensus"]["buy"] == 1.1
         assert warnings == []
 
-    def test_requires_vcs(self, config_file):
-        service = ConfigurationService(config_file)
-        proposal = ConfigurationProposal(
-            summary="less conservative",
-            changes=[
-                ConfigChange(
-                    path="assets.BTC_USD.consensus.buy",
-                    old_value=1.3,
-                    new_value=1.1,
-                    reason="more trades",
-                ),
-            ],
-        )
-
-        with pytest.raises(RuntimeError):
-            service.apply_proposal_to_vcs(proposal)
 
 
 def _assistant_message(message_id, payload):

@@ -48,9 +48,12 @@ def make_event(domain="trading", levelno=logging.INFO, asset=None, message="hell
     )
 
 
+from src.vcs.application.service import VCSService
+
+
 def build_client(bus):
     app = ChatApp.create(
-        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), _TEST_CONFIG_PATH),
+        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=MagicMock(spec=VCSService)),
         event_bus=bus,
         db_manager=MagicMock(spec=DatabaseManager),
     )

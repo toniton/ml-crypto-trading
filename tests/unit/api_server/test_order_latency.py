@@ -1,5 +1,3 @@
-import os
-import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -27,15 +25,12 @@ assets:
       sell: 0.5
 """
 
-_TEST_CONFIG_DIR = tempfile.mkdtemp(prefix="latency-api-tests-")
-_TEST_CONFIG_PATH = os.path.join(_TEST_CONFIG_DIR, "trading-config.yaml")
-with open(_TEST_CONFIG_PATH, "w", encoding="utf-8") as handle:
-    handle.write(SAMPLE_CONFIG)
+from src.vcs.application.service import VCSService
 
 
 def build_app(db_manager):
     return ChatApp.create(
-        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), _TEST_CONFIG_PATH),
+        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=MagicMock(spec=VCSService)),
         event_bus=MessageEventBus(),
         db_manager=db_manager,
     )

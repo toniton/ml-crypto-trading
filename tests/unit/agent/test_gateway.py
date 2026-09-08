@@ -25,21 +25,21 @@ class TestAgentGateway:
             clarification_question="What would you like to improve: profitability, trade frequency, or drawdown?",
         )
 
-    def test_general_prompt_routed_by_intent(self, sample_config):
+    def test_general_prompt_routed_by_intent(self, vcs):
         llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.GENERAL)])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("Analyze the market")
         assert result.kind == "general"
         assert len(llm.structured_calls) == 1
 
-    def test_analysis_intent_falls_back_to_general_without_a_graph(self, sample_config):
+    def test_analysis_intent_falls_back_to_general_without_a_graph(self, vcs):
         llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.RISK_ANALYSIS)])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("Why did BTC exposure spike last week?")
         assert result.kind == "general"
 
 
-    def test_configuration_prompt_runs_graph(self, sample_config):
+    def test_configuration_prompt_runs_graph(self, vcs):
         llm = FakeLlmAdapter([
             self._config_route(),
             ConfigurationProposal(
@@ -47,7 +47,7 @@ class TestAgentGateway:
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("make the strategy less conservative")
         assert result.kind == "configuration"
         assert result.proposal is not None
@@ -56,7 +56,7 @@ class TestAgentGateway:
         # one routing call in the router graph, one proposal call in the graph
         assert len(llm.structured_calls) == 2
 
-    def test_semantic_config_detection_without_typical_keywords(self, sample_config):
+    def test_semantic_config_detection_without_typical_keywords(self, vcs):
         llm = FakeLlmAdapter([
             self._config_route(objective="aggressive position sizing"),
             ConfigurationProposal(
@@ -64,12 +64,12 @@ class TestAgentGateway:
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.05, reason="riskier")],
             ),
         ])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("I'd like my bot to be a bit riskier on sizing")
         assert result.kind == "configuration"
         assert result.proposal is not None
 
-    def test_dynamic_quantity_intent_runs_graph(self, sample_config):
+    def test_dynamic_quantity_intent_runs_graph(self, vcs):
         llm = FakeLlmAdapter([
             self._config_route(objective="update dynamic quantity"),
             ConfigurationProposal(
@@ -84,14 +84,14 @@ class TestAgentGateway:
                 ],
             ),
         ])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("Update dynamic quantity in my configuration.")
         assert result.kind == "configuration"
         assert result.proposal.changes[0].path == "dynamic_quantity"
 
-    def test_clarification_prompt_short_circuits_handle(self, sample_config):
+    def test_clarification_prompt_short_circuits_handle(self, vcs):
         llm = FakeLlmAdapter([self._clarification_route()])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("make it better")
         assert result.kind == "clarification"
         assert "profitability" in result.question
@@ -100,9 +100,9 @@ class TestAgentGateway:
         # only the router ran; no agent graph was invoked
         assert len(llm.structured_calls) == 1
 
-    def test_clarification_prompt_short_circuits_stream(self, sample_config):
+    def test_clarification_prompt_short_circuits_stream(self, vcs):
         llm = FakeLlmAdapter([self._clarification_route()])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
 
         async def collect():
             return [event async for event in gateway.stream("make it better")]
@@ -118,9 +118,9 @@ class TestAgentGateway:
         assert clarification.payload["goal"].objective == "make it better"
         assert events[-1].payload == {"kind": "clarification"}
 
-    def test_general_stream_forwards_history(self, sample_config):
+    def test_general_stream_forwards_history(self, vcs):
         llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.GENERAL)], chunks=["a", "b"])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         history = [ChatTurn(role="user", content="what is BTC?"), ChatTurn(role="assistant", content="It is Bitcoin.")]
 
         async def collect():
@@ -130,7 +130,7 @@ class TestAgentGateway:
         assert events[-1].type == "done"
         assert llm.last_history == history
 
-    def test_configuration_prompt_includes_history(self, sample_config):
+    def test_configuration_prompt_includes_history(self, vcs):
         history = [ChatTurn(role="user", content="make the strategy less conservative")]
         llm = FakeLlmAdapter([
             self._config_route(),
@@ -139,14 +139,14 @@ class TestAgentGateway:
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
             ),
         ])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("make it a bit more aggressive", history=history)
         assert result.kind == "configuration"
         proposal_prompt = llm.structured_calls[1][1]
         assert "CONVERSATION HISTORY" in proposal_prompt
         assert "make the strategy less conservative" in proposal_prompt
 
-    def test_view_configuration_prompt_skips_proposal(self, sample_config):
+    def test_view_configuration_prompt_skips_proposal(self, vcs):
         llm = FakeLlmAdapter([
             AgentRoute(
                 intent=AgentIntent.CONFIGURATION,
@@ -154,7 +154,7 @@ class TestAgentGateway:
                 goal=AgentGoal(objective="show BTC_USD config", target_asset="BTC_USD"),
             ),
         ])
-        gateway = AgentGateway(llm, sample_config)
+        gateway = AgentGateway(llm, vcs)
         result = gateway.handle("show me configuration for BTC_USD")
         assert result.kind == "configuration"
         assert result.proposal is None

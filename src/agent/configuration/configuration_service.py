@@ -3,7 +3,6 @@ from __future__ import annotations
 import copy
 from typing import Any, List, Optional, Tuple
 
-import yaml
 from pydantic import ValidationError
 
 from src.agent.configuration.models import (
@@ -34,28 +33,16 @@ from src.vcs.domain.exceptions import VcsError
 
 
 class ConfigurationService(AgentLoggingMixin):
-    def __init__(self, config_filepath: str, vcs: Optional["VCSService"] = None):
-        self._config_filepath = config_filepath
-        self._schema = ConfigurationSchema()
+    def __init__(self, vcs: VCSService):
         self._vcs = vcs
-
-    @property
-    def config_filepath(self) -> str:
-        return self._config_filepath
+        self._schema = ConfigurationSchema()
 
     def load_raw_config(self) -> dict:
-        if self._vcs is not None:
-            try:
-                return self._vcs.checkout("HEAD")
-            except VcsError:
-                self.agent_logger.warning(
-                    "No committed configuration at HEAD; falling back to on-disk file %s",
-                    self._config_filepath,
-                )
-        if not self._config_filepath:
+        try:
+            return self._vcs.checkout("HEAD")
+        except VcsError:
+            self.agent_logger.warning("No committed configuration at HEAD.")
             return {}
-        with open(self._config_filepath, "r", encoding="utf-8") as stream:
-            return yaml.safe_load(stream) or {}
 
     def get_field_catalog(self) -> List[ConfigField]:
         return self._schema.build_field_catalog(self.load_raw_config())

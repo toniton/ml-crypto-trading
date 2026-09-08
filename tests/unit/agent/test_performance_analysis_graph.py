@@ -122,8 +122,8 @@ class TestPerformanceAnalysisGraph:
 
 
 class TestPerformanceAnalysisAgentRegistration:
-    def test_registered_with_graph_in_default_registry(self, sample_config):
-        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
+    def test_registered_with_graph_in_default_registry(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         definition = registry.get(AgentIntent.PERFORMANCE_ANALYSIS)
         assert definition.name == "performance_analysis"
         assert definition.graph is not None

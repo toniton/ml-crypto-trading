@@ -24,19 +24,13 @@ class AgentGateway:
     def __init__(
             self,
             llm: LlmAdapter,
-            config_filepath: str,
+            vcs: VCSService,
             registry: Optional[AgentRegistry] = None,
-            vcs: Optional["VCSService"] = None,
     ):
         self._llm = llm
-        self._config_filepath = config_filepath
-        self._registry = registry or self.build_default_registry(llm, config_filepath, vcs=vcs)
+        self._vcs = vcs
+        self._registry = registry or self.build_default_registry(llm, vcs=vcs)
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
-
-    @property
-    def config_filepath(self) -> str:
-        return self._config_filepath
-
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
         route = self._route(prompt, history=history)
@@ -154,11 +148,10 @@ class AgentGateway:
 
     @staticmethod
     def build_default_registry(
-        llm: LlmAdapter,
-        config_filepath: str,
-        vcs: Optional["VCSService"] = None,
+            llm: LlmAdapter,
+            vcs: VCSService,
     ) -> AgentRegistry:
-        configuration_service = ConfigurationService(config_filepath, vcs=vcs)
+        configuration_service = ConfigurationService(vcs=vcs)
         definitions = [
             AgentDefinition(
                 name="configuration",

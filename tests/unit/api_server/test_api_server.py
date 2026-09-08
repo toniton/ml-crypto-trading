@@ -38,21 +38,30 @@ assets:
 """
 
 
+import yaml
+from src.configuration.trading_config import TradingConfig
+from src.vcs.application.service import VCSService
+
 _TEST_CONFIG_DIR = tempfile.mkdtemp(prefix="agent-api-tests-")
 _TEST_CONFIG_PATH = os.path.join(_TEST_CONFIG_DIR, "trading-config.yaml")
 with open(_TEST_CONFIG_PATH, "w", encoding="utf-8") as handle:
     handle.write(SAMPLE_CONFIG)
 
 
-def build_gateway(llm):
-    return AgentGateway(llm, _TEST_CONFIG_PATH)
+def build_gateway(llm, db_manager=None):
+    if db_manager is None:
+        db_manager = make_temp_db_manager()
+    vcs = VCSService(db_manager)
+    vcs.seed_if_empty(TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)), author="test", message="seed")
+    return AgentGateway(llm, vcs=vcs)
 
 
 def build_app(llm):
+    db_mgr = make_temp_db_manager()
     return ChatApp.create(
-        agent=build_gateway(llm),
+        agent=build_gateway(llm, db_mgr),
         event_bus=MessageEventBus(),
-        db_manager=make_temp_db_manager(),
+        db_manager=db_mgr,
     )
 
 

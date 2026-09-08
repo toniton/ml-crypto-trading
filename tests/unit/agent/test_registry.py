@@ -27,15 +27,15 @@ class TestAgentRegistry:
 
 
 class TestDefaultRegistry:
-    def test_configuration_agent_has_graph(self, sample_config):
-        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
+    def test_configuration_agent_has_graph(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         definition = registry.get(AgentIntent.CONFIGURATION)
         assert definition.name == "configuration"
         assert definition.graph is not None
         assert definition.presentation_node == "present_proposal"
 
-    def test_specialized_agents_registered_as_stubs(self, sample_config):
-        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
+    def test_specialized_agents_registered_as_stubs(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         for intent in (
             AgentIntent.RISK_ANALYSIS,
             AgentIntent.MARKET_ANALYSIS,
@@ -47,12 +47,12 @@ class TestDefaultRegistry:
             assert definition.name == intent.value
 
 
-    def test_general_agent_registered(self, sample_config):
-        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
+    def test_general_agent_registered(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         assert registry.get(AgentIntent.GENERAL).name == "general"
 
-    def test_intents_are_decoupled_from_agent_names(self, sample_config):
-        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
+    def test_intents_are_decoupled_from_agent_names(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         agent = AgentDefinition(name="configuration", description="cfg")
         registry.register(AgentIntent.CONFIGURATION, "configuration")
         # intent value and agent name both "configuration" today, but the mapping

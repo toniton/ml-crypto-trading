@@ -264,8 +264,8 @@ class TestBacktestGraph:
 
 
 class TestBacktestAgentRegistration:
-    def test_backtest_agent_registered_with_graph(self, sample_config):
-        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), sample_config)
+    def test_backtest_agent_registered_with_graph(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         definition = registry.get(AgentIntent.BACKTEST)
         assert definition.name == "backtest"
         assert definition.graph is not None

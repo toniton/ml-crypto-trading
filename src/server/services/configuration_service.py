@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Tuple
 
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.asset_schedule import AssetSchedule
@@ -14,11 +14,10 @@ from src.vcs.domain.exceptions import CommitNotFoundError, InvalidReferenceError
 
 
 class ConfigurationService:
-    def __init__(self, db_manager: DatabaseManager, config_filepath: Optional[str] = None):
+    def __init__(self, db_manager: DatabaseManager):
         self._db_manager = db_manager
-        self._config_filepath = config_filepath
         self._vcs = VCSService(db_manager)
-        self._delegate = AgentConfigurationService(config_filepath, vcs=self._vcs)
+        self._delegate = AgentConfigurationService(vcs=self._vcs)
 
     def get_config(self) -> dict:
         raw = self._delegate.load_raw_config()

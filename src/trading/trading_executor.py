@@ -101,6 +101,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         for config_asset, current_asset in zip(config_assets, current_assets):
             if config_asset.ticker_symbol != current_asset.ticker_symbol:
                 return True
+            if config_asset.enabled != current_asset.enabled:
+                return True
             if (config_asset.strategies or []) != (current_asset.strategies or []):
                 return True
         return False
@@ -159,6 +161,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def create_buy_order(self, assets: list[Asset]):
         for asset in assets:
+            if not asset.enabled:
+                self.app_logger.debug("Skipping BUY for disabled asset %s", asset.ticker_symbol)
+                continue
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
                 trading_context = self.session_manager.get_trading_context(asset.key)

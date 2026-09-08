@@ -75,8 +75,11 @@ def _make_app(vcs):
 class TestEnsureConfigStoreSeeded:
     def test_seeds_empty_store_from_bootstrap_config(self, vcs):
         app = _make_app(vcs)
+        bootstrap_config = TradingConfig.model_validate(
+            {"assets": [], "dynamic_quantity": "min_qty"}
+        )
 
-        app._ensure_config_store_seeded()
+        app._ensure_config_store_seeded(bootstrap_config)
 
         seeded = TradingConfig.model_validate(vcs.checkout("HEAD"))
         assert seeded.dynamic_quantity == "min_qty"
@@ -84,8 +87,11 @@ class TestEnsureConfigStoreSeeded:
     def test_does_not_overwrite_existing_head(self, vcs):
         existing = _seed_config(vcs, assets=[_asset({"buy": 1.0, "sell": 0.5})])
         app = _make_app(vcs)
+        bootstrap_config = TradingConfig.model_validate(
+            {"assets": [], "dynamic_quantity": "min_qty"}
+        )
 
-        app._ensure_config_store_seeded()
+        app._ensure_config_store_seeded(bootstrap_config)
 
         assert vcs.head("HEAD").hash == existing.hash
         assert TradingConfig.model_validate(vcs.checkout("HEAD")).assets[0].consensus.buy == 1.0
@@ -216,3 +222,52 @@ class TestTradingExecutorUpdateConfig:
         factor = executor.consensus_manager.factor_for("BTC_USD")
         assert factor.buy == 2.0
         assert factor.sell == 0.8
+
+    def test_update_config_detects_enabled_flag_change(self):
+        executor = _make_executor()
+        asset_enabled = _asset({"buy": 2.0, "sell": 0.8})
+        asset_enabled["enabled"] = True
+        config1 = TradingConfig.model_validate({"assets": [asset_enabled]})
+        executor.update_config(config1)
+        assert executor.assets[0].enabled is True
+
+        asset_disabled = _asset({"buy": 2.0, "sell": 0.8})
+        asset_disabled["enabled"] = False
+        config2 = TradingConfig.model_validate({"assets": [asset_disabled]})
+        executor.update_config(config2)
+        assert executor.assets[0].enabled is False
+
+    def test_create_buy_order_skips_disabled_asset(self, monkeypatch):
+        executor = _make_executor()
+        disabled_asset_dict = _asset({"buy": 1.0, "sell": 0.5})
+        disabled_asset_dict["enabled"] = False
+        config = TradingConfig.model_validate({"assets": [disabled_asset_dict]})
+        disabled_asset = config.assets[0]
+
+        called = []
+        monkeypatch.setattr(
+            executor,
+            "_prepare_trade_context",
+            lambda asset: called.append(asset),
+        )
+
+        executor.create_buy_order([disabled_asset])
+        assert called == []
+
+    def test_create_buy_order_processes_enabled_asset(self, monkeypatch):
+        executor = _make_executor()
+        enabled_asset_dict = _asset({"buy": 1.0, "sell": 0.5})
+        enabled_asset_dict["enabled"] = True
+        config = TradingConfig.model_validate({"assets": [enabled_asset_dict]})
+        enabled_asset = config.assets[0]
+
+        called = []
+        monkeypatch.setattr(
+            executor,
+            "_prepare_trade_context",
+            lambda asset: called.append(asset),
+        )
+
+        executor.create_buy_order([enabled_asset])
+        assert len(called) == 1
+        assert called[0].ticker_symbol == "BTC_USD"

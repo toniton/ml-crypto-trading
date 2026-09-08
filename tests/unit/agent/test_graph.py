@@ -49,7 +49,7 @@ class TestConfigurationGraph:
             goal=AgentGoal(objective=objective, target_asset=target_asset),
         )
 
-    def test_preloaded_request_never_requires_understanding(self, sample_config):
+    def test_preloaded_request_never_requires_understanding(self, vcs):
         """The router owns understanding: the graph starts from the request."""
         llm = FakeLlmAdapter([
             ConfigurationProposal(
@@ -57,7 +57,7 @@ class TestConfigurationGraph:
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="r")],
             ),
         ])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         state = graph.invoke({
             "user_prompt": "x",
             "request": self._config_route(),
@@ -66,9 +66,9 @@ class TestConfigurationGraph:
         assert len(llm.structured_calls) == 1
         assert llm.structured_calls[0][0] is ConfigurationProposal
 
-    def test_view_request_presents_config_without_proposal(self, sample_config):
+    def test_view_request_presents_config_without_proposal(self, vcs):
         llm = FakeLlmAdapter([])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         route = AgentRoute(
             intent=AgentIntent.CONFIGURATION,
             action=ConfigurationAction.VIEW,
@@ -93,9 +93,9 @@ class TestConfigurationGraph:
         assert any(card.label == "Strategies" for card in view.stats)
         assert view.signal_window.sell == 0.5 and view.signal_window.buy == 1.3
 
-    def test_view_request_without_asset_renders_full_catalog(self, sample_config):
+    def test_view_request_without_asset_renders_full_catalog(self, vcs):
         llm = FakeLlmAdapter([])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         route = AgentRoute(
             intent=AgentIntent.CONFIGURATION,
             action=ConfigurationAction.VIEW,
@@ -107,7 +107,7 @@ class TestConfigurationGraph:
         assert blocks[0].type == "markdown"
         assert "dynamic_quantity" in blocks[0].content
 
-    def test_scoped_request_presentation_warns_about_global_field(self, sample_config):
+    def test_scoped_request_presentation_warns_about_global_field(self, vcs):
         llm = FakeLlmAdapter([
             ConfigurationProposal(
                 summary="more aggressive",
@@ -121,7 +121,7 @@ class TestConfigurationGraph:
                 ],
             ),
         ])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         state = graph.invoke({
             "user_prompt": "make dynamic quantity more aggressive for BTC_USD",
             "request": self._config_route(objective="more aggressive sizing", target_asset="BTC_USD"),
@@ -129,7 +129,7 @@ class TestConfigurationGraph:
         assert state["validation"].valid is True
         assert "global" in state["presentation"].markdown()
 
-    def test_valid_proposal_ends_with_presentation(self, sample_config):
+    def test_valid_proposal_ends_with_presentation(self, vcs):
         route = AgentRoute(
             intent=AgentIntent.CONFIGURATION,
             goal=AgentGoal(objective="take more trades", desired_outcomes=["more signals"]),
@@ -141,7 +141,7 @@ class TestConfigurationGraph:
                 expected_effect="more buy signals",
             ),
         ])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         state = graph.invoke({"user_prompt": "make the strategy less conservative", "request": route})
 
         assert state["request"].goal.objective == "take more trades"
@@ -149,7 +149,7 @@ class TestConfigurationGraph:
         assert state["proposal"].changes[0].path == "assets.BTC_USD.consensus.buy"
         assert "assets.BTC_USD.consensus.buy: 1.3 -> 1.1" in state["presentation"].markdown()
 
-    def test_invalid_then_regenerated_proposal(self, sample_config):
+    def test_invalid_then_regenerated_proposal(self, vcs):
         llm = FakeLlmAdapter([
             ConfigurationProposal(
                 summary="broken",
@@ -160,7 +160,7 @@ class TestConfigurationGraph:
                 changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="fixed")],
             ),
         ])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         state = graph.invoke({
             "user_prompt": "take more trades",
             "request": self._config_route(),
@@ -172,13 +172,13 @@ class TestConfigurationGraph:
         assert "broken" in regeneration_prompt
         assert "bogus.path" in regeneration_prompt
 
-    def test_persistently_invalid_proposal_stops_after_max_attempts(self, sample_config):
+    def test_persistently_invalid_proposal_stops_after_max_attempts(self, vcs):
         invalid = ConfigurationProposal(
             summary="always broken",
             changes=[ConfigChange(path="bogus.path", old_value=None, new_value=1, reason="x")],
         )
         llm = FakeLlmAdapter([invalid, invalid, invalid])
-        graph = ConfigurationGraph(llm, ConfigurationService(sample_config)).build()
+        graph = ConfigurationGraph(llm, ConfigurationService(vcs)).build()
         state = graph.invoke({
             "user_prompt": "change something",
             "request": self._config_route(),

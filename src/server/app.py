@@ -72,9 +72,8 @@ class ChatApp:
             event_bus: EventBus,
             db_manager: DatabaseManager,
     ) -> FastAPI:
-        config_filepath = getattr(agent, "config_filepath", None)
         conversation_service = ConversationService(db_manager)
-        configuration_service = ConfigurationService(db_manager, config_filepath=config_filepath)
+        configuration_service = ConfigurationService(db_manager)
 
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
