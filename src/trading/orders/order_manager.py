@@ -28,7 +28,7 @@ class OrderManager(ApplicationLoggingMixin):
     def __init__(
             self, database_manager: DatabaseManager, trading_journal: TradingJournal,
             rest_manager: RestManager, websocket_manager: WebSocketManager,
-            is_backtest: bool = False,
+            synchronous_execution: bool = False,
             event_bus: Optional[EventBus] = None,
     ):
         self._database_manager = database_manager
@@ -38,7 +38,7 @@ class OrderManager(ApplicationLoggingMixin):
         self._order_queue = Queue()
         self._trading_journal = trading_journal
         self._assets = []
-        self._is_backtest = is_backtest
+        self._synchronous_execution = synchronous_execution
         self._stop_event = threading.Event()
         self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
         self._execute_thread.start()
@@ -110,8 +110,7 @@ class OrderManager(ApplicationLoggingMixin):
     def initialize(self, assets: list[Asset]):
         self._assets = assets
         self._init_websocket(assets)
-        if not self._is_backtest:
-            self.reconcile_pending_orders()
+        self.reconcile_pending_orders()
 
     def _init_websocket(self, assets: list[Asset]):
         for asset in assets:
@@ -188,7 +187,7 @@ class OrderManager(ApplicationLoggingMixin):
             ticker_symbol=ticker_symbol,
             created_time=timestamp
         )
-        if self._is_backtest:
+        if self._synchronous_execution:
             self.execute_order(order)
         else:
             self._order_queue.put(order)

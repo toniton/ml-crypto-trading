@@ -190,29 +190,24 @@ class Application(ApplicationLoggingMixin):
 
         self._setup_configuration()
 
+        db_manager = NoopDatabaseManager() if self._is_backtest_mode else SqlAlchemyDatabaseManager()
+        db_manager.initialize()
+        self._db_manager = db_manager
+        self._metric_service = MetricService(db_manager)
+        self._event_metric_collector = EventMetricCollector(self._metric_service)
+        self._strategies_config = StrategiesConfig()
+        self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
+
         if self._is_backtest_mode:
-            db_manager = NoopDatabaseManager()
-            self._db_manager = db_manager
-            self._metric_service = MetricService(db_manager)
-            self._event_metric_collector = EventMetricCollector(self._metric_service)
-            self._strategies_config = StrategiesConfig()
-            self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
             self._assets = self._seed_trading_config.assets
             self._dynamic_quantity = self._seed_trading_config.dynamic_quantity
             self._trading_config = self._seed_trading_config
             self.is_ready.set()
             return
 
-        db_manager = SqlAlchemyDatabaseManager()
-        db_manager.initialize()
-        self._db_manager = db_manager
-        self._metric_service = MetricService(db_manager)
         self._retention_engine = RetentionEngine(db_manager)
         self._retention_scheduler = RetentionScheduler(self._retention_engine)
-        self._event_metric_collector = EventMetricCollector(self._metric_service)
         self._runtime_metrics_collector = RuntimeMetricsCollector(self._metric_service)
-        self._strategies_config = StrategiesConfig()
-        self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
 
         self._vcs_ref = "HEAD"
         self._vcs = VCSService(db_manager)
@@ -225,9 +220,6 @@ class Application(ApplicationLoggingMixin):
         self._startup_live(db_manager)
 
     def _resolve_active_config(self) -> TradingConfig:
-        if self._is_backtest_mode:
-            return self._seed_trading_config
-
         self._ensure_config_store_seeded(self._seed_trading_config)
         try:
             raw_config = self._vcs.checkout(self._vcs_ref)

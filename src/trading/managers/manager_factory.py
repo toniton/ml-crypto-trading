@@ -20,7 +20,7 @@ class ManagerFactory:
             database_manager,
             assets,
             is_simulated: bool = False,
-            is_backtest: bool = False,
+            synchronous_execution: bool = False,
             event_bus=None,
             metric_service: Optional[MetricService] = None,
             metrics_collector: Optional[ExchangeMetricsCollector] = None,
@@ -37,7 +37,7 @@ class ManagerFactory:
         )
         order_manager = OrderManager(
             database_manager, trading_journal, rest_manager, websocket_manager,
-            is_backtest=is_backtest, event_bus=event_bus
+            synchronous_execution=synchronous_execution, event_bus=event_bus
         )
 
         container = ManagerContainer(

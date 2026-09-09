@@ -97,7 +97,9 @@ class BacktestRunner:
             initial_balance=first.initial_balance,
         )
 
-        managers, _ = ManagerFactory.build_manager_container(self._db_manager, assets, is_backtest=True)
+        managers, _ = ManagerFactory.build_manager_container(
+            self._db_manager, assets, synchronous_execution=True
+        )
         managers.rest_manager.register_service(BacktestRestService(clock, bus, datasets, execution_engine))
         managers.websocket_manager.register_service(BacktestWebSocketService(bus))
 
