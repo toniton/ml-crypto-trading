@@ -42,7 +42,12 @@ class WebSocketManager(WebSocketRegistry, ApplicationLoggingMixin):
         for service_name in self.get_registered_services():
             service = self.get_service(service_name)
             service.set_reconnect_callback(self._on_reconnect)
+            service.set_error_callback(self._handle_service_error)
             service.connect(self._handle_incoming_message)
+
+    def _handle_service_error(self, exchange: str, operation: str, error_type: str):
+        if self._metrics_collector:
+            self._metrics_collector.record_websocket_error(exchange, operation, error_type)
 
     def _handle_incoming_message(self, exchange: str, visibility: SubscriptionVisibility, data: dict):
         if self._metrics_collector:

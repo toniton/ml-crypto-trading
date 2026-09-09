@@ -120,3 +120,12 @@ class TestCryptoDotComWebSocketService(unittest.TestCase):
         # Verify it waited and then sent
         mock_event.wait.assert_called_once()
         mock_conn.send.assert_called_once()
+
+    def test_error_callback_on_handle_error(self):
+        mock_error_cb = MagicMock()
+        self.service.set_error_callback(mock_error_cb)
+
+        self.service._handle_error("CRYPTO_DOT_COM", "CRYPTO_DOT_COM-public", RuntimeError("Network down"))
+
+        mock_error_cb.assert_called_once_with("CRYPTO_DOT_COM", "CRYPTO_DOT_COM-public", "RuntimeError")
+

@@ -95,6 +95,7 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
             self._loop.run_until_complete(self._wait_for_shutdown())
         except Exception as e:
             self.app_logger.error(f"CCXT WebSocket loop error for {self._provider.value}: {e}")
+            self._notify_error("loop", type(e).__name__)
         finally:
             if self._exchange:
                 self._loop.run_until_complete(self._exchange.close())
@@ -141,7 +142,17 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
             except Exception as e:
                 disconnected = True
                 self.app_logger.error(f"CCXT Watch error for {self._provider.value} {sub_type} {symbol}: {e}")
+                self._notify_error(f"{sub_type}_{symbol}", type(e).__name__)
                 await asyncio.sleep(5)
+
+    def _notify_error(self, operation: str, error_type: str):
+        if self._on_error:
+            try:
+                self._on_error(self.get_provider_name(), operation, error_type)
+            except Exception as e:
+                self.app_logger.warning(
+                    f"Error callback failed for {self._provider.value}: {e}"
+                )
 
     def _notify_reconnect(self):
         if self._on_reconnect:

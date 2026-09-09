@@ -60,7 +60,7 @@ class MetricSampleDBVSEntityMapper:
     def map_to_db(entity: MetricSample) -> MetricSampleDao:
         return MetricSampleDao(
             metric_id=entity.metric_id,
-            timestamp=_to_naive_utc(entity.timestamp),
+            timestamp=_to_aware_utc(entity.timestamp),
             value=entity.value,
             labels=dict(entity.labels),
         )

@@ -9,6 +9,7 @@ from src.database.repositories.base_repository import T
 from src.database.repositories.mappers.metric_db_vs_entity_mapper import (
     MetricDefinitionDBVSEntityMapper,
     MetricSampleDBVSEntityMapper,
+    _to_aware_utc,
 )
 from src.metrics.models.metric import MetricDefinition
 from src.metrics.models.metric_sample import MetricSample
@@ -49,19 +50,22 @@ class PostgresMetricRepository(MetricRepository):
             self.database_session.add(MetricSampleDBVSEntityMapper.map_to_db(sample))
 
     def get_samples(self, metric_id: str, start: datetime, end: datetime) -> list[MetricSample]:
+        start_utc = _to_aware_utc(start)
+        end_utc = _to_aware_utc(end)
         samples = self.database_session.query(MetricSampleDao).filter(
             MetricSampleDao.metric_id == metric_id,
-            MetricSampleDao.timestamp >= start,
-            MetricSampleDao.timestamp <= end,
+            MetricSampleDao.timestamp >= start_utc,
+            MetricSampleDao.timestamp <= end_utc,
         ).all()
         return [MetricSampleDBVSEntityMapper.map_to_entity(cast(MetricSampleDao, sample)) for sample in samples]
 
     def delete_samples_before(self, metric_id: str, cutoff: datetime, batch_size: int) -> int:
+        cutoff_utc = _to_aware_utc(cutoff)
         total = 0
         while True:
             ids = self.database_session.query(MetricSampleDao.id).filter(
                 MetricSampleDao.metric_id == metric_id,
-                MetricSampleDao.timestamp < cutoff,
+                MetricSampleDao.timestamp < cutoff_utc,
             ).limit(batch_size).all()
             if not ids:
                 break

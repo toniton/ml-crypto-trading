@@ -147,3 +147,12 @@ class TestWebSocketManager(unittest.TestCase):
         mock_collector.record_websocket_reconnect.assert_called_once_with("all")
         mock_reconnect_target.assert_called_once()
 
+    def test_metrics_collection_on_service_error(self):
+        mock_collector = MagicMock()
+        manager = WebSocketManager(metrics_collector=mock_collector)
+
+        manager._handle_service_error("CRYPTO_DOT_COM", "CRYPTO_DOT_COM-public", "gaierror")
+
+        mock_collector.record_websocket_error.assert_called_once_with("CRYPTO_DOT_COM", "CRYPTO_DOT_COM-public", "gaierror")
+
+

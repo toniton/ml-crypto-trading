@@ -11,6 +11,7 @@ from src.core.interfaces.subscription_data import SubscriptionVisibility
 
 class ExchangeWebSocketService(ABC):
     _on_reconnect: Optional[Callable] = None
+    _on_error: Optional[Callable[[str, str, str], None]] = None
 
     @abstractmethod
     def get_provider_name(self) -> str:
@@ -42,6 +43,9 @@ class ExchangeWebSocketService(ABC):
 
     def set_reconnect_callback(self, callback: Optional[Callable]) -> None:
         self._on_reconnect = callback
+
+    def set_error_callback(self, callback: Optional[Callable[[str, str, str], None]]) -> None:
+        self._on_error = callback
 
     @abstractmethod
     def subscribe(self, builder: ExchangeWebSocketBuilder):

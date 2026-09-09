@@ -83,7 +83,7 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
             url=url,
             on_open=lambda ws: self._handle_open(exchange, visibility),
             on_message=lambda ws, data: self._handle_message(exchange, visibility, data),
-            on_error=lambda ws, e: self.app_logger.error(f"WebSocket error for {conn_id}: {e}"),
+            on_error=lambda ws, e: self._handle_error(exchange, conn_id, e),
             on_close=lambda ws, code, msg: self._handle_close(exchange, visibility, code, msg)
         )
 
@@ -102,6 +102,22 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         # Wait for connection to be established
         if not self._connection_events[conn_id].wait(timeout=10):
             self.app_logger.warning(f"Timeout waiting for WebSocket connection {conn_id}")
+            self._notify_error(exchange, conn_id, "ConnectionTimeout")
+
+    def _handle_error(self, exchange: str, conn_id: str, error: Exception | str):
+        self.app_logger.error(f"WebSocket error for {conn_id}: {error}")
+        self._notify_error(
+            exchange,
+            conn_id,
+            type(error).__name__ if isinstance(error, Exception) else str(error),
+        )
+
+    def _notify_error(self, exchange: str, operation: str, error_type: str):
+        if self._on_error:
+            try:
+                self._on_error(exchange, operation, error_type)
+            except Exception as e:
+                self.app_logger.warning(f"Error callback failed for {self._provider}: {e}")
 
     def _handle_open(self, exchange: str, visibility: SubscriptionVisibility):
         conn_id = f"{exchange}-{visibility.value}"
@@ -185,8 +201,7 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         # Immediate reconnect logic could go here, or handled by a supervisor.
         if code != 1000:
             self.app_logger.warning(f"Abnormal closure for {conn_id}, attempting to reconnect...")
-            # Re-establishing connection will happen on next subscribe, or we can trigger it here.
-            # For simplicity, we just clear it so next use reconnects.
+            self._notify_error(exchange, conn_id, f"AbnormalClosure_{code or 'None'}")
 
     def unsubscribe(self, builder: ExchangeWebSocketBuilder):
         exchange = self.get_provider_name()
