@@ -5,7 +5,7 @@ import uvicorn
 
 from src.agent import AgentGateway
 from src.core.interfaces.event_bus import EventBus
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.server.app import ChatApp
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 

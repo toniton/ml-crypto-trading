@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import Column, DateTime, String, func
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
-class ConversationDao(DatabaseManager.BaseTableModel):
+class ConversationDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "conversations"
 
     id = Column(String(36), primary_key=True)

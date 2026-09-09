@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Callable, Optional
 
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.vcs.application.events import RefChangedEvent
 

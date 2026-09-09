@@ -6,7 +6,7 @@ from typing import Optional
 from pydantic import BaseModel
 
 from api.interfaces.order import Order
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 
 

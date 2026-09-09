@@ -3,12 +3,12 @@ from __future__ import annotations
 from sqlalchemy import Column, DateTime, JSON, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 JSON_TYPE = JSON().with_variant(JSONB, "postgresql")
 
 
-class BlobDao(DatabaseManager.BaseTableModel):
+class BlobDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "vcs_blobs"
 
     hash = Column(String(64), primary_key=True)

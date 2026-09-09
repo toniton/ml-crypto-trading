@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from tests.unit.agent.fakes import FakeLlmAdapter
@@ -38,7 +38,7 @@ def build_app(db_manager):
 
 class TestOrderHeatmapEndpoint(unittest.TestCase):
     def test_returns_day_counts(self):
-        db_manager = MagicMock(spec=DatabaseManager)
+        db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         payload = {
             "year": 2026,
             "month": 10,
@@ -65,7 +65,7 @@ class TestOrderHeatmapEndpoint(unittest.TestCase):
         self.assertEqual(data["days"][0]["total"], 3)
 
     def test_invalid_month_returns_422(self):
-        db_manager = MagicMock(spec=DatabaseManager)
+        db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         client = TestClient(build_app(db_manager))
         response = client.get("/api/v1/heatmap/orders/2026/13")
         self.assertEqual(response.status_code, 422)

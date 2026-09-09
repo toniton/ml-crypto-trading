@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces import DatabaseManager
 from src.database.repositories.providers.postgres_metric_repository import PostgresMetricRepository
 from src.metrics.models.metric import MetricDefinition
 from src.metrics.models.metric_query import MetricQuery

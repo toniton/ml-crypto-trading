@@ -24,7 +24,8 @@ from src.backtest.execution.fees.percentage_fee import PercentageFee
 from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
 from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
 from src.configuration.strategies_config import StrategiesConfig
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
+from src.database.noop_database_manager import NoopDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -42,8 +43,8 @@ def build_execution_model(config: ExecutionConfiguration) -> ExecutionModel:
 class BacktestRunner:
     def __init__(
             self,
-            db_manager: DatabaseManager,
-            assets: Mapping[str, Asset],
+            db_manager: DatabaseManager = NoopDatabaseManager(),
+            assets: Mapping[str, Asset] = None,
             strategy_registry: Optional[StrategyRegistry] = None,
             activity_queue: Optional[Queue] = None,
             dynamic_quantity: Optional[str] = None,

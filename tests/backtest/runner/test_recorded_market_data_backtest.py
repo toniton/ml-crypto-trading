@@ -15,7 +15,7 @@ from api.interfaces.backtest_request import (
 from api.interfaces.market_data import MarketData
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.recorder.market_data_recorder import MarketDataRecorder
@@ -24,11 +24,11 @@ from src.trading.events import MarketDataEvent
 from src.trading.strategies.strategy_registry import StrategyRegistry
 
 
-def _db_manager() -> DatabaseManager:
+def _db_manager() -> SqlAlchemyDatabaseManager:
     engine = create_engine("sqlite:///:memory:")
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
-    db_manager = DatabaseManager()
+    db_manager = SqlAlchemyDatabaseManager()
     db_manager.engine = engine
     db_manager._session_factory = session_factory
     return db_manager

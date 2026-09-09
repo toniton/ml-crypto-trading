@@ -5,11 +5,12 @@ from alembic.config import Config
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-from src.database.unit_of_work import UnitOfWork
+from src.core.interfaces.database_manager import DatabaseManager
+from src.database.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.configuration.providers.database_config import DatabaseConfig
 
 
-class DatabaseManager:
+class SqlAlchemyDatabaseManager(DatabaseManager):
     BaseTableModel = declarative_base()
 
     def __init__(self):
@@ -40,7 +41,7 @@ class DatabaseManager:
         engine = self.get_engine()
         self._session_factory = sessionmaker(bind=engine)
 
-    def get_unit_of_work(self) -> UnitOfWork:
+    def get_unit_of_work(self) -> SqlAlchemyUnitOfWork:
         if self._session_factory is None:
             raise RuntimeError("DatabaseManager must be initialized before calling get_unit_of_work()")
-        return UnitOfWork(self._session_factory())
+        return SqlAlchemyUnitOfWork(self._session_factory())

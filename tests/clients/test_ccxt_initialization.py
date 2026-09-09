@@ -25,7 +25,7 @@ class TestCCXTInitialization(unittest.TestCase):
         self.trading_config.dynamic_quantity = None
 
     @patch('src.application.Application._setup_configuration')
-    @patch('src.application.DatabaseManager')
+    @patch('src.application.SqlAlchemyDatabaseManager')
     @patch('src.application.VCSService')
     @patch('src.application.RefChangeListener')
     @patch('src.application.TradingEngine')

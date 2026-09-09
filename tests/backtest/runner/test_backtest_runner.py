@@ -17,7 +17,7 @@ from api.interfaces.trade_action import TradeAction
 from src.agent.backtest.backtest_service import BacktestService
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.configuration.strategy_config import StrategyConfig, StrategyType
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.llm.tools.backtest_tool import BacktestTool
 from src.trading.consensus.consensus_factor import ConsensusFactor
@@ -29,9 +29,9 @@ T0 = 1_700_000_000
 @pytest.fixture
 def db_manager():
     engine = create_engine("sqlite:///:memory:")
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
-    db_mgr = DatabaseManager()
+    db_mgr = SqlAlchemyDatabaseManager()
     db_mgr.engine = engine
     db_mgr._session_factory = session_factory
     return db_mgr

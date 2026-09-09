@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.markets.market_data_manager import MarketDataManager
@@ -109,13 +109,13 @@ class TestManagerIsolation(unittest.TestCase):
         self.assertIn(asset1.key, manager1._market_data, "Original MarketDataManager should retain data")
 
     def test_order_manager_isolation(self):
-        db_manager1 = Mock(spec=DatabaseManager)
+        db_manager1 = Mock(spec=SqlAlchemyDatabaseManager)
         journal1 = Mock()
         ws_manager1 = Mock()
         rest_manager1 = Mock()
         manager1 = OrderManager(db_manager1, journal1, rest_manager1, ws_manager1)
 
-        db_manager2 = Mock(spec=DatabaseManager)
+        db_manager2 = Mock(spec=SqlAlchemyDatabaseManager)
         journal2 = Mock()
         ws_manager2 = Mock()
         rest_manager2 = Mock()

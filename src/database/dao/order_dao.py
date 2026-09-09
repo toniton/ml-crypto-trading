@@ -1,9 +1,9 @@
 from sqlalchemy import Column, Integer, String, TIMESTAMP
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
-class OrderDao(DatabaseManager.BaseTableModel):
+class OrderDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True)
     uuid = Column(String, index=True, unique=True)

@@ -28,8 +28,10 @@ from src.agent.oracle import (
 from src.backtest.analysis.drift_detector import BacktestDriftDetector
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
+from src.core.interfaces.database_manager import DatabaseManager
+from src.database.noop_database_manager import NoopDatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.server import ApiServer
-from src.database.database_manager import DatabaseManager
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
@@ -188,7 +190,20 @@ class Application(ApplicationLoggingMixin):
 
         self._setup_configuration()
 
-        db_manager = DatabaseManager()
+        if self._is_backtest_mode:
+            db_manager = NoopDatabaseManager()
+            self._db_manager = db_manager
+            self._metric_service = MetricService(db_manager)
+            self._event_metric_collector = EventMetricCollector(self._metric_service)
+            self._strategies_config = StrategiesConfig()
+            self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
+            self._assets = self._seed_trading_config.assets
+            self._dynamic_quantity = self._seed_trading_config.dynamic_quantity
+            self._trading_config = self._seed_trading_config
+            self.is_ready.set()
+            return
+
+        db_manager = SqlAlchemyDatabaseManager()
         db_manager.initialize()
         self._db_manager = db_manager
         self._metric_service = MetricService(db_manager)
@@ -206,10 +221,6 @@ class Application(ApplicationLoggingMixin):
         self._assets = active_config.assets
         self._dynamic_quantity = active_config.dynamic_quantity
         self._trading_config = active_config
-
-        if self._is_backtest_mode:
-            self.is_ready.set()
-            return
 
         self._startup_live(db_manager)
 

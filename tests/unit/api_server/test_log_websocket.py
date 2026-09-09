@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.logging.log_event import LogEvent, LogEventPayload
 from src.server.app import ChatApp
@@ -55,7 +55,7 @@ def build_client(bus):
     app = ChatApp.create(
         agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=MagicMock(spec=VCSService)),
         event_bus=bus,
-        db_manager=MagicMock(spec=DatabaseManager),
+        db_manager=MagicMock(spec=SqlAlchemyDatabaseManager),
     )
     return TestClient(app)
 

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import BigInteger, Boolean, Column, DateTime, String, Text, func
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
-class MetricDefinitionDao(DatabaseManager.BaseTableModel):
+class MetricDefinitionDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "metric_definitions"
 
     id = Column(String(32), primary_key=True)

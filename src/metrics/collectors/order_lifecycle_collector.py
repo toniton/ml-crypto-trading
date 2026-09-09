@@ -6,7 +6,7 @@ from typing import Any, Dict, List
 
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.metrics.models.metric_type import AggregationType, MetricType
 from src.metrics.models.metric_query import MetricQuery

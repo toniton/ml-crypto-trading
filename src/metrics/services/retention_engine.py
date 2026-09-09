@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_metric_repository import PostgresMetricRepository
 from src.metrics.models.retention_policy import RetentionResult
 

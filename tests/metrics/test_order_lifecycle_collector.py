@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.models.metric_query import MetricQuery
@@ -24,7 +24,7 @@ def _create_order(uuid: str, status: OrderStatus, created_time: float) -> Order:
 
 
 class TestOrderLifecycleCollector:
-    def test_collects_gauges_and_detects_stuck_orders(self, db_manager: DatabaseManager):
+    def test_collects_gauges_and_detects_stuck_orders(self, db_manager: SqlAlchemyDatabaseManager):
         metric_service = MetricService(db_manager)
         collector = OrderLifecycleCollector(metric_service, db_manager)
 

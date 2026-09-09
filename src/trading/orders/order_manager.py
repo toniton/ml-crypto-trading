@@ -10,7 +10,7 @@ from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trade_action import OrderStatus
 from src.core.interfaces.event_bus import EventBus
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.interfaces.trading_journal import TradingJournal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin

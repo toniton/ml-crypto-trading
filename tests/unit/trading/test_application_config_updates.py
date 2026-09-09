@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.application import Application
 from src.configuration.trading_config import TradingConfig
 from src.trading.trading_engine import TradingEngine
@@ -19,10 +19,10 @@ from src.vcs.application.service import VCSService
 @pytest.fixture
 def vcs():
     engine = create_engine("sqlite:///:memory:")
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
-    db_mgr = DatabaseManager()
+    db_mgr = SqlAlchemyDatabaseManager()
     db_mgr.engine = engine
     db_mgr._session_factory = session_factory
 

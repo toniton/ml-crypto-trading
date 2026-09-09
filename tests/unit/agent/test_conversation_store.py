@@ -6,17 +6,17 @@ from sqlalchemy.orm import sessionmaker
 
 from src.server.services.conversation_service import ConversationService
 from src.core.interfaces.conversation_store import ConversationMessage
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.database.repositories.providers.postgres_conversation_repository import PostgresConversationRepository
 
 
 @pytest.fixture
 def mock_db_manager():
     engine = create_engine("sqlite:///:memory:")
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
-    db_mgr = DatabaseManager()
+    db_mgr = SqlAlchemyDatabaseManager()
     db_mgr.engine = engine
     db_mgr._session_factory = session_factory
 

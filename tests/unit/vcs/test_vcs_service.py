@@ -7,7 +7,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.database.repositories.providers.postgres_blob_repository import PostgresBlobRepository
 from src.database.repositories.providers.postgres_commit_repository import PostgresCommitRepository
 from src.database.repositories.providers.postgres_ref_repository import PostgresRefRepository
@@ -16,12 +16,12 @@ from src.vcs.application.service import VCSService
 
 @pytest.fixture
 def mock_db_manager(monkeypatch):
-    """Creates an in-memory SQLite DatabaseManager for testing VCS operations."""
+    """Creates an in-memory SQLite SqlAlchemyDatabaseManager for testing VCS operations."""
     engine = create_engine("sqlite:///:memory:")
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
-    db_mgr = DatabaseManager()
+    db_mgr = SqlAlchemyDatabaseManager()
     db_mgr.engine = engine
     db_mgr._session_factory = session_factory
 
@@ -176,10 +176,10 @@ def test_vcs_concurrent_commits_preserve_integrity(tmp_path):
     and that the ref always resolves to a valid, well-formed commit.
     """
     engine = create_engine(f"sqlite:///{tmp_path}/vcs.db", connect_args={"timeout": 30})
-    DatabaseManager.BaseTableModel.metadata.create_all(engine)
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
     session_factory = sessionmaker(bind=engine)
 
-    db_mgr = DatabaseManager()
+    db_mgr = SqlAlchemyDatabaseManager()
     db_mgr.engine = engine
     db_mgr._session_factory = session_factory
 

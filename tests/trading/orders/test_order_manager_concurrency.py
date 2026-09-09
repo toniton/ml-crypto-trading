@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import MagicMock
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction, OrderStatus
-from src.database.database_manager import DatabaseManager
-from src.database.unit_of_work import UnitOfWork
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
+from src.core.interfaces.unit_of_work import UnitOfWork
 from src.trading.orders.order_manager import OrderManager
 
 from src.core.interfaces.trading_journal import TradingJournal
@@ -14,7 +14,7 @@ from src.core.interfaces.trading_journal import TradingJournal
 class TestOrderManagerConcurrency(unittest.TestCase):
     # pylint: disable=protected-access
     def setUp(self):
-        self.mock_db_manager = MagicMock(spec=DatabaseManager)
+        self.mock_db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         self.mock_uow = MagicMock(spec=UnitOfWork)
         self.mock_db_manager.get_unit_of_work.return_value = self.mock_uow
         self.mock_uow.__enter__.return_value = self.mock_uow

@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from tests.unit.agent.fakes import FakeLlmAdapter
@@ -38,7 +38,7 @@ def build_app(db_manager):
 
 class TestOrdersEndpoint(unittest.TestCase):
     def test_returns_orders_for_day(self):
-        db_manager = MagicMock(spec=DatabaseManager)
+        db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         payload = {
             "date": "2026-08-08",
             "count": 1,
@@ -70,7 +70,7 @@ class TestOrdersEndpoint(unittest.TestCase):
         self.assertEqual(data["orders"][0]["latency_ms"], 150.0)
 
     def test_returns_week_counts(self):
-        db_manager = MagicMock(spec=DatabaseManager)
+        db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         payload = {
             "start": "2026-08-03",
             "end": "2026-08-09",
@@ -86,7 +86,7 @@ class TestOrdersEndpoint(unittest.TestCase):
         self.assertEqual(response.json()["days"][0]["count"], 3)
 
     def test_invalid_date_returns_422(self):
-        db_manager = MagicMock(spec=DatabaseManager)
+        db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         client = TestClient(build_app(db_manager))
         response = client.get("/api/v1/orders/2026/2/30")
         self.assertEqual(response.status_code, 422)

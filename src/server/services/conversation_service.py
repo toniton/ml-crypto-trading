@@ -6,7 +6,7 @@ from typing import List, Optional
 
 from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore, SessionSummary
 from src.core.interfaces.llm_adapter import ChatTurn
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_conversation_repository import PostgresConversationRepository
 
 

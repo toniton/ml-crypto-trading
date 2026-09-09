@@ -15,7 +15,7 @@ class TestBacktestToolWiring(unittest.TestCase):
 
     @patch("src.application.Application._setup_clients")
     @patch("src.application.Application._setup_configuration")
-    @patch("src.application.DatabaseManager")
+    @patch("src.application.SqlAlchemyDatabaseManager")
     @patch("src.application.VCSService")
     @patch("src.application.RefChangeListener")
     @patch("src.trading.managers.manager_factory.ClientFactory")

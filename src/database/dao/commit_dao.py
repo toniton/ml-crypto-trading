@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import Column, DateTime, ForeignKey, String, Text, func
 
 from src.database.dao.blob_dao import JSON_TYPE
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
-class CommitDao(DatabaseManager.BaseTableModel):
+class CommitDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "vcs_commits"
 
     hash = Column(String(64), primary_key=True)

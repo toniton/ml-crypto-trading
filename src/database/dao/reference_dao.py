@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from sqlalchemy import Column, DateTime, ForeignKey, String, func
 
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
-class ReferenceDao(DatabaseManager.BaseTableModel):
+class ReferenceDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "vcs_refs"
 
     name = Column(String(255), primary_key=True)

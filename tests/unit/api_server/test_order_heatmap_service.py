@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.services.order_heatmap_service import OrderHeatmapService
 
 
@@ -23,7 +23,7 @@ def order_on(day: str, action: TradeAction) -> Order:
 
 class TestOrderHeatmapService(unittest.TestCase):
     def setUp(self):
-        self.db_manager = MagicMock(spec=DatabaseManager)
+        self.db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         self.uow = MagicMock()
         self.db_manager.get_unit_of_work.return_value = self.uow
         self.uow.__enter__.return_value = self.uow

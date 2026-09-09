@@ -3,10 +3,10 @@ from __future__ import annotations
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text, func
 
 from src.database.dao.blob_dao import JSON_TYPE
-from src.database.database_manager import DatabaseManager
+from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
-class ConversationMessageDao(DatabaseManager.BaseTableModel):
+class ConversationMessageDao(SqlAlchemyDatabaseManager.BaseTableModel):
     __tablename__ = "conversation_messages"
 
     id = Column(Integer, primary_key=True, autoincrement=True)

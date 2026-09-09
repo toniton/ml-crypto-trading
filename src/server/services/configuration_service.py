@@ -7,7 +7,7 @@ from api.interfaces.asset_schedule import AssetSchedule
 from src.agent.configuration.configuration_service import ConfigurationService as AgentConfigurationService
 from src.agent.configuration.models import ConfigurationProposal, ValidationResult
 from src.configuration.trading_config import TradingConfig
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import CommitNotFoundError, InvalidReferenceError

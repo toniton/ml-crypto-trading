@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
-from src.database.database_manager import DatabaseManager
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_blob_repository import PostgresBlobRepository
 from src.database.repositories.providers.postgres_commit_repository import PostgresCommitRepository
 from src.database.repositories.providers.postgres_ref_repository import PostgresRefRepository
