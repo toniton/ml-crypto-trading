@@ -331,6 +331,22 @@ class ChatApp:
                     detail=str(exc),
                 ) from exc
 
+        @app.get("/api/v1/vcs/log")
+        async def get_vcs_log_endpoint(req: Request, limit: int = 50, ref: str = "HEAD"):
+            _configuration_service: ConfigurationService = req.app.state.configuration_service
+            return await asyncio.to_thread(_configuration_service.get_vcs_log, ref=ref, limit=limit)
+
+        @app.get("/api/v1/vcs/checkout/{commit_hash}")
+        async def get_vcs_checkout_endpoint(commit_hash: str, req: Request):
+            _configuration_service: ConfigurationService = req.app.state.configuration_service
+            try:
+                return await asyncio.to_thread(_configuration_service.checkout_vcs, commit_hash_or_ref=commit_hash)
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=str(exc),
+                ) from exc
+
         return app
 
     @staticmethod

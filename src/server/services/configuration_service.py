@@ -77,3 +77,27 @@ class ConfigurationService:
     ) -> Tuple[Any, List[str]]:
         return self._delegate.apply_proposal_to_vcs(proposal, author=author, ref=ref)
 
+    def get_vcs_log(self, ref: str = "HEAD", limit: int = 50) -> List[dict]:
+        try:
+            commits = self._vcs.log(ref=ref, limit=limit)
+            return [
+                {
+                    "hash": commit.hash,
+                    "blob_hash": commit.blob_hash,
+                    "parent_hash": commit.parent_hash,
+                    "author": commit.author,
+                    "message": commit.message,
+                    "created_at": commit.created_at.isoformat() if commit.created_at else None,
+                    "metadata": commit.metadata or {},
+                }
+                for commit in commits
+            ]
+        except (CommitNotFoundError, InvalidReferenceError):
+            return []
+
+    def checkout_vcs(self, commit_hash_or_ref: str) -> dict:
+        try:
+            return self._vcs.checkout(commit_hash_or_ref)
+        except (CommitNotFoundError, InvalidReferenceError) as exc:
+            raise exc
+
