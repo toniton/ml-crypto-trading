@@ -9,12 +9,14 @@ from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trade_action import OrderStatus
+from src.core.interfaces.event_bus import EventBus
 from src.database.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.core.interfaces.trading_journal import TradingJournal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
+from src.trading.events import OrderCancelled, OrderExecuted, OrderRejected
 
 
 class OrderManager(ApplicationLoggingMixin):
@@ -27,10 +29,12 @@ class OrderManager(ApplicationLoggingMixin):
             self, database_manager: DatabaseManager, trading_journal: TradingJournal,
             rest_manager: RestManager, websocket_manager: WebSocketManager,
             is_backtest: bool = False,
+            event_bus: Optional[EventBus] = None,
     ):
         self._database_manager = database_manager
         self._rest_manager = rest_manager
         self._websocket_manager = websocket_manager
+        self._event_bus = event_bus
         self._order_queue = Queue()
         self._trading_journal = trading_journal
         self._assets = []
@@ -67,6 +71,12 @@ class OrderManager(ApplicationLoggingMixin):
                     self.app_logger.info(f"Order executed: {order.uuid}")
                 except RuntimeError as exc:
                     self.app_logger.error(f"Executing order failed. Order={order}: {exc}", exc_info=True)
+                    if self._event_bus:
+                        self._event_bus.publish(OrderRejected(
+                            symbol=order.ticker_symbol,
+                            order=order,
+                            reason=str(exc),
+                        ))
             except queue.Empty:
                 pass
         self.app_logger.info("Order processing thread exiting")
@@ -86,6 +96,11 @@ class OrderManager(ApplicationLoggingMixin):
                     self.app_logger.debug(f"Order update received, saving to DB: {order}")
                     if order.status == OrderStatus.COMPLETED:
                         self._trading_journal.record_fill(order)
+                        if self._event_bus:
+                            self._event_bus.publish(OrderExecuted(symbol=order.ticker_symbol, order=order))
+                    elif order.status == OrderStatus.CANCELLED:
+                        if self._event_bus:
+                            self._event_bus.publish(OrderCancelled(symbol=order.ticker_symbol, order=order))
                     order_repository = uow.get_repository(PostgresOrderRepository)
                     order_repository.upsert(order)
         except Exception as e:

@@ -334,6 +334,26 @@ class TestConversationSessions(unittest.TestCase):
         self.assertIn("p99_ms", data["event_loop_lag"])
         self.assertIn("max_ms", data["event_loop_lag"])
 
+    def test_order_lifecycle_endpoint(self):
+        db = make_temp_db_manager()
+        app = ChatApp.create(
+            agent=build_gateway(FakeLlmAdapter()),
+            event_bus=MessageEventBus(),
+            db_manager=db,
+        )
+        client = TestClient(app)
+        res = client.get("/api/v1/orders/lifecycle")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertIn("status", data)
+        self.assertIn("funnel", data)
+        self.assertIn("consistency", data)
+        self.assertIn("latencies", data)
+        self.assertIn("healthy", data["consistency"])
+        self.assertIn("stuck_5m", data["consistency"])
+        self.assertIn("pending_gt_30s", data["consistency"])
+
+
 
 
 

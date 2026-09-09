@@ -1,13 +1,21 @@
 import threading
 
+from typing import Optional
+
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 
 
 class OrderReconciler(ApplicationLoggingMixin):
     RECONCILE_INTERVAL_SECONDS = 60.0
 
-    def __init__(self, order_manager):
+    def __init__(
+            self,
+            order_manager,
+            order_lifecycle_collector: Optional[OrderLifecycleCollector] = None,
+    ):
         self._order_manager = order_manager
+        self._order_lifecycle_collector = order_lifecycle_collector
         self._stop_event = threading.Event()
         self._trigger_event = threading.Event()
         self._thread = None
@@ -40,4 +48,11 @@ class OrderReconciler(ApplicationLoggingMixin):
                 self._order_manager.reconcile_pending_orders()
             except Exception as exc:
                 self.app_logger.warning(f"Reconciliation cycle failed: {exc}")
+
+            if self._order_lifecycle_collector is not None:
+                try:
+                    self._order_lifecycle_collector.collect_and_record()
+                except Exception as exc:
+                    self.app_logger.warning(f"Order lifecycle metric collection failed: {exc}")
+
         self.app_logger.info("Order reconciler thread exiting")

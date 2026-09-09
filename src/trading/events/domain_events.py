@@ -40,6 +40,13 @@ class OrderCancelled(TradingEvent):
 
 
 @dataclass
+class OrderRejected(TradingEvent):
+    symbol: str
+    order: Order
+    reason: str = ""
+
+
+@dataclass
 class PositionChanged(TradingEvent):
     symbol: str
     action: str

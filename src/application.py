@@ -31,6 +31,7 @@ from src.backtest.runner.backtest_runner import BacktestRunner
 from src.server.server import ApiServer
 from src.database.database_manager import DatabaseManager
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
+from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
 from src.metrics.services.metric_service import MetricService
 from src.metrics.services.retention_engine import RetentionEngine
@@ -106,6 +107,7 @@ class Application(ApplicationLoggingMixin):
         self._retention_engine: Optional[RetentionEngine] = None
         self._retention_scheduler: Optional[RetentionScheduler] = None
         self._event_metric_collector: Optional[EventMetricCollector] = None
+        self._order_lifecycle_collector: Optional[OrderLifecycleCollector] = None
         self._runtime_metrics_collector: Optional[RuntimeMetricsCollector] = None
         self._strategies_config: Optional[StrategiesConfig] = None
         self._strategies_registry: Optional[StrategyRegistry] = None
@@ -136,7 +138,11 @@ class Application(ApplicationLoggingMixin):
             metric_service=self._metric_service,
         )
         self._trading_journal = trading_journal
-        self._order_reconciler = OrderReconciler(container.order_manager)
+        self._order_lifecycle_collector = OrderLifecycleCollector(self._metric_service, db_manager)
+        self._order_reconciler = OrderReconciler(
+            container.order_manager,
+            order_lifecycle_collector=self._order_lifecycle_collector,
+        )
         container.websocket_manager.set_reconnect_callback(self._order_reconciler.trigger)
 
         return container

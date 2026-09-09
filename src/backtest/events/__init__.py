@@ -6,6 +6,7 @@ from .domain_events import (
     OrderFillEvent,
     OrderFilledEvent,
     OrderCancelledEvent,
+    OrderRejectedEvent,
     PortfolioSnapshotEvent,
     BalanceUpdateEvent,
 )

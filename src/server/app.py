@@ -18,6 +18,7 @@ from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
 from src.database.database_manager import DatabaseManager
 from src.metrics.api.metric_routes import create_metric_router
+from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.request_metrics_collector import (
     RequestMetricsCollector,
     RequestMetricsMiddleware,
@@ -78,6 +79,7 @@ class ChatApp:
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
         runtime_collector = RuntimeMetricsCollector(metric_service)
+        order_lifecycle_collector = OrderLifecycleCollector(metric_service, db_manager)
 
         @asynccontextmanager
         async def lifespan(_app_instance: FastAPI):
@@ -94,6 +96,7 @@ class ChatApp:
         app.state.configuration_service = configuration_service
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
         app.state.runtime_collector = runtime_collector
+        app.state.order_lifecycle_collector = order_lifecycle_collector
 
         app.add_middleware(
             CORSMiddleware,
@@ -113,6 +116,16 @@ class ChatApp:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                     detail="Runtime collector is not initialized.",
+                )
+            return collector.collect_and_record()
+
+        @app.get("/api/v1/orders/lifecycle")
+        async def order_lifecycle_endpoint():
+            collector: Optional[OrderLifecycleCollector] = getattr(app.state, "order_lifecycle_collector", None)
+            if not collector:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Order lifecycle collector is not initialized.",
                 )
             return collector.collect_and_record()
 

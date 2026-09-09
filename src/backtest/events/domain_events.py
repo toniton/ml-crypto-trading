@@ -82,6 +82,12 @@ class OrderCancelledEvent(BacktestEvent):
 
 
 @dataclass
+class OrderRejectedEvent(BacktestEvent):
+    order: Order
+    reason: str = ""
+
+
+@dataclass
 class PortfolioSnapshotEvent(BacktestEvent):
     snapshot: PortfolioSnapshot
     ticker_symbol: str

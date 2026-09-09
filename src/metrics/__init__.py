@@ -8,6 +8,7 @@ from src.metrics.collectors.request_metrics_collector import (
     RequestMetricsCollector,
     RequestMetricsMiddleware,
 )
+from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.models.metric import MetricDefinition
 from src.metrics.models.metric_query import MetricQuery
 from src.metrics.models.metric_sample import MetricSample
@@ -40,6 +41,7 @@ __all__ = [
     "MetricSeries",
     "MetricService",
     "MetricType",
+    "OrderLifecycleCollector",
     "RequestMetricsCollector",
     "RequestMetricsMiddleware",
     "RetentionEngine",

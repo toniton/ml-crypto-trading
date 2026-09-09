@@ -36,7 +36,8 @@ class ManagerFactory:
             is_simulated, metrics_collector=collector
         )
         order_manager = OrderManager(
-            database_manager, trading_journal, rest_manager, websocket_manager, is_backtest
+            database_manager, trading_journal, rest_manager, websocket_manager,
+            is_backtest=is_backtest, event_bus=event_bus
         )
 
         container = ManagerContainer(

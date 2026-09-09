@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from api.interfaces.order import Order
-from api.interfaces.trade_action import OrderStatus
+from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.database.dao.order_dao import OrderDao
 
 
@@ -15,9 +15,9 @@ class OrderDBVSEntityMapper:
             uuid=order_dao.uuid,
             provider_name=order_dao.provider_name,
             ticker_symbol=order_dao.ticker_symbol,
-            price=order_dao.price,
+            price=Decimal(order_dao.price),
             quantity=order_dao.quantity,
-            trade_action=order_dao.trade_action,
+            trade_action=TradeAction(order_dao.trade_action),
             created_time=order_dao.created_timestamp.replace(tzinfo=timezone.utc).timestamp(),
             executed_time=(
                 order_dao.executed_timestamp.replace(tzinfo=timezone.utc).timestamp()
@@ -41,7 +41,7 @@ class OrderDBVSEntityMapper:
             uuid=order.uuid,
             provider_name=order.provider_name,
             ticker_symbol=order.ticker_symbol,
-            price=order.price,
+            price=str(order.price),
             quantity=order.quantity,
             trade_action=order.trade_action.value,
             status=order.status.value,
