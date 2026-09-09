@@ -71,6 +71,24 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin):
         self.trading_logger.info(f"Executing BUY for {market_data.asset}")
 ```
 
+## Real-Time WebSocket Streaming
+
+When running in server mode (`--server=true`), live logs are broadcast over WebSockets:
+
+- **Endpoint**: `ws://<host>:<port>/api/v1/logs/ws`
+- **Payload**: JSON formatted event stream containing log level, timestamp, message, and logger source.
+- Enables live remote terminal and UI monitoring without file tailing.
+
+## Consensus Decision Log Format
+
+Every evaluation cycle emits a structured consensus line for easy auditability and debugging:
+
+```text
+INFO: Consensus [BTC_USD BUY]: HammerAccumulationStrategy=True, RsiOversoldBuy=False -> Quorum=False (1/2)
+```
+
+The format explicitly names each evaluated strategy, its boolean vote, the resulting Quorum decision, and the `(True_Votes/Total_Votes)` count.
+
 ## Audit Log Replay
 
 One of the most powerful features of the MCT bot is the ability to replay audit logs. This ensures that you are testing

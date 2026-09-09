@@ -1,86 +1,101 @@
 ## High-Level Architecture
 
 ```text
-+-----------------------------------------------------------------------+
-|                              APPLICATION                              |
-|   (Bootstrapping, Configuration, Managers, Strategies, Protections)    |
-+----------------------------------+------------------------------------+
-                                   |
-                                   v
-+-----------------------------------------------------------------------+
-|                            TRADING ENGINE                             |
-|           (Orchestrates Scheduler and Executor interaction)           |
-+------------------+-------------------------------+--------------------+
-                   |                               |
-                   v                               v
-+-----------------------------------+   +-------------------------------+
-|         TRADING SCHEDULER         |   |       TRADING EXECUTOR        |
-| (Live: Time-based / Backtest: CPU)|-->| (Data -> Vote -> Risk -> Run) |
-+-----------------------------------+   +---------------+---------------+
-                                                        |
-                                                        v
-+-----------------------------------------------------------------------+
-|                          MANAGER CONTAINER                            |
-+-----------+-----------+-----------+-----------+-----------+-----------+
-|  Market   |  Account  |   Order   | Consensus | Protection|  Session  |
-|   Data    |  Manager  |  Manager  |  Manager  |  Manager  |  Manager  |
-+-----------+-----------+-----+-----+-----------+-----------+-----------+
-                              |
-                              v
-+-----------------------------------------------------------------------+
-|                  REST / WEBSOCKET CLIENT REGISTRIES                   |
-+--------------------------+-------------------------+------------------+
-|   CryptoDotCom Client    |   Simulated Client...   |   Other Clients  |
-+--------------------------+-------------------------+------------------+
++---------------------------------------------------------------------------------------------------+
+|                                            APPLICATION                                            |
+|                  (Bootstrapping, Dependency Injection, Configuration, VCS)                         |
++-------------------+-------------------------------+-------------------------------+---------------+
+                    |                               |                               |
+                    v                               v                               v
++-------------------+---------------+   +-----------+-------------------+   +-----------+---------------+
+|          TRADING ENGINE           |   |       AI AGENT SYSTEM         |   |    FASTAPI SERVER & WS    |
+|  - Trading Scheduler (Live/Backtest)  | - LangGraph Router & Subgraphs|   | - SSE Chat Stream (/chat) |
+|  - Trading Executor (Data->Vote->Risk)| - Configuration Proposal Graph|   | - Order Heatmap & Latency |
+|  - Manager Container              |   | - Backtest & Analytics Graph  |   | - VCS History & Proposals |
+|  - Protection Guards              |   | - Proactive Trading Oracle    |   | - WebSocket Logs (/ws)    |
++-------------------+---------------+   +-----------+-------------------+   +-----------+---------------+
+                    |                               |                               |
+                    +-----------------------+-------+-------------------------------+
+                                            |
+                                            v
++---------------------------------------------------------------------------------------------------+
+|                                         MANAGER CONTAINER                                         |
++-------------------+-------------------+-------------------+-------------------+-------------------+
+| MarketDataManager |  AccountManager   |   OrderManager    | ConsensusManager  | ProtectionManager |
++-------------------+-------------------+---------+---------+-------------------+-------------------+
+                                                  |
+                    +-----------------------------+-----------------------------+
+                    |                                                           |
+                    v                                                           v
++-------------------+-------------------+                   +-------------------+-------------------+
+|     HIGH-FIDELITY BACKTEST ENGINE     |                   |  COMMUNICATION LAYER (REST / WS)  |
+| - Virtual Concurrent BacktestClocks   |                   | - Crypto.com REST & WebSocket     |
+| - Execution Frictions (Slippage/Delay)|                   | - CCXT Provider Registries        |
+| - Noop Database Manager               |                   | - Simulated Paper Clients         |
+| - Drift Detector & Market Recorder    |                   +-----------------------------------+
++---------------------------------------+                                       |
+                    |                                                           |
+                    v                                                           v
++---------------------------------------------------------------------------------------------------+
+|                                     OBSERVABILITY & METRICS                                       |
+| - Process Telemetry (CPU / Memory)    - Order Lifecycle Timing    - Exchange Telemetry & Errors   |
++---------------------------------------------------------------------------------------------------+
 ```
 
-## Core Components
+## Core Subsystems
 
-The application follows a modular, manager-based architecture where responsibilities are clearly separated.
+The application follows a modular, decoupled architecture adhering to strict separation of concerns.
 
-### 🚀 Application & Engine
+### 🚀 Application & Composition Root
+- **`Application`**: Coordinates startup, configuration bootstrapping, database connections, manager instantiation, strategy registration, and graceful shutdown.
+- **`VCS` (Version Control System)**: Content-addressable storage preserving snapshots of configuration changes with commit history and runtime checkout/rollback capabilities.
 
-- **Application**: The entry point/composition root. It handles the bootstrapping of configuration, database
-  initialization, manager setup, and strategy/protection registration.
-- **Trading Engine**: The core heart that brings together the Scheduler and Executor. It manages the starting and
-  stopping of the trading lifecycle.
+### ⏱️ Trading Engine
+- **Trading Scheduler**: Controls asset evaluation intervals:
+  - `LiveTradingScheduler`: Driven by time intervals across second, minute, hour, and daily cadences.
+  - `BacktestTradingScheduler`: Driven by a virtual `BacktestClock` stepping time as fast as the CPU allows.
+- **Trading Executor**: Core tick loop:
+  1. Pulls candle and ticker data via `MarketDataManager`.
+  2. Gathers strategy votes and determines BFT quorum via `ConsensusManager`.
+  3. Evaluates position sizing via `DynamicExpressionEngine`.
+  4. Validates safety constraints via `ProtectionManager`.
+  5. Dispatches orders through `OrderManager`.
 
-### ⏱️ Scheduling & Execution
+### 🗃️ Manager Layer
+- **`AccountManager`**: Tracks multi-asset balances and synchronizes equity.
+- **`OrderManager`**: Maintains order lifecycle state and persists execution journals to PostgreSQL.
+- **`MarketDataManager`**: Aggregates real-time feeds, historical candle bars, and recorded market ticks.
+- **`ConsensusManager`**: Evaluates multi-strategy quorum voting (1-of-1, 1-of-2 OR, 2-of-2 strict consensus).
+- **`ProtectionManager`**: Enforces risk guardrails (e.g. `MaxDrawdownGuard`, cooldowns, circuit breakers).
 
-- **Trading Scheduler**: Responsible for determining *when* an asset should be traded based on its configuration.
-    - **LiveTradingScheduler**: Uses real-time clocks and intervals to trigger execution loops.
-    - **BacktestTradingScheduler**: Driven by a `BacktestClock` to simulate time as fast as the CPU allows.
-- **Trading Executor**: The core brain of the trading loop. For each scheduled tick, it:
-    1. Fetches current market data via `MarketDataManager`.
-    2. Gathers decision votes from all registered strategies via `ConsensusManager`.
-    3. Validates the decision against risk constraints in `ProtectionManager`.
-    4. Executes orders through the `OrderManager`.
+### 🧠 AI Agent System (LangGraph)
+- **`RouterGraph`**: Classifies incoming natural language queries and dynamically routes execution.
+- **`ConfigurationGraph`**: Proposes strategy parameter adjustments, validates formulas, calculates diffs, and manages human-in-the-loop approvals.
+- **`BacktestGraph`**: Automates on-demand historical simulations and parameter sweeps.
+- **`PerformanceAnalysisGraph`**: Generates analytics on order distributions, latency, and win-rates.
+- **`TradingOracle`**: Emits proactive trading and market summaries based on trade event counters.
 
-### 🗃️ Managers (The Manager Layer)
+### 📊 High-Fidelity Backtesting Subsystem
+- **Multi-Asset Simulation**: Independent `BacktestClock` instances running per asset.
+- **Execution Modeling**: Realistic slippage (`FixedTickSlippage`), latency delays (`FixedLatency`), and exchange fee deduction (`PercentageFee`).
+- **Isolation**: Utilizes `NoopDatabaseManager` to ensure zero database side-effects during historical runs.
+- **Drift Detection & Market Recording**: `DriftDetector` evaluates strategy robustness; `MarketDataRecorder` enables deterministic tick replay.
 
-- **AccountManager**: Manages exchange balances and handles balance synchronization.
-- **OrderManager**: Tracks order lifecycle, maintains the `InMemoryTradingJournal`, and persists trades to the
-  PostgreSQL database.
-- **MarketDataManager**: Centralized source for real-time and historical price data (tickers, candles).
-- **ConsensusManager**: Orchestrates the multi-strategy voting system. It ensures that trades are only executed when a
-  quorum (Byzantine Fault Tolerance) is reached.
-- **ProtectionManager**: Applies safety "Guards" (like `MaxDrawdownGuard`) to prevent catastrophic losses.
-- **SessionManager**: Tracks the current trading session and its metadata.
+### 🌐 Server & API Layer (FastAPI)
+- Exposes RESTful endpoints for configuration, VCS logs, order heatmaps, and order latency distributions.
+- Streams live conversational agent turns via Server-Sent Events (`/api/v1/chat`).
+- Streams real-time trading and application logs via WebSockets (`/api/v1/logs/ws`).
 
-### 🔌 Communication Layer
-
-- **Client Registries**: Centralized hubs for `RestClient` and `WebSocketClient` instances.
-- **Exchange Clients**: Specific implementations for different exchanges (e.g., `CryptoDotComRestClient`). These can be
-  swapped with **Simulated Clients** for paper trading or backtesting.
-
-## Configuration & System Properties
-
-For a detailed breakdown of system properties, CLI arguments, environment variables, and asset configuration, see
-the [Configuration Documentation](configuration.md).
+### 📈 Observability & Telemetry Subsystem
+- **`RuntimeMetricsCollector`**: Gathers CPU and RAM utilization.
+- **`OrderLifecycleCollector`**: Telemetry on order placement latency, fill delays, and slippage.
+- **`ExchangeMetricsCollector`**: Monitors WebSocket connection health, REST API response times, and error rates.
 
 ---
 
-## Logging Architecture
+## Configuration & Documentation Links
 
-The trading bot uses a mixin-based logging architecture that separates concerns and supports auditability. For a
-detailed breakdown of log types, configuration, and audit replay, see the [Logging Documentation](logging.md).
+- [Configuration & System Properties](configuration.md)
+- [Core Concepts](concepts.md)
+- [Logging Architecture](logging.md)
+- [Introduction & Features](introduction.md)
