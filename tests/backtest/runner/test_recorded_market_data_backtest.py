@@ -1,8 +1,5 @@
 from decimal import Decimal
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
@@ -15,23 +12,12 @@ from api.interfaces.backtest_request import (
 from api.interfaces.market_data import MarketData
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
-from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.recorder.market_data_recorder import MarketDataRecorder
 from src.recorder.market_data_store import MarketDataStore
 from src.trading.events import MarketDataEvent
 from src.trading.strategies.strategy_registry import StrategyRegistry
-
-
-def _db_manager() -> SqlAlchemyDatabaseManager:
-    engine = create_engine("sqlite:///:memory:")
-    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine)
-    db_manager = SqlAlchemyDatabaseManager()
-    db_manager.engine = engine
-    db_manager._session_factory = session_factory
-    return db_manager
 
 
 def _asset() -> Asset:
@@ -68,9 +54,8 @@ class TestRecordedMarketDataBacktest:
             ))
 
         runner = BacktestRunner(
-            _db_manager(),
-            {"BTC_USD": _asset()},
-            StrategyRegistry(),
+            assets={"BTC_USD": _asset()},
+            strategy_registry=StrategyRegistry(),
             data_source_resolver=BacktestDataSourceResolver(store),
         )
         request = BacktestRequest(

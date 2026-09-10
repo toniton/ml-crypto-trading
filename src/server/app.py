@@ -17,6 +17,7 @@ from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.metrics.api.metric_routes import create_metric_router
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.request_metrics_collector import (
@@ -168,6 +169,56 @@ class ChatApp:
         async def order_by_day_endpoint(year: int, month: int, day: int):
             ChatApp._validate_date(year, month, day)
             return order_by_day_service.for_date(year, month, day)
+
+        @app.get("/api/v1/backtests")
+        async def list_backtests_endpoint(limit: int = 50):
+            with db_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresBacktestRepository)
+                sessions = repo.list_sessions(limit=limit)
+                results = []
+                for s in sessions:
+                    res = repo.get_result(s.id)
+                    metrics = repo.get_result_metrics(s.id)
+                    results.append({
+                        "session_id": s.id,
+                        "ticker_symbol": s.ticker_symbol,
+                        "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                        "initial_balance": str(s.request.initial_balance) if s.request else None,
+                        "final_equity": str(res.final_equity) if res else None,
+                        "created_at": s.created_at.isoformat() if s.created_at else None,
+                        "metrics": metrics,
+                    })
+                return results
+
+        @app.get("/api/v1/backtests/{session_id}")
+        async def get_backtest_endpoint(session_id: str):
+            with db_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresBacktestRepository)
+                session = repo.get_session(session_id)
+                if not session:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Backtest session '{session_id}' not found.",
+                    )
+                res = repo.get_result(session_id)
+                metrics = repo.get_result_metrics(session_id)
+                return {
+                    "session_id": session.id,
+                    "ticker_symbol": session.ticker_symbol,
+                    "status": session.status.value if hasattr(session.status, "value") else str(session.status),
+                    "created_at": session.created_at.isoformat() if session.created_at else None,
+                    "started_at": session.started_at.isoformat() if session.started_at else None,
+                    "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+                    "initial_balance": str(session.request.initial_balance) if session.request else None,
+                    "final_balance": str(res.final_balance) if res else None,
+                    "final_equity": str(res.final_equity) if res else None,
+                    "execution_config": {
+                        "latency_ms": res.execution.latency_ms,
+                        "slippage_ticks": res.execution.slippage_ticks,
+                        "fee_rate": str(res.execution.fee_rate),
+                    } if res else None,
+                    "metrics": metrics,
+                }
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:

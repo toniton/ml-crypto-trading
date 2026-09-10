@@ -14,6 +14,8 @@ from src.backtest.domain.metrics import BacktestSummary
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
 from src.backtest.runner.backtest_runner import BacktestRunner
+from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.logging.agent_logging_mixin import AgentLoggingMixin
 
 
@@ -31,11 +33,13 @@ class BacktestService(AgentLoggingMixin):
             data_source_request: BacktestDataSourceRequest,
             initial_balance: Decimal,
             execution: ExecutionConfiguration,
+            db_manager: DatabaseManager,
     ):
         self._runner = runner
         self._data_source_request = data_source_request
         self._initial_balance = initial_balance
         self._execution = execution
+        self._db_manager = db_manager
         self._calculator = BacktestMetricsCalculator()
         self._sessions: dict[str, BacktestSession] = {}
         self._results: dict[str, BacktestResult] = {}
@@ -58,13 +62,63 @@ class BacktestService(AgentLoggingMixin):
         result = self._runner.run_session(session)
         self._sessions[session.id] = session
         self._results[session.id] = result
+        self._persist_run(session, result)
         return result
 
+    def _persist_run(self, session: BacktestSession, result: BacktestResult) -> None:
+        if self._db_manager is None:
+            return
+        try:
+            metrics = self._calculator.calculate(result)
+            with self._db_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresBacktestRepository)
+                repo.save_session(session)
+                repo.save_result(result, metrics=metrics)
+            self.agent_logger.info(f"Persisted backtest result for session {session.id} to database")
+        except Exception as exc:  # pylint: disable=broad-except
+            self.agent_logger.warning(f"Failed to persist backtest result to database: {exc}")
+
     def get(self, session_id: str) -> BacktestSession:
-        return self._sessions[session_id]
+        if session_id in self._sessions:
+            return self._sessions[session_id]
+        if self._db_manager is not None:
+            try:
+                with self._db_manager.get_unit_of_work() as uow:
+                    repo = uow.get_repository(PostgresBacktestRepository)
+                    session = repo.get_session(session_id)
+                    if session is not None:
+                        self._sessions[session_id] = session
+                        return session
+            except Exception as exc:  # pylint: disable=broad-except
+                self.agent_logger.warning(f"Failed to load session {session_id} from database: {exc}")
+        raise KeyError(f"Backtest session '{session_id}' not found.")
 
     def result(self, session_id: str) -> BacktestResult:
-        return self._results[session_id]
+        if session_id in self._results:
+            return self._results[session_id]
+        if self._db_manager is not None:
+            try:
+                with self._db_manager.get_unit_of_work() as uow:
+                    repo = uow.get_repository(PostgresBacktestRepository)
+                    res = repo.get_result(session_id)
+                    if res is not None:
+                        self._results[session_id] = res
+                        return res
+            except Exception as exc:  # pylint: disable=broad-except
+                self.agent_logger.warning(f"Failed to load result for session {session_id} from database: {exc}")
+        raise KeyError(f"Backtest result for session '{session_id}' not found.")
+
+    def list_sessions(self, limit: int = 50) -> list[BacktestSession]:
+        if self._db_manager is not None:
+            try:
+                with self._db_manager.get_unit_of_work() as uow:
+                    repo = uow.get_repository(PostgresBacktestRepository)
+                    db_sessions = repo.list_sessions(limit=limit)
+                    if db_sessions:
+                        return db_sessions
+            except Exception as exc:  # pylint: disable=broad-except
+                self.agent_logger.warning(f"Failed to list backtest sessions from database: {exc}")
+        return list(self._sessions.values())[:limit]
 
     def summary(self, session_id: str) -> BacktestSummary:
         session = self.get(session_id)

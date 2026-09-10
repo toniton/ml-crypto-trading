@@ -190,8 +190,19 @@ class Application(ApplicationLoggingMixin):
 
         self._setup_configuration()
 
-        db_manager = NoopDatabaseManager() if self._is_backtest_mode else SqlAlchemyDatabaseManager()
-        db_manager.initialize()
+        db_manager: DatabaseManager
+        try:
+            db_manager = SqlAlchemyDatabaseManager()
+            db_manager.initialize()
+        except Exception as exc:  # pylint: disable=broad-except
+            if self._is_backtest_mode:
+                self.app_logger.warning(
+                    f"Could not initialize SQL database in backtest mode; falling back to NoopDatabaseManager: {exc}"
+                )
+                db_manager = NoopDatabaseManager()
+                db_manager.initialize()
+            else:
+                raise
         self._db_manager = db_manager
         self._metric_service = MetricService(db_manager)
         self._event_metric_collector = EventMetricCollector(self._metric_service)
@@ -360,11 +371,12 @@ class Application(ApplicationLoggingMixin):
             self._api_server.start()
 
     def run_backtest(self) -> None:
-        """Drive the backtest simulation(s) via a BacktestRunner."""
+        """Drive the backtest simulation(s) via a BacktestService."""
 
+        service = self._build_backtest_service()
         requests = [self._build_backtest_request(asset) for asset in self._assets]
-        results = self._build_backtest_runner().run(requests)
-        for result in results:
+        for request in requests:
+            result = service.run(request)
             self.app_logger.info(
                 f"Backtest {result.session_id} for {result.ticker_symbol}: "
                 f"initial={result.initial_balance} final_equity={result.final_equity} "
@@ -373,11 +385,10 @@ class Application(ApplicationLoggingMixin):
 
     def _build_backtest_runner(self) -> BacktestRunner:
         return BacktestRunner(
-            self._db_manager,
-            {asset.ticker_symbol: asset for asset in self._assets},
-            self._strategies_registry,
-            self._activity_queue,
-            self._dynamic_quantity,
+            assets={asset.ticker_symbol: asset for asset in self._assets},
+            strategy_registry=self._strategies_registry,
+            activity_queue=self._activity_queue,
+            dynamic_quantity=self._dynamic_quantity,
             data_source_resolver=BacktestDataSourceResolver(self._market_data_store),
         )
 
@@ -395,6 +406,7 @@ class Application(ApplicationLoggingMixin):
                 slippage_ticks=self._application_config.backtest_slippage_ticks,
                 fee_rate=Decimal(str(self._application_config.backtest_fee_rate)),
             ),
+            db_manager=self._db_manager,
         )
 
     def _build_backtest_request(self, asset) -> BacktestRequest:

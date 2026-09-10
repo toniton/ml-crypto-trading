@@ -4,8 +4,6 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from api.interfaces.asset import Asset
 from api.interfaces.backtest_request import (
@@ -17,24 +15,13 @@ from api.interfaces.trade_action import TradeAction
 from src.agent.backtest.backtest_service import BacktestService
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.configuration.strategy_config import StrategyConfig, StrategyType
-from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
+from src.database import NoopDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.llm.tools.backtest_tool import BacktestTool
 from src.trading.consensus.consensus_factor import ConsensusFactor
 from src.trading.strategies.strategy_registry import StrategyRegistry
 
 T0 = 1_700_000_000
-
-
-@pytest.fixture
-def db_manager():
-    engine = create_engine("sqlite:///:memory:")
-    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(engine)
-    session_factory = sessionmaker(bind=engine)
-    db_mgr = SqlAlchemyDatabaseManager()
-    db_mgr.engine = engine
-    db_mgr._session_factory = session_factory
-    return db_mgr
 
 
 def _make_asset(
@@ -98,19 +85,18 @@ def _consensus() -> ConsensusFactor:
     return ConsensusFactor(buy=1.0, sell=1.0)
 
 
-def _make_runner(db_manager, asset) -> BacktestRunner:
+def _make_runner(asset) -> BacktestRunner:
     return BacktestRunner(
-        db_manager,
-        {asset.ticker_symbol: asset},
-        StrategyRegistry(),
+        assets={asset.ticker_symbol: asset},
+        strategy_registry=StrategyRegistry(),
     )
 
 
 class TestBacktestRunner:
-    def test_no_strategies_yields_no_fills(self, tmp_path, db_manager):
+    def test_no_strategies_yields_no_fills(self, tmp_path):
         _write_history(tmp_path, "BTC_USD", [(T0, "100"), (T0 + 1000, "101"), (T0 + 2000, "102")])
         asset = _make_asset(strategies=[], consensus=_consensus())
-        runner = _make_runner(db_manager, asset)
+        runner = _make_runner(asset)
 
         result = runner.run_one(_make_request(tmp_path))
 
@@ -120,18 +106,18 @@ class TestBacktestRunner:
         assert result.final_balance == Decimal("10000.0")
         assert result.final_equity == Decimal("10000.0")
 
-    def test_unknown_asset_raises(self, tmp_path, db_manager):
+    def test_unknown_asset_raises(self, tmp_path):
         _write_history(tmp_path, "BTC_USD", [(T0, "100")])
         asset = _make_asset(strategies=[], consensus=_consensus())
-        runner = _make_runner(db_manager, asset)
+        runner = _make_runner(asset)
 
         with pytest.raises(ValueError):
             runner.run_one(_make_request(tmp_path, ticker_symbol="ETH_USD"))
 
-    def test_time_range_filters_data(self, tmp_path, db_manager):
+    def test_time_range_filters_data(self, tmp_path):
         _write_history(tmp_path, "BTC_USD", [(T0, "100"), (T0 + 1000, "101"), (T0 + 5000, "105")])
         asset = _make_asset(strategies=[], consensus=_consensus())
-        runner = _make_runner(db_manager, asset)
+        runner = _make_runner(asset)
 
         result = runner.run_one(
             _make_request(tmp_path, end_time=datetime.fromtimestamp(T0 + 1000, tz=timezone.utc))
@@ -141,10 +127,10 @@ class TestBacktestRunner:
 
 
 class TestBacktestRunnerFills:
-    def test_static_buy_strategy_produces_fills(self, tmp_path, db_manager):
+    def test_static_buy_strategy_produces_fills(self, tmp_path):
         _write_history(tmp_path, "BTC_USD", [(T0, "100"), (T0 + 1000, "99"), (T0 + 2000, "98")])
         asset = _make_asset(strategies=[_buy_lower_strategy()], consensus=_consensus())
-        runner = _make_runner(db_manager, asset)
+        runner = _make_runner(asset)
 
         result = runner.run_one(_make_request(tmp_path))
 
@@ -153,15 +139,16 @@ class TestBacktestRunnerFills:
 
 
 class TestBacktestTool:
-    def test_run_backtest_returns_summary(self, tmp_path, db_manager):
+    def test_run_backtest_returns_summary(self, tmp_path):
         _write_history(tmp_path, "BTC_USD", [(T0, "100"), (T0 + 1000, "101")])
         asset = _make_asset(strategies=[], consensus=_consensus())
-        runner = _make_runner(db_manager, asset)
+        runner = _make_runner(asset)
         service = BacktestService(
             runner=runner,
             data_source_request=BacktestDataSourceRequest(path=str(tmp_path)),
             initial_balance=Decimal("10000.0"),
             execution=ExecutionConfiguration(latency_ms=0.0, slippage_ticks=0, fee_rate=Decimal("0")),
+            db_manager=NoopDatabaseManager()
         )
         tool = BacktestTool(backtest_service=service)
 
