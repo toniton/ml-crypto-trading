@@ -22,12 +22,12 @@ the [Byzantine Fault Tolerance](https://en.wikipedia.org/wiki/Byzantine_fault) a
 The consensus mechanism evaluates strategy votes for a given direction (`BUY` or `SELL`). Each strategy registered for that direction returns a boolean vote (`True` or `False`).
 
 Quorum is achieved when the quorum margin is non-negative:
-
-$$\text{quorum\_margin} = \text{true\_count} - \text{factor} \times (\text{total} - \text{true\_count}) \ge 0$$
+ 
+$$\text{Quorum Margin} = \text{True Count} - \text{Factor} \times (\text{Total} - \text{True Count}) \ge 0$$
 
 Equivalently, the minimum required `true_count` is:
 
-$$\text{true\_count} \ge \frac{\text{factor}}{1.0 + \text{factor}} \times \text{total}$$
+$$\text{True Count} \ge \frac{\text{Factor}}{1.0 + \text{Factor}} \times \text{Total}$$
 
 - **Buy Consensus (`consensus.buy`)**: The threshold factor that must be reached for a BUY action.
 - **Sell Consensus (`consensus.sell`)**: The threshold factor that must be reached for a SELL action.

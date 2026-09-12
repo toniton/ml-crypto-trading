@@ -86,7 +86,8 @@ dynamic_quantity: "max(min_qty, (balance * 0.02) / close)"
 ### Consensus Configurations
 
 MCT uses a Byzantine Fault Tolerant (BFT) voting system where trade actions execute when consensus quorum is satisfied:
-$$\text{true\_count} \ge \text{factor} \times (\text{total} - \text{true\_count})$$
+
+$$\text{True Count} \ge \text{Factor} \times (\text{Total} - \text{True Count})$$
 
 You can configure consensus per asset depending on your trading strategy:
 
