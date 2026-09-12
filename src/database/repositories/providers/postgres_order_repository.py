@@ -105,3 +105,24 @@ class PostgresOrderRepository(OrderRepository):
         for order_dao in filtered_query:
             result.append(OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, order_dao)))
         return result
+
+    def get_completed_by_ticker_and_executed_range(
+        self, ticker_symbol: str, start: datetime, end: datetime
+    ) -> list[Order]:
+        symbols = {
+            ticker_symbol,
+            ticker_symbol.replace("_", "/"),
+            ticker_symbol.replace("/", "_"),
+            ticker_symbol.replace("-", "_"),
+            ticker_symbol.replace("_", "-"),
+        }
+        query = self.database_session.query(OrderDao).filter(
+            OrderDao.ticker_symbol.in_(list(symbols)),
+            OrderDao.status == OrderStatus.COMPLETED.value,
+            OrderDao.executed_timestamp >= start,
+            OrderDao.executed_timestamp < end,
+        ).order_by(OrderDao.executed_timestamp.asc())
+        return [
+            OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, row))
+            for row in query.all()
+        ]

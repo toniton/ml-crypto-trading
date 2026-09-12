@@ -34,3 +34,9 @@ class OrderRepository(BaseRepository[Order]):
     @abc.abstractmethod
     def get_by_price(self, ticker_symbol: str, price: str):
         raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_completed_by_ticker_and_executed_range(
+            self, ticker_symbol: str, start: datetime, end: datetime
+    ) -> list[Order]:
+        raise NotImplementedError()
