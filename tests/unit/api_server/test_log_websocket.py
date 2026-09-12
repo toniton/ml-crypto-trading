@@ -10,7 +10,9 @@ from src.agent import AgentGateway
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.logging.log_event import LogEvent, LogEventPayload
+from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
+from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 SAMPLE_CONFIG = """
@@ -48,14 +50,16 @@ def make_event(domain="trading", levelno=logging.INFO, asset=None, message="hell
     )
 
 
-from src.vcs.application.service import VCSService
-
 
 def build_client(bus):
+    db_mgr = MagicMock(spec=SqlAlchemyDatabaseManager)
+    vcs = MagicMock(spec=VCSService)
     app = ChatApp.create(
-        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=MagicMock(spec=VCSService)),
+        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=vcs),
         event_bus=bus,
-        db_manager=MagicMock(spec=SqlAlchemyDatabaseManager),
+        db_manager=db_mgr,
+        market_data_store=MarketDataStore(),
+        vcs=vcs,
     )
     return TestClient(app)
 

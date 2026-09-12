@@ -32,6 +32,7 @@ from src.core.interfaces.database_manager import DatabaseManager
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.server import ApiServer
+from src.server.services.dataset_service import DatasetService
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
@@ -367,6 +368,8 @@ class Application(ApplicationLoggingMixin):
                 agent=gateway,
                 event_bus=self._event_bus,
                 db_manager=self._db_manager,
+                market_data_store=self._market_data_store,
+                vcs=self._vcs,
             )
             self._api_server.start()
 
@@ -389,7 +392,10 @@ class Application(ApplicationLoggingMixin):
             strategy_registry=self._strategies_registry,
             activity_queue=self._activity_queue,
             dynamic_quantity=self._dynamic_quantity,
-            data_source_resolver=BacktestDataSourceResolver(self._market_data_store),
+            data_source_resolver=BacktestDataSourceResolver(
+                market_data_store=self._market_data_store,
+                dataset_service=DatasetService(),
+            ),
         )
 
     def _build_backtest_service(self) -> BacktestService:

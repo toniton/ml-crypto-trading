@@ -17,16 +17,20 @@ from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
+from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 
 def build_app(db_manager):
+    vcs = MagicMock(spec=VCSService)
     return ChatApp.create(
-        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=MagicMock(spec=VCSService)),
+        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=vcs),
         event_bus=MessageEventBus(),
         db_manager=db_manager,
+        market_data_store=MarketDataStore(),
+        vcs=vcs,
     )
 
 
@@ -132,7 +136,48 @@ class TestBacktestEndpoints(unittest.TestCase):
 
         self.assertEqual(response.status_code, 404)
 
+    def test_upload_dataset_endpoint(self):
+        db_manager, _ = self._setup_db_manager()
+        client = TestClient(build_app(db_manager))
+
+        csv_content = b"timestamp,open,high,low,close,volume\n2026-01-01T00:00:00,100,105,95,102,1000\n2026-01-01T01:00:00,102,108,101,107,1500\n"
+        response = client.post(
+            "/api/v1/backtests/datasets",
+            files={"file": ("test.csv", csv_content, "text/csv")},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["filename"], "test.csv")
+        self.assertEqual(data["row_count"], 2)
+        self.assertTrue(bool(data["sha256"]))
+
+        list_resp = client.get("/api/v1/backtests/datasets")
+        self.assertEqual(list_resp.status_code, 200)
+        datasets = list_resp.json()
+        self.assertTrue(any(d["id"] == data["id"] for d in datasets))
+
+    def test_upload_semicolon_delimited_dataset_with_extra_columns(self):
+        db_manager, _ = self._setup_db_manager()
+        client = TestClient(build_app(db_manager))
+
+        csv_content = (
+            b"timeOpen;timeClose;timeHigh;timeLow;name;open;high;low;close;volume;marketCap;timestamp\n"
+            b"2026-01-01T00:00:00;2026-01-01T00:01:00;105;95;Bitcoin;100;105;95;102;1000;2000000;2026-01-01T00:00:00Z\n"
+            b"2026-01-01T00:01:00;2026-01-01T00:02:00;108;101;Bitcoin;102;108;101;107;1500;2000000;2026-01-01T00:01:00Z\n"
+        )
+        response = client.post(
+            "/api/v1/backtests/datasets",
+            files={"file": ("btc_semicolon.csv", csv_content, "text/csv")},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["filename"], "btc_semicolon.csv")
+        self.assertEqual(data["row_count"], 2)
+        self.assertTrue(bool(data["sha256"]))
+
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

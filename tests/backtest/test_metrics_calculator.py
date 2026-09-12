@@ -95,3 +95,22 @@ class TestBacktestMetricsCalculator:
         assert summary.session_id == session.id
         assert summary.ticker_symbol == "BTC_USD"
         assert summary.status == session.status.value
+
+    def test_calculates_trade_metrics_and_sharpe_ratio(self):
+        fills = [
+            _fill(TradeAction.BUY, "100", "1"),
+            _fill(TradeAction.SELL, "120", "1"),  # Gain +20
+            _fill(TradeAction.BUY, "100", "1"),
+            _fill(TradeAction.SELL, "90", "1"),   # Loss -10
+        ]
+        result = _result(fills, equity="10010.0")
+        metrics = BacktestMetricsCalculator().calculate(result)
+
+        assert metrics.round_trips == 2
+        assert metrics.total_trades == 2
+        assert metrics.win_rate_pct == Decimal("50.00")
+        assert metrics.profit_factor == Decimal("2.00")
+        assert metrics.total_pnl == Decimal("10.0")
+        assert metrics.sharpe_ratio is not None
+        assert len(metrics.equity_curve) == 3
+        assert metrics.equity_curve[0]["equity"] == 10000.0

@@ -111,13 +111,24 @@ class BacktestDBVSEntityMapper:
     ) -> BacktestResultDao:
         metrics_dict: dict[str, Any] = {}
         if metrics is not None:
-            if isinstance(metrics, dict):
-                metrics_dict = {k: str(v) if isinstance(v, Decimal) else v for k, v in metrics.items()}
-            elif hasattr(metrics, "__dict__"):
-                metrics_dict = {
-                    k: str(v) if isinstance(v, Decimal) else v
-                    for k, v in metrics.__dict__.items()
-                }
+            raw_metrics = (
+                metrics if isinstance(metrics, dict)
+                else getattr(metrics, "__dict__", {})
+            )
+            for k, v in raw_metrics.items():
+                if isinstance(v, Decimal):
+                    metrics_dict[k] = str(v)
+                else:
+                    metrics_dict[k] = v
+
+            if "total_pnl" not in metrics_dict and "absolute_pnl" in metrics_dict:
+                metrics_dict["total_pnl"] = metrics_dict["absolute_pnl"]
+            if "total_trades" not in metrics_dict and "round_trips" in metrics_dict:
+                metrics_dict["total_trades"] = metrics_dict["round_trips"]
+            if "total_orders" not in metrics_dict and "orders_submitted" in metrics_dict:
+                metrics_dict["total_orders"] = metrics_dict["orders_submitted"]
+            if "total_fills" not in metrics_dict and "orders_filled" in metrics_dict:
+                metrics_dict["total_fills"] = metrics_dict["orders_filled"]
 
         execution_dict = {
             "latency_ms": result.execution.latency_ms,

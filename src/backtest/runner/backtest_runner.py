@@ -27,6 +27,8 @@ from src.configuration.strategies_config import StrategiesConfig
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.recorder.market_data_store import MarketDataStore
+from src.server.services.dataset_service import DatasetService
 from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
@@ -59,7 +61,10 @@ class BacktestRunner:
         )
         self._activity_queue = activity_queue or Queue()
         self._dynamic_quantity = dynamic_quantity
-        self._resolver = data_source_resolver or BacktestDataSourceResolver()
+        self._resolver = data_source_resolver or BacktestDataSourceResolver(
+            market_data_store=MarketDataStore(),
+            dataset_service=DatasetService(),
+        )
 
     def run(self, requests: list[BacktestRequest]) -> list[BacktestResult]:
         if not requests:

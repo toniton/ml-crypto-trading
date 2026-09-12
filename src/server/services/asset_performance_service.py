@@ -3,7 +3,7 @@ from __future__ import annotations
 import collections
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
-from typing import Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional
 
 from pydantic import BaseModel
 

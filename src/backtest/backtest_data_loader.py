@@ -25,48 +25,51 @@ class BacktestDataLoader:
         self.data_path = data_path
 
     def load(self, ticker_symbol: str) -> List[HistoricalDataPoint]:
-        base_name = ticker_symbol.replace("/", "_")
-        potential_names = {
-            base_name,
-            base_name.lower(),
-            base_name.upper(),
-            base_name.replace("_", "-"),
-            base_name.replace("_", "-").lower(),
-            base_name.replace("_", "-").upper(),
-            base_name.replace("-", "_"),
-            base_name.replace("-", "_").lower(),
-            base_name.replace("-", "_").upper(),
-            f"audit-{base_name}",
-            f"audit-{base_name.lower()}",
-            f"audit-{base_name.upper()}",
-            f"audit-{base_name.replace('-', '_')}",
-            f"audit-{base_name.replace('-', '_').lower()}",
-            f"audit-{base_name.replace('-', '_').upper()}",
-        }
-        potential_filenames = []
-        for name in potential_names:
-            potential_filenames.append(f"{name}.csv")
-            potential_filenames.append(f"{name}.log")
-            # Support for dated audit logs like audit-BTC_USD-2026-01.log
-            # We can use glob to find these if we want, but let's stick to a few more patterns
-            potential_filenames.append(f"{name}-*.log")
-            potential_filenames.append(f"{name}*.log")
-            potential_filenames.append(f"{name}*.csv")
+        if os.path.isfile(self.data_path):
+            file_path = self.data_path
+        else:
+            base_name = ticker_symbol.replace("/", "_")
+            potential_names = {
+                base_name,
+                base_name.lower(),
+                base_name.upper(),
+                base_name.replace("_", "-"),
+                base_name.replace("_", "-").lower(),
+                base_name.replace("_", "-").upper(),
+                base_name.replace("-", "_"),
+                base_name.replace("-", "_").lower(),
+                base_name.replace("-", "_").upper(),
+                f"audit-{base_name}",
+                f"audit-{base_name.lower()}",
+                f"audit-{base_name.upper()}",
+                f"audit-{base_name.replace('-', '_')}",
+                f"audit-{base_name.replace('-', '_').lower()}",
+                f"audit-{base_name.replace('-', '_').upper()}",
+            }
+            potential_filenames = []
+            for name in potential_names:
+                potential_filenames.append(f"{name}.csv")
+                potential_filenames.append(f"{name}.log")
+                # Support for dated audit logs like audit-BTC_USD-2026-01.log
+                # We can use glob to find these if we want, but let's stick to a few more patterns
+                potential_filenames.append(f"{name}-*.log")
+                potential_filenames.append(f"{name}*.log")
+                potential_filenames.append(f"{name}*.csv")
 
-        import glob
-        file_path = None
-        for pattern in potential_filenames:
-            candidate_pattern = os.path.join(self.data_path, pattern)
-            matches = glob.glob(candidate_pattern)
-            if matches:
-                file_path = matches[0]
-                break
+            import glob
+            file_path = None
+            for pattern in potential_filenames:
+                candidate_pattern = os.path.join(self.data_path, pattern)
+                matches = glob.glob(candidate_pattern)
+                if matches:
+                    file_path = matches[0]
+                    break
 
-        if not file_path:
-            raise FileNotFoundError(
-                f"Historical data file not found for {ticker_symbol} in {self.data_path}. "
-                f"Tried: {', '.join(potential_filenames)}"
-            )
+            if not file_path:
+                raise FileNotFoundError(
+                    f"Historical data file not found for {ticker_symbol} in {self.data_path}. "
+                    f"Tried: {', '.join(potential_filenames)}"
+                )
 
         # Detect separator and format
         first_line = ""

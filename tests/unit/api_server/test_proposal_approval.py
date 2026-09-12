@@ -13,6 +13,7 @@ from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
+from src.recorder.market_data_store import MarketDataStore
 from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
 from tests.unit.api_server.helpers import make_db_manager
 
@@ -70,12 +71,16 @@ def _configuration_llm():
     ])
 
 
+
 def _build_app(config_file, db_manager):
-    gateway = AgentGateway(_configuration_llm(), vcs=VCSService(db_manager))
+    vcs = VCSService(db_manager)
+    gateway = AgentGateway(_configuration_llm(), vcs=vcs)
     return ChatApp.create(
         agent=gateway,
         event_bus=MessageEventBus(),
         db_manager=db_manager,
+        market_data_store=MarketDataStore(),
+        vcs=vcs,
     )
 
 

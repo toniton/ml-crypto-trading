@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from src.agent import AgentGateway
 from src.configuration.trading_config import TradingConfig
 from src.events.message_event_bus import MessageEventBus
+from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
@@ -52,6 +53,8 @@ class TestConfigEndpoints(unittest.TestCase):
             agent=self.agent,
             event_bus=MessageEventBus(),
             db_manager=self.db,
+            market_data_store=MarketDataStore(),
+            vcs=self.vcs,
         )
         self.client = TestClient(self.app)
 

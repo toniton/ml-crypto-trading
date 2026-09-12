@@ -1,14 +1,15 @@
 import asyncio
 from contextlib import asynccontextmanager
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import AsyncGenerator, List, Optional
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket, status
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from api.interfaces.backtest_run_spec import BacktestRunSpec
 from src.agent import AgentGateway, ProposalDecision
 from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.events import AIEvent
@@ -28,20 +29,25 @@ from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsColle
 from src.metrics.services.metric_service import MetricService
 from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
+from src.server.services.asset_performance_service import AssetPerformanceService
+from src.server.services.backtest_application_service import BacktestApplicationService
 from src.server.services.configuration_service import ConfigurationService
 from src.server.services.conversation_service import ConversationService
+from src.server.services.dataset_service import DatasetService, DatasetValidationError
 from src.server.services.order_by_day_service import OrderByDayService
 from src.server.services.order_heatmap_service import OrderHeatmapService
 from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
+from src.vcs.application.service import VCSService
+from src.recorder.market_data_store import MarketDataStore
 
 
 class ChatRequest(BaseModel):
     prompt: Optional[str] = Field(default=None, description="Prompt query")
-    query: Optional[str] = Field(default=None, description="Alternative prompt query field")
+    query: Optional[str] = Field(default=None, description="Alternative prompt query")
     session_id: Optional[str] = Field(
         default=None,
-        description="Conversation session id. Omit to start a new session.",
+        description="Optional session ID. If omitted or not found, a new session is created.",
     )
 
     def get_prompt_text(self) -> str:  # pylint: disable=no-member
@@ -73,6 +79,8 @@ class ChatApp:
             agent: AgentGateway,
             event_bus: EventBus,
             db_manager: DatabaseManager,
+            market_data_store: MarketDataStore,
+            vcs: VCSService,
     ) -> FastAPI:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
@@ -93,11 +101,13 @@ class ChatApp:
 
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0", lifespan=lifespan)
         app.state.agent = agent
+        app.state.vcs = vcs
         app.state.conversation_service = conversation_service
         app.state.configuration_service = configuration_service
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
         app.state.runtime_collector = runtime_collector
         app.state.order_lifecycle_collector = order_lifecycle_collector
+        app.state.market_data_store = market_data_store
 
         app.add_middleware(
             CORSMiddleware,
@@ -150,6 +160,7 @@ class ChatApp:
         order_by_day_service = OrderByDayService(db_manager)
         order_week_service = OrderWeekService(db_manager)
         order_latency_service = OrderLatencyService(db_manager)
+        asset_performance_service = AssetPerformanceService(db_manager)
 
         @app.get("/api/v1/orders/latency/{year}/{month}")
         async def order_latency_endpoint(year: int, month: int):
@@ -170,6 +181,51 @@ class ChatApp:
             ChatApp._validate_date(year, month, day)
             return order_by_day_service.for_date(year, month, day)
 
+        @app.get("/api/v1/performance/assets/{ticker_symbol}")
+        async def asset_performance_endpoint(
+                ticker_symbol: str,
+                start: Optional[str] = None,
+                end: Optional[str] = None,
+        ):
+            now = datetime.now(timezone.utc)
+            try:
+                start_dt = datetime.fromisoformat(start) if start else now - timedelta(days=30)
+                end_dt = datetime.fromisoformat(end) if end else now
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid date format: {exc}",
+                ) from exc
+
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+
+            if start_dt > end_dt:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="'start' date must be before or equal to 'end' date.",
+                )
+
+            return await asyncio.to_thread(
+                asset_performance_service.calculate_performance,
+                ticker_symbol=ticker_symbol,
+                start=start_dt,
+                end=end_dt,
+            )
+
+        dataset_service = DatasetService()
+        app.state.dataset_service = dataset_service
+
+        backtest_service = BacktestApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            market_data_store=market_data_store,
+            dataset_service=dataset_service,
+        )
+        app.state.backtest_service = backtest_service
+
         @app.get("/api/v1/backtests")
         async def list_backtests_endpoint(limit: int = 50):
             with db_manager.get_unit_of_work() as uow:
@@ -186,9 +242,95 @@ class ChatApp:
                         "initial_balance": str(s.request.initial_balance) if s.request else None,
                         "final_equity": str(res.final_equity) if res else None,
                         "created_at": s.created_at.isoformat() if s.created_at else None,
+                        "started_at": s.started_at.isoformat() if s.started_at else None,
+                        "completed_at": s.completed_at.isoformat() if s.completed_at else None,
                         "metrics": metrics,
                     })
                 return results
+
+        @app.post("/api/v1/backtests")
+        async def start_backtest_endpoint(spec: BacktestRunSpec, req: Request):
+            srv: BacktestApplicationService = req.app.state.backtest_service
+            try:
+                session = srv.start_backtest_run(spec)
+                return {
+                    "session_id": session.id,
+                    "ticker_symbol": session.ticker_symbol,
+                    "status": session.status.value if hasattr(session.status, "value") else str(session.status),
+                    "created_at": session.created_at.isoformat() if session.created_at else None,
+                    "started_at": session.started_at.isoformat() if session.started_at else None,
+                }
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=str(exc),
+                ) from exc
+
+        @app.get("/api/v1/backtests/datasets")
+        async def list_datasets_endpoint(req: Request):
+            ds_srv: DatasetService = req.app.state.dataset_service
+            datasets = await asyncio.to_thread(ds_srv.list_datasets)
+            return [d.to_dict() for d in datasets]
+
+        @app.post("/api/v1/backtests/datasets")
+        async def upload_dataset_endpoint(
+                file: UploadFile = File(...),
+                req: Request = None,
+        ):
+            ds_srv: DatasetService = req.app.state.dataset_service
+            content = await file.read()
+            try:
+                metadata = await asyncio.to_thread(
+                    ds_srv.validate_and_save_csv,
+                    filename=file.filename or "dataset.csv",
+                    content=content,
+                )
+                return metadata.to_dict()
+            except DatasetValidationError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=str(exc),
+                ) from exc
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to process CSV dataset: {exc}",
+                ) from exc
+
+        @app.get("/api/v1/backtests/datasets/{dataset_id}")
+        async def get_dataset_endpoint(dataset_id: str, req: Request):
+            ds_srv: DatasetService = req.app.state.dataset_service
+            metadata = await asyncio.to_thread(ds_srv.get_dataset, dataset_id)
+            if not metadata:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Dataset '{dataset_id}' not found.",
+                )
+            return metadata.to_dict()
+
+        @app.get("/api/v1/backtests/recorded-data")
+        async def list_recorded_data_endpoint(req: Request):
+            md_store: Optional[MarketDataStore] = getattr(req.app.state, "market_data_store", None)
+            if not md_store:
+                return []
+            results = []
+            for ticker in md_store.tickers():
+                obs = md_store.observations(ticker)
+                if obs:
+                    start_ts = datetime.fromtimestamp(int(obs[0].timestamp)).isoformat()
+                    end_ts = datetime.fromtimestamp(int(obs[-1].timestamp)).isoformat()
+                    results.append({
+                        "ticker_symbol": ticker,
+                        "observation_count": len(obs),
+                        "start_time": start_ts,
+                        "end_time": end_ts,
+                    })
+            return results
 
         @app.get("/api/v1/backtests/{session_id}")
         async def get_backtest_endpoint(session_id: str):
@@ -196,29 +338,36 @@ class ChatApp:
                 repo = uow.get_repository(PostgresBacktestRepository)
                 session = repo.get_session(session_id)
                 if not session:
-                    raise HTTPException(
-                        status_code=status.HTTP_404_NOT_FOUND,
-                        detail=f"Backtest session '{session_id}' not found.",
-                    )
-                res = repo.get_result(session_id)
-                metrics = repo.get_result_metrics(session_id)
-                return {
-                    "session_id": session.id,
-                    "ticker_symbol": session.ticker_symbol,
-                    "status": session.status.value if hasattr(session.status, "value") else str(session.status),
-                    "created_at": session.created_at.isoformat() if session.created_at else None,
-                    "started_at": session.started_at.isoformat() if session.started_at else None,
-                    "completed_at": session.completed_at.isoformat() if session.completed_at else None,
-                    "initial_balance": str(session.request.initial_balance) if session.request else None,
-                    "final_balance": str(res.final_balance) if res else None,
-                    "final_equity": str(res.final_equity) if res else None,
-                    "execution_config": {
-                        "latency_ms": res.execution.latency_ms,
-                        "slippage_ticks": res.execution.slippage_ticks,
-                        "fee_rate": str(res.execution.fee_rate),
-                    } if res else None,
-                    "metrics": metrics,
-                }
+                    session = None
+                    res = None
+                    metrics = None
+                else:
+                    res = repo.get_result(session_id)
+                    metrics = repo.get_result_metrics(session_id)
+
+            if not session:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Backtest session '{session_id}' not found.",
+                )
+            return {
+                "session_id": session.id,
+                "ticker_symbol": session.ticker_symbol,
+                "status": session.status.value if hasattr(session.status, "value") else str(session.status),
+                "created_at": session.created_at.isoformat() if session.created_at else None,
+                "started_at": session.started_at.isoformat() if session.started_at else None,
+                "completed_at": session.completed_at.isoformat() if session.completed_at else None,
+                "initial_balance": str(session.request.initial_balance) if session.request else None,
+                "final_balance": str(res.final_balance) if res else None,
+                "final_equity": str(res.final_equity) if res else None,
+                "execution_config": {
+                    "latency_ms": res.execution.latency_ms,
+                    "slippage_ticks": res.execution.slippage_ticks,
+                    "fee_rate": str(res.execution.fee_rate),
+                } if res else None,
+                "metrics": metrics,
+            }
+
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:

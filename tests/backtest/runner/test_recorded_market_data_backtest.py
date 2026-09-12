@@ -16,6 +16,7 @@ from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.recorder.market_data_recorder import MarketDataRecorder
 from src.recorder.market_data_store import MarketDataStore
+from src.server.services.dataset_service import DatasetService
 from src.trading.events import MarketDataEvent
 from src.trading.strategies.strategy_registry import StrategyRegistry
 
@@ -56,7 +57,10 @@ class TestRecordedMarketDataBacktest:
         runner = BacktestRunner(
             assets={"BTC_USD": _asset()},
             strategy_registry=StrategyRegistry(),
-            data_source_resolver=BacktestDataSourceResolver(store),
+            data_source_resolver=BacktestDataSourceResolver(
+                market_data_store=store,
+                dataset_service=DatasetService(),
+            ),
         )
         request = BacktestRequest(
             ticker_symbol="BTC_USD",

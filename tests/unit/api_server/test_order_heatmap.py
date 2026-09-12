@@ -6,7 +6,9 @@ from fastapi.testclient import TestClient
 from src.agent import AgentGateway
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
+from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
+from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 SAMPLE_CONFIG = """
@@ -25,14 +27,15 @@ assets:
       sell: 0.5
 """
 
-from src.vcs.application.service import VCSService
-
 
 def build_app(db_manager):
+    vcs = MagicMock(spec=VCSService)
     return ChatApp.create(
-        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=MagicMock(spec=VCSService)),
+        agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=vcs),
         event_bus=MessageEventBus(),
         db_manager=db_manager,
+        market_data_store=MarketDataStore(),
+        vcs=vcs,
     )
 
 

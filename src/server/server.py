@@ -6,7 +6,9 @@ import uvicorn
 from src.agent import AgentGateway
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.database_manager import DatabaseManager
+from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
+from src.vcs.application.service import VCSService
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
@@ -16,16 +18,21 @@ class ApiServer(ApplicationLoggingMixin):
             agent: AgentGateway,
             event_bus: EventBus,
             db_manager: DatabaseManager,
+            market_data_store: MarketDataStore,
+            vcs: VCSService,
             host: str = "127.0.0.1",
             port: int = 8000,
     ):
         self.host = host
         self.port = port
         self.agent = agent
+        self.vcs = vcs
         self.app = ChatApp.create(
             agent=agent,
             event_bus=event_bus,
             db_manager=db_manager,
+            market_data_store=market_data_store,
+            vcs=vcs,
         )
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None
