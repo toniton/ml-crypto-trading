@@ -19,6 +19,7 @@ class OrderDBVSEntityMapper:
             quantity=order_dao.quantity,
             trade_action=TradeAction(order_dao.trade_action),
             created_time=order_dao.created_timestamp.replace(tzinfo=timezone.utc).timestamp(),
+            commit_hash=order_dao.commit_hash,
             executed_time=(
                 order_dao.executed_timestamp.replace(tzinfo=timezone.utc).timestamp()
                 if order_dao.executed_timestamp
@@ -45,6 +46,7 @@ class OrderDBVSEntityMapper:
             quantity=order.quantity,
             trade_action=order.trade_action.value,
             status=order.status.value,
+            commit_hash=order.commit_hash,
             fees=str(order.fees) if order.fees is not None else None,
             fill_price=str(order.fill_price) if order.fill_price is not None else None,
             last_updated_timestamp=datetime.now(timezone.utc),

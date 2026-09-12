@@ -19,6 +19,7 @@ def order_on(day_iso: str, action: TradeAction, status=OrderStatus.COMPLETED, ho
         quantity="0.00005",
         trade_action=action,
         created_time=dt.timestamp(),
+        commit_hash="56339b9",
         executed_time=dt.timestamp() + executed_offset_seconds if status == OrderStatus.COMPLETED else None,
         status=status,
     )

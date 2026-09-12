@@ -157,8 +157,13 @@ class OrderManager(ApplicationLoggingMixin):
                 self._mark_reconciliation_required(order)
                 continue
 
+            order.status = exchange_order.status
+            order.fill_price = exchange_order.fill_price
+            order.fees = exchange_order.fees
+            order.executed_time = exchange_order.executed_time
+
             try:
-                self._save_orders_to_database([exchange_order])
+                self._save_orders_to_database([order])
             except Exception as exc:
                 self.app_logger.warning(
                     f"Failed to persist reconciled order {order.uuid}: {exc}"
@@ -176,7 +181,7 @@ class OrderManager(ApplicationLoggingMixin):
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
             price: Decimal, trade_action: TradeAction,
-            timestamp: float, uuid: str = None
+            timestamp: float, commit_hash: str = "HEAD", uuid: str = None
     ):
         order = Order(
             uuid=uuid or str(uuid4()),
@@ -185,7 +190,8 @@ class OrderManager(ApplicationLoggingMixin):
             provider_name=provider_name,
             trade_action=trade_action,
             ticker_symbol=ticker_symbol,
-            created_time=timestamp
+            created_time=timestamp,
+            commit_hash=commit_hash,
         )
         if self._synchronous_execution:
             self.execute_order(order)

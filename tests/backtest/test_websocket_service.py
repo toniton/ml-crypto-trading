@@ -95,7 +95,8 @@ class TestBacktestWebSocketService:
             status=OrderStatus.COMPLETED,
             provider_name=ExchangeProvidersEnum.CRYPTO_DOT_COM.value,
             trade_action=TradeAction.BUY,
-            created_time=1234567890.0
+            created_time=1234567890.0,
+            commit_hash="56339b9",
         )
         event = OrderFillEvent(order=order)
         event_bus.publish(event)

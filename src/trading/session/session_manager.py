@@ -44,6 +44,18 @@ class SessionManager:
         except Exception:  # pylint: disable=broad-except
             return None
 
+    def get_current_commit_hash(self) -> str:
+        with self._lock:
+            if self.current_session and self.current_session.commit_hash:
+                return self.current_session.commit_hash
+        fetched = self._fetch_head_commit_hash()
+        return fetched or "HEAD"
+
+    def update_commit_hash(self, commit_hash: str) -> None:
+        with self._lock:
+            if self.current_session:
+                self.current_session.commit_hash = commit_hash
+
     def start_session(self) -> None:
         with self._lock:
             if not self.current_session:

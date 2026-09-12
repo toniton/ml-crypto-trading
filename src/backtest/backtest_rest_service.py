@@ -85,6 +85,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             price: str,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
+            commit_hash: str = "HEAD",
     ) -> Order:
         executed_at = created_time if created_time is not None else self.clock.now(ticker_symbol)
         order = Order(
@@ -96,6 +97,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             provider_name=self.get_provider_name(),
             trade_action=trade_action,
             created_time=executed_at,
+            commit_hash=commit_hash,
         )
         self.account.orders.append(order)
         self.execution_engine.submit(order, ticker_symbol)

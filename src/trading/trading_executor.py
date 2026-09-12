@@ -191,13 +191,15 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     )
                     continue
                 quantity = format(quantity_val, "f")
+                commit_hash = self.session_manager.get_current_commit_hash()
                 buy_order = self.order_manager.open_order(
                     ticker_symbol=asset.ticker_symbol,
                     quantity=quantity,
                     price=price,
                     provider_name=asset.exchange.value,
                     trade_action=TradeAction.BUY,
-                    timestamp=market_data.timestamp
+                    timestamp=market_data.timestamp,
+                    commit_hash=commit_hash,
                 )
                 self.activity_queue.put_nowait(buy_order.model_dump_json())
                 self.session_manager.record_position(
@@ -225,7 +227,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     asset=asset.ticker_symbol,
                     action=TradeAction.BUY.value,
                     market_data=market_data,
-                    context=f'order_id={buy_order.uuid},price={price},quantity={quantity}'
+                    context=f'order_id={buy_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
                 )
             except Exception as exc:
                 self.app_logger.error(f"Error processing asset {asset}: {exc}", exc_info=True)
@@ -266,10 +268,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 quantity = format(quantity_val, "f")
                 best_position: MarketData | None = next(iter(open_positions), None)
                 if best_position and base_balance.available_balance >= quantity_val:
+                    commit_hash = self.session_manager.get_current_commit_hash()
                     sell_order = self.order_manager.open_order(
                         price=price, trade_action=TradeAction.SELL,
                         quantity=quantity, provider_name=asset.exchange.value,
-                        ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp
+                        ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp,
+                        commit_hash=commit_hash,
                     )
                     self.activity_queue.put_nowait(sell_order.model_dump_json())
                     self.session_manager.record_position(
@@ -298,7 +302,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         asset=asset.ticker_symbol,
                         action=TradeAction.SELL.value,
                         market_data=market_data,
-                        context=f'order_id={sell_order.uuid},price={price},quantity={quantity}'
+                        context=f'order_id={sell_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
                     )
 
             except Exception as exc:

@@ -43,6 +43,7 @@ class SimulatedRestManager(RestManager):
             price: Decimal,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
+            commit_hash: str = "HEAD",
     ) -> None:
         order = Order(
             uuid=uuid,
@@ -52,6 +53,7 @@ class SimulatedRestManager(RestManager):
             price=price,
             trade_action=trade_action,
             created_time=created_time if created_time is not None else time.time(),
+            commit_hash=commit_hash,
             status=OrderStatus.PENDING
         )
         self._account.add_order(order)

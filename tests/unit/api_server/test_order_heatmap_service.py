@@ -18,6 +18,7 @@ def order_on(day: str, action: TradeAction) -> Order:
         quantity="1",
         trade_action=action,
         created_time=dt.timestamp(),
+        commit_hash="56339b9",
     )
 
 

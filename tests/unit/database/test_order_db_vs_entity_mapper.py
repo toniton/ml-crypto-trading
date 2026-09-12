@@ -21,6 +21,7 @@ def build_dao(**overrides) -> OrderDao:
         quantity="0.00005",
         status=OrderStatus.COMPLETED.value,
         trade_action=TradeAction.BUY.value,
+        commit_hash="56339b9",
         last_updated_timestamp=CREATED_AT,
         created_timestamp=CREATED_AT,
     )
@@ -52,6 +53,7 @@ class TestMapToEntity:
         assert entity.quantity == "0.00005"
         assert entity.trade_action is TradeAction.BUY
         assert entity.created_time == CREATED_AT.timestamp()
+        assert entity.commit_hash == "56339b9"
 
     def test_null_executed_timestamp_maps_to_none(self):
         entity = OrderDBVSEntityMapper.map_to_entity(build_dao(executed_timestamp=None))
@@ -72,11 +74,13 @@ class TestMapToDb:
             quantity="0.001",
             trade_action=TradeAction.BUY,
             created_time=CREATED_AT.timestamp(),
+            commit_hash="56339b9",
             executed_time=None,
             status=OrderStatus.PENDING,
         )
         dao = OrderDBVSEntityMapper.map_to_db(order)
         assert dao.executed_timestamp is None
+        assert dao.commit_hash == "56339b9"
 
     def test_executed_time_maps_to_datetime(self):
         order = Order(
@@ -87,11 +91,13 @@ class TestMapToDb:
             quantity="0.001",
             trade_action=TradeAction.BUY,
             created_time=CREATED_AT.timestamp(),
+            commit_hash="56339b9",
             executed_time=EXECUTED_AT.timestamp(),
             status=OrderStatus.COMPLETED,
         )
         dao = OrderDBVSEntityMapper.map_to_db(order)
         assert dao.executed_timestamp == EXECUTED_AT
+        assert dao.commit_hash == "56339b9"
 
 
 class TestRoundTrip:
@@ -105,6 +111,7 @@ class TestRoundTrip:
             quantity="0.01",
             trade_action=TradeAction.SELL,
             created_time=CREATED_AT.timestamp(),
+            commit_hash="56339b9",
             status=status,
         )
 
@@ -114,6 +121,7 @@ class TestRoundTrip:
         assert restored.uuid == original.uuid
         assert restored.trade_action is original.trade_action
         assert restored.created_time == original.created_time
+        assert restored.commit_hash == original.commit_hash
 
     def test_null_executed_time_survives_round_trip(self):
         original = Order(
@@ -124,12 +132,14 @@ class TestRoundTrip:
             quantity="0.01",
             trade_action=TradeAction.SELL,
             created_time=CREATED_AT.timestamp(),
+            commit_hash="56339b9",
             executed_time=None,
             status=OrderStatus.PENDING,
         )
 
         restored = OrderDBVSEntityMapper.map_to_entity(OrderDBVSEntityMapper.map_to_db(original))
         assert restored.executed_time is None
+        assert restored.commit_hash == original.commit_hash
 
     def test_executed_time_survives_round_trip(self):
         original = Order(
@@ -140,9 +150,11 @@ class TestRoundTrip:
             quantity="0.01",
             trade_action=TradeAction.SELL,
             created_time=CREATED_AT.timestamp(),
+            commit_hash="56339b9",
             executed_time=EXECUTED_AT.timestamp(),
             status=OrderStatus.COMPLETED,
         )
 
         restored = OrderDBVSEntityMapper.map_to_entity(OrderDBVSEntityMapper.map_to_db(original))
         assert restored.executed_time == original.executed_time
+        assert restored.commit_hash == original.commit_hash

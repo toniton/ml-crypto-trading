@@ -17,6 +17,7 @@ class Order:
     quantity: str
     trade_action: TradeAction
     created_time: float
+    commit_hash: Optional[str] = None
     executed_time: Optional[float] = None
     status: Optional[OrderStatus] = OrderStatus.PENDING
     fees: Optional[Decimal] = None

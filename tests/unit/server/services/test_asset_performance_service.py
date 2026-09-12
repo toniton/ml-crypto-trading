@@ -25,6 +25,7 @@ def make_order(
         trade_action=action,
         status=OrderStatus.COMPLETED,
         created_time=dt.timestamp(),
+        commit_hash="56339b9",
         executed_time=dt.timestamp(),
         fees=Decimal(str(fees)),
     )

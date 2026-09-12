@@ -19,6 +19,7 @@ def _create_order(uuid: str, status: OrderStatus, created_time: float) -> Order:
         quantity="1.0",
         trade_action=TradeAction.BUY,
         created_time=created_time,
+        commit_hash="56339b9",
         status=status,
     )
 

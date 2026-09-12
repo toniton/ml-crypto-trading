@@ -13,6 +13,7 @@ class OrderDao(SqlAlchemyDatabaseManager.BaseTableModel):
     quantity = Column(String)
     status = Column(String)
     trade_action = Column(String(4))
+    commit_hash = Column(String, nullable=True)
     fees = Column(String, nullable=True)
     fill_price = Column(String, nullable=True)
     last_updated_timestamp = Column(TIMESTAMP)

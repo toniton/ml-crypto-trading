@@ -11,6 +11,16 @@ from src.trading.orders.order_manager import OrderManager
 from src.core.interfaces.trading_journal import TradingJournal
 
 
+def _make_order(uuid: str, price: str = "100", quantity: str = "1", provider_name: str = "p1",
+                trade_action: TradeAction = TradeAction.BUY, ticker_symbol: str = "BTC",
+                status: OrderStatus = OrderStatus.PENDING, commit_hash: str = "56339b9") -> Order:
+    return Order(
+        uuid=uuid, price=price, quantity=quantity, provider_name=provider_name,
+        trade_action=trade_action, ticker_symbol=ticker_symbol, created_time=time.time(),
+        commit_hash=commit_hash, status=status
+    )
+
+
 class TestOrderManagerConcurrency(unittest.TestCase):
     # pylint: disable=protected-access
     def setUp(self):
@@ -30,8 +40,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
 
     def test_save_orders_uses_isolated_unit_of_work(self):
         orders = [
-            Order(uuid="1", price="100", quantity="1", provider_name="p1",
-                  trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time())
+            _make_order(uuid="1", price="100", quantity="1", provider_name="p1")
         ]
 
         def save_orders():
@@ -50,9 +59,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_journal.record_fill.assert_not_called()
 
     def test_save_orders_updates_journal_for_completed_order(self):
-        order = Order(uuid="2", price="101", quantity="1", provider_name="p1",
-                      trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time(),
-                      status=OrderStatus.COMPLETED)
+        order = _make_order(uuid="2", price="101", quantity="1", provider_name="p1",
+                            status=OrderStatus.COMPLETED)
 
         self.order_manager._save_orders_to_database([order])
 
@@ -61,8 +69,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
     def test_execute_order_uses_isolated_unit_of_work(self):
         self.mock_rest_manager.place_order.return_value = None
 
-        order = Order(uuid="3", price="102", quantity="1", provider_name="p1",
-                      trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time())
+        order = _make_order(uuid="3", price="102", quantity="1", provider_name="p1")
 
         self.order_manager.execute_order(order)
 
@@ -78,9 +85,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertTrue(self.mock_uow.__exit__.called)
 
     def test_get_open_orders_does_not_update_database(self):
-        exchange_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
-                               trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                               created_time=time.time(), status=OrderStatus.PENDING)
+        exchange_order = _make_order(uuid="5", price="104", quantity="1", provider_name="p1",
+                                     status=OrderStatus.PENDING)
         mock_asset = MagicMock()
         mock_asset.ticker_symbol = "BTC"
         mock_asset.exchange.value = "p1"
@@ -95,9 +101,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertEqual(updated, [exchange_order])
 
     def test_get_open_orders_filters_by_ticker(self):
-        exchange_order = Order(uuid="6", price="104", quantity="1", provider_name="p1",
-                               trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                               created_time=time.time(), status=OrderStatus.PENDING)
+        exchange_order = _make_order(uuid="6", price="104", quantity="1", provider_name="p1",
+                                     status=OrderStatus.PENDING)
         mock_asset = MagicMock()
         mock_asset.ticker_symbol = "BTC"
         mock_asset.exchange.value = "p1"
@@ -125,12 +130,10 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.assertEqual(updated, [])
 
     def test_reconcile_pending_orders_updates_database(self):
-        pending_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
-                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                              created_time=time.time(), status=OrderStatus.PENDING)
-        exchange_order = Order(uuid="5", price="104", quantity="1", provider_name="p1",
-                               trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                               created_time=time.time(), status=OrderStatus.COMPLETED)
+        pending_order = _make_order(uuid="5", price="104", quantity="1", provider_name="p1",
+                                    status=OrderStatus.PENDING)
+        exchange_order = _make_order(uuid="5", price="104", quantity="1", provider_name="p1",
+                                     status=OrderStatus.COMPLETED)
         self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
         self.order_manager.get_order = MagicMock(return_value=exchange_order)
         self.order_manager._save_orders_to_database = MagicMock()
@@ -138,12 +141,11 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager.reconcile_pending_orders()
 
         self.order_manager.get_order.assert_called_once_with("p1", "5")
-        self.order_manager._save_orders_to_database.assert_called_once_with([exchange_order])
+        self.order_manager._save_orders_to_database.assert_called_once_with([pending_order])
 
     def test_reconcile_marks_missing_order_as_reconciliation_required(self):
-        pending_order = Order(uuid="6", price="104", quantity="1", provider_name="p1",
-                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                              created_time=time.time(), status=OrderStatus.PENDING)
+        pending_order = _make_order(uuid="6", price="104", quantity="1", provider_name="p1",
+                                    status=OrderStatus.PENDING)
         self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
         self.order_manager.get_order = MagicMock(return_value=None)
         self.order_manager._save_orders_to_database = MagicMock()
@@ -154,12 +156,10 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager._save_orders_to_database.assert_called_once_with([pending_order])
 
     def test_reconcile_marks_unknown_status_as_reconciliation_required(self):
-        pending_order = Order(uuid="7", price="104", quantity="1", provider_name="p1",
-                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                              created_time=time.time(), status=OrderStatus.PENDING)
-        unknown_order = Order(uuid="7", price="104", quantity="1", provider_name="p1",
-                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                              created_time=time.time(), status=None)
+        pending_order = _make_order(uuid="7", price="104", quantity="1", provider_name="p1",
+                                    status=OrderStatus.PENDING)
+        unknown_order = _make_order(uuid="7", price="104", quantity="1", provider_name="p1",
+                                    status=None)
         self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
         self.order_manager.get_order = MagicMock(return_value=unknown_order)
         self.order_manager._save_orders_to_database = MagicMock()
@@ -170,9 +170,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager._save_orders_to_database.assert_called_once_with([pending_order])
 
     def test_reconcile_skips_unregistered_provider(self):
-        pending_order = Order(uuid="11", price="104", quantity="1", provider_name="UNREGISTERED",
-                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                              created_time=time.time(), status=OrderStatus.PENDING)
+        pending_order = _make_order(uuid="11", price="104", quantity="1", provider_name="UNREGISTERED",
+                                    status=OrderStatus.PENDING)
         self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
         self.order_manager.get_order = MagicMock()
         self.order_manager._save_orders_to_database = MagicMock()
@@ -183,9 +182,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager._save_orders_to_database.assert_not_called()
 
     def test_reconcile_leaves_order_on_transient_error(self):
-        pending_order = Order(uuid="8", price="104", quantity="1", provider_name="p1",
-                              trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                              created_time=time.time(), status=OrderStatus.PENDING)
+        pending_order = _make_order(uuid="8", price="104", quantity="1", provider_name="p1",
+                                    status=OrderStatus.PENDING)
         self.order_manager._get_non_terminal_orders = MagicMock(return_value=[pending_order])
         self.order_manager.get_order = MagicMock(side_effect=RuntimeError("network down"))
         self.order_manager._save_orders_to_database = MagicMock()
@@ -199,9 +197,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_rest_manager.cancel_order.return_value = None
         self.order_manager._save_orders_to_database = MagicMock()
 
-        order = Order(uuid="9", price="103", quantity="1", provider_name="p1",
-                      trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                      created_time=time.time(), status=OrderStatus.PENDING)
+        order = _make_order(uuid="9", price="103", quantity="1", provider_name="p1",
+                            status=OrderStatus.PENDING)
 
         self.order_manager._cancel_order(order)
 
@@ -210,9 +207,8 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager._save_orders_to_database.assert_called_once_with([order])
 
     def test_cancel_open_orders_swallows_cancel_failures(self):
-        order = Order(uuid="10", price="103", quantity="1", provider_name="p1",
-                      trade_action=TradeAction.BUY, ticker_symbol="BTC",
-                      created_time=time.time(), status=OrderStatus.PROCESSING)
+        order = _make_order(uuid="10", price="103", quantity="1", provider_name="p1",
+                            status=OrderStatus.PROCESSING)
         self.order_manager._get_non_terminal_orders = MagicMock(return_value=[order])
         self.order_manager._cancel_order = MagicMock(side_effect=RuntimeError("cancel failed"))
 
@@ -223,8 +219,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
     def test_cancel_order_calls_provider(self):
         self.mock_rest_manager.cancel_order.return_value = None
 
-        order = Order(uuid="4", price="103", quantity="1", provider_name="p1",
-                      trade_action=TradeAction.BUY, ticker_symbol="BTC", created_time=time.time())
+        order = _make_order(uuid="4", price="103", quantity="1", provider_name="p1")
 
         self.order_manager._cancel_order(order)
         self.mock_rest_manager.cancel_order.assert_called_once_with("p1", order.uuid)

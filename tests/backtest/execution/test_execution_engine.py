@@ -95,6 +95,7 @@ def _make_order(
     quantity: str = "0.1",
     price: str = "100.00",
     created_time: float = 1000.0,
+    commit_hash: str = "56339b9",
 ) -> Order:
     return Order(
         uuid=uuid,
@@ -104,6 +105,7 @@ def _make_order(
         quantity=quantity,
         trade_action=action,
         created_time=created_time,
+        commit_hash=commit_hash,
     )
 
 

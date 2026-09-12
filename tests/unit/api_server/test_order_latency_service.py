@@ -18,6 +18,7 @@ def order_on(day: str, latency_ms: float, at_hour: int = 10) -> Order:
         quantity="1",
         trade_action=TradeAction.BUY,
         created_time=created.timestamp(),
+        commit_hash="56339b9",
         executed_time=created.timestamp() + latency_ms / 1000,
         status=OrderStatus.COMPLETED,
     )

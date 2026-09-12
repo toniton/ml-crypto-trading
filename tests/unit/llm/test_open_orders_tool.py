@@ -18,6 +18,7 @@ class TestGetOpenOrdersTool(unittest.TestCase):
             quantity="0.1",
             trade_action=TradeAction.BUY,
             created_time=123456.78,
+            commit_hash="56339b9",
             status=OrderStatus.PENDING
         )
 

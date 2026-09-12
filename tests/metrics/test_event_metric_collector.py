@@ -18,6 +18,7 @@ def _order() -> Order:
         quantity="1",
         trade_action=TradeAction.BUY,
         created_time=0.0,
+        commit_hash="56339b9",
     )
 
 

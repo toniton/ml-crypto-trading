@@ -63,6 +63,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
             signal_at=order.created_time,
             submitted_at=order.created_time,
             eligible_at=eligible_at,
+            commit_hash=order.commit_hash,
             execution_timestamp=execution_timestamp,
         )
 
@@ -144,6 +145,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
             submitted_at=pending.submitted_at,
             eligible_at=pending.eligible_at,
             executed_at=float(pending.execution_timestamp),
+            commit_hash=pending.commit_hash,
         )
         self._results.append(result)
 
@@ -206,6 +208,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
             quantity=str(pending.quantity),
             trade_action=pending.trade_action,
             created_time=pending.signal_at,
+            commit_hash=pending.commit_hash,
             status=OrderStatus.CANCELLED,
         )
 
@@ -232,6 +235,7 @@ class BacktestExecutionEngine(ApplicationLoggingMixin):
                     quantity=str(pending.quantity),
                     trade_action=pending.trade_action,
                     created_time=pending.signal_at,
+                    commit_hash=pending.commit_hash,
                     status=OrderStatus.PENDING,
                 ))
         return orders

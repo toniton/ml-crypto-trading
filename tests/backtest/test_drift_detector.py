@@ -34,6 +34,7 @@ def _order(action: TradeAction, price: str, quantity: str, fill_price: str | Non
         quantity=quantity,
         trade_action=action,
         created_time=0.0,
+        commit_hash="56339b9",
         fill_price=Decimal(fill_price) if fill_price is not None else None,
     )
 

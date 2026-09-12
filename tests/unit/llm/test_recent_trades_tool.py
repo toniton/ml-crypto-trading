@@ -23,6 +23,7 @@ class TestRecentTradesTool(unittest.TestCase):
             quantity=qty,
             trade_action=TradeAction.BUY,
             created_time=123.0,
+            commit_hash="56339b9",
             status=OrderStatus.COMPLETED,
         )
 

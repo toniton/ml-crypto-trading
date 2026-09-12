@@ -34,6 +34,7 @@ def _make_order(symbol: str = "BTC_USD", action: TradeAction = TradeAction.BUY) 
         quantity="1.5",
         trade_action=action,
         created_time=1_700_000_000.0,
+        commit_hash="56339b9",
     )
 
 

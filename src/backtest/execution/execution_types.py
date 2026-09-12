@@ -15,6 +15,7 @@ class PendingOrder:
     signal_at: float
     submitted_at: float
     eligible_at: float
+    commit_hash: str = "HEAD"
     execution_timestamp: Optional[int] = None
 
 
@@ -36,3 +37,4 @@ class ExecutionResult:  # pylint: disable=too-many-instance-attributes
     submitted_at: float
     eligible_at: float
     executed_at: float
+    commit_hash: str = "HEAD"
