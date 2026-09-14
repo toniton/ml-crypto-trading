@@ -221,3 +221,45 @@ def test_vcs_concurrent_commits_preserve_integrity(tmp_path):
             current = commit.parent_hash
 
     assert len(seen) >= 1
+
+
+def test_vcs_ref_alias_resolution_and_merge(mock_db_manager):
+    vcs = VCSService(mock_db_manager)
+    config = {
+        "assets": [],
+        "consensus": {"buy": 1.0, "sell": 0.5},
+        "dynamic_quantity": "10",
+    }
+
+    # 1. Seed or commit only to 'HEAD'
+    c1 = vcs.commit(config, author="toni", message="Initial on HEAD", ref="HEAD")
+
+    # 2. Both 'refs/heads/main', 'main', and 'HEAD' must resolve to c1
+    assert vcs.resolve_commit_hash("HEAD") == c1.hash
+    assert vcs.resolve_commit_hash("refs/heads/main") == c1.hash
+    assert vcs.resolve_commit_hash("main") == c1.hash
+
+    # 3. Create branch
+    branch_ref = vcs.branch("refs/heads/backtest/bt-test-1", from_ref="refs/heads/main")
+    assert branch_ref.commit_hash == c1.hash
+
+    # 4. Also resolve by short name 'bt-test-1' and 'backtest/bt-test-1'
+    assert vcs.resolve_commit_hash("bt-test-1") == c1.hash
+    assert vcs.resolve_commit_hash("backtest/bt-test-1") == c1.hash
+    assert vcs.resolve_commit_hash("refs/heads/backtest/bt-test-1") == c1.hash
+
+    # 5. Commit on branch
+    config_branch = {**config, "dynamic_quantity": "25"}
+    c2 = vcs.commit(config_branch, author="toni", message="Branch update", ref="refs/heads/backtest/bt-test-1")
+
+    # 6. Merge branch into 'refs/heads/main'
+    result = vcs.merge(
+        source_ref_or_commit="refs/heads/backtest/bt-test-1",
+        target_ref="refs/heads/main",
+        author="toni",
+        message="Merge backtest into main",
+    )
+    assert result.status == "MERGED"
+    assert vcs.resolve_commit_hash("refs/heads/main") == result.merge_commit_hash
+    assert vcs.resolve_commit_hash("HEAD") == result.merge_commit_hash
+    assert vcs.checkout("refs/heads/main")["dynamic_quantity"] == "25"

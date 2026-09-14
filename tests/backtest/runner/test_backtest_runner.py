@@ -54,6 +54,15 @@ def _buy_lower_strategy() -> StrategyConfig:
     )
 
 
+def _dynamic_rsi_buy_strategy() -> StrategyConfig:
+    return StrategyConfig(
+        name="RsiOversoldBuy",
+        type=StrategyType.DYNAMIC,
+        action=TradeAction.BUY,
+        expression="rsi(14) < 30",
+    )
+
+
 def _ts_str(epoch: int) -> str:
     return datetime.fromtimestamp(epoch, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -73,7 +82,7 @@ def _make_request(tmp_path, ticker_symbol: str = "BTC_USD", **overrides) -> Back
     kwargs = {
         "ticker_symbol": ticker_symbol,
         "start_time": datetime.fromtimestamp(T0, tz=timezone.utc),
-        "end_time": datetime.fromtimestamp(T0 + 2000, tz=timezone.utc),
+        "end_time": datetime.fromtimestamp(T0 + 50000, tz=timezone.utc),
         "data_source": BacktestDataSourceRequest(path=str(tmp_path)),
         "execution": ExecutionConfiguration(latency_ms=0.0, slippage_ticks=0, fee_rate=Decimal("0")),
     }
@@ -102,7 +111,8 @@ class TestBacktestRunner:
 
         assert len(result.market_series) == 3
         assert len(result.portfolio_snapshots) == 3
-        assert result.fills == []
+        assert not result.fills
+
         assert result.final_balance == Decimal("10000.0")
         assert result.final_equity == Decimal("10000.0")
 
@@ -136,6 +146,17 @@ class TestBacktestRunnerFills:
 
         assert [fill.execution_price for fill in result.fills] == [Decimal("100"), Decimal("99")]
         assert result.final_balance == Decimal("9980.10")
+
+    def test_dynamic_rsi_strategy_produces_fills_with_candle_history(self, tmp_path):
+        # 20 points with declining prices to trigger RSI < 30
+        rows = [(T0 + i * 60, str(100 - i * 2)) for i in range(25)]
+        _write_history(tmp_path, "BTC_USD", rows)
+        asset = _make_asset(strategies=[_dynamic_rsi_buy_strategy()], consensus=_consensus())
+        runner = _make_runner(asset)
+
+        result = runner.run_one(_make_request(tmp_path))
+
+        assert len(result.fills) > 0
 
 
 class TestBacktestTool:

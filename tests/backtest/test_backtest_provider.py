@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import Mock
 
@@ -6,8 +7,10 @@ import pytest
 from api.interfaces.asset import Asset
 from api.interfaces.order import OrderStatus
 from api.interfaces.trade_action import TradeAction
+from src.backtest.backtest_data_loader import HistoricalDataPoint
 from src.backtest.backtest_event_bus import BacktestEventBus
 from src.backtest.backtest_rest_service import BacktestRestService
+from src.backtest.data.backtest_data_set import BacktestDataSet
 from src.backtest.events.domain_events import OrderFilledEvent, BalanceUpdateEvent
 from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
 from src.backtest.execution.execution_model import ExecutionModel
@@ -130,3 +133,36 @@ class TestBacktestRestService:
         open_orders = provider.execute(provider.builder().get_open_orders("btc-usd"))
         assert len(open_orders) == 1
         assert open_orders[0].uuid == "order-1"
+
+    def test_get_candles_returns_rolling_history(self, event_bus, mock_clock, engine):
+        points = tuple(
+            HistoricalDataPoint(
+                timestamp=1000 + i * 60,
+                open_price=Decimal("100"),
+                high_price=Decimal("105"),
+                low_price=Decimal("95"),
+                close_price=Decimal("102"),
+                volume=Decimal("10"),
+                market_cap=Decimal("0"),
+            )
+            for i in range(10)
+        )
+        dataset = BacktestDataSet(
+            dataset_id="test",
+            ticker_symbol="btc-usd",
+            start_time=datetime.fromtimestamp(1000, tz=timezone.utc),
+            end_time=datetime.fromtimestamp(1000 + 9 * 60, tz=timezone.utc),
+            data_points=points,
+        )
+        mock_clock.now.return_value = 1000 + 4 * 60  # at index 4 (5 points)
+        provider = BacktestRestService(
+            event_bus=event_bus,
+            clock=mock_clock,
+            datasets={"btc-usd": dataset},
+            execution_engine=engine,
+        )
+
+        builder = provider.builder().candles("btc-usd", "MIN1")
+        candles = provider.execute(builder)
+        assert len(candles) == 5
+        assert candles[-1].start_time == float(1000 + 4 * 60)

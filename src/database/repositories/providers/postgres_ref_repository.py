@@ -47,6 +47,17 @@ class PostgresRefRepository(RefRepository):
         assert dao is not None
         return dao
 
+    def delete_reference(self, name: str) -> bool:
+        deleted = (
+            self.database_session.query(ReferenceDao)
+            .filter(ReferenceDao.name == name)
+            .delete()
+        )
+        return deleted > 0
+
+    def delete(self, entity_id: str) -> bool:
+        return self.delete_reference(entity_id)
+
     def list_all(self) -> List[Reference]:
         daos = self.database_session.query(ReferenceDao).all()
         return [Reference(name=d.name, commit_hash=d.commit_hash, updated_at=d.updated_at) for d in daos]

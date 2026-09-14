@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import bisect
 from decimal import Decimal
 from typing import Any, Optional
 from uuid import uuid4
@@ -20,6 +23,8 @@ from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
+    DEFAULT_CANDLES_LIMIT = 300
+
     def __init__(
             self,
             clock: BacktestClock,
@@ -122,14 +127,26 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             if order.uuid == uuid and order.status == OrderStatus.PENDING:
                 order.status = OrderStatus.CANCELLED
 
-    def _handle_candles(self, ticker_symbol: str, timeframe: Timeframe) -> list[Candle]:  # pylint: disable=unused-argument
-        market_data = self._handle_market_data(ticker_symbol)
+    def _handle_candles(
+            self,
+            ticker_symbol: str,
+            timeframe: Timeframe = None,  # pylint: disable=unused-argument
+            limit: int = DEFAULT_CANDLES_LIMIT,
+    ) -> list[Candle]:
+
+        dataset = self.datasets.get(ticker_symbol)
+        if not dataset or not dataset.data_points:
+            return []
+        current = self.clock.now(ticker_symbol)
+        idx = bisect.bisect_right(dataset.timestamps, current)
+        start_idx = max(0, idx - limit) if limit else 0
         return [
             Candle(
-                open=market_data.close_price,
-                high=market_data.high_price,
-                low=market_data.low_price,
-                close=market_data.close_price,
-                start_time=float(market_data.timestamp),
+                open=p.open_price,
+                high=p.high_price,
+                low=p.low_price,
+                close=p.close_price,
+                start_time=float(p.timestamp),
             )
+            for p in dataset.data_points[start_idx:idx]
         ]

@@ -31,6 +31,7 @@ from src.server.log_websocket import LogWebSocketHandler
 from src.server.response_reconstructor import ResponseReconstructor
 from src.server.services.asset_performance_service import AssetPerformanceService
 from src.server.services.backtest_application_service import BacktestApplicationService
+from src.server.services.backtest_service import BacktestService
 from src.server.services.configuration_service import ConfigurationService
 from src.server.services.conversation_service import ConversationService
 from src.server.services.dataset_service import DatasetService, DatasetValidationError
@@ -39,7 +40,30 @@ from src.server.services.order_heatmap_service import OrderHeatmapService
 from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
 from src.vcs.application.service import VCSService
+from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
 from src.recorder.market_data_store import MarketDataStore
+
+
+class CreateBranchRequest(BaseModel):
+    name: str = Field(description="Name of the backtest branch")
+    description: Optional[str] = Field(default="", description="Branch description")
+    source_commit_hash: Optional[str] = Field(default=None, description="Source commit hash to fork from")
+    author: Optional[str] = Field(default="user", description="Author")
+
+
+class UpdateAssetConfigRequest(BaseModel):
+    asset: dict = Field(description="Asset configuration object")
+    author: Optional[str] = Field(default="user", description="Author")
+    message: Optional[str] = Field(default=None, description="Commit message")
+
+
+class MergeBranchRequest(BaseModel):
+    commit_hash: Optional[str] = Field(default=None, description="Commit hash to merge")
+    target_ref: Optional[str] = Field(default="refs/heads/main", description="Target branch ref")
+    author: Optional[str] = Field(default="user", description="Author")
+    message: Optional[str] = Field(default=None, description="Merge commit message")
+    expected_target_head: Optional[str] = Field(default=None, description="Expected target HEAD for optimistic locking")
+    resolved_config: Optional[dict] = Field(default=None, description="Resolved config if conflicts were manually resolved")
 
 
 class ChatRequest(BaseModel):
@@ -225,6 +249,134 @@ class ChatApp:
             dataset_service=dataset_service,
         )
         app.state.backtest_service = backtest_service
+
+        backtest_branch_service = BacktestService(db_manager)
+        app.state.backtest_branch_service = backtest_branch_service
+
+        @app.get("/api/v1/backtests/branches")
+        async def list_backtest_branches_endpoint():
+            return await asyncio.to_thread(backtest_branch_service.list_branches)
+
+        @app.post("/api/v1/backtests/branches")
+        async def create_backtest_branch_endpoint(payload: CreateBranchRequest):
+            try:
+                return await asyncio.to_thread(
+                    backtest_branch_service.create_branch,
+                    name=payload.name,
+                    description=payload.description,
+                    source_commit_hash=payload.source_commit_hash,
+                    author=payload.author or "user",
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to create backtest branch: {exc}",
+                ) from exc
+
+        @app.get("/api/v1/backtests/branches/{branch_id}")
+        async def get_backtest_branch_endpoint(branch_id: str):
+            try:
+                return await asyncio.to_thread(backtest_branch_service.get_branch, branch_id=branch_id)
+            except InvalidReferenceError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Backtest branch '{branch_id}' not found.",
+                ) from exc
+
+        @app.delete("/api/v1/backtests/branches/{branch_id}")
+        async def delete_backtest_branch_endpoint(branch_id: str):
+            try:
+                deleted = await asyncio.to_thread(backtest_branch_service.delete_branch, branch_id=branch_id)
+                return {"branch_id": branch_id, "deleted": deleted}
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
+
+        @app.get("/api/v1/backtests/branches/{branch_id}/configuration")
+        async def get_branch_configuration_endpoint(branch_id: str, commit_hash: Optional[str] = None):
+            try:
+                return await asyncio.to_thread(
+                    backtest_branch_service.get_configuration,
+                    branch_id=branch_id,
+                    commit_hash=commit_hash,
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Failed to load configuration: {exc}",
+                ) from exc
+
+        @app.put("/api/v1/backtests/branches/{branch_id}/configuration/assets/{asset_symbol}")
+        async def update_branch_asset_configuration_endpoint(
+            branch_id: str,
+            asset_symbol: str,
+            payload: UpdateAssetConfigRequest,
+        ):
+            try:
+                return await asyncio.to_thread(
+                    backtest_branch_service.update_asset_configuration,
+                    branch_id=branch_id,
+                    asset_symbol=asset_symbol,
+                    asset_data=payload.asset,
+                    author=payload.author or "user",
+                    message=payload.message,
+                )
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Configuration validation failed: {exc}",
+                ) from exc
+
+        @app.post("/api/v1/backtests/branches/{branch_id}/merge-preview")
+        async def preview_branch_merge_endpoint(
+            branch_id: str,
+            payload: Optional[MergeBranchRequest] = None,
+        ):
+            commit_hash = payload.commit_hash if payload else None
+            target_ref = (payload.target_ref if payload and payload.target_ref else "refs/heads/main")
+            try:
+                preview = await asyncio.to_thread(
+                    backtest_branch_service.preview_merge,
+                    branch_id=branch_id,
+                    commit_hash=commit_hash,
+                    target_ref=target_ref,
+                )
+                return preview.model_dump()
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to preview merge: {exc}",
+                ) from exc
+
+        @app.post("/api/v1/backtests/branches/{branch_id}/merge")
+        async def execute_branch_merge_endpoint(
+            branch_id: str,
+            payload: MergeBranchRequest,
+        ):
+            try:
+                result = await asyncio.to_thread(
+                    backtest_branch_service.execute_merge,
+                    branch_id=branch_id,
+                    commit_hash=payload.commit_hash,
+                    target_ref=payload.target_ref or "refs/heads/main",
+                    author=payload.author or "user",
+                    message=payload.message,
+                    expected_target_head=payload.expected_target_head,
+                    resolved_config=payload.resolved_config,
+                )
+                return result.model_dump()
+            except VcsError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=str(exc),
+                ) from exc
+            except Exception as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Merge execution failed: {exc}",
+                ) from exc
 
         @app.get("/api/v1/backtests")
         async def list_backtests_endpoint(limit: int = 50):

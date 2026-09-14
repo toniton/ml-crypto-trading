@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Optional
 
 from api.interfaces.backtest_request import BacktestRequest
 from src.backtest.backtest_data_loader import HistoricalDataPoint
@@ -33,18 +34,23 @@ class RecordedMarketDataSource(DataSource[BacktestRequest, BacktestDataSet]):
                 f"No recorded market data for {request.ticker_symbol}."
             )
 
-        data_points = tuple(
-            HistoricalDataPoint(
-                timestamp=int(item.timestamp),
-                open_price=item.close_price,
-                high_price=item.high_price,
-                low_price=item.low_price,
-                close_price=item.close_price,
-                volume=item.volume,
-                market_cap=Decimal("0"),
+        data_points_list: list[HistoricalDataPoint] = []
+        prev_close: Optional[Decimal] = None
+        for item in market_data_items:
+            open_price = prev_close if prev_close is not None else item.close_price
+            prev_close = item.close_price
+            data_points_list.append(
+                HistoricalDataPoint(
+                    timestamp=int(item.timestamp),
+                    open_price=open_price,
+                    high_price=item.high_price,
+                    low_price=item.low_price,
+                    close_price=item.close_price,
+                    volume=item.volume,
+                    market_cap=Decimal("0"),
+                )
             )
-            for item in market_data_items
-        )
+        data_points = tuple(data_points_list)
 
         return BacktestDataSet(
             dataset_id=(
