@@ -132,7 +132,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def _prepare_trade_context(self, asset: Asset) -> tuple[AccountBalance, MarketData, list[Candle], Fees]:
         quote_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
-        self.session_manager.update_available_balance(asset.key, quote_balance.available_balance)
+        if self.session_manager:
+            self.session_manager.update_available_balance(asset.key, quote_balance.available_balance)
         if quote_balance.available_balance <= 0:
             self.app_logger.debug(f"Balance too low for {asset}: {quote_balance}")
             raise ValueError(f"Insufficient balance for {asset.quote_ticker_symbol}")
@@ -165,9 +166,18 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 self.app_logger.debug("Skipping BUY for disabled asset %s", asset.ticker_symbol)
                 continue
             try:
+                if self.session_manager and self.session_manager.get_trading_context(asset.key) is None:
+                    if self.account_manager and not self.account_manager.init_asset_balance(
+                            asset, self.session_manager
+                    ):
+                        self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
+                        continue
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-                trading_context = self.session_manager.get_trading_context(asset.key)
-                if trading_context is None:
+                trading_context = (
+                    self.session_manager.get_trading_context(asset.key)
+                    if self.session_manager else None
+                )
+                if trading_context is None and self.session_manager is not None:
                     self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
                     continue
                 decision = self._evaluate_decision(
@@ -241,7 +251,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 self.app_logger.debug("Skipping SELL for disabled asset %s", asset.ticker_symbol)
                 continue
             try:
-                trading_context = self.session_manager.get_trading_context(asset.key)
+                trading_context = self.session_manager.get_trading_context(asset.key) if self.session_manager else None
+                if trading_context is None and self.session_manager and self.account_manager:
+                    if not self.account_manager.init_asset_balance(asset, self.session_manager):
+                        continue
+                    trading_context = self.session_manager.get_trading_context(asset.key)
                 if not trading_context or not trading_context.open_positions:
                     self.app_logger.debug(f"No open positions for {asset}")
                     continue

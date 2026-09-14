@@ -49,15 +49,23 @@ class AccountManager(ApplicationLoggingMixin):
         for provider_name in self._websocket_manager.get_registered_services():
             self._websocket_manager.unsubscribe_account_balance(exchange=provider_name)
 
+    def init_asset_balance(self, asset: Asset, session_manager: SessionManager) -> bool:
+        if session_manager.get_trading_context(asset.key) is not None:
+            return True
+        try:
+            opening_balance = self.get_quote_balance(asset, asset.exchange.value)
+            session_manager.init_asset_balance(asset, opening_balance.available_balance)
+            return True
+        except Exception:
+            self.app_logger.error(
+                f"Unable to initialize account balance for {asset} from {asset.exchange}",
+                exc_info=True,
+            )
+            return False
+
     def init_account_balances(self, session_manager: SessionManager):
         for asset in self.assets:
-            exchange = asset.exchange
-            try:
-                opening_balance = self.get_quote_balance(asset, exchange.value)
-                session_manager.init_asset_balance(asset, opening_balance.available_balance)
-            except Exception:
-                self.app_logger.error(f"Unable to initialize account balance for {asset} from {exchange}",
-                                      exc_info=True)
+            self.init_asset_balance(asset, session_manager)
 
     def get_base_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
         currency_symbol = asset.base_ticker_symbol

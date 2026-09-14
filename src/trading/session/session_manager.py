@@ -70,7 +70,7 @@ class SessionManager:
                 raise ValueError("No active session.")
 
             if asset.key in self.current_session.trading_contexts:
-                raise ValueError(f"Asset {asset.key} already initialized.")
+                return
 
             ctx = TradingContext(
                 starting_balance=starting_balance, ticker_symbol=asset.ticker_symbol,

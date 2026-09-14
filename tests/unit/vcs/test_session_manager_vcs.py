@@ -65,3 +65,17 @@ def test_session_manager_uninitialized_asset_returns_none():
     session_mgr = SessionManager()
     session_mgr.create_session(session_id="test_safe_get")
     assert session_mgr.get_trading_context(99999) is None
+
+
+def test_session_manager_init_asset_balance_idempotent():
+    session_mgr = SessionManager()
+    session_mgr.create_session(session_id="test_idempotent")
+    mock_asset = MagicMock()
+    mock_asset.key = 123
+    mock_asset.ticker_symbol = "BTC/USDT"
+    mock_asset.exchange.value = "BINANCE"
+
+    session_mgr.init_asset_balance(mock_asset, Decimal("100.0"))
+    session_mgr.init_asset_balance(mock_asset, Decimal("200.0"))
+
+    assert session_mgr.get_trading_context(123).starting_balance == Decimal("100.0")
