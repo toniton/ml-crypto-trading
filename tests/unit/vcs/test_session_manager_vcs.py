@@ -60,3 +60,8 @@ def test_session_manager_explicit_hash_overrides_auto_fetch():
 
     assert session_mgr.current_session.commit_hash == explicit_hash
     mock_vcs.head.assert_not_called()
+
+def test_session_manager_uninitialized_asset_returns_none():
+    session_mgr = SessionManager()
+    session_mgr.create_session(session_id="test_safe_get")
+    assert session_mgr.get_trading_context(99999) is None

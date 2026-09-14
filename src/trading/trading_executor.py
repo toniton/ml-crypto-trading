@@ -167,6 +167,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             try:
                 account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
                 trading_context = self.session_manager.get_trading_context(asset.key)
+                if trading_context is None:
+                    self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
+                    continue
                 decision = self._evaluate_decision(
                     asset, TradeAction.BUY, trading_context, market_data, candles
                 )
@@ -234,9 +237,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def create_sell_order(self, assets: list[Asset]):
         for asset in assets:
+            if not asset.enabled:
+                self.app_logger.debug("Skipping SELL for disabled asset %s", asset.ticker_symbol)
+                continue
             try:
                 trading_context = self.session_manager.get_trading_context(asset.key)
-                if not trading_context.open_positions:
+                if not trading_context or not trading_context.open_positions:
                     self.app_logger.debug(f"No open positions for {asset}")
                     continue
                 _, market_data, candles, fees = self._prepare_trade_context(asset)
@@ -252,12 +258,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 if decision is None or not decision.quorum:
                     continue
 
-                open_positions: list[MarketData] = sorted(
-                    trading_context.open_positions,
-                    key=lambda o, _current_price=market_data.close_price:
-                    (float(_current_price) - float(o.close_price)) / float(o.close_price)
-                )
-
                 quantity_val = self._calculate_quantity(asset, TradeAction.SELL, market_data, decision)
                 if quantity_val is None:
                     self.app_logger.warning(
@@ -266,8 +266,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     )
                     continue
                 quantity = format(quantity_val, "f")
-                best_position: MarketData | None = next(iter(open_positions), None)
-                if best_position and base_balance.available_balance >= quantity_val:
+                if base_balance.available_balance >= quantity_val:
                     commit_hash = self.session_manager.get_current_commit_hash()
                     sell_order = self.order_manager.open_order(
                         price=price, trade_action=TradeAction.SELL,
@@ -302,7 +301,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         asset=asset.ticker_symbol,
                         action=TradeAction.SELL.value,
                         market_data=market_data,
-                        context=f'order_id={sell_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
+                        context=(
+                            f'order_id={sell_order.uuid},price={price},'
+                            f'quantity={quantity},commit_hash={commit_hash}'
+                        )
                     )
 
             except Exception as exc:
@@ -372,6 +374,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             decision: ConsensusDecision,
     ) -> Decimal | None:
         trading_context = self.session_manager.get_trading_context(asset.key)
+        if trading_context is None:
+            return None
         account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
         candles = self.market_data_manager.get_candles(asset)
 

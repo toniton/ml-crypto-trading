@@ -78,13 +78,19 @@ class SessionManager:
             )
             self.current_session.trading_contexts[asset.key] = ctx
 
-    def get_trading_context(self, asset_key: int) -> TradingContext:
+    def get_trading_context(self, asset_key: int) -> Optional[TradingContext]:
         with self._lock:
-            return self.current_session.trading_contexts[asset_key]
+            if not self.current_session:
+                return None
+            return self.current_session.trading_contexts.get(asset_key)
 
     def update_available_balance(self, asset_key: int, available_balance: Decimal) -> None:
         with self._lock:
-            self.current_session.trading_contexts[asset_key].available_balance = available_balance
+            if not self.current_session:
+                return
+            ctx = self.current_session.trading_contexts.get(asset_key)
+            if ctx is not None:
+                ctx.available_balance = available_balance
 
     def record_position(self, asset_id: int, market_data: MarketData, trade_action: TradeAction,
                         quantity: Decimal = Decimal(0), price: Decimal = Decimal(0)) -> None:
