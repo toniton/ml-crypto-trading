@@ -61,7 +61,6 @@ class BacktestService(ApplicationLoggingMixin):
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 
-
     def list_branches(self) -> List[Dict[str, Any]]:
         refs = self.vcs.list_branches(prefix="refs/heads/backtest/")
         results: List[Dict[str, Any]] = []
@@ -157,9 +156,9 @@ class BacktestService(ApplicationLoggingMixin):
         return self.vcs.delete_branch(ref_name)
 
     def get_configuration(
-        self,
-        branch_id: str,
-        commit_hash: Optional[str] = None,
+            self,
+            branch_id: str,
+            commit_hash: Optional[str] = None,
     ) -> Dict[str, Any]:
         ref_or_hash = commit_hash or f"refs/heads/backtest/{branch_id}"
         config_dict = self.vcs.checkout(ref_or_hash)
@@ -174,9 +173,9 @@ class BacktestService(ApplicationLoggingMixin):
 
     @staticmethod
     def _merge_asset_data(
-        assets: List[Dict[str, Any]],
-        asset_symbol: str,
-        asset_data: Dict[str, Any],
+            assets: List[Dict[str, Any]],
+            asset_symbol: str,
+            asset_data: Dict[str, Any],
     ) -> List[Dict[str, Any]]:
         merged_assets: List[Dict[str, Any]] = copy.deepcopy(assets)
         norm_target = asset_symbol.replace("/", "_").upper()
@@ -196,12 +195,12 @@ class BacktestService(ApplicationLoggingMixin):
         return merged_assets
 
     def update_asset_configuration(
-        self,
-        branch_id: str,
-        asset_symbol: str,
-        asset_data: Dict[str, Any],
-        author: str = "user",
-        message: Optional[str] = None,
+            self,
+            branch_id: str,
+            asset_symbol: str,
+            asset_data: Dict[str, Any],
+            author: str = "user",
+            message: Optional[str] = None,
     ) -> Dict[str, Any]:
         ref_name = f"refs/heads/backtest/{branch_id}"
         current_config = self.vcs.checkout(ref_name)
