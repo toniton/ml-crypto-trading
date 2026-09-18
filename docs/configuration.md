@@ -9,17 +9,19 @@ configuration files.
 
 These properties control the fundamental behavior of the bot, runtime modes, and external connectivity.
 
-| Property       | CLI Argument    | Env Variable               | Description                                          | Default          |
-|----------------|-----------------|----------------------------|------------------------------------------------------|------------------|
-| Environment    | -               | `APP_ENV`                  | Environment mode (`staging`, `production`)           | -                |
-| Assets Config  | `--assets-conf` | -                          | Path to the `trading-config.yaml` configuration file | Required         |
-| Simulated Mode | `--simulated`   | -                          | Enable in-memory order execution (paper trading)     | `false`          |
-| Headless Mode  | `--headless`    | -                          | Run without interactive/UI processes                 | `false`          |
-| Database Host  | -               | `DATABASE_CONNECTION_HOST` | Host and port for PostgreSQL connection              | `localhost:5432` |
-| Postgres User  | -               | `POSTGRES_USER`            | Database username                                    | `postgres`       |
-| Postgres DB    | -               | `POSTGRES_DATABASE`        | Database name                                        | `trading_bot`    |
-| Log Directory  | -               | `LOG_DIR`                  | Destination folder for log files                     | `.`              |
-| Log Level      | -               | `LOG_LEVEL`                | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)  | Env-dependent    |
+| Property       | CLI Argument               | Env Variable               | Description                                          | Default          |
+|----------------|----------------------------|----------------------------|------------------------------------------------------|------------------|
+| Environment    | -                          | `APP_ENV`                  | Environment mode (`staging`, `production`)           | -                |
+| Assets Config  | `--assets-conf`            | -                          | Path to the `trading-config.yaml` configuration file | Required         |
+| Simulated Mode | `--simulated`              | -                          | Enable in-memory order execution (paper trading)     | `false`          |
+| Headless Mode  | `--headless`               | -                          | Run without interactive/UI processes                 | `false`          |
+| API Host       | `--api-host` / `--host`    | `HOST` / `API_HOST`        | Host interface for the REST API server to bind to    | `0.0.0.0`        |
+| API Port       | `--api-port` / `--port`    | `PORT` / `API_PORT`        | Port for the REST API server to listen on            | `8000`           |
+| Database Host  | -                          | `DATABASE_CONNECTION_HOST` | Host and port for PostgreSQL connection              | `localhost:5432` |
+| Postgres User  | -                          | `POSTGRES_USER`            | Database username                                    | `postgres`       |
+| Postgres DB    | -                          | `POSTGRES_DATABASE`        | Database name                                        | `trading_bot`    |
+| Log Directory  | -                          | `LOG_DIR`                  | Destination folder for log files                     | `.`              |
+| Log Level      | -                          | `LOG_LEVEL`                | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`)  | Env-dependent    |
 
 ### Exchange & CCXT Credentials
 

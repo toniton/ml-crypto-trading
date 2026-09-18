@@ -68,6 +68,53 @@ class TestApplicationHeadless(unittest.TestCase):
     @patch("src.application.ModelFactory")
     @patch("src.application.TradingEngine")
     @patch("src.application.ApiServer")
+    def test_application_passes_custom_api_host_and_port(
+            self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
+            mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients
+    ):
+        from src.application import Application
+        from src.configuration.environment_config import EnvironmentConfig
+        from src.configuration.llm_config import LlmConfig
+        from src.configuration.trading_config import TradingConfig
+        from src.vcs.application.service import VCSService
+
+        mock_vcs.return_value = MagicMock(spec=VCSService)
+
+        app_config = ApplicationConfig(
+            trading_config_filepath="config.yaml",
+            headless=False,
+            api_host="127.0.0.1",
+            api_port=9090,
+        )
+        env_config = MagicMock(spec=EnvironmentConfig)
+        trading_config = MagicMock(spec=TradingConfig)
+        trading_config.assets = []
+        trading_config.consensus = MagicMock()
+        trading_config.dynamic_quantity = None
+        llm_config = LlmConfig()
+
+        mock_server_instance = MagicMock()
+        mock_api_server_cls.return_value = mock_server_instance
+
+        app = Application(app_config, env_config, trading_config, llm_config)
+        app.startup()
+
+        mock_api_server_cls.assert_called_once()
+        _, kwargs = mock_api_server_cls.call_args
+        self.assertEqual(kwargs["host"], "127.0.0.1")
+        self.assertEqual(kwargs["port"], 9090)
+
+        app.shutdown()
+
+    @patch("src.application.Application._setup_clients")
+    @patch("src.application.Application._setup_configuration")
+    @patch("src.application.SqlAlchemyDatabaseManager")
+    @patch("src.application.VCSService")
+    @patch("src.application.RefChangeListener")
+    @patch("src.trading.managers.manager_factory.ClientFactory")
+    @patch("src.application.ModelFactory")
+    @patch("src.application.TradingEngine")
+    @patch("src.application.ApiServer")
     def test_application_skips_api_server_when_headless(
             self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
             mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients

@@ -370,6 +370,8 @@ class Application(ApplicationLoggingMixin):
                 db_manager=self._db_manager,
                 market_data_store=self._market_data_store,
                 vcs=self._vcs,
+                host=self._application_config.api_host,
+                port=self._application_config.api_port,
             )
             self._api_server.start()
 

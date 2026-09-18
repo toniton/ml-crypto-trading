@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import Field, model_validator
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,6 +18,14 @@ class ApplicationConfig(BaseSettings):
     backtest_latency_ms: float = Field(default=500.0, alias="backtest-latency-ms")
     backtest_slippage_ticks: int = Field(default=2, alias="backtest-slippage-ticks")
     backtest_fee_rate: float = Field(default=0.001, alias="backtest-fee-rate")
+    api_host: str = Field(
+        default="0.0.0.0",
+        validation_alias=AliasChoices("api_host", "api-host", "host", "HOST", "API_HOST"),
+    )
+    api_port: int = Field(
+        default=8000,
+        validation_alias=AliasChoices("api_port", "api-port", "port", "PORT", "API_PORT"),
+    )
 
     model_config = SettingsConfigDict(
         cli_parse_args=True,

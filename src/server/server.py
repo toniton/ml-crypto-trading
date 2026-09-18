@@ -20,7 +20,7 @@ class ApiServer(ApplicationLoggingMixin):
             db_manager: DatabaseManager,
             market_data_store: MarketDataStore,
             vcs: VCSService,
-            host: str = "127.0.0.1",
+            host: str = "0.0.0.0",
             port: int = 8000,
     ):
         self.host = host
