@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
+from decimal import Decimal
 from unittest.mock import MagicMock
 
+from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.database.dao.order_dao import OrderDao
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
@@ -52,3 +54,29 @@ class TestGetNonTerminal:
         assert len(result) == 1
         assert result[0].status is OrderStatus.PROCESSING
         assert result[0].uuid == dao.uuid
+
+
+class TestUpsert:
+    def test_upsert_executes_statement_with_commit_hash(self):
+        session = MagicMock()
+        repo = PostgresOrderRepository(database_session=session)
+
+        order = Order(
+            uuid="test-uuid-123",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63000.00"),
+            quantity="0.05",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            commit_hash="a" * 64,
+            status=OrderStatus.PENDING,
+        )
+
+        repo.upsert(order)
+
+        session.execute.assert_called_once()
+        executed_clause = session.execute.call_args[0][0]
+        compiled_params = executed_clause.compile().params
+        assert compiled_params.get("commit_hash") == "a" * 64
+        assert compiled_params.get("uuid") == "test-uuid-123"

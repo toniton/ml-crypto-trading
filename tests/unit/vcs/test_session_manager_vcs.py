@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 
 from api.interfaces.asset import Asset
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.session.session_manager import SessionManager
 from src.vcs.domain.commit import Commit
 
@@ -79,3 +80,16 @@ def test_session_manager_init_asset_balance_idempotent():
     session_mgr.init_asset_balance(mock_asset, Decimal("200.0"))
 
     assert session_mgr.get_trading_context(123).starting_balance == Decimal("100.0")
+
+
+def test_manager_factory_injects_config_vcs_into_session_manager():
+    mock_vcs = MagicMock()
+    mock_db = MagicMock()
+    container, _ = ManagerFactory.build_manager_container(
+        database_manager=mock_db,
+        assets=[],
+        config_vcs=mock_vcs,
+    )
+
+    # pylint: disable=protected-access
+    assert container.session_manager._config_vcs is mock_vcs

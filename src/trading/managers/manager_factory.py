@@ -12,6 +12,7 @@ from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
+from src.vcs.application import VCSService
 
 
 class ManagerFactory:
@@ -24,6 +25,7 @@ class ManagerFactory:
             event_bus=None,
             metric_service: Optional[MetricService] = None,
             metrics_collector: Optional[ExchangeMetricsCollector] = None,
+            config_vcs: Optional[VCSService] = None,
     ) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
         trading_journal = InMemoryTradingJournal()
         collector = metrics_collector or (
@@ -47,7 +49,7 @@ class ManagerFactory:
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
             consensus_manager=ConsensusManager(),
             protection_manager=ProtectionManager(),
-            session_manager=SessionManager(),
+            session_manager=SessionManager(config_vcs=config_vcs),
             websocket_manager=websocket_manager,
             rest_manager=rest_manager,
         )

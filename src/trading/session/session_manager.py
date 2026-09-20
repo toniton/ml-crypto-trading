@@ -12,10 +12,11 @@ from api.interfaces.session_time import SessionTime
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.trading_session import TradingSession
+from src.vcs.application import VCSService
 
 
 class SessionManager:
-    def __init__(self, config_vcs=None):
+    def __init__(self, config_vcs: VCSService = None):
         self.current_session: Optional[TradingSession] = None
         self.is_running: Event = Event()
         self._lock = threading.Lock()

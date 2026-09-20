@@ -139,6 +139,7 @@ class Application(ApplicationLoggingMixin):
             is_simulated,
             event_bus=self._trading_event_bus,
             metric_service=self._metric_service,
+            config_vcs=self._vcs,
         )
         self._trading_journal = trading_journal
         self._order_lifecycle_collector = OrderLifecycleCollector(self._metric_service, db_manager)
@@ -458,6 +459,8 @@ class Application(ApplicationLoggingMixin):
 
         if self._trading_engine:
             self._trading_engine.update_config(updated)
+        if self._managers and self._managers.session_manager:
+            self._managers.session_manager.update_commit_hash(commit_hash)
         self.app_logger.info("Config updated from VCS %s", commit_hash[:8])
 
     def shutdown(self):
