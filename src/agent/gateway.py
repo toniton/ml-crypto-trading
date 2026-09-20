@@ -13,6 +13,8 @@ from src.agent.router.graph import RouterGraph
 from src.agent.router.models import AgentIntent, AgentRoute
 from src.agent.runtime.agent import AgentDefinition
 from src.agent.runtime.registry import AgentRegistry
+from src.agent.runtime_debug.graph import RuntimeDebugGraph
+from src.agent.runtime_debug.tools import RuntimeDebugToolbox
 from src.agent.events import AIEvent
 from src.llm.math_normalizer import DelimiterStream
 from src.vcs.application.service import VCSService
@@ -202,6 +204,21 @@ class AgentGateway:
                     {"backtest.run", "trading_config.read", "market_data.read"}
                 ),
             ),
+            AgentDefinition(
+                name="runtime_debug",
+                description="Investigates and diagnoses live runtime errors, order rejections, and exchange failures",
+                graph=RuntimeDebugGraph(
+                    toolbox=RuntimeDebugToolbox(
+                        database_manager=getattr(vcs, "_db_manager", None),
+                        vcs=vcs,
+                    ),
+                    llm=llm,
+                ).build(),
+                presentation_node="present_suggestion",
+                capabilities=frozenset(
+                    {"runtime_errors.read", "trading_config.read", "orders.read", "vcs.read", "exchange_metadata.read"}
+                ),
+            ),
         ]
 
         registry = AgentRegistry(definitions)
@@ -214,6 +231,7 @@ class AgentGateway:
                 (AgentIntent.SYSTEM_HELP, "system_help"),
                 (AgentIntent.GENERAL, "general"),
                 (AgentIntent.BACKTEST, "backtest"),
+                (AgentIntent.RUNTIME_DEBUG, "runtime_debug"),
         ):
             registry.register(intent, name)
         return registry

@@ -14,6 +14,7 @@ class AgentIntent(str, Enum):
     REPORTING = "reporting"
     SYSTEM_HELP = "system_help"
     BACKTEST = "backtest"
+    RUNTIME_DEBUG = "runtime_debug"
     GENERAL = "general"
 
 

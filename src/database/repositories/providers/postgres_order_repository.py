@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import cast
+from typing import Optional, cast
 
 from sqlalchemy.dialects.postgresql import insert
 
@@ -129,3 +131,22 @@ class PostgresOrderRepository(OrderRepository):
             OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, row))
             for row in query.all()
         ]
+
+    def get_last_completed_by_ticker(self, ticker_symbol: str) -> Optional[Order]:
+        symbols = {
+            ticker_symbol,
+            ticker_symbol.replace("_", "/"),
+            ticker_symbol.replace("/", "_"),
+            ticker_symbol.replace("-", "_"),
+            ticker_symbol.replace("_", "-"),
+        }
+        row = (
+            self.database_session.query(OrderDao)
+            .filter(
+                OrderDao.ticker_symbol.in_(list(symbols)),
+                OrderDao.status == OrderStatus.COMPLETED.value,
+            )
+            .order_by(OrderDao.created_timestamp.desc())
+            .first()
+        )
+        return OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, row)) if row else None

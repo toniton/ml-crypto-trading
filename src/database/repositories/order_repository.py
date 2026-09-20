@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 import abc
 from datetime import datetime
+from typing import Optional
 
 from api.interfaces.order import Order
 from src.database.repositories.base_repository import BaseRepository
@@ -39,4 +42,8 @@ class OrderRepository(BaseRepository[Order]):
     def get_completed_by_ticker_and_executed_range(
             self, ticker_symbol: str, start: datetime, end: datetime
     ) -> list[Order]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_last_completed_by_ticker(self, ticker_symbol: str) -> Optional[Order]:
         raise NotImplementedError()

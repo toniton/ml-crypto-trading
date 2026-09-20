@@ -16,6 +16,8 @@ from src.core.interfaces.trading_journal import TradingJournal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
+from src.events.runtime_events import RuntimeErrorCapturedEvent
+from src.agent.runtime_debug.error_extractor import extract_runtime_error_from_order_exception
 from src.trading.events import OrderCancelled, OrderExecuted, OrderRejected
 
 
@@ -76,6 +78,10 @@ class OrderManager(ApplicationLoggingMixin):
                             symbol=order.ticker_symbol,
                             order=order,
                             reason=str(exc),
+                        ))
+                        runtime_err = extract_runtime_error_from_order_exception(exc, order=order)
+                        self._event_bus.publish(RuntimeErrorCapturedEvent(
+                            event_payload=runtime_err.to_dict(),
                         ))
             except queue.Empty:
                 pass

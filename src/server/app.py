@@ -39,6 +39,8 @@ from src.server.services.order_by_day_service import OrderByDayService
 from src.server.services.order_heatmap_service import OrderHeatmapService
 from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
+from src.server.routes.runtime_debug_routes import create_runtime_debug_router
+from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
 from src.recorder.market_data_store import MarketDataStore
@@ -141,8 +143,16 @@ class ChatApp:
             allow_headers=["*"],
         )
 
+        runtime_debug_service = RuntimeDebugService(
+            database_manager=db_manager,
+            vcs=vcs,
+            event_bus=event_bus,
+        )
+        app.state.runtime_debug_service = runtime_debug_service
+
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
+        app.include_router(create_runtime_debug_router(runtime_debug_service))
 
         @app.get("/api/v1/runtime")
         async def runtime_health_endpoint():

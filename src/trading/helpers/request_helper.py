@@ -6,6 +6,22 @@ from urllib.request import Request, urlopen
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
+class ExchangeRequestError(RuntimeError):
+    def __init__(
+            self,
+            message: str,
+            http_status: int = None,
+            response_body: Any = None,
+            url: str = None,
+            method: str = "GET",
+    ):
+        super().__init__(message)
+        self.http_status = http_status
+        self.response_body = response_body
+        self.url = url
+        self.method = method
+
+
 class RequestHelper(ApplicationLoggingMixin):
     @classmethod
     def create_request(
@@ -38,7 +54,18 @@ class RequestHelper(ApplicationLoggingMixin):
                 detail = exc.read().decode()
             except UnicodeDecodeError:
                 detail = str(exc)
-            raise RuntimeError(f"HTTP error: {detail}") from exc
+            parsed_body = None
+            try:
+                parsed_body = json.loads(detail)
+            except Exception:
+                parsed_body = detail
+            raise ExchangeRequestError(
+                f"HTTP error: {detail}",
+                http_status=exc.code,
+                response_body=parsed_body,
+                url=request.full_url,
+                method=request.get_method(),
+            ) from exc
 
         except URLError as exc:
             cls().app_logger.error(f"URL error while calling {request.full_url}: {exc.reason}")

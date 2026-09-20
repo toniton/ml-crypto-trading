@@ -28,11 +28,13 @@ from src.vcs.domain import (
 
 
 class VCSService(ApplicationLoggingMixin):
+    _db_manager: DatabaseManager
+
     def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
+        self._db_manager = db_manager
 
     def resolve_commit_hash(self, commit_hash_or_ref: str) -> str:
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
 
             # 1. Build candidates list in priority order
@@ -64,7 +66,7 @@ class VCSService(ApplicationLoggingMixin):
 
     def head(self, ref: str = "HEAD") -> Commit:
         commit_hash = self.resolve_commit_hash(ref)
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             commit_repo = uow.get_repository(PostgresCommitRepository)
             commit = commit_repo.get_by_hash(commit_hash)
             if not commit:
@@ -73,7 +75,7 @@ class VCSService(ApplicationLoggingMixin):
 
     def get_blob(self, commit_hash_or_ref: str) -> Blob:
         commit_hash = self.resolve_commit_hash(commit_hash_or_ref)
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             commit_repo = uow.get_repository(PostgresCommitRepository)
             blob_repo = uow.get_repository(PostgresBlobRepository)
 
@@ -107,7 +109,7 @@ class VCSService(ApplicationLoggingMixin):
         blob_hash = Hashing.compute_blob_hash(canonical_dict)
         now = datetime.now(timezone.utc)
 
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             commit_repo = uow.get_repository(PostgresCommitRepository)
             blob_repo = uow.get_repository(PostgresBlobRepository)
@@ -161,7 +163,7 @@ class VCSService(ApplicationLoggingMixin):
             message: str,
             ref: str = "HEAD",
     ) -> Optional[Commit]:
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             existing_ref = ref_repo.get_by_name(ref)
             if not existing_ref and ref in ("HEAD", "refs/heads/main", "main"):
@@ -179,7 +181,7 @@ class VCSService(ApplicationLoggingMixin):
 
     def reset(self, ref: str, commit_hash_or_ref: str) -> Reference:
         target_commit_hash = self.resolve_commit_hash(commit_hash_or_ref)
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             ref_repo.get_by_name(ref, lock_for_update=True)
 
@@ -189,7 +191,7 @@ class VCSService(ApplicationLoggingMixin):
 
     def branch(self, name: str, from_ref: str = "HEAD") -> Reference:
         target_commit_hash = self.resolve_commit_hash(from_ref)
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             ref_result = ref_repo.set_reference(name, target_commit_hash)
             self.app_logger.info(f"Created branch '{name}' pointing to {target_commit_hash[:8]}")
@@ -197,12 +199,12 @@ class VCSService(ApplicationLoggingMixin):
 
     def log(self, ref: str = "HEAD", limit: int = 100) -> List[Commit]:
         start_commit_hash = self.resolve_commit_hash(ref)
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             commit_repo = uow.get_repository(PostgresCommitRepository)
             return commit_repo.get_log(start_commit_hash, limit=limit)
 
     def list_branches(self, prefix: str = "refs/heads/") -> List[Reference]:
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             refs = ref_repo.list_all()
             return [r for r in refs if r.name.startswith(prefix) or r.name in ("HEAD", "main")]
@@ -210,7 +212,7 @@ class VCSService(ApplicationLoggingMixin):
     def delete_branch(self, name: str) -> bool:
         if name in ("HEAD", "refs/heads/main", "main"):
             raise VcsError(f"Cannot delete protected branch '{name}'")
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             return ref_repo.delete_reference(name)
 
@@ -221,7 +223,7 @@ class VCSService(ApplicationLoggingMixin):
         if hash_a == hash_b:
             return hash_a
 
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             commit_repo = uow.get_repository(PostgresCommitRepository)
 
             # Traverse ancestors of A
@@ -376,7 +378,7 @@ class VCSService(ApplicationLoggingMixin):
             "merge_target": target_ref,
         }
 
-        with self.db_manager.get_unit_of_work() as uow:
+        with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)
             commit_repo = uow.get_repository(PostgresCommitRepository)
             blob_repo = uow.get_repository(PostgresBlobRepository)

@@ -17,6 +17,9 @@ DEFAULT_EVENT_METRICS = {
     "OrderCancelledEvent": "orders.cancelled",
     "OrderRejected": "orders.rejected",
     "OrderRejectedEvent": "orders.rejected",
+    "RuntimeErrorCapturedEvent": "runtime.errors.total",
+    "RuntimeIncidentCreatedEvent": "runtime.incidents.total",
+    "RuntimeIncidentUpdatedEvent": "runtime.incident.occurrences",
 }
 
 
@@ -34,6 +37,27 @@ class EventMetricCollector:
         self._register_definitions()
 
     def _register_definitions(self) -> None:
+        self._metric_service.register(
+            "runtime.errors.total",
+            metric_type=MetricType.COUNTER,
+            unit="errors",
+            description="Total captured runtime error count",
+            aggregation=AggregationType.SUM,
+        )
+        self._metric_service.register(
+            "runtime.incidents.total",
+            metric_type=MetricType.COUNTER,
+            unit="incidents",
+            description="Total created runtime incidents",
+            aggregation=AggregationType.SUM,
+        )
+        self._metric_service.register(
+            "runtime.incident.occurrences",
+            metric_type=MetricType.COUNTER,
+            unit="occurrences",
+            description="Total runtime incident occurrence increments",
+            aggregation=AggregationType.SUM,
+        )
         self._metric_service.register(
             "orders.submitted",
             metric_type=MetricType.COUNTER,
@@ -105,6 +129,20 @@ class EventMetricCollector:
     @staticmethod
     def _extract_labels(event: Event) -> dict[str, str]:
         labels: dict[str, str] = {}
+        payload = getattr(event, "event_payload", None) or getattr(event, "incident_payload", None)
+        if isinstance(payload, dict):
+            if payload.get("exchange"):
+                labels["exchange"] = str(payload["exchange"])
+            if payload.get("asset"):
+                labels["asset"] = str(payload["asset"])
+            if payload.get("severity"):
+                labels["severity"] = str(payload["severity"])
+            if payload.get("category"):
+                labels["category"] = str(payload["category"])
+            if payload.get("component"):
+                labels["component"] = str(payload["component"])
+            return labels
+
         order = getattr(event, "order", None)
         if order is None and hasattr(event, "payload") and isinstance(event.payload, dict):
             order = event.payload.get("order")

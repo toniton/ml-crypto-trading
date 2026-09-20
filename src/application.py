@@ -18,6 +18,8 @@ from api.interfaces.backtest_request import (
 from src.agent import AgentGateway
 from src.agent.backtest.backtest_service import BacktestService
 from src.agent.configuration.configuration_service import ConfigurationService
+from src.agent.runtime_debug.incident_aggregator import IncidentAggregator
+from src.agent.runtime_debug.service import RuntimeDebugService
 from src.agent.oracle import (
     AnalyzeTradingStateTool,
     GetTradingSummaryTool,
@@ -116,10 +118,12 @@ class Application(ApplicationLoggingMixin):
         self._strategies_registry: Optional[StrategyRegistry] = None
         self._vcs_ref = "HEAD"
         self._vcs: Optional[VCSService] = None
+        self._managers: Optional[ManagerContainer] = None
+        self._runtime_debug_service: Optional[RuntimeDebugService] = None
+        self._incident_aggregator: Optional[IncidentAggregator] = None
         self._assets = []
         self._dynamic_quantity = None
         self._config_listener: Optional[RefChangeListener] = None
-        self._managers: Optional[ManagerContainer] = None
         self._trading_journal = None
         self._order_reconciler: Optional[OrderReconciler] = None
 
@@ -250,6 +254,19 @@ class Application(ApplicationLoggingMixin):
         self._setup_clients()
         self._setup_protections()
         self._config_listener.start()
+
+        self._runtime_debug_service = RuntimeDebugService(
+            database_manager=db_manager,
+            vcs=self._vcs,
+            event_bus=self._trading_event_bus,
+        )
+        self._incident_aggregator = IncidentAggregator(
+            database_manager=db_manager,
+            event_bus=self._trading_event_bus,
+            investigation_callback=self._runtime_debug_service.investigate_incident,
+            auto_investigate=True,
+        )
+        self._incident_aggregator.subscribe(self._trading_event_bus)
 
         trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
@@ -459,7 +476,7 @@ class Application(ApplicationLoggingMixin):
 
         if self._trading_engine:
             self._trading_engine.update_config(updated)
-        if self._managers and self._managers.session_manager:
+        if getattr(self, "_managers", None) and self._managers.session_manager:
             self._managers.session_manager.update_commit_hash(commit_hash)
         self.app_logger.info("Config updated from VCS %s", commit_hash[:8])
 
