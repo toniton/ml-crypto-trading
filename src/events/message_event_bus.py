@@ -46,13 +46,25 @@ class MessageEventBus(EventBus):
                     return
 
     def publish(self, event: Event) -> None:
+        event_types = {event.type}
+        if hasattr(event, "EVENT_TYPE"):
+            event_types.add(getattr(event, "EVENT_TYPE"))
+        if type(event).__name__ != event.type:
+            event_types.add(type(event).__name__)
+
+        subscribers = []
         with self._lock:
-            subscribers = list(self._subscriptions.get(event.type, {}).values())
+            for et in event_types:
+                subscribers.extend(self._subscriptions.get(et, {}).values())
+
+        seen_ids = set()
         for subscription in subscribers:
-            try:
-                subscription.put(event)
-            except Exception:  # pylint: disable=broad-except
-                continue
+            if id(subscription) not in seen_ids:
+                seen_ids.add(id(subscription))
+                try:
+                    subscription.put(event)
+                except Exception:  # pylint: disable=broad-except
+                    continue
 
     def subscriber_count(self, event_type: Optional[str] = None) -> int:
         with self._lock:

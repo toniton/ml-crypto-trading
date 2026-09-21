@@ -84,6 +84,7 @@ class PostgresConversationRepository(ConversationRepository):
         ]
 
     def append(self, session_id: str, message: ConversationMessage, max_turns: int) -> None:
+        self.get_or_create(session_id)
         self.database_session.add(
             ConversationMessageDao(
                 conversation_id=session_id,

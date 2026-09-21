@@ -39,6 +39,13 @@ class TestConversationService:
         assert manager.get_or_create(sid) == sid
         assert [turn.content for turn in manager.history(sid)] == ["first"]
 
+    def test_append_without_explicit_get_or_create(self, mock_db_manager):
+        manager = ConversationService(mock_db_manager)
+        sid = "unregistered-session"
+        manager.append(sid, ConversationMessage(role="assistant", content="proactive message"))
+        assert [turn.content for turn in manager.history(sid)] == ["proactive message"]
+        assert len(manager.messages(sid)) == 1
+
     def test_memory_window_is_short(self, mock_db_manager):
         manager = ConversationService(mock_db_manager, memory_max_turns=2)
         sid = manager.get_or_create(None)

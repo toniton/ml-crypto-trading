@@ -39,6 +39,14 @@ from src.server.services.order_by_day_service import OrderByDayService
 from src.server.services.order_heatmap_service import OrderHeatmapService
 from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
+from src.agent.configuration.configuration_service import ConfigurationService as AgentConfigurationService
+from src.agent.actions import (
+    AgentActionExecutor,
+    AgentActionService,
+    AgentApprovalService,
+)
+from src.server.agent_websocket import AgentWebSocketHandler
+from src.server.routes.agent_action_routes import create_agent_action_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
@@ -150,9 +158,45 @@ class ChatApp:
         )
         app.state.runtime_debug_service = runtime_debug_service
 
+        action_service = AgentActionService(
+            event_bus=event_bus,
+            conversation_store=conversation_service,
+        )
+        agent_config_service = getattr(agent, "configuration_service", None) or AgentConfigurationService(vcs=vcs)
+        approval_service = AgentApprovalService(
+            vcs=vcs,
+            configuration_service=agent_config_service,
+            action_service=action_service,
+            event_bus=event_bus,
+            conversation_store=conversation_service,
+        )
+        action_executor = AgentActionExecutor(
+            action_service=action_service,
+            approval_service=approval_service,
+            vcs=vcs,
+            configuration_service=agent_config_service,
+        )
+
+        app.state.action_service = action_service
+        app.state.approval_service = approval_service
+        app.state.action_executor = action_executor
+
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
         app.include_router(create_runtime_debug_router(runtime_debug_service))
+        app.include_router(
+            create_agent_action_router(
+                action_service=action_service,
+                approval_service=approval_service,
+                executor=action_executor,
+            )
+        )
+
+        agent_ws_handler = AgentWebSocketHandler(event_bus)
+
+        @app.websocket("/api/v1/agent/ws")
+        async def agent_websocket(websocket: WebSocket) -> None:
+            await agent_ws_handler.handle(websocket)
 
         @app.get("/api/v1/runtime")
         async def runtime_health_endpoint():

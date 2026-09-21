@@ -18,7 +18,7 @@ class TradingEvent(Event):
 
     def __post_init__(self) -> None:
         self._id: str = uuid4().hex
-        self._event_type: str = type(self).__name__
+        self._event_type: str = getattr(self, "EVENT_TYPE", None) or type(self).__name__
         self._payload: dict = asdict(self)
         self._timestamp: str = datetime.now(timezone.utc).isoformat()
         self._metadata: dict = {}
