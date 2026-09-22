@@ -46,5 +46,8 @@ class MultiRegistry(Generic[K, V]):
     def keys(self) -> list[K]:
         return list(self._entries)
 
+    def clear(self) -> None:
+        self._entries.clear()
+
     def __contains__(self, key: K) -> bool:
         return key in self._entries

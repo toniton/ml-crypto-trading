@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Callable, List
 
@@ -12,4 +14,12 @@ class TradingScheduler(AssetScheduleRegistry, ABC):
 
     @abstractmethod
     def stop(self):
+        pass
+
+    @abstractmethod
+    def update_schedules(
+            self,
+            assets: List[Asset],
+            callback: Callable[[List[Asset]], None] | None = None,
+    ) -> None:
         pass

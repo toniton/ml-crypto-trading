@@ -37,4 +37,10 @@ class TradingEngine:
         self._is_running.clear()
 
     def update_config(self, trading_config: TradingConfig) -> None:
-        self._trading_executor.update_config(trading_config)
+        if self._trading_executor is not None:
+            self._trading_executor.update_config(trading_config)
+        if self._trading_scheduler is not None:
+            self._trading_scheduler.update_schedules(trading_config.assets, self._run_trading_cycle)
+
+
+

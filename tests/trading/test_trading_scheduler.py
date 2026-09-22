@@ -12,6 +12,34 @@ class TestLiveTradingScheduler(unittest.TestCase):
         scheduler = LiveTradingScheduler()
         self.assertIsNotNone(scheduler)
 
+    def test_update_schedules_registers_and_recycles_threads(self):
+        scheduler = LiveTradingScheduler()
+        asset_1 = Mock(spec=Asset)
+        asset_1.schedule = AssetSchedule.EVERY_MINUTE
+        asset_1.ticker_symbol = "BTC_USD"
+
+        scheduler.register_assets([asset_1])
+        callback = Mock()
+        scheduler.start(callback)
+
+        self.assertIn(AssetSchedule.EVERY_MINUTE, scheduler._scheduler_threads)
+        self.assertEqual(len(scheduler.get_assets(AssetSchedule.EVERY_MINUTE)), 1)
+
+        # Update schedules to EVERY_HOUR
+        asset_2 = Mock(spec=Asset)
+        asset_2.schedule = AssetSchedule.EVERY_HOUR
+        asset_2.ticker_symbol = "ETH_USD"
+
+        scheduler.update_schedules([asset_2])
+
+        self.assertNotIn(AssetSchedule.EVERY_MINUTE, scheduler._scheduler_threads)
+        self.assertIn(AssetSchedule.EVERY_HOUR, scheduler._scheduler_threads)
+        self.assertEqual(len(scheduler.get_assets(AssetSchedule.EVERY_HOUR)), 1)
+        self.assertEqual(scheduler.get_assets(AssetSchedule.EVERY_HOUR)[0].ticker_symbol, "ETH_USD")
+
+        scheduler.stop()
+
+
 
 class TestBacktestTradingScheduler(unittest.TestCase):
     def test_on_tick_triggers_callback(self):
@@ -76,3 +104,28 @@ class TestBacktestTradingScheduler(unittest.TestCase):
         scheduler.on_tick(61, asset_sec)
         self.assertEqual(callback.call_count, 2)
         callback.assert_has_calls(expected_calls, any_order=True)
+
+    def test_update_schedules(self):
+        clock = Mock()
+        scheduler = BacktestTradingScheduler(clock)
+
+        asset_1 = Mock(spec=Asset)
+        asset_1.schedule = AssetSchedule.EVERY_MINUTE
+        asset_1.ticker_symbol = "BTC_USD"
+
+        scheduler.register_assets([asset_1])
+        callback = Mock()
+        scheduler.start(callback)
+
+        asset_2 = Mock(spec=Asset)
+        asset_2.schedule = AssetSchedule.EVERY_HOUR
+        asset_2.ticker_symbol = "ETH_USD"
+
+        scheduler.update_schedules([asset_2])
+
+        self.assertNotIn(AssetSchedule.EVERY_MINUTE, scheduler.get_registered_schedules())
+        self.assertIn(AssetSchedule.EVERY_HOUR, scheduler.get_registered_schedules())
+        self.assertEqual(len(scheduler.get_assets(AssetSchedule.EVERY_HOUR)), 1)
+        self.assertEqual(scheduler.get_assets(AssetSchedule.EVERY_HOUR)[0].ticker_symbol, "ETH_USD")
+
+

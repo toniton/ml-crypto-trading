@@ -36,6 +36,8 @@ class StrategyResolver:
             asset: Asset,
             registry: Optional[StrategyRegistry] = None,
     ) -> list[TradingStrategy]:
+        if not asset.enabled:
+            return []
         strategies: list[TradingStrategy] = []
         for entry in asset.strategies or []:
             if not entry.enabled:

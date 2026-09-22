@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from threading import Lock
 from typing import Callable
 
@@ -34,6 +36,17 @@ class BacktestTradingScheduler(TradingScheduler):
 
     def stop(self):
         self._last_execution.clear()
+
+    def update_schedules(
+            self,
+            assets: list[Asset],
+            callback: Callable[[list[Asset]], None] | None = None,
+    ) -> None:
+        with self._lock:
+            if callback is not None:
+                self._callbacks = [callback]
+            self.clear_assets()
+            self.register_assets(assets)
 
     def _should_run(self, schedule: AssetSchedule, current_timestamp: int, previous_timestamp: int) -> bool:
         if previous_timestamp is None:

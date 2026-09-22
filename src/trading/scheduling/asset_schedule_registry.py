@@ -33,3 +33,6 @@ class AssetScheduleRegistry(MultiRegistry[AssetSchedule, Asset]):
 
     def get_registered_schedules(self) -> list[AssetSchedule]:
         return self.keys()
+
+    def clear_assets(self) -> None:
+        self.clear()

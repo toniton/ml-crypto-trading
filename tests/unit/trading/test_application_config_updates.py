@@ -155,6 +155,23 @@ class TestTradingEngineUpdateConfig:
 
         assert executor.configs == [config]
 
+    def test_delegates_to_scheduler(self):
+        from unittest.mock import Mock
+        engine = object.__new__(TradingEngine)
+        executor = _FakeEngine()
+        scheduler = Mock()
+        engine._trading_executor = executor
+        engine._trading_scheduler = scheduler
+
+        config = TradingConfig.model_validate(
+            {"assets": [_asset({"buy": 2.0, "sell": 0.8})], "dynamic_quantity": "equity * 0.1"}
+        )
+        engine.update_config(config)
+
+        scheduler.update_schedules.assert_called_once()
+        assert len(scheduler.update_schedules.call_args[0][0]) == 1
+
+
 
 def _make_executor(dynamic_quantity="min_qty"):
     from src.trading.consensus.consensus_manager import ConsensusManager

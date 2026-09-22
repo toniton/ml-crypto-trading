@@ -19,47 +19,91 @@ class LiveTradingScheduler(TradingScheduler, ApplicationLoggingMixin):
         self._scheduler_threads: dict[AssetSchedule, threading.Thread] = {}
         self._stop_events: dict[AssetSchedule, threading.Event] = {}
         self._executors: dict[AssetSchedule, ThreadPoolExecutor] = {}
+        self._callback: Callable[[list[Asset]], None] | None = None
+        self._lock = threading.Lock()
 
     def start(self, callback: Callable[[list[Asset]], None]) -> None:
-        if self._scheduler_threads:
-            self.app_logger.warning("Scheduler already running")
-            return
+        with self._lock:
+            self._callback = callback
+            if self._scheduler_threads:
+                self.app_logger.warning("Scheduler already running")
+                return
 
-        self.app_logger.info("Starting scheduler")
+            self.app_logger.info("Starting scheduler")
 
-        for asset_schedule in self.get_registered_schedules():
-            self._start_schedule(asset_schedule, callback)
+            for asset_schedule in self.get_registered_schedules():
+                self._start_schedule(asset_schedule, callback)
 
     def stop(self, asset_schedule: AssetSchedule | None = None) -> None:
-        self.app_logger.info("Stopping scheduler")
+        with self._lock:
+            self.app_logger.info("Stopping scheduler")
 
-        schedules = (
-            [asset_schedule]
-            if asset_schedule is not None
-            else list(self._scheduler_threads.keys())
-        )
+            schedules = (
+                [asset_schedule]
+                if asset_schedule is not None
+                else list(self._scheduler_threads.keys())
+            )
 
-        for schedule_key in schedules:
-            stop_event = self._stop_events.get(schedule_key)
-            if stop_event:
-                stop_event.set()
+            for schedule_key in schedules:
+                stop_event = self._stop_events.get(schedule_key)
+                if stop_event:
+                    stop_event.set()
 
-        for schedule_key in schedules:
-            thread = self._scheduler_threads.get(schedule_key)
-            if thread:
-                thread.join(timeout=5)
-                if thread.is_alive():
-                    self.app_logger.warning(
-                        f"Scheduler thread {schedule_key} did not exit within timeout"
-                    )
+            for schedule_key in schedules:
+                thread = self._scheduler_threads.get(schedule_key)
+                if thread:
+                    thread.join(timeout=5)
+                    if thread.is_alive():
+                        self.app_logger.warning(
+                            f"Scheduler thread {schedule_key} did not exit within timeout"
+                        )
 
-        for schedule_key in schedules:
-            executor = self._executors.get(schedule_key)
-            if executor:
-                executor.shutdown(wait=True)
+            for schedule_key in schedules:
+                executor = self._executors.get(schedule_key)
+                if executor:
+                    executor.shutdown(wait=True)
 
-        for schedule_key in schedules:
-            self._cleanup(schedule_key)
+            for schedule_key in schedules:
+                self._cleanup(schedule_key)
+
+    def update_schedules(
+            self,
+            assets: list[Asset],
+            callback: Callable[[list[Asset]], None] | None = None,
+    ) -> None:
+        with self._lock:
+            cb = callback or self._callback
+            self._callback = cb
+            was_running = bool(self._scheduler_threads)
+
+            if was_running:
+                for schedule_key in list(self._scheduler_threads.keys()):
+                    stop_event = self._stop_events.get(schedule_key)
+                    if stop_event:
+                        stop_event.set()
+
+                for schedule_key, thread in list(self._scheduler_threads.items()):
+                    if thread:
+                        thread.join(timeout=5)
+
+                for schedule_key, executor in list(self._executors.items()):
+                    if executor:
+                        executor.shutdown(wait=True)
+
+                for schedule_key in list(self._scheduler_threads.keys()):
+                    self._cleanup(schedule_key)
+
+            self.clear_assets()
+            self.register_assets(assets)
+
+            if was_running and cb:
+                for asset_schedule in self.get_registered_schedules():
+                    self._start_schedule(asset_schedule, cb)
+                self.app_logger.info(
+                    "Updated live trading scheduler cadences for %d assets: %s",
+                    len(assets),
+                    [s.value for s in self.get_registered_schedules()],
+                )
 
     def _start_schedule(
             self,
