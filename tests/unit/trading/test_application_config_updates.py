@@ -147,6 +147,7 @@ class TestTradingEngineUpdateConfig:
         engine = object.__new__(TradingEngine)
         executor = _FakeEngine()
         engine._trading_executor = executor
+        engine._trading_scheduler = None
 
         config = TradingConfig.model_validate(
             {"assets": [_asset({"buy": 2.0, "sell": 0.8})], "dynamic_quantity": "equity * 0.1"}

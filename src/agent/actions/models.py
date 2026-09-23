@@ -134,7 +134,7 @@ class AgentApprovalRequest(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)
     conversation_id: Optional[str] = None
     agent_action_id: str
-    action_type: str
+    action_type: AgentActionType
     title: str
     description: str
     proposed_change: dict = Field(default_factory=dict)
