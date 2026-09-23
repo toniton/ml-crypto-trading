@@ -28,10 +28,9 @@ def conversation_store():
 
 
 @pytest.fixture
-def action_service(event_bus, conversation_store):
+def action_service(event_bus):
     return AgentActionService(
         event_bus=event_bus,
-        conversation_store=conversation_store,
         notification_policy=NotificationPolicy(info_cooldown_seconds=10.0, warning_cooldown_seconds=5.0),
     )
 

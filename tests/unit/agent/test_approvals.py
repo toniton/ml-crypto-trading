@@ -14,7 +14,6 @@ from src.agent.actions.service import AgentActionService, AgentApprovalService
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.events.message_event_bus import MessageEventBus
 from src.vcs.application.service import VCSService
-from tests.unit.agent.fakes import FakeConversationStore
 from tests.unit.api_server.helpers import make_db_manager
 
 SAMPLE_CONFIG = """
@@ -54,7 +53,7 @@ def config_service(vcs):
 
 @pytest.fixture
 def action_service():
-    return AgentActionService(event_bus=MessageEventBus(), conversation_store=FakeConversationStore())
+    return AgentActionService(event_bus=MessageEventBus())
 
 
 @pytest.fixture
@@ -64,7 +63,6 @@ def approval_service(vcs, config_service, action_service):
         configuration_service=config_service,
         action_service=action_service,
         event_bus=MessageEventBus(),
-        conversation_store=FakeConversationStore(),
     )
 
 

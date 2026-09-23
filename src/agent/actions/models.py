@@ -7,6 +7,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from src.agent.actions.safety import ActionSafetyClass, safety_class_for_action_type
+
 
 class AgentActionType(str, Enum):
     SEND_MESSAGE = "SEND_MESSAGE"
@@ -97,9 +99,16 @@ class AgentAction(BaseModel):
     reason: Optional[ActionReason] = None
     severity: ActionSeverity = ActionSeverity.INFO
     requires_approval: bool = False
+    safety_class: Optional[ActionSafetyClass] = None
+    request_id: Optional[str] = None
+    correlation_id: Optional[str] = None
+    causation_id: Optional[str] = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     completed_at: Optional[datetime] = None
     error: Optional[str] = None
+
+    def effective_safety_class(self) -> ActionSafetyClass:
+        return self.safety_class or safety_class_for_action_type(self.type)
 
 
 class AgentApprovalRequest(BaseModel):
@@ -115,6 +124,9 @@ class AgentApprovalRequest(BaseModel):
     proposed_config_hash: Optional[str] = None
     asset: Optional[str] = None
     proposal_id: Optional[str] = None
+    request_id: Optional[str] = None
+    correlation_id: Optional[str] = None
+    causation_id: Optional[str] = None
     status: ApprovalStatus = ApprovalStatus.PENDING
     requested_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     responded_at: Optional[datetime] = None

@@ -87,11 +87,13 @@ class TestLogWebSocket(unittest.TestCase):
     def test_unsubscribe_on_disconnect(self):
         bus = MessageEventBus()
         client = build_client(bus)
-        self.assertEqual(bus.subscriber_count(), 0)
+        # ChatApp registers the agent event projector, which holds permanent subscriptions.
+        baseline = bus.subscriber_count()
+        self.assertGreaterEqual(baseline, 1)
         with client.websocket_connect("/api/v1/logs/ws") as ws:
             ws.receive_json()
-            self.assertEqual(bus.subscriber_count(), 1)
-        self.assertEqual(bus.subscriber_count(), 0)
+            self.assertEqual(bus.subscriber_count(), baseline + 1)
+        self.assertEqual(bus.subscriber_count(), baseline)
 
     def test_concurrent_subscribers(self):
         bus = MessageEventBus()

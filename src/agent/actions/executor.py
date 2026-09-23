@@ -118,7 +118,11 @@ class AgentActionExecutor(AgentLoggingMixin):
             )
             return action
 
-        current_head = self._vcs.head("HEAD").hash
+        try:
+            head_commit = self._vcs.head("HEAD")
+            current_head = head_commit.hash if head_commit else ""
+        except Exception:
+            current_head = ""
         proposed_change = action.payload.get("proposed_change") or {}
 
         approval_req = AgentApprovalRequest(
@@ -133,30 +137,11 @@ class AgentActionExecutor(AgentLoggingMixin):
             proposed_config_hash=action.payload.get("proposed_config_hash"),
             asset=action.payload.get("asset"),
             proposal_id=action.payload.get("proposal_id"),
+            request_id=action.request_id,
+            correlation_id=action.correlation_id,
+            causation_id=action.causation_id,
         )
         self._approval_service.request_approval(approval_req)
-
-        # Also emit approval card into chat
-        conversation_id = action.conversation_id
-        message_id = uuid4().hex
-        approval_block = {
-            "type": "agent_approval",
-            "approval_id": approval_req.id,
-            "action_id": action.id,
-            "title": action.title,
-            "description": action.description,
-            "base_commit": current_head,
-            "asset": action.payload.get("asset"),
-            "proposed_change": proposed_change,
-            "status": "pending",
-        }
-        self._action_service.send_proactive_message(
-            conversation_id=conversation_id,
-            message_id=message_id,
-            content=f"Approval Requested: {action.title}",
-            blocks=[approval_block],
-            action=action,
-        )
         return action
 
     def compare_backtest_drift(self, comparison: BacktestComparisonAction) -> BacktestComparisonResult:

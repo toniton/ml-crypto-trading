@@ -25,6 +25,8 @@ from src.trading.events import (
     MarketStateChanged,
     OrderSubmitted,
     PositionChanged,
+    SignalGeneratedEvent,
+    StrategyEvaluatedEvent,
 )
 from src.trading.factories.trading_expression_factory import TradingExpressionFactory
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -127,6 +129,16 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         decision = self.consensus_manager.evaluate(
             action, asset.ticker_symbol, trading_context, market_data, candles
         )
+        self._publish_event(StrategyEvaluatedEvent(
+            symbol=asset.ticker_symbol,
+            evaluated_at=float(market_data.timestamp),
+        ))
+        if decision is not None and decision.quorum:
+            self._publish_event(SignalGeneratedEvent(
+                symbol=asset.ticker_symbol,
+                action=action.value,
+                generated_at=float(market_data.timestamp),
+            ))
         self.app_logger.debug(f"Consensus={decision.quorum} for asset={asset}")
         return decision
 

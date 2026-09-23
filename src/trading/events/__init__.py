@@ -8,6 +8,8 @@ from .domain_events import (
     OrderSubmitted,
     PositionChanged,
     RiskStateChanged,
+    SignalGeneratedEvent,
+    StrategyEvaluatedEvent,
 )
 from src.events.trading_event import TradingEvent
 
@@ -21,5 +23,7 @@ __all__ = [
     "OrderSubmitted",
     "PositionChanged",
     "RiskStateChanged",
+    "SignalGeneratedEvent",
+    "StrategyEvaluatedEvent",
     "TradingEvent",
 ]

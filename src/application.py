@@ -16,8 +16,15 @@ from api.interfaces.backtest_request import (
     ExecutionConfiguration,
 )
 from src.agent import AgentGateway
+from src.agent.actions import (
+    AgentActionExecutor,
+    AgentActionService,
+    AgentApprovalService,
+)
+from src.agent.automation import AutomationController, InvestigateActivityAnomaly
 from src.agent.backtest.backtest_service import BacktestService
 from src.agent.configuration.configuration_service import ConfigurationService
+from src.agent.monitoring.starvation_watchdog import StarvationWatchdog
 from src.agent.runtime_debug.incident_aggregator import IncidentAggregator
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.agent.oracle import (
@@ -41,6 +48,7 @@ from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsColle
 from src.metrics.services.metric_service import MetricService
 from src.metrics.services.retention_engine import RetentionEngine
 from src.metrics.services.retention_scheduler import RetentionScheduler
+from src.trading.activity import AssetActivityTracker
 from src.vcs.application.events import RefChangedEvent
 from src.vcs.application.listener import RefChangeListener
 from src.vcs.application.service import VCSService
@@ -126,6 +134,9 @@ class Application(ApplicationLoggingMixin):
         self._config_listener: Optional[RefChangeListener] = None
         self._trading_journal = None
         self._order_reconciler: Optional[OrderReconciler] = None
+        self._activity_tracker: Optional[AssetActivityTracker] = None
+        self._agent_action_executor: Optional[AgentActionExecutor] = None
+        self._automation: Optional[AutomationController] = None
 
         atexit.register(self.shutdown)
 
@@ -255,6 +266,9 @@ class Application(ApplicationLoggingMixin):
         self._setup_protections()
         self._config_listener.start()
 
+        self._event_bus = MessageEventBus()
+        LoggingManager.get_instance().set_event_bus(self._event_bus)
+
         self._runtime_debug_service = RuntimeDebugService(
             database_manager=db_manager,
             vcs=self._vcs,
@@ -267,6 +281,8 @@ class Application(ApplicationLoggingMixin):
             auto_investigate=True,
         )
         self._incident_aggregator.subscribe(self._trading_event_bus)
+
+        self._setup_agent_automation()
 
         trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
@@ -380,8 +396,6 @@ class Application(ApplicationLoggingMixin):
                 api_llm,
                 vcs=self._vcs,
             )
-            self._event_bus = MessageEventBus()
-            LoggingManager.get_instance().set_event_bus(self._event_bus)
             self._api_server = ApiServer(
                 agent=gateway,
                 event_bus=self._event_bus,
@@ -390,8 +404,63 @@ class Application(ApplicationLoggingMixin):
                 vcs=self._vcs,
                 host=self._application_config.api_host,
                 port=self._application_config.api_port,
+                compare_backtest=(
+                    self._agent_action_executor.compare_backtest_drift
+                    if self._agent_action_executor else None
+                ),
             )
             self._api_server.start()
+
+    def _setup_agent_automation(self) -> None:
+        """Assembles and starts the agent automation subsystem (headless-capable)."""
+        self._activity_tracker = AssetActivityTracker()
+        self._activity_tracker.subscribe(self._trading_event_bus)
+
+        configuration_service = ConfigurationService(vcs=self._vcs)
+        action_service = AgentActionService(event_bus=self._event_bus)
+        approval_service = AgentApprovalService(
+            vcs=self._vcs,
+            configuration_service=configuration_service,
+            action_service=action_service,
+            event_bus=self._event_bus,
+        )
+        try:
+            backtest_service = self._build_backtest_service()
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                f"Backtest service unavailable; drift detection disabled: {exc}"
+            )
+            backtest_service = None
+        self._agent_action_executor = AgentActionExecutor(
+            action_service=action_service,
+            approval_service=approval_service,
+            vcs=self._vcs,
+            configuration_service=configuration_service,
+            backtest_service=backtest_service,
+        )
+        drift_detector = (
+            BacktestDriftDetector(backtest_service, self._trading_journal)
+            if backtest_service is not None else None
+        )
+        investigation = InvestigateActivityAnomaly(
+            activity_provider=self._activity_tracker,
+            drift_detector=drift_detector,
+        )
+        watchdog = StarvationWatchdog(
+            activity_provider=self._activity_tracker,
+            assets=self._assets,
+            event_bus=self._event_bus,
+            poll_interval_seconds=30.0,
+        )
+        self._automation = AutomationController(
+            event_bus=self._event_bus,
+            executor=self._agent_action_executor,
+            approval_service=approval_service,
+            investigation=investigation,
+            watchdog=watchdog,
+        )
+        self._automation.start()
+        self.app_logger.info("Agent automation initialized (%d assets)", len(self._assets))
 
     def run_backtest(self) -> None:
         """Drive the backtest simulation(s) via a BacktestService."""
@@ -486,6 +555,9 @@ class Application(ApplicationLoggingMixin):
         if self._api_server:
             self._api_server.stop()
             self._api_server = None
+        if self._automation:
+            self._automation.stop()
+            self._automation = None
         if self._event_bus:
             self._event_bus.close()
             self._event_bus = None

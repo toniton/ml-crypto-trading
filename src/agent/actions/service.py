@@ -12,7 +12,7 @@ from src.agent.actions.models import (
 from src.agent.actions.notification_policy import NotificationPolicy
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.models import ConfigChange, ConfigurationProposal
-from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
+from src.core.interfaces.conversation_store import ConversationStore
 from src.core.interfaces.event_bus import EventBus
 from src.events.agent_events import (
     AgentActionCompletedEvent,
@@ -28,16 +28,12 @@ from src.vcs.application.service import VCSService
 
 
 class AgentActionService(AgentLoggingMixin):
-    """Manages the lifecycle and state transitions of autonomous and semi-autonomous agent actions."""
-
     def __init__(
             self,
             event_bus: Optional[EventBus] = None,
-            conversation_store: Optional[ConversationStore] = None,
             notification_policy: Optional[NotificationPolicy] = None,
     ):
         self._event_bus = event_bus
-        self._conversation_store = conversation_store
         self._notification_policy = notification_policy or NotificationPolicy()
         self._actions: Dict[str, AgentAction] = {}
 
@@ -112,20 +108,6 @@ class AgentActionService(AgentLoggingMixin):
         actions.sort(key=lambda a: a.created_at, reverse=True)
         return actions[:limit]
 
-    def resolve_conversation_id(self, conversation_id: Optional[str] = None) -> str:
-        """Resolves target conversation, defaulting to the latest active database session."""
-        if conversation_id and conversation_id != "default":
-            return conversation_id
-        if self._conversation_store:
-            try:
-                sessions = self._conversation_store.list_sessions()
-                if sessions:
-                    return sessions[0].id
-            except Exception:
-                pass
-            return self._conversation_store.get_or_create(None)
-        return conversation_id or "default"
-
     def send_proactive_message(
             self,
             conversation_id: Optional[str],
@@ -134,37 +116,25 @@ class AgentActionService(AgentLoggingMixin):
             blocks: List[dict],
             action: Optional[AgentAction] = None,
             force: bool = False,
+            agent_context_id: Optional[str] = None,
+            server_profile_id: Optional[str] = None,
+            user_id: Optional[str] = None,
     ) -> None:
-        """Emits a proactive message to the conversation store and event bus."""
+        """Publishes a proactive agent message event. The server projects it into the conversation store."""
         if action and not force and not self._notification_policy.should_deliver(action):
             self.agent_logger.info(
                 f"Proactive message throttled by policy for action {action.id}"
             )
             return
 
-        resolved_id = self.resolve_conversation_id(conversation_id)
-        if action:
-            action.conversation_id = resolved_id
-
-        payload = {"blocks": blocks, "tokens": ""}
-        if action:
-            payload["agent_action"] = action.model_dump(mode="json")
-
-        if self._conversation_store:
-            self._conversation_store.append(
-                resolved_id,
-                ConversationMessage(
-                    role="assistant",
-                    content=content,
-                    message_id=message_id,
-                    payload=payload,
-                ),
-            )
-
         if self._event_bus:
+            payload = {"blocks": blocks, "tokens": ""}
+            if action:
+                payload["agent_action"] = action.model_dump(mode="json")
+
             self._event_bus.publish(
                 AgentMessageCreatedEvent(
-                    conversation_id=resolved_id,
+                    conversation_id=conversation_id,
                     message_payload={
                         "message_id": message_id,
                         "content": content,
@@ -172,6 +142,9 @@ class AgentActionService(AgentLoggingMixin):
                         "payload": payload,
                         "action": action.model_dump(mode="json") if action else None,
                     },
+                    agent_context_id=agent_context_id,
+                    server_profile_id=server_profile_id,
+                    user_id=user_id,
                 )
             )
 

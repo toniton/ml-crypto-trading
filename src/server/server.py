@@ -1,5 +1,5 @@
 import threading
-from typing import Optional
+from typing import Callable, Optional
 
 import uvicorn
 
@@ -22,6 +22,7 @@ class ApiServer(ApplicationLoggingMixin):
             vcs: VCSService,
             host: str = "0.0.0.0",
             port: int = 8000,
+            compare_backtest: Optional[Callable] = None,
     ):
         self.host = host
         self.port = port
@@ -33,6 +34,7 @@ class ApiServer(ApplicationLoggingMixin):
             db_manager=db_manager,
             market_data_store=market_data_store,
             vcs=vcs,
+            compare_backtest=compare_backtest,
         )
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None

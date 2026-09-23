@@ -15,6 +15,19 @@ class MarketDataEvent(TradingEvent):
 
 
 @dataclass
+class StrategyEvaluatedEvent(TradingEvent):
+    symbol: str
+    evaluated_at: float
+
+
+@dataclass
+class SignalGeneratedEvent(TradingEvent):
+    symbol: str
+    action: str
+    generated_at: float
+
+
+@dataclass
 class MarketStateChanged(TradingEvent):
     symbol: str
     price: Decimal
