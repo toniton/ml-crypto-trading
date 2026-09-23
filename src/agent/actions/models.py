@@ -7,7 +7,13 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
-from src.agent.actions.safety import ActionSafetyClass, safety_class_for_action_type
+
+class ActionSafetyClass(str, Enum):
+    INFORMATIONAL = "INFORMATIONAL"
+    DIAGNOSTIC = "DIAGNOSTIC"
+    PROPOSAL = "PROPOSAL"
+    STATE_CHANGING = "STATE_CHANGING"
+    TRADING_CONTROL = "TRADING_CONTROL"
 
 
 class AgentActionType(str, Enum):
@@ -88,6 +94,17 @@ class BacktestComparisonResult(BaseModel):
     configuration_changes: List[dict] = Field(default_factory=list)
 
 
+DEFAULT_ACTION_SAFETY_MAPPING: dict[AgentActionType, ActionSafetyClass] = {
+    AgentActionType.SEND_MESSAGE: ActionSafetyClass.INFORMATIONAL,
+    AgentActionType.RUN_ANALYSIS: ActionSafetyClass.DIAGNOSTIC,
+    AgentActionType.RUN_BACKTEST: ActionSafetyClass.DIAGNOSTIC,
+    AgentActionType.CREATE_PROPOSAL: ActionSafetyClass.PROPOSAL,
+    AgentActionType.REQUEST_APPROVAL: ActionSafetyClass.PROPOSAL,
+    AgentActionType.APPLY_CONFIGURATION: ActionSafetyClass.STATE_CHANGING,
+    AgentActionType.CREATE_COMMIT: ActionSafetyClass.STATE_CHANGING,
+}
+
+
 class AgentAction(BaseModel):
     id: str = Field(default_factory=lambda: uuid4().hex)
     type: AgentActionType
@@ -108,7 +125,9 @@ class AgentAction(BaseModel):
     error: Optional[str] = None
 
     def effective_safety_class(self) -> ActionSafetyClass:
-        return self.safety_class or safety_class_for_action_type(self.type)
+        return self.safety_class or DEFAULT_ACTION_SAFETY_MAPPING.get(
+            self.type, ActionSafetyClass.INFORMATIONAL
+        )
 
 
 class AgentApprovalRequest(BaseModel):

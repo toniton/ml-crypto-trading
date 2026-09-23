@@ -3,6 +3,7 @@ from __future__ import annotations
 from src.agent.actions.executor import AgentActionExecutor
 from src.agent.actions.models import (
     ActionReason,
+    ActionSafetyClass,
     ActionSeverity,
     ActionStatus,
     AgentAction,
@@ -20,6 +21,7 @@ from src.agent.actions.service import AgentActionService, AgentApprovalService
 __all__ = [
     "AgentAction",
     "AgentActionType",
+    "ActionSafetyClass",
     "ActionStatus",
     "ApprovalStatus",
     "ActionSeverity",

@@ -32,8 +32,10 @@ class TradingEngine:
 
     def stop_application(self):
         if self._is_running.is_set():
-            self._trading_scheduler.stop()
-            self._trading_executor.stop()
+            if self._trading_scheduler is not None:
+                self._trading_scheduler.stop()
+            if self._trading_executor is not None:
+                self._trading_executor.stop()
         self._is_running.clear()
 
     def update_config(self, trading_config: TradingConfig) -> None:
