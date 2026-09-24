@@ -80,7 +80,7 @@ class BacktestService(ApplicationLoggingMixin):
                 # Find runs associated with this branch
                 branch_runs = [
                     s for s in all_sessions
-                    if getattr(s, "config", {}) and s.config.get("branch_id") == branch_id
+                    if s.config and s.config.get("branch_id") == branch_id
                 ]
 
                 latest_run_metrics = None
@@ -115,14 +115,14 @@ class BacktestService(ApplicationLoggingMixin):
                 {
                     "session_id": s.id,
                     "ticker_symbol": s.ticker_symbol,
-                    "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                    "status": s.status.value,
                     "commit_hash": s.config.get("commit_hash") if s.config else None,
                     "initial_balance": s.config.get("initial_balance") if s.config else None,
                     "created_at": s.created_at.isoformat() if s.created_at else None,
                     "metrics": backtest_repo.get_result_metrics(s.id),
                 }
                 for s in all_sessions
-                if getattr(s, "config", {}) and s.config.get("branch_id") == branch_id
+                if s.config and s.config.get("branch_id") == branch_id
             ]
 
         return {
@@ -223,9 +223,10 @@ class BacktestService(ApplicationLoggingMixin):
             metadata={"branch_id": branch_id, "asset": asset_symbol},
         )
 
-        created_at = getattr(commit_obj, "created_at", None)
-        created_at_str = created_at.isoformat() if hasattr(created_at, "isoformat") else str(created_at)
-
+        created_at: Optional[datetime] = commit_obj.created_at
+        created_at_str = (
+            created_at.isoformat() if isinstance(created_at, datetime) else str(created_at)  # pylint: disable=no-member
+        )
         return {
             "branch_id": branch_id,
             "commit_hash": commit_obj.hash,

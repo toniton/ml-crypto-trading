@@ -57,9 +57,8 @@ class IncidentAggregator(ApplicationLoggingMixin):
         return self._subscription_id
 
     def _on_error_captured_event(self, event: Event) -> None:
-        payload = getattr(event, "event_payload", None)
-        if isinstance(payload, dict):
-            error_event = RuntimeErrorEvent.from_dict(payload)
+        if isinstance(event, RuntimeErrorCapturedEvent) and isinstance(event.event_payload, dict):
+            error_event = RuntimeErrorEvent.from_dict(event.event_payload)
             self.process_error_event(error_event)
 
     @classmethod

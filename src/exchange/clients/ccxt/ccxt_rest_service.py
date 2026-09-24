@@ -17,21 +17,22 @@ class CCXTExchangeRestService(ExchangeRestService):
         ExchangeProvidersEnum.CCXT_KUCOIN,
     }
 
-    _MAP = {
-        ExchangeProvidersEnum.CCXT_BINANCE: "binance",
-        ExchangeProvidersEnum.CCXT_KRAKEN: "kraken",
-        ExchangeProvidersEnum.CCXT_COINBASE: "coinbase",
-        ExchangeProvidersEnum.CCXT_BYBIT: "bybit",
-        ExchangeProvidersEnum.CCXT_KUCOIN: "kucoin",
+    _CLASS_MAP: ClassVar[dict[ExchangeProvidersEnum, type]] = {
+        ExchangeProvidersEnum.CCXT_BINANCE: ccxt.binance,
+        ExchangeProvidersEnum.CCXT_KRAKEN: ccxt.kraken,
+        ExchangeProvidersEnum.CCXT_COINBASE: ccxt.coinbase,
+        ExchangeProvidersEnum.CCXT_BYBIT: ccxt.bybit,
+        ExchangeProvidersEnum.CCXT_KUCOIN: ccxt.kucoin,
     }
 
     def __init__(self, provider: ExchangeProvidersEnum):
         self._provider = provider
-        __p = self._MAP.get(provider) or ""
+        exchange_class = self._CLASS_MAP.get(provider)
+        if exchange_class is None:
+            raise ValueError(f"CCXT does not support exchange: {provider}")
         try:
-            exchange_class = getattr(ccxt, __p)
             config = EnvironmentConfig()
-            credentials = config.ccxt_providers.get_provider_credentials(__p)
+            credentials = config.ccxt_providers.get_provider_credentials(provider)
 
             self._exchange = exchange_class({
                 'apiKey': credentials.api_key if credentials else None,
@@ -40,7 +41,7 @@ class CCXTExchangeRestService(ExchangeRestService):
                 'options': {'fetchOpenOrders': {'warnWithoutSymbol': False}},
             })
         except AttributeError as exc:
-            raise ValueError(f"CCXT does not support exchange: {__p}") from exc
+            raise ValueError(f"CCXT does not support exchange: {provider}") from exc
         except ImportError as exc:
             raise ImportError("ccxt library not installed. Install with: pip install ccxt") from exc
 
@@ -56,7 +57,21 @@ class CCXTExchangeRestService(ExchangeRestService):
         if not endpoint or not isinstance(endpoint, CCXTEndpoint):
             raise ValueError("Invalid builder for CCXTExchangeRestService")
 
-        method = getattr(self._exchange, endpoint.method_name)
+        method_map = {
+            "fetch_ticker": self._exchange.fetch_ticker,
+            "fetch_order_book": self._exchange.fetch_order_book,
+            "fetch_ohlcv": self._exchange.fetch_ohlcv,
+            "fetch_balance": self._exchange.fetch_balance,
+            "fetch_trading_fees": self._exchange.fetch_trading_fees,
+            "fetch_trading_fee": self._exchange.fetch_trading_fee,
+            "create_order": self._exchange.create_order,
+            "fetch_order": self._exchange.fetch_order,
+            "fetch_open_orders": self._exchange.fetch_open_orders,
+            "cancel_order": self._exchange.cancel_order,
+        }
+        method = method_map.get(endpoint.method_name)
+        if method is None or not callable(method):
+            raise ValueError(f"Exchange does not support method: {endpoint.method_name}")
         response = method(**endpoint.params)
 
         # Mapping logic

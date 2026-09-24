@@ -42,12 +42,17 @@ class AgentActionService(AgentLoggingMixin):
         self._actions[action.id] = action
 
         if self._event_bus:
-            self._event_bus.publish(
-                AgentActionCreatedEvent(
-                    action_id=action.id,
-                    action_payload=action.model_dump(mode="json"),
-                )
+            event = AgentActionCreatedEvent(
+                action_id=action.id,
+                action_payload=action.model_dump(mode="json"),
             )
+            event.set_causality(
+                correlation_id=str(action.correlation_id) if action.correlation_id else None,
+                causation_id=str(action.causation_id) if action.causation_id else None,
+                actor_type="AGENT",
+                source="agent_action_service",
+            )
+            self._event_bus.publish(event)
         return action
 
     def update_status(
@@ -69,26 +74,27 @@ class AgentActionService(AgentLoggingMixin):
 
         if self._event_bus:
             if status == ActionStatus.COMPLETED:
-                self._event_bus.publish(
-                    AgentActionCompletedEvent(
-                        action_id=action.id,
-                        result_payload=action.payload,
-                    )
+                event = AgentActionCompletedEvent(
+                    action_id=action.id,
+                    result_payload=action.payload,
                 )
             elif status == ActionStatus.FAILED:
-                self._event_bus.publish(
-                    AgentActionFailedEvent(
-                        action_id=action.id,
-                        error=error or "Action failed",
-                    )
+                event = AgentActionFailedEvent(
+                    action_id=action.id,
+                    error=error or "Action failed",
                 )
             else:
-                self._event_bus.publish(
-                    AgentActionUpdatedEvent(
-                        action_id=action.id,
-                        action_payload=action.model_dump(mode="json"),
-                    )
+                event = AgentActionUpdatedEvent(
+                    action_id=action.id,
+                    action_payload=action.model_dump(mode="json"),
                 )
+            event.set_causality(
+                correlation_id=str(action.correlation_id) if action.correlation_id else None,
+                causation_id=action.id,
+                actor_type="AGENT",
+                source="agent_action_service",
+            )
+            self._event_bus.publish(event)
         return action
 
     def get_action(self, action_id: str) -> Optional[AgentAction]:
@@ -174,12 +180,17 @@ class AgentApprovalService(AgentLoggingMixin):
         )
 
         if self._event_bus:
-            self._event_bus.publish(
-                AgentApprovalRequestedEvent(
-                    approval_id=request.id,
-                    approval_payload=request.model_dump(mode="json"),
-                )
+            event = AgentApprovalRequestedEvent(
+                approval_id=request.id,
+                approval_payload=request.model_dump(mode="json"),
             )
+            event.set_causality(
+                correlation_id=str(request.correlation_id) if request.correlation_id else None,
+                causation_id=str(request.causation_id) if request.causation_id else request.agent_action_id,
+                actor_type="AGENT",
+                source="agent_approval_service",
+            )
+            self._event_bus.publish(event)
         return request
 
     def get_approval(self, approval_id: str) -> Optional[AgentApprovalRequest]:
@@ -279,10 +290,16 @@ class AgentApprovalService(AgentLoggingMixin):
             payload = approval.model_dump(mode="json")
             if commit_hash:
                 payload["commit_hash"] = commit_hash
-            self._event_bus.publish(
-                AgentApprovalResolvedEvent(
-                    approval_id=approval.id,
-                    decision=decision,
-                    approval_payload=payload,
-                )
+            event = AgentApprovalResolvedEvent(
+                approval_id=approval.id,
+                decision=decision,
+                approval_payload=payload,
             )
+            event.set_causality(
+                correlation_id=str(approval.correlation_id) if approval.correlation_id else None,
+                causation_id=approval.id,
+                commit_hash=commit_hash,
+                actor_type="USER",
+                source="agent_approval_service",
+            )
+            self._event_bus.publish(event)

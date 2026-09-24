@@ -93,9 +93,14 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
         for _turn in range(self._max_turns):
             response = self._bound_model.invoke(messages)
 
-            if hasattr(response, "tool_calls") and response.tool_calls:
+            try:
+                tool_calls = response.tool_calls
+            except AttributeError:
+                tool_calls = None
+
+            if tool_calls:
                 messages.append(response)
-                self._execute_tool_calls(response.tool_calls, messages)
+                self._execute_tool_calls(tool_calls, messages)
                 continue
             return response.content
 
@@ -145,7 +150,10 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
     def _parse_json_fallback(self, schema: Type[Structured], result: Any) -> Structured:
         """Parses a structured output from raw model content when the provider does not
         support native structured output (e.g. local Ollama models)."""
-        content = result.content if hasattr(result, "content") else result
+        try:
+            content = result.content
+        except AttributeError:
+            content = result
         if isinstance(content, list):
             content = "".join(
                 str(item.get("text", "")) if isinstance(item, dict) else str(item)
@@ -177,12 +185,21 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
         for _turn in range(self._max_turns):
             accumulated: Any = None
             async for chunk in self._bound_model.astream(messages):
-                if hasattr(chunk, "content") and chunk.content:
-                    yield str(chunk.content)
+                try:
+                    chunk_content = chunk.content
+                except AttributeError:
+                    chunk_content = None
+                if chunk_content:
+                    yield str(chunk_content)
                 accumulated = chunk if accumulated is None else accumulated + chunk
 
-            if accumulated and hasattr(accumulated, "tool_calls") and accumulated.tool_calls:
+            try:
+                tool_calls = accumulated.tool_calls
+            except AttributeError:
+                tool_calls = None
+
+            if tool_calls:
                 messages.append(accumulated)
-                await asyncio.to_thread(self._execute_tool_calls, accumulated.tool_calls, messages)
+                await asyncio.to_thread(self._execute_tool_calls, tool_calls, messages)
                 continue
             break

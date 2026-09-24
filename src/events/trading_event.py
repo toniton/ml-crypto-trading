@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Optional
 from uuid import uuid4
@@ -8,24 +8,31 @@ from uuid import uuid4
 from src.core.interfaces.event import Event
 
 
-@dataclass
-class TradingEvent(Event):
+class TradingEvent(Event):  # pylint: disable=too-many-instance-attributes
     """Base class for live trading domain events with causal lineage tracking."""
 
+    def __init__(self):
+        self._commit_hash = None
+
     def __post_init__(self) -> None:
-        self._id: str = getattr(self, "_id", None) or uuid4().hex
-        self._event_type: str = getattr(self, "EVENT_TYPE", None) or type(self).__name__
-        self._timestamp: str = getattr(self, "_timestamp", None) or datetime.now(timezone.utc).isoformat()
-        self._correlation_id: Optional[str] = getattr(self, "_correlation_id", None)
-        self._causation_id: Optional[str] = getattr(self, "_causation_id", None)
-        self._source: str = getattr(self, "_source", "trading_engine")
-        self._actor_type: str = getattr(self, "_actor_type", "SYSTEM")
-        self._actor_id: Optional[str] = getattr(self, "_actor_id", None)
-        self._commit_hash: Optional[str] = getattr(self, "_commit_hash", None)
-        self._asset: Optional[str] = getattr(self, "symbol", None) or getattr(self, "ticker_symbol", None) or getattr(self, "_asset", None)
-        self._exchange: Optional[str] = getattr(self, "_exchange", None)
-        self._metadata: dict = getattr(self, "_metadata", {})
-        self._payload: dict = asdict(self)
+        self._id: str = uuid4().hex
+        self._event_type: str = self.EVENT_TYPE or type(self).__name__
+        self._timestamp: str = datetime.now(timezone.utc).isoformat()
+        self._correlation_id: Optional[str] = None
+        self._causation_id: Optional[str] = None
+        self._source: str = "trading_engine"
+        self._actor_type: str = "SYSTEM"
+        self._actor_id: Optional[str] = None
+        self._commit_hash: Optional[str] = None
+        self._asset: Optional[str] = self._resolve_asset()
+        self._exchange: Optional[str] = None
+        self._metadata: dict = {}
+        self._payload: dict = (
+            asdict(self) if (is_dataclass(self) and not isinstance(self, type)) else {}
+        )
+
+    def _resolve_asset(self) -> Optional[str]:
+        return None
 
     @property
     def id(self) -> str:
@@ -101,7 +108,7 @@ class TradingEvent(Event):
 
     @property
     def asset(self) -> Optional[str]:
-        return self._asset or getattr(self, "symbol", None) or getattr(self, "ticker_symbol", None)
+        return self._asset
 
     @asset.setter
     def asset(self, val: Optional[str]) -> None:

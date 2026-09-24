@@ -39,7 +39,7 @@ class FakeLlmAdapter(LlmAdapter):
 
     def bind_tools(self, tools) -> None:
         self._tools = {
-            (getattr(tool, "name", None) or str(tool)).lower(): tool
+            (tool.name if hasattr(tool, "name") and tool.name else str(tool)).lower(): tool
             for tool in tools
         }
 

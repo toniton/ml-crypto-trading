@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict, is_dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -21,7 +22,7 @@ class BacktestDBVSEntityMapper:
 
     @staticmethod
     def session_to_dao(session: BacktestSession) -> BacktestSessionDao:
-        status_str = session.status.value if hasattr(session.status, "value") else str(session.status)
+        status_str = session.status.value
         config_dict: dict[str, Any] = {}
         if session.request:
             config_dict = {
@@ -29,7 +30,11 @@ class BacktestDBVSEntityMapper:
                 "end_time": session.request.end_time.isoformat() if session.request.end_time else None,
                 "initial_balance": str(session.request.initial_balance),
                 "data_source": {
-                    "source_type": session.request.data_source.source_type.value if session.request.data_source else "csv",
+                    "source_type": (
+                        session.request.data_source.source_type.value
+                        if session.request.data_source
+                        else "csv"
+                    ),
                     "path": session.request.data_source.path if session.request.data_source else None,
                     "source_id": session.request.data_source.source_id if session.request.data_source else None,
                 } if session.request.data_source else None,
@@ -111,10 +116,14 @@ class BacktestDBVSEntityMapper:
     ) -> BacktestResultDao:
         metrics_dict: dict[str, Any] = {}
         if metrics is not None:
-            raw_metrics = (
-                metrics if isinstance(metrics, dict)
-                else getattr(metrics, "__dict__", {})
-            )
+            if isinstance(metrics, dict):
+                raw_metrics = metrics
+            elif isinstance(metrics, BacktestMetrics):
+                raw_metrics = asdict(metrics)
+            elif is_dataclass(metrics) and not isinstance(metrics, type):
+                raw_metrics = asdict(metrics)
+            else:
+                raw_metrics = {}
             for k, v in raw_metrics.items():
                 if isinstance(v, Decimal):
                     metrics_dict[k] = str(v)

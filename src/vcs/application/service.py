@@ -34,6 +34,10 @@ class VCSService(ApplicationLoggingMixin):
     def __init__(self, db_manager: DatabaseManager):
         self._db_manager = db_manager
 
+    @property
+    def db_manager(self) -> DatabaseManager:
+        return self._db_manager
+
     def resolve_commit_hash(self, commit_hash_or_ref: str) -> str:
         with self._db_manager.get_unit_of_work() as uow:
             ref_repo = uow.get_repository(PostgresRefRepository)

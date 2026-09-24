@@ -16,6 +16,7 @@ class TimelineCategory(str, Enum):
     APPROVAL = "APPROVAL"
     VCS = "VCS"
     BACKTEST = "BACKTEST"
+    RUNTIME = "RUNTIME"
     SYSTEM = "SYSTEM"
 
 

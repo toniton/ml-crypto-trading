@@ -5,6 +5,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from typing import Any, Optional, TypeVar
 
+from pydantic import BaseModel
 from src.core.interfaces.event import Event
 
 T = TypeVar("T")
@@ -59,11 +60,11 @@ class MessageEvent(Event[T]):
     def _serialize_payload(payload: Any) -> Any:
         if payload is None:
             return None
-        if hasattr(payload, "to_dict"):
+        if isinstance(payload, Event):
             return payload.to_dict()
-        if hasattr(payload, "model_dump"):
+        if isinstance(payload, BaseModel):
             return payload.model_dump()
-        if is_dataclass(payload):
+        if is_dataclass(payload) and not isinstance(payload, type):
             return asdict(payload)
         if isinstance(payload, dict):
             return payload

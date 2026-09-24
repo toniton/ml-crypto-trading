@@ -114,7 +114,8 @@ class LoggingManager:
     def _setup_domain_logger(self, domain: LogDomain, level: str) -> None:
         logger_name = f"{domain.value}.{self.instance_id}"
         logger = logging.getLogger(logger_name)
-        logger.setLevel(getattr(logging, level.upper()))
+        log_level = logging.getLevelNamesMapping().get(level.upper(), logging.INFO)
+        logger.setLevel(log_level)
         logger.propagate = False
 
         # Add file handler

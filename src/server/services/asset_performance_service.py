@@ -99,9 +99,6 @@ class AssetPerformanceService:
     ) -> AssetPerformanceResponse:
         # Sort chronologically by execution time
         def get_exec_dt(o: Order) -> datetime:
-            exec_ts = getattr(o, "executed_timestamp", None)
-            if exec_dt_val := exec_ts:
-                return exec_dt_val
             if o.executed_time is not None:
                 return datetime.fromtimestamp(o.executed_time, tz=timezone.utc)
             return datetime.fromtimestamp(o.created_time, tz=timezone.utc)
@@ -128,7 +125,7 @@ class AssetPerformanceService:
         execution_items: List[TradeExecutionItem] = []
 
         for order in sorted_orders:
-            action_raw = order.trade_action.value if hasattr(order.trade_action, "value") else str(order.trade_action)
+            action_raw = order.trade_action.value
             side = "BUY" if "BUY" in action_raw.upper() else "SELL"
 
             qty = Decimal(str(order.quantity or "0"))

@@ -97,8 +97,8 @@ class StarvationWatchdog(ApplicationLoggingMixin):
                 activity_state=state.to_dict() if state is not None else None,
                 threshold=threshold,
                 detected_at=str(now),
-                agent_metadata=AgentEventMetadata(causation_id=None),
             )
+            event.agent_metadata = AgentEventMetadata(causation_id=None)
             self._event_bus.publish(event)
             self.app_logger.warning(
                 f"Trading starvation detected for {ticker}: {anomaly_kind}"
@@ -113,7 +113,7 @@ class StarvationWatchdog(ApplicationLoggingMixin):
     def _is_starved(self, state: Optional[AssetActivityState], now: float, threshold: float) -> bool:
         return self._classify(state, now, threshold, baseline=self._baseline(state)) is not None
 
-    def _baseline(self, state: Optional[AssetActivityState] = None) -> float:
+    def _baseline(self, _state: Optional[AssetActivityState] = None) -> float:
         return max(self._activity_provider.started_at, self._started_at)
 
     @classmethod
@@ -153,8 +153,7 @@ class StarvationWatchdog(ApplicationLoggingMixin):
         return value is None or (now - value) > threshold
 
     def _threshold_for(self, asset: Asset) -> float:
-        schedule = getattr(asset, "schedule", None)
-        schedule_value = getattr(schedule, "value", schedule)
+        schedule_value = asset.schedule.value if isinstance(asset.schedule, AssetSchedule) else asset.schedule
         if schedule_value in self.SCHEDULE_SECONDS:
             expected = self.SCHEDULE_SECONDS[schedule_value]
         else:

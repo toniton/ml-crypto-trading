@@ -46,10 +46,13 @@ class RefChangeListener(ApplicationLoggingMixin):
                 engine = self.db_manager.get_engine()
                 raw_conn = engine.raw_connection()
                 # Set autocommit mode for psycopg2/psycopg3 raw connection
-                if hasattr(raw_conn, "set_isolation_level"):
+                try:
                     raw_conn.set_isolation_level(0)  # AUTOCOMMIT
-                elif hasattr(raw_conn, "autocommit"):
-                    raw_conn.autocommit = True
+                except AttributeError:
+                    try:
+                        raw_conn.autocommit = True
+                    except AttributeError:
+                        self.app_logger.debug("Raw connection does not support explicit isolation level.")
 
                 cursor = raw_conn.cursor()
                 cursor.execute(f"LISTEN {self.channel_name};")

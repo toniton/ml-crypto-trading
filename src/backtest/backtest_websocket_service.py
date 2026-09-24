@@ -58,7 +58,7 @@ class BacktestWebSocketService(ExchangeWebSocketService):
 
     def subscribe(self, builder: ExchangeWebSocketBuilder):
         sub_data = builder.get_subscription_data()
-        event_class = getattr(builder, "event_class", None) if isinstance(builder, BacktestWebSocketBuilder) else None
+        event_class = builder.event_class if isinstance(builder, BacktestWebSocketBuilder) else None
 
         self._subscriptions[builder.key] = (sub_data, event_class)
 

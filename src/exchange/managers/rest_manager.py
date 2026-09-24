@@ -25,7 +25,7 @@ def _instrument_rest(operation: str):
 
         @functools.wraps(func)
         def wrapper(self, exchange: str, *args, **kwargs):
-            collector = getattr(self, "_metrics_collector", None)
+            collector = self.metrics_collector
             if collector is None:
                 return func(self, exchange, *args, **kwargs)
 
@@ -58,6 +58,10 @@ class RestManager(ExchangeRestManager, RestRegistry):
     def __init__(self, metrics_collector: Optional[ExchangeMetricsCollector] = None):
         super().__init__()
         self._metrics_collector = metrics_collector
+
+    @property
+    def metrics_collector(self) -> Optional[ExchangeMetricsCollector]:
+        return self._metrics_collector
 
     @_instrument_rest("get_market_data")
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
@@ -133,4 +137,3 @@ class RestManager(ExchangeRestManager, RestRegistry):
         service = self.get_service(exchange)
         builder = service.builder().candles(ticker_symbol, timeframe)
         return service.execute(builder)
-

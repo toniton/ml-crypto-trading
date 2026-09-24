@@ -14,10 +14,16 @@ class AuditCsvFormatter(logging.Formatter):
 
         row = []
         for field in self.header:
-            if field == 'timestamp':
-                val = getattr(record, 'timestamp', int(record.created * 1000))
+            if field == "timestamp":
+                try:
+                    val = record.__dict__["timestamp"]
+                except KeyError:
+                    val = int(record.created * 1000)
             else:
-                val = getattr(record, field, '')
+                try:
+                    val = record.__dict__[field]
+                except (KeyError, AttributeError):
+                    val = ""
             row.append(val)
 
         writer.writerow(row)

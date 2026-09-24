@@ -47,7 +47,7 @@ class ManagerFactory:
             fees_manager=FeesManager(assets, rest_manager),
             order_manager=order_manager,
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
-            consensus_manager=ConsensusManager(),
+            consensus_manager=ConsensusManager(event_bus=event_bus),
             protection_manager=ProtectionManager(),
             session_manager=SessionManager(config_vcs=config_vcs),
             websocket_manager=websocket_manager,

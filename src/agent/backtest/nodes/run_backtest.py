@@ -11,12 +11,16 @@ class RunBacktestNode:
     def __call__(self, state: BacktestAgentState) -> dict:
         resolved = state["resolved_request"]
         tool = self._llm.get_tool("run_backtest")
-        if tool is None or not hasattr(tool, "backtest_service"):
+        if tool is None:
             return {"error": "Backtest tool is not available"}
         try:
             service = tool.backtest_service
+            if service is None:
+                return {"error": "Backtest tool is not available"}
             result = service.run(resolved)
             summary = service.summary(result.session_id)
             return {"result": result, "summary": summary}
+        except AttributeError:
+            return {"error": "Backtest tool is not available"}
         except Exception as exc:  # pylint: disable=broad-except
             return {"error": str(exc)}

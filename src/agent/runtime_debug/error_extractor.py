@@ -36,12 +36,12 @@ def extract_runtime_error_from_order_exception(
             if current.method:
                 metadata["method"] = current.method
             break
-        current = getattr(current, "__cause__", None) or getattr(current, "__context__", None)
+        current = current.__cause__ or current.__context__
 
     if order is not None:
         metadata["order_quantity"] = str(order.quantity)
         metadata["order_price"] = str(order.price)
-        metadata["trade_action"] = order.trade_action.value if hasattr(order.trade_action, "value") else str(order.trade_action)
+        metadata["trade_action"] = order.trade_action.value
 
     severity = ErrorSeverity.ERROR
     if http_status == 400 and exchange_code:

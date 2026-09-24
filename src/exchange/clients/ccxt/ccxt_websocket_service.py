@@ -24,12 +24,12 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         ExchangeProvidersEnum.CCXT_KUCOIN,
     }
 
-    _MAP: ClassVar[dict[ExchangeProvidersEnum, str]] = {
-        ExchangeProvidersEnum.CCXT_BINANCE: "binance",
-        ExchangeProvidersEnum.CCXT_KRAKEN: "kraken",
-        ExchangeProvidersEnum.CCXT_COINBASE: "coinbase",
-        ExchangeProvidersEnum.CCXT_BYBIT: "bybit",
-        ExchangeProvidersEnum.CCXT_KUCOIN: "kucoin",
+    _CLASS_MAP: ClassVar[dict[ExchangeProvidersEnum, type]] = {
+        ExchangeProvidersEnum.CCXT_BINANCE: ccxtpro.binance,
+        ExchangeProvidersEnum.CCXT_KRAKEN: ccxtpro.kraken,
+        ExchangeProvidersEnum.CCXT_COINBASE: ccxtpro.coinbase,
+        ExchangeProvidersEnum.CCXT_BYBIT: ccxtpro.bybit,
+        ExchangeProvidersEnum.CCXT_KUCOIN: ccxtpro.kucoin,
     }
 
     def __init__(self, provider: ExchangeProvidersEnum):
@@ -80,10 +80,11 @@ class CCXTExchangeWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         asyncio.set_event_loop(self._loop)
 
         try:
-            __p = self._MAP.get(self._provider) or ""
-            exchange_class = getattr(ccxtpro, __p)
+            exchange_class = self._CLASS_MAP.get(self._provider)
+            if exchange_class is None:
+                raise ValueError(f"CCXT Pro does not support exchange: {self._provider}")
             config = EnvironmentConfig()
-            credentials = config.ccxt_providers.get_provider_credentials(__p)  # pylint: disable=no-member
+            credentials = config.ccxt_providers.get_provider_credentials(self._provider)  # pylint: disable=no-member
 
             self._exchange = exchange_class({
                 'apiKey': credentials.api_key if credentials else None,

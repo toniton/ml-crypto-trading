@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, is_dataclass
 from typing import Any, Literal
+
+from pydantic import BaseModel
 
 
 @dataclass
@@ -39,6 +41,8 @@ class AIEvent:
 
     @staticmethod
     def _json_default(value: Any) -> Any:
-        if hasattr(value, "model_dump"):
+        if isinstance(value, BaseModel):
             return value.model_dump()
-        return asdict(value)
+        if is_dataclass(value) and not isinstance(value, type):
+            return asdict(value)
+        return str(value)

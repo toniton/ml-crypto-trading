@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from src.core.interfaces.unit_of_work import UnitOfWork
 
@@ -14,4 +15,8 @@ class DatabaseManager(ABC):
 
     @abstractmethod
     def get_unit_of_work(self) -> UnitOfWork:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_engine(self) -> Any:
         raise NotImplementedError

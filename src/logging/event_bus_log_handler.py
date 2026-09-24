@@ -30,17 +30,29 @@ class EventBusLogHandler(logging.Handler):
             asset=self._resolve_asset(record, message),
             thread=record.threadName,
         )
+        metadata = {}
+        try:
+            extra_meta = record.__dict__["metadata"]
+            if isinstance(extra_meta, dict):
+                metadata = dict(extra_meta)
+        except (KeyError, AttributeError):
+            pass
+
         return LogEvent(
             payload,
             timestamp=datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
-            metadata=dict(getattr(record, "metadata", None) or {}),
+            metadata=metadata,
         )
 
     @staticmethod
     def _resolve_asset(record: logging.LogRecord, message: str) -> Optional[str]:
-        explicit = getattr(record, "asset", None)
-        if explicit:
-            return explicit
+        try:
+            explicit = record.__dict__["asset"]
+            if explicit:
+                return explicit
+        except (KeyError, AttributeError):
+            pass
+
         symbols = extract_asset_symbols(message)
         if len(symbols) == 1:
             return symbols[0]

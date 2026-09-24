@@ -70,7 +70,10 @@ class MergeBranchRequest(BaseModel):
     author: Optional[str] = Field(default="user", description="Author")
     message: Optional[str] = Field(default=None, description="Merge commit message")
     expected_target_head: Optional[str] = Field(default=None, description="Expected target HEAD for optimistic locking")
-    resolved_config: Optional[dict] = Field(default=None, description="Resolved config if conflicts were manually resolved")
+    resolved_config: Optional[dict] = Field(
+        default=None,
+        description="Resolved config if conflicts were manually resolved",
+    )
 
 
 class ChatRequest(BaseModel):
@@ -81,14 +84,12 @@ class ChatRequest(BaseModel):
         description="Optional session ID. If omitted or not found, a new session is created.",
     )
 
-    def get_prompt_text(self) -> str:  # pylint: disable=no-member
-        prompt_val = getattr(self, "prompt", None)
-        query_val = getattr(self, "query", None)
-        raw = prompt_val if isinstance(prompt_val, str) else query_val
+    def get_prompt_text(self) -> str:
+        raw: Optional[str] = self.prompt or self.query
         if not isinstance(raw, str) or not raw.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Either 'prompt' or 'query' must be provided."
+                detail="Either 'prompt' or 'query' must be provided.",
             )
         return raw.strip()
 
@@ -188,7 +189,7 @@ class ChatApp:
 
         @app.get("/api/v1/runtime")
         async def runtime_health_endpoint():
-            collector: Optional[RuntimeMetricsCollector] = getattr(app.state, "runtime_collector", None)
+            collector: Optional[RuntimeMetricsCollector] = app.state.runtime_collector
             if not collector:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -198,7 +199,7 @@ class ChatApp:
 
         @app.get("/api/v1/orders/lifecycle")
         async def order_lifecycle_endpoint():
-            collector: Optional[OrderLifecycleCollector] = getattr(app.state, "order_lifecycle_collector", None)
+            collector: Optional[OrderLifecycleCollector] = app.state.order_lifecycle_collector
             if not collector:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -432,7 +433,7 @@ class ChatApp:
                     results.append({
                         "session_id": s.id,
                         "ticker_symbol": s.ticker_symbol,
-                        "status": s.status.value if hasattr(s.status, "value") else str(s.status),
+                        "status": s.status.value,
                         "initial_balance": str(s.request.initial_balance) if s.request else None,
                         "final_equity": str(res.final_equity) if res else None,
                         "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -450,7 +451,7 @@ class ChatApp:
                 return {
                     "session_id": session.id,
                     "ticker_symbol": session.ticker_symbol,
-                    "status": session.status.value if hasattr(session.status, "value") else str(session.status),
+                    "status": session.status.value,
                     "created_at": session.created_at.isoformat() if session.created_at else None,
                     "started_at": session.started_at.isoformat() if session.started_at else None,
                 }
@@ -509,7 +510,7 @@ class ChatApp:
 
         @app.get("/api/v1/backtests/recorded-data")
         async def list_recorded_data_endpoint(req: Request):
-            md_store: Optional[MarketDataStore] = getattr(req.app.state, "market_data_store", None)
+            md_store: Optional[MarketDataStore] = req.app.state.market_data_store
             if not md_store:
                 return []
             results = []
@@ -547,7 +548,7 @@ class ChatApp:
             return {
                 "session_id": session.id,
                 "ticker_symbol": session.ticker_symbol,
-                "status": session.status.value if hasattr(session.status, "value") else str(session.status),
+                "status": session.status.value,
                 "created_at": session.created_at.isoformat() if session.created_at else None,
                 "started_at": session.started_at.isoformat() if session.started_at else None,
                 "completed_at": session.completed_at.isoformat() if session.completed_at else None,
@@ -565,7 +566,7 @@ class ChatApp:
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:
-            gateway: Optional[AgentGateway] = getattr(req.app.state, "agent", None)
+            gateway: Optional[AgentGateway] = req.app.state.agent
             if not gateway:
                 raise HTTPException(
                     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -615,7 +616,7 @@ class ChatApp:
                             payload = payload or {}
                             payload["proposal"] = (
                                 proposal.model_dump(mode="json")
-                                if hasattr(proposal, "model_dump")
+                                if isinstance(proposal, BaseModel)
                                 else proposal
                             )
                         await asyncio.to_thread(
@@ -754,18 +755,16 @@ class ChatApp:
             ) from exc
 
     @staticmethod
-    def format_event(event) -> str:
-        name = "message"
-        data = event.to_json() if hasattr(event, "to_json") else str(event)
-        if hasattr(event, "type"):
-            name = event.type
+    def format_event(event: AIEvent) -> str:
+        name = event.type if isinstance(event, AIEvent) else "message"
+        data = event.to_json() if isinstance(event, AIEvent) else str(event)
         return f"event: {name}\ndata: {data}\n\n"
 
     @staticmethod
-    def _capture(event, blocks: list, tokens: List[str]) -> None:
+    def _capture(event: AIEvent, blocks: list, tokens: List[str]) -> None:
         if event.type == "block":
             payload = event.payload
-            blocks.append(payload.model_dump() if hasattr(payload, "model_dump") else payload)
+            blocks.append(payload.model_dump() if isinstance(payload, BaseModel) else payload)
         elif event.type == "clarification":
             payload = event.payload or {}
             if isinstance(payload, dict):

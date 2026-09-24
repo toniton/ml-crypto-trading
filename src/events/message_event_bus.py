@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import uuid
 from typing import Any, Callable, Optional
@@ -25,6 +26,11 @@ class MessageEventBus(EventBus):
         self._lock = threading.RLock()
         self._subscriptions: dict[str, dict[str, EventSubscription]] = {}
 
+    @property
+    def app_logger(self) -> logging.Logger:
+        from src.logging.factory import LoggingFactory  # pylint: disable=import-outside-toplevel
+        return LoggingFactory.get_application_logger(self.__class__.__name__)
+
     def subscribe(self, event_type: str, subscription: EventSubscription) -> str:
         subscription_id = uuid.uuid4().hex
         with self._lock:
@@ -47,8 +53,14 @@ class MessageEventBus(EventBus):
 
     def publish(self, event: Event) -> None:
         event_types = {event.type}
-        if hasattr(event, "EVENT_TYPE"):
-            event_types.add(getattr(event, "EVENT_TYPE"))
+        if event.EVENT_TYPE:
+            event_types.add(event.EVENT_TYPE)
+        else:
+            self.app_logger.debug(
+                "Event '%s' has no EVENT_TYPE alias; publishing under type '%s'.",
+                type(event).__name__,
+                event.type,
+            )
         if type(event).__name__ != event.type:
             event_types.add(type(event).__name__)
 

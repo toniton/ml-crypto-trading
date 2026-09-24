@@ -45,12 +45,22 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
         return BacktestRestBuilder()
 
     def execute(self, builder: BacktestRestBuilder) -> Any:
-        try:
-            handler = getattr(self, f"_handle_{builder.method_name}")
-        except AttributeError as exc:
+        handlers = {
+            "market_data": self._handle_market_data,
+            "account_balance": self._handle_account_balance,
+            "account_fees": self._handle_account_fees,
+            "instrument_fees": self._handle_instrument_fees,
+            "create_order": self._handle_create_order,
+            "get_order": self._handle_get_order,
+            "get_open_orders": self._handle_get_open_orders,
+            "cancel_order": self._handle_cancel_order,
+            "candles": self._handle_candles,
+        }
+        handler = handlers.get(builder.method_name)
+        if handler is None:
             raise NotImplementedError(
                 f"BacktestRestService does not support {builder.method_name}"
-            ) from exc
+            )
         return handler(**builder.params)
 
     def _handle_market_data(self, ticker_symbol: str) -> MarketData:

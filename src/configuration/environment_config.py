@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -26,8 +28,19 @@ class CCXTProviderSettings(BaseModel):
 
     model_config = SettingsConfigDict(extra='ignore')
 
-    def get_provider_credentials(self, provider_name: str) -> Optional[ExchangeCredentials]:
-        return getattr(self, provider_name, None)
+    def get_provider_credentials(self, provider: Any) -> Optional[ExchangeCredentials]:
+        key = provider.name if isinstance(provider, Enum) else str(provider).upper()
+        if "BINANCE" in key:
+            return self.binance
+        if "KRAKEN" in key:
+            return self.kraken
+        if "COINBASE" in key:
+            return self.coinbase
+        if "BYBIT" in key:
+            return self.bybit
+        if "KUCOIN" in key:
+            return self.kucoin
+        return None
 
 
 class EnvironmentConfig(BaseSettings):

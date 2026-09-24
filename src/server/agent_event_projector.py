@@ -30,17 +30,17 @@ class AgentEventProjector(ApplicationLoggingMixin):
         self._subscriptions: list[str] = []
 
     def subscribe(self) -> None:
-        for event_type in (
-                "AgentMessageCreatedEvent",
-                "AgentActionCreatedEvent",
-                "AgentActionUpdatedEvent",
-                "AgentActionCompletedEvent",
-                "AgentActionFailedEvent",
-                "AgentApprovalRequestedEvent",
-                "AgentApprovalResolvedEvent",
+        for event_cls in (
+                AgentMessageCreatedEvent,
+                AgentActionCreatedEvent,
+                AgentActionUpdatedEvent,
+                AgentActionCompletedEvent,
+                AgentActionFailedEvent,
+                AgentApprovalRequestedEvent,
+                AgentApprovalResolvedEvent,
         ):
             self._subscriptions.append(
-                self._event_bus.subscribe(event_type, CallbackSubscription(self._on_event))
+                self._event_bus.subscribe(event_cls.__name__, CallbackSubscription(self._on_event))
             )
 
     def close(self) -> None:
@@ -49,18 +49,29 @@ class AgentEventProjector(ApplicationLoggingMixin):
         self._subscriptions.clear()
 
     def _on_event(self, event: Event) -> None:
-        event_id = getattr(event, "event_id", None) or getattr(event, "id", None)
+        event_id = event.id
         if event_id:
             with self._lock:
                 if event_id in self._seen_event_ids:
                     return
                 self._seen_event_ids.add(event_id)
 
-        handler = getattr(self, f"_on_{type(event).__name__}", None)
-        if handler is not None:
-            handler(event)
+        if isinstance(event, AgentMessageCreatedEvent):
+            self._on_agent_message_created(event)
+        elif isinstance(event, AgentActionCreatedEvent):
+            self._on_agent_action_created(event)
+        elif isinstance(event, AgentActionUpdatedEvent):
+            self._on_agent_action_updated(event)
+        elif isinstance(event, AgentActionCompletedEvent):
+            self._on_agent_action_completed(event)
+        elif isinstance(event, AgentActionFailedEvent):
+            self._on_agent_action_failed(event)
+        elif isinstance(event, AgentApprovalRequestedEvent):
+            self._on_agent_approval_requested(event)
+        elif isinstance(event, AgentApprovalResolvedEvent):
+            self._on_agent_approval_resolved(event)
 
-    def _on_AgentMessageCreatedEvent(self, event: AgentMessageCreatedEvent) -> None:
+    def _on_agent_message_created(self, event: AgentMessageCreatedEvent) -> None:
         conversation_id = self._resolve_conversation(event)
         payload = event.message_payload or {}
         self._conversation_store.append(
@@ -74,13 +85,13 @@ class AgentEventProjector(ApplicationLoggingMixin):
             ),
         )
 
-    def _on_AgentActionCreatedEvent(self, event: AgentActionCreatedEvent) -> None:
+    def _on_agent_action_created(self, event: AgentActionCreatedEvent) -> None:
         self._upsert_action(event.action_id, event.action_payload or {})
 
-    def _on_AgentActionUpdatedEvent(self, event: AgentActionUpdatedEvent) -> None:
+    def _on_agent_action_updated(self, event: AgentActionUpdatedEvent) -> None:
         self._upsert_action(event.action_id, event.action_payload or {})
 
-    def _on_AgentActionCompletedEvent(self, event: AgentActionCompletedEvent) -> None:
+    def _on_agent_action_completed(self, event: AgentActionCompletedEvent) -> None:
         with self._lock:
             action = self._actions.get(event.action_id)
             if action is not None:
@@ -88,14 +99,14 @@ class AgentEventProjector(ApplicationLoggingMixin):
                 if event.result_payload:
                     action["result_payload"] = event.result_payload
 
-    def _on_AgentActionFailedEvent(self, event: AgentActionFailedEvent) -> None:
+    def _on_agent_action_failed(self, event: AgentActionFailedEvent) -> None:
         with self._lock:
             action = self._actions.get(event.action_id)
             if action is not None:
                 action["status"] = "FAILED"
                 action["error"] = event.error
 
-    def _on_AgentApprovalRequestedEvent(self, event: AgentApprovalRequestedEvent) -> None:
+    def _on_agent_approval_requested(self, event: AgentApprovalRequestedEvent) -> None:
         payload = event.approval_payload or {}
         payload["status"] = payload.get("status") or "PENDING"
         with self._lock:
@@ -127,7 +138,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
             ),
         )
 
-    def _on_AgentApprovalResolvedEvent(self, event: AgentApprovalResolvedEvent) -> None:
+    def _on_agent_approval_resolved(self, event: AgentApprovalResolvedEvent) -> None:
         with self._lock:
             approval = self._approvals.get(event.approval_id)
             if approval is None:
@@ -149,15 +160,30 @@ class AgentEventProjector(ApplicationLoggingMixin):
             self._actions[action_id] = existing
 
     def _resolve_conversation(self, event: Any) -> str:
-        conversation_id = getattr(event, "conversation_id", None)
-        if not conversation_id:
-            approval_payload = getattr(event, "approval_payload", None) or {}
-            conversation_id = approval_payload.get("conversation_id")
+        conversation_id = None
+        if isinstance(event, AgentMessageCreatedEvent):
+            conversation_id = event.conversation_id
+        elif isinstance(event, AgentApprovalRequestedEvent) and event.approval_payload:
+            conversation_id = event.approval_payload.get("conversation_id")
+
         if conversation_id:
             return conversation_id
-        agent_context_id = getattr(event, "agent_context_id", None) or "agent"
-        server_profile_id = getattr(event, "server_profile_id", None) or "default"
-        user_id = getattr(event, "user_id", None) or "system"
+
+        agent_context_id = (
+            event.agent_context_id
+            if isinstance(event, AgentMessageCreatedEvent) and event.agent_context_id
+            else "agent"
+        )
+        server_profile_id = (
+            event.server_profile_id
+            if isinstance(event, AgentMessageCreatedEvent) and event.server_profile_id
+            else "default"
+        )
+        user_id = (
+            event.user_id
+            if isinstance(event, AgentMessageCreatedEvent) and event.user_id
+            else "system"
+        )
         session_id = f"system:{server_profile_id}:{agent_context_id}:{user_id}"
         return self._conversation_store.get_or_create(session_id)
 

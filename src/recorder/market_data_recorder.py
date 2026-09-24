@@ -23,7 +23,5 @@ class MarketDataRecorder:
         return self._subscription_ids
 
     def on_market_data(self, event: Event) -> None:
-        ticker_symbol = getattr(event, "ticker_symbol", None)
-        market_data = getattr(event, "market_data", None)
-        if ticker_symbol and market_data is not None:
-            self._store.record(ticker_symbol, market_data)
+        if isinstance(event, MarketDataEvent):
+            self._store.record(event.ticker_symbol, event.market_data)

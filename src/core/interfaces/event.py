@@ -1,12 +1,12 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from typing import Generic, TypeVar
+from typing import ClassVar, Generic, Optional, TypeVar
 
 T = TypeVar("T")
 
 
 class Event(ABC, Generic[T]):
+    EVENT_TYPE: ClassVar[Optional[str]] = None
+
     @property
     @abstractmethod
     def id(self) -> str:

@@ -5,7 +5,19 @@ from decimal import Decimal
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.agent.monitoring.starvation_watchdog import TradingActivityAnomalyDetectedEvent
-from src.events.agent_events import AgentApprovalRequestedEvent, AgentApprovalResolvedEvent
+from src.events.agent_events import (
+    AgentActionCompletedEvent,
+    AgentActionFailedEvent,
+    AgentApprovalRequestedEvent,
+    AgentApprovalResolvedEvent,
+)
+from src.events.decision_models import (
+    ActorType,
+    AgentDecisionRecordedEvent,
+    DecisionRecord,
+    DecisionType,
+    EntityRef,
+)
 from src.events.message_event_bus import MessageEventBus
 from src.server.timeline_projector import TimelineProjector
 from src.trading.events import (
@@ -149,9 +161,61 @@ def test_max_items_eviction():
     projector.subscribe()
 
     for i in range(5):
-        bus.publish(ConsensusEvaluatedEvent(symbol=f"SYM_{i}", decision="HOLD", quorum_met=False, buy_votes=0, sell_votes=0))
+        bus.publish(ConsensusEvaluatedEvent(
+            symbol=f"SYM_{i}", decision="HOLD", quorum_met=False, buy_votes=0, sell_votes=0
+        ))
 
     items = projector.list_items()
     assert len(items) == 3
     assert items[0]["title"] == "Consensus Evaluated: SYM_4 -> HOLD"
     assert items[2]["title"] == "Consensus Evaluated: SYM_2 -> HOLD"
+
+
+def test_decision_recorded_event_projected():
+    bus = MessageEventBus()
+    projector = TimelineProjector(event_bus=bus)
+    projector.subscribe()
+
+    record = DecisionRecord(
+        actor_type=ActorType.AGENT,
+        actor_id="investigation_worker",
+        decision_type=DecisionType.INVESTIGATION_OUTCOME,
+        summary="Risk or configuration gating",
+        rationale="Starvation detected for BTC_USD. Proposing pause.",
+        evidence_ids=["ev-123"],
+        entities=[EntityRef(type="ASSET", id="BTC_USD")],
+    )
+    event = AgentDecisionRecordedEvent(decision=record)
+    event.set_causality(correlation_id="corr-1", causation_id="cause-1", asset="BTC_USD")
+    bus.publish(event)
+
+    items = projector.list_items(category="DECISION")
+    assert len(items) == 1
+    assert items[0]["category"] == "DECISION"
+    assert items[0]["title"] == "Decision: Risk or configuration gating"
+    assert items[0]["summary"] == "Starvation detected for BTC_USD. Proposing pause."
+    assert items[0]["correlation_id"] == "corr-1"
+    assert items[0]["causation_id"] == "cause-1"
+    assert items[0]["primary_entity"]["id"] == "BTC_USD"
+
+
+def test_action_completed_and_failed_projected():
+    bus = MessageEventBus()
+    projector = TimelineProjector(event_bus=bus)
+    projector.subscribe()
+
+    bus.publish(AgentActionCompletedEvent(
+        action_id="act-100",
+        result_payload={"status": "ok"},
+    ))
+    bus.publish(AgentActionFailedEvent(
+        action_id="act-200",
+        error="Permission denied",
+    ))
+
+    items = projector.list_items(category="AGENT")
+    assert len(items) == 2
+    assert items[0]["title"] == "Action Failed: act-200"
+    assert items[0]["severity"] == "ERROR"
+    assert items[1]["title"] == "Action Completed: act-100"
+    assert items[1]["severity"] == "INFO"

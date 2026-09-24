@@ -6,7 +6,15 @@ from typing import Literal, Optional
 
 from src.agent.monitoring.activity_state import ActivityStateProvider, AssetActivityState
 from src.backtest.analysis.drift_detector import BacktestDriftDetector, DriftReport
+from src.core.interfaces.event_bus import EventBus
 from src.events.agent_events import TradingActivityAnomalyDetectedEvent
+from src.events.decision_models import (
+    ActorType,
+    AgentDecisionRecordedEvent,
+    DecisionRecord,
+    DecisionType,
+    EntityRef,
+)
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
@@ -24,9 +32,11 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             self,
             activity_provider: ActivityStateProvider,
             drift_detector: Optional[BacktestDriftDetector] = None,
+            event_bus: Optional[EventBus] = None,
     ):
         self._activity_provider = activity_provider
         self._drift_detector = drift_detector
+        self._event_bus = event_bus
 
     def investigate(self, event: TradingActivityAnomalyDetectedEvent) -> AnomalyDecision:
         state = self._activity_provider.state_for(event.asset)
@@ -84,6 +94,12 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             body: str,
     ) -> AnomalyDecision:
         content, blocks = self._build_diagnostic(event, state, drift, title, body)
+        self._record_decision(
+            event=event,
+            summary=title,
+            rationale=body,
+            drift=drift,
+        )
         return AnomalyDecision(kind="diagnostic", asset=event.asset, content=content, blocks=blocks)
 
     def _proposal_decision(
@@ -112,6 +128,12 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             "risks": ["Asset will not trade until re-enabled."],
             "expected_effect": f"Pause trading for {event.asset} until activity resumes.",
         }
+        self._record_decision(
+            event=event,
+            summary=title,
+            rationale=body,
+            drift=drift,
+        )
         return AnomalyDecision(
             kind="proposal",
             asset=event.asset,
@@ -119,6 +141,44 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             blocks=blocks,
             proposed_change=proposed_change,
         )
+
+    def _record_decision(
+            self,
+            event: TradingActivityAnomalyDetectedEvent,
+            summary: str,
+            rationale: str,
+            drift: Optional[DriftReport],
+            proposed_action_id: Optional[str] = None,
+    ) -> None:
+        if self._event_bus is None:
+            return
+        try:
+            evidence_ids = [event.event_id]
+            if drift is not None:
+                evidence_ids.append(f"drift:{event.asset}:{drift.drifted}")
+
+            record = DecisionRecord(
+                actor_type=ActorType.AGENT,
+                actor_id="investigate_activity_anomaly",
+                decision_type=DecisionType.INVESTIGATION_OUTCOME,
+                summary=summary,
+                rationale=rationale,
+                evidence_ids=evidence_ids,
+                entities=[EntityRef(type="ASSET", id=event.asset)],
+                proposed_action_id=proposed_action_id,
+            )
+            decision_event = AgentDecisionRecordedEvent(decision=record)
+            causation = str(event.causation_id) if event.causation_id else event.event_id
+            decision_event.set_causality(
+                correlation_id=str(event.correlation_id),
+                causation_id=causation,
+                asset=event.asset,
+                actor_type="AGENT",
+                source="investigate_activity_anomaly",
+            )
+            self._event_bus.publish(decision_event)
+        except Exception:  # pylint: disable=broad-except
+            self.app_logger.exception("Failed to publish AgentDecisionRecordedEvent")
 
     @staticmethod
     def _build_diagnostic(

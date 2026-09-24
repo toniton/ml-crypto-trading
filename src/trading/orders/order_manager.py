@@ -90,7 +90,7 @@ class OrderManager(ApplicationLoggingMixin):
     def _stop_order_executions(self):
         self.app_logger.info("Stopping order executions...")
         self._stop_event.set()
-        if hasattr(self, '_execute_thread') and self._execute_thread.is_alive():
+        if self._execute_thread and self._execute_thread.is_alive():
             self._execute_thread.join(timeout=5)
             if self._execute_thread.is_alive():
                 self.app_logger.warning("Order execution thread failed to terminate in time.")

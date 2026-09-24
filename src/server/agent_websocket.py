@@ -102,8 +102,8 @@ class AgentWebSocketHandler:
             if event is None:
                 return
 
-            event_dict = event.to_dict() if hasattr(event, "to_dict") else vars(event)
-            event_dict["event_name"] = getattr(event, "EVENT_TYPE", "agent_event")
+            event_dict = event.to_dict()
+            event_dict["event_name"] = event.EVENT_TYPE or event.type or "agent_event"
             if "payload" in event_dict and isinstance(event_dict["payload"], dict):
                 for k, v in event_dict["payload"].items():
                     event_dict.setdefault(k, v)

@@ -209,7 +209,7 @@ class AgentGateway:
                 description="Investigates and diagnoses live runtime errors, order rejections, and exchange failures",
                 graph=RuntimeDebugGraph(
                     toolbox=RuntimeDebugToolbox(
-                        database_manager=getattr(vcs, "_db_manager", None),
+                        database_manager=vcs.db_manager,
                         vcs=vcs,
                     ),
                     llm=llm,

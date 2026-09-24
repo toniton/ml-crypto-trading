@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from api.interfaces.order import Order
+from api.interfaces.trade_action import TradeAction
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.events.message_event_bus import CallbackSubscription
@@ -10,6 +12,7 @@ from src.events.runtime_events import (
     RuntimeIncidentCreatedEvent,
     RuntimeIncidentUpdatedEvent,
 )
+from src.events.trading_event import TradingEvent
 from src.metrics.models.metric_type import AggregationType, MetricType
 from src.metrics.services.metric_service import MetricService
 from src.trading.events import (
@@ -133,64 +136,75 @@ class EventMetricCollector:
         self._record_latencies(event, metric_name, labels)
         self._metric_service.flush()
 
+    @classmethod
+    def _extract_labels(cls, event: Event) -> dict[str, str]:
+        payload_labels = cls._extract_payload_labels(event)
+        if payload_labels is not None:
+            return payload_labels
+
+        labels = cls._extract_order_labels(event)
+        if "symbol" not in labels and isinstance(event, TradingEvent) and event.asset:
+            labels["symbol"] = str(event.asset)
+        return labels
+
     @staticmethod
-    def _extract_labels(event: Event) -> dict[str, str]:
+    def _extract_payload_labels(event: Event) -> Optional[dict[str, str]]:
+        payload = None
+        if isinstance(event, RuntimeErrorCapturedEvent):
+            payload = event.event_payload
+        elif isinstance(event, (RuntimeIncidentCreatedEvent, RuntimeIncidentUpdatedEvent)):
+            payload = event.incident_payload
+
+        if not isinstance(payload, dict):
+            return None
+
+        keys = ("exchange", "asset", "severity", "category", "component")
+        return {key: str(payload[key]) for key in keys if payload.get(key)}
+
+    @staticmethod
+    def _extract_order(event: Event) -> Optional[Order | dict]:
+        if isinstance(event, (OrderSubmittedEvent, OrderFilledEvent, OrderCancelledEvent, OrderRejectedEvent)):
+            return event.order
+        if isinstance(event.payload, dict):
+            return event.payload.get("order")
+        return None
+
+    @classmethod
+    def _extract_order_labels(cls, event: Event) -> dict[str, str]:
         labels: dict[str, str] = {}
-        payload = getattr(event, "event_payload", None) or getattr(event, "incident_payload", None)
-        if isinstance(payload, dict):
-            if payload.get("exchange"):
-                labels["exchange"] = str(payload["exchange"])
-            if payload.get("asset"):
-                labels["asset"] = str(payload["asset"])
-            if payload.get("severity"):
-                labels["severity"] = str(payload["severity"])
-            if payload.get("category"):
-                labels["category"] = str(payload["category"])
-            if payload.get("component"):
-                labels["component"] = str(payload["component"])
+        order = cls._extract_order(event)
+        if order is None:
             return labels
 
-        order = getattr(event, "order", None)
-        if order is None and hasattr(event, "payload") and isinstance(event.payload, dict):
-            order = event.payload.get("order")
+        if isinstance(order, dict):
+            provider = order.get("provider_name")
+            symbol = order.get("ticker_symbol")
+            action = order.get("trade_action")
+        else:
+            provider = order.provider_name
+            symbol = order.ticker_symbol
+            action = order.trade_action
 
-        if order is not None:
-            provider = getattr(order, "provider_name", None)
-            if provider is None and isinstance(order, dict):
-                provider = order.get("provider_name")
-            if provider:
-                labels["provider"] = str(provider)
-
-            symbol = getattr(order, "ticker_symbol", None)
-            if symbol is None and isinstance(order, dict):
-                symbol = order.get("ticker_symbol")
-            if symbol:
-                labels["symbol"] = str(symbol)
-
-            action = getattr(order, "trade_action", None)
-            if action is None and isinstance(order, dict):
-                action = order.get("trade_action")
-            if action:
-                labels["action"] = action.value if hasattr(action, "value") else str(action)
-        elif hasattr(event, "symbol") and getattr(event, "symbol"):
-            labels["symbol"] = str(getattr(event, "symbol"))
+        if provider:
+            labels["provider"] = str(provider)
+        if symbol:
+            labels["symbol"] = str(symbol)
+        if action:
+            labels["action"] = action.value if isinstance(action, TradeAction) else str(action)
 
         return labels
 
     def _record_latencies(self, event: Event, metric_name: str, labels: dict[str, str]) -> None:
-        order = getattr(event, "order", None)
-        if order is None and hasattr(event, "payload") and isinstance(event.payload, dict):
-            order = event.payload.get("order")
+        order = self._extract_order(event)
         if order is None:
             return
 
-        created_time = getattr(order, "created_time", None)
-        if created_time is None and isinstance(order, dict):
+        if isinstance(order, dict):
             created_time = order.get("created_time")
-
-        executed_time = getattr(order, "executed_time", None)
-        if executed_time is None and isinstance(order, dict):
             executed_time = order.get("executed_time")
+        else:
+            created_time = order.created_time
+            executed_time = order.executed_time
 
         if created_time is not None and executed_time is not None and executed_time >= created_time:
             latency_ms = (executed_time - created_time) * 1000.0

@@ -49,7 +49,7 @@ class AutomationWorker(ApplicationLoggingMixin):
         except queue.Full:
             self.app_logger.warning(
                 "Automation worker queue full; dropping event %s",
-                getattr(event, "type", type(event).__name__),
+                event.type,
             )
             return False
 
@@ -64,5 +64,5 @@ class AutomationWorker(ApplicationLoggingMixin):
             except Exception:  # pylint: disable=broad-except
                 self.app_logger.exception(
                     "Automation worker failed to process %s",
-                    getattr(event, "type", type(event).__name__),
+                    event.type,
                 )

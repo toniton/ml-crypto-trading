@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from datetime import datetime, timezone
 
 from api.interfaces.asset import Asset
@@ -19,11 +18,12 @@ from src.backtest.runner.backtest_runner import BacktestRunner
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
+from src.logging.factory import LoggingFactory
 from src.recorder.market_data_store import MarketDataStore
 from src.server.services.dataset_service import DatasetService
 from src.vcs.application.service import VCSService
 
-logger = logging.getLogger(__name__)
+logger = LoggingFactory.get_application_logger(__name__)
 
 
 class BacktestApplicationService:

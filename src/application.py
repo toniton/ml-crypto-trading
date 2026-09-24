@@ -186,10 +186,9 @@ class Application(ApplicationLoggingMixin):
     ):
         for cls in service_class.__subclasses__():
             if cls.__module__.startswith(src.exchange.clients.__name__):
-                if hasattr(cls, 'get_supported_providers') and callable(cls.get_supported_providers):
-                    for provider in cls.get_supported_providers():
-                        instance = cls(provider)
-                        self._register_with_managers(instance)
+                for provider in cls.get_supported_providers():
+                    instance = cls(provider)
+                    self._register_with_managers(instance)
 
     def _setup_protections(self):
         ApplicationHelper.import_modules(src.trading.protection.guards)
@@ -445,6 +444,7 @@ class Application(ApplicationLoggingMixin):
         investigation = InvestigateActivityAnomaly(
             activity_provider=self._activity_tracker,
             drift_detector=drift_detector,
+            event_bus=self._event_bus,
         )
         watchdog = StarvationWatchdog(
             activity_provider=self._activity_tracker,
@@ -545,8 +545,11 @@ class Application(ApplicationLoggingMixin):
 
         if self._trading_engine:
             self._trading_engine.update_config(updated)
-        if getattr(self, "_managers", None) and self._managers.session_manager:
-            self._managers.session_manager.update_commit_hash(commit_hash)
+        try:
+            if self._managers and self._managers.session_manager:
+                self._managers.session_manager.update_commit_hash(commit_hash)
+        except AttributeError:
+            pass
         self.app_logger.info("Config updated from VCS %s", commit_hash[:8])
 
     def shutdown(self):

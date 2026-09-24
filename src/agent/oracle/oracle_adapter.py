@@ -3,12 +3,19 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 
+from api.interfaces.trade_action import TradeAction
 from src.agent.oracle.oracle_context import (
     ExecutionObservation,
     OracleContext,
     OrderObservation,
 )
-from src.backtest.events import BalanceUpdateEvent, PortfolioSnapshotEvent
+from src.backtest.events import (
+    BalanceUpdateEvent,
+    OrderCancelledEvent as BacktestOrderCancelledEvent,
+    OrderFilledEvent as BacktestOrderFilledEvent,
+    OrderSubmittedEvent as BacktestOrderSubmittedEvent,
+    PortfolioSnapshotEvent,
+)
 from src.core.interfaces.event import Event
 from src.trading.events import (
     BalanceChangedEvent,
@@ -19,13 +26,6 @@ from src.trading.events import (
     OrderSubmittedEvent,
     PositionChangedEvent,
 )
-
-_MARKET_TYPES = {MarketStateChangedEvent.__name__, MarketDataEvent.__name__}
-_ORDER_SUBMITTED_TYPES = {OrderSubmittedEvent.__name__}
-_ORDER_FILLED_TYPES = {OrderFilledEvent.__name__}
-_ORDER_CANCELLED_TYPES = {OrderCancelledEvent.__name__}
-_POSITION_TYPES = {PositionChangedEvent.__name__, PortfolioSnapshotEvent.__name__}
-_BALANCE_TYPES = {BalanceChangedEvent.__name__, BalanceUpdateEvent.__name__}
 
 
 def _to_decimal(value) -> Decimal | None:
@@ -42,8 +42,8 @@ def _to_decimal(value) -> Decimal | None:
 def _action_of(value) -> str | None:
     if value is None:
         return None
-    if hasattr(value, "value"):
-        return str(value.value)
+    if isinstance(value, TradeAction):
+        return value.value
     return str(value)
 
 
@@ -69,145 +69,109 @@ class OracleEventAdapter:
     """
 
     def apply(self, event: Event, context: OracleContext) -> None:
-        event_type = event.type
+        if isinstance(event, (MarketDataEvent, MarketStateChangedEvent)):
+            self._apply_market_event(event, context)
+        elif isinstance(event, (
+                OrderSubmittedEvent, BacktestOrderSubmittedEvent,
+                OrderFilledEvent, BacktestOrderFilledEvent,
+                OrderCancelledEvent, BacktestOrderCancelledEvent,
+        )):
+            self._apply_order_event(event, context)
+        elif isinstance(event, (
+                PositionChangedEvent, PortfolioSnapshotEvent,
+                BalanceChangedEvent, BalanceUpdateEvent,
+        )):
+            self._apply_account_event(event, context)
 
-        if event_type in _MARKET_TYPES:
-            self._apply_market_price(event, context)
-        elif event_type in _ORDER_SUBMITTED_TYPES:
-            self._apply_order(event, context)
-        elif event_type in _ORDER_FILLED_TYPES:
-            self._apply_order_filled(event, context)
-        elif event_type in _ORDER_CANCELLED_TYPES:
-            self._apply_order(event, context, status="CANCELLED")
-        elif event_type in _POSITION_TYPES:
-            self._apply_position(event, context)
-        elif event_type in _BALANCE_TYPES:
-            self._apply_balance(event, context)
+    @staticmethod
+    def _apply_market_event(
+            event: MarketDataEvent | MarketStateChangedEvent,
+            context: OracleContext,
+    ) -> None:
+        if isinstance(event, MarketDataEvent):
+            price = _to_decimal(event.market_data.close_price)
+            if price is not None:
+                context.symbol(event.ticker_symbol).current_price = price
+        elif isinstance(event, MarketStateChangedEvent):
+            price = _to_decimal(event.price)
+            if price is not None:
+                context.symbol(event.symbol).current_price = price
 
-    def _apply_market_price(self, event: Event, context: OracleContext) -> None:
-        symbol = getattr(event, "symbol", None) or getattr(event, "ticker_symbol", None)
-        price = getattr(event, "price", None)
-
-        market_data = getattr(event, "market_data", None)
-        if price is None and market_data is not None:
-            price = getattr(market_data, "close_price", None)
-
-        price = _to_decimal(price)
-        if symbol and price is not None:
-            context.symbol(symbol).current_price = price
-
-    def _apply_order(self, event: Event, context: OracleContext, status: str | None = None) -> None:
-        order = getattr(event, "order", None)
-        if order is None:
-            return
-        symbol = getattr(order, "ticker_symbol", None) or getattr(event, "symbol", None)
-        if symbol:
-            context.symbol(symbol).add_order(self._order_observation(order, status))
-
-    def _apply_order_filled(self, event: Event, context: OracleContext) -> None:
-        order = getattr(event, "order", None)
-        if order is None:
-            return
-        symbol = getattr(order, "ticker_symbol", None) or getattr(event, "symbol", None)
-        if not symbol:
-            return
-        symbol_context = context.symbol(symbol)
-        symbol_context.add_order(self._order_observation(order, status="COMPLETED"))
-        execution = self._execution_observation(event)
-        if execution is not None:
-            symbol_context.add_execution(execution)
-
-    def _apply_position(self, event: Event, context: OracleContext) -> None:
-        symbol = getattr(event, "symbol", None) or getattr(event, "ticker_symbol", None)
-        if not symbol:
-            return
-
-        symbol_context = context.symbol(symbol)
-
-        position = _to_decimal(getattr(event, "position_qty", None))
-        if position is None:
-            snapshot = getattr(event, "snapshot", None)
-            if snapshot is not None:
-                positions = getattr(snapshot, "positions", None) or {}
-                if isinstance(positions, dict):
-                    position = _to_decimal(positions.get(symbol))
-
-        pnl = _to_decimal(getattr(event, "realized_pnl", None)) or _to_decimal(getattr(event, "pnl", None))
-        drawdown = _to_decimal(getattr(event, "drawdown", None))
-
-        if position is not None:
-            symbol_context.position = position
-        if pnl is not None:
-            symbol_context.pnl = pnl
-        if drawdown is not None:
-            symbol_context.drawdown = drawdown
-
-    def _apply_balance(self, event: Event, context: OracleContext) -> None:
-        symbol = getattr(event, "symbol", None)
-        if symbol:
-            balance = _to_decimal(
-                getattr(event, "balance", None) or getattr(event, "available_balance", None)
+    def _apply_order_event(self, event: Event, context: OracleContext) -> None:
+        if isinstance(event, (OrderSubmittedEvent, BacktestOrderSubmittedEvent)):
+            context.symbol(event.order.ticker_symbol).add_order(self._order_observation(event.order))
+        elif isinstance(event, (OrderFilledEvent, BacktestOrderFilledEvent)):
+            symbol_context = context.symbol(event.order.ticker_symbol)
+            symbol_context.add_order(self._order_observation(event.order, status="COMPLETED"))
+            execution = self._execution_observation(event)
+            if execution is not None:
+                symbol_context.add_execution(execution)
+        elif isinstance(event, (OrderCancelledEvent, BacktestOrderCancelledEvent)):
+            context.symbol(event.order.ticker_symbol).add_order(
+                self._order_observation(event.order, status="CANCELLED")
             )
-            if balance is not None:
-                context.symbol(symbol).balance = balance
-            return
 
-        balances = getattr(event, "balances", None) or []
-        if not isinstance(balances, list):
-            return
-        for balance in balances:
-            currency = getattr(balance, "currency", None)
-            amount = _to_decimal(getattr(balance, "available_balance", None))
-            if currency is None or amount is None:
-                continue
-            for symbol_key, symbol_context in context.symbols.items():
-                base = symbol_key.split("_")[0] if "_" in symbol_key else symbol_key
-                if base == currency:
-                    symbol_context.balance = amount
+    @staticmethod
+    def _apply_account_event(event: Event, context: OracleContext) -> None:
+        if isinstance(event, PositionChangedEvent):
+            symbol_context = context.symbol(event.symbol)
+            symbol_context.position = _to_decimal(event.position_qty)
+            symbol_context.pnl = _to_decimal(event.realized_pnl)
+        elif isinstance(event, PortfolioSnapshotEvent):
+            symbol_context = context.symbol(event.ticker_symbol)
+            positions = event.snapshot.positions or {}
+            if isinstance(positions, dict):
+                pos = positions.get(event.ticker_symbol)
+                if pos is not None:
+                    symbol_context.position = _to_decimal(pos)
+        elif isinstance(event, BalanceChangedEvent):
+            balance = _to_decimal(event.balance)
+            if balance is not None:
+                context.symbol(event.symbol).balance = balance
+        elif isinstance(event, BalanceUpdateEvent):
+            for balance in event.balances:
+                amount = _to_decimal(balance.available_balance)
+                if balance.currency is None or amount is None:
+                    continue
+                for symbol_key, symbol_context in context.symbols.items():
+                    base = symbol_key.split("_")[0] if "_" in symbol_key else symbol_key
+                    if base == balance.currency:
+                        symbol_context.balance = amount
 
     @staticmethod
     def _order_observation(order, status: str | None = None) -> OrderObservation:
+        order_status = status or (order.status.value if order.status is not None else "")
         return OrderObservation(
-            order_id=str(getattr(order, "uuid", "") or ""),
-            symbol=getattr(order, "ticker_symbol", None),
-            action=_action_of(getattr(order, "trade_action", None)),
-            quantity=_to_decimal(getattr(order, "quantity", None)) or Decimal(0),
-            price=_to_decimal(getattr(order, "price", None)),
-            status=status or str(getattr(order, "status", None) or ""),
-            timestamp=_to_datetime(getattr(order, "created_time", None)),
+            order_id=order.uuid,
+            symbol=order.ticker_symbol,
+            action=_action_of(order.trade_action),
+            quantity=_to_decimal(order.quantity) or Decimal(0),
+            price=_to_decimal(order.price),
+            status=order_status,
+            timestamp=_to_datetime(order.created_time),
         )
 
     @staticmethod
     def _execution_observation(event: Event) -> ExecutionObservation | None:
-        order = getattr(event, "order", None)
-        if order is None:
+        if not isinstance(event, (OrderFilledEvent, BacktestOrderFilledEvent)) or event.order is None:
             return None
-
-        execution = getattr(event, "execution", None)
-        if execution is not None:
-            price = _to_decimal(
-                getattr(execution, "execution_price", None) or getattr(execution, "price", None)
-            )
-            quantity = _to_decimal(
-                getattr(execution, "executed_quantity", None) or getattr(execution, "quantity", None)
-            )
-            fee = _to_decimal(getattr(execution, "fee", None))
-            timestamp = _to_datetime(
-                getattr(execution, "executed_at", None) or getattr(execution, "timestamp", None)
-            )
+        order = event.order
+        if isinstance(event, BacktestOrderFilledEvent) and event.execution is not None:
+            price = _to_decimal(event.execution.execution_price)
+            quantity = _to_decimal(event.execution.executed_quantity) or Decimal(0)
+            fee = _to_decimal(event.execution.fee)
+            timestamp = _to_datetime(event.execution.executed_at)
         else:
-            price = _to_decimal(getattr(order, "fill_price", None)) or _to_decimal(
-                getattr(order, "price", None)
-            )
-            quantity = _to_decimal(getattr(order, "quantity", None))
-            fee = _to_decimal(getattr(order, "fees", None))
-            timestamp = _to_datetime(getattr(order, "executed_time", None))
+            price = _to_decimal(order.fill_price or order.price)
+            quantity = _to_decimal(order.quantity) or Decimal(0)
+            fee = _to_decimal(order.fees)
+            timestamp = _to_datetime(order.executed_time or order.created_time)
 
         return ExecutionObservation(
-            order_id=str(getattr(order, "uuid", "") or ""),
-            symbol=getattr(order, "ticker_symbol", None),
-            action=_action_of(getattr(order, "trade_action", None)),
-            quantity=quantity or Decimal(0),
+            order_id=order.uuid,
+            symbol=order.ticker_symbol,
+            action=_action_of(order.trade_action),
+            quantity=quantity,
             price=price,
             fee=fee,
             timestamp=timestamp,
