@@ -6,7 +6,7 @@ from src.events.message_event_bus import MessageEventBus
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.models.metric_query import MetricQuery
 from src.metrics.services.metric_service import MetricService
-from src.trading.events import OrderExecuted, OrderSubmitted
+from src.trading.events import OrderFilledEvent, OrderSubmittedEvent
 
 
 def _order() -> Order:
@@ -29,8 +29,8 @@ class TestEventMetricCollector:
         bus = MessageEventBus()
         collector.subscribe(bus)
 
-        bus.publish(OrderSubmitted(symbol="BTC_USD", order=_order()))
-        bus.publish(OrderSubmitted(symbol="BTC_USD", order=_order()))
+        bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order()))
+        bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order()))
 
         series = service.query(MetricQuery(metric_names=("orders.submitted",), interval_seconds=60))[0]
         assert [point.value for point in series.points] == [2.0]
@@ -43,7 +43,7 @@ class TestEventMetricCollector:
 
         order = _order()
         order.executed_time = 0.5  # 500ms latency
-        bus.publish(OrderExecuted(symbol="BTC_USD", order=order))
+        bus.publish(OrderFilledEvent(symbol="BTC_USD", order=order))
 
         series = service.query(MetricQuery(
             metric_names=("orders.executed",),
@@ -60,12 +60,13 @@ class TestEventMetricCollector:
 
     def test_custom_event_metric_mapping(self, db_manager):
         service = MetricService(db_manager)
-        collector = EventMetricCollector(service, event_metric_map={"OrderSubmitted": "custom.orders"})
+        collector = EventMetricCollector(service, event_metric_map={"OrderSubmittedEvent": "custom.orders"})
         bus = MessageEventBus()
         collector.subscribe(bus)
 
-        bus.publish(OrderSubmitted(symbol="BTC_USD", order=_order()))
+        bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order()))
 
         series = service.query(MetricQuery(metric_names=("custom.orders",), interval_seconds=60))[0]
         assert [point.value for point in series.points] == [1.0]
+
 

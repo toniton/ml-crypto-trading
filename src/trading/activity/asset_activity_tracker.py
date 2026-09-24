@@ -1,18 +1,17 @@
 import dataclasses
 import threading
 import time
-from typing import Callable, Optional
+from typing import Optional
 
 from src.agent.monitoring.activity_state import ActivityStateProvider, AssetActivityState
-from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.events.message_event_bus import CallbackSubscription
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.events import (
     MarketDataEvent,
-    MarketStateChanged,
-    OrderExecuted,
-    OrderSubmitted,
+    MarketStateChangedEvent,
+    OrderFilledEvent,
+    OrderSubmittedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
 )
@@ -32,41 +31,31 @@ class AssetActivityTracker(ActivityStateProvider, ApplicationLoggingMixin):
 
     def subscribe(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus
-        for event_type in (
-                "MarketDataEvent",
-                "MarketStateChanged",
-                "StrategyEvaluatedEvent",
-                "SignalGeneratedEvent",
-                "OrderSubmitted",
-                "OrderExecuted",
-        ):
-            self._subscriptions.append(
-                event_bus.subscribe(event_type, CallbackSubscription(self._on_event))
-            )
+        self._subscriptions.extend([
+            event_bus.subscribe(MarketDataEvent.__name__, CallbackSubscription(self._on_market_data)),
+            event_bus.subscribe(MarketStateChangedEvent.__name__, CallbackSubscription(self._on_market_state_changed)),
+            event_bus.subscribe(StrategyEvaluatedEvent.__name__, CallbackSubscription(self._on_strategy_evaluated)),
+            event_bus.subscribe(SignalGeneratedEvent.__name__, CallbackSubscription(self._on_signal_generated)),
+            event_bus.subscribe(OrderSubmittedEvent.__name__, CallbackSubscription(self._on_order_submitted)),
+            event_bus.subscribe(OrderFilledEvent.__name__, CallbackSubscription(self._on_order_filled)),
+        ])
 
-    def _on_event(self, event: Event) -> None:
-        handler: Optional[Callable[[Event], None]] = getattr(
-            self, f"_on_{type(event).__name__}", None
-        )
-        if handler is not None:
-            handler(event)
-
-    def _on_MarketDataEvent(self, event: MarketDataEvent) -> None:
+    def _on_market_data(self, event: MarketDataEvent) -> None:
         self._touch(event.ticker_symbol, last_market_data_at=event.market_data.timestamp)
 
-    def _on_MarketStateChanged(self, event: MarketStateChanged) -> None:
+    def _on_market_state_changed(self, event: MarketStateChangedEvent) -> None:
         self._touch(event.symbol, last_market_data_at=event.market_timestamp)
 
-    def _on_StrategyEvaluatedEvent(self, event: StrategyEvaluatedEvent) -> None:
+    def _on_strategy_evaluated(self, event: StrategyEvaluatedEvent) -> None:
         self._touch(event.symbol, last_evaluation_at=event.evaluated_at)
 
-    def _on_SignalGeneratedEvent(self, event: SignalGeneratedEvent) -> None:
+    def _on_signal_generated(self, event: SignalGeneratedEvent) -> None:
         self._touch(event.symbol, last_signal_at=event.generated_at)
 
-    def _on_OrderSubmitted(self, event: OrderSubmitted) -> None:
+    def _on_order_submitted(self, event: OrderSubmittedEvent) -> None:
         self._touch(event.symbol, last_order_at=event.order.created_time)
 
-    def _on_OrderExecuted(self, event: OrderExecuted) -> None:
+    def _on_order_filled(self, event: OrderFilledEvent) -> None:
         executed_at = event.order.executed_time or event.order.created_time
         self._touch(event.symbol, last_execution_at=executed_at)
 

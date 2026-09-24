@@ -18,7 +18,7 @@ from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.events.runtime_events import RuntimeErrorCapturedEvent
 from src.agent.runtime_debug.error_extractor import extract_runtime_error_from_order_exception
-from src.trading.events import OrderCancelled, OrderExecuted, OrderRejected
+from src.trading.events import OrderCancelledEvent, OrderFilledEvent, OrderRejectedEvent
 
 
 class OrderManager(ApplicationLoggingMixin):
@@ -74,7 +74,7 @@ class OrderManager(ApplicationLoggingMixin):
                 except RuntimeError as exc:
                     self.app_logger.error(f"Executing order failed. Order={order}: {exc}", exc_info=True)
                     if self._event_bus:
-                        self._event_bus.publish(OrderRejected(
+                        self._event_bus.publish(OrderRejectedEvent(
                             symbol=order.ticker_symbol,
                             order=order,
                             reason=str(exc),
@@ -103,10 +103,10 @@ class OrderManager(ApplicationLoggingMixin):
                     if order.status == OrderStatus.COMPLETED:
                         self._trading_journal.record_fill(order)
                         if self._event_bus:
-                            self._event_bus.publish(OrderExecuted(symbol=order.ticker_symbol, order=order))
+                            self._event_bus.publish(OrderFilledEvent(symbol=order.ticker_symbol, order=order))
                     elif order.status == OrderStatus.CANCELLED:
                         if self._event_bus:
-                            self._event_bus.publish(OrderCancelled(symbol=order.ticker_symbol, order=order))
+                            self._event_bus.publish(OrderCancelledEvent(symbol=order.ticker_symbol, order=order))
                     order_repository = uow.get_repository(PostgresOrderRepository)
                     order_repository.upsert(order)
         except Exception as e:

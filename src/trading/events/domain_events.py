@@ -28,39 +28,39 @@ class SignalGeneratedEvent(TradingEvent):
 
 
 @dataclass
-class MarketStateChanged(TradingEvent):
+class MarketStateChangedEvent(TradingEvent):
     symbol: str
     price: Decimal
     market_timestamp: float
 
 
 @dataclass
-class OrderSubmitted(TradingEvent):
+class OrderSubmittedEvent(TradingEvent):
     symbol: str
     order: Order
 
 
 @dataclass
-class OrderExecuted(TradingEvent):
+class OrderFilledEvent(TradingEvent):
     symbol: str
     order: Order
 
 
 @dataclass
-class OrderCancelled(TradingEvent):
+class OrderCancelledEvent(TradingEvent):
     symbol: str
     order: Order
 
 
 @dataclass
-class OrderRejected(TradingEvent):
+class OrderRejectedEvent(TradingEvent):
     symbol: str
     order: Order
     reason: str = ""
 
 
 @dataclass
-class PositionChanged(TradingEvent):
+class PositionChangedEvent(TradingEvent):
     symbol: str
     action: str
     quantity: Decimal
@@ -70,13 +70,26 @@ class PositionChanged(TradingEvent):
 
 
 @dataclass
-class BalanceChanged(TradingEvent):
+class BalanceChangedEvent(TradingEvent):
     symbol: str
     currency: str
     balance: Decimal
 
 
 @dataclass
-class RiskStateChanged(TradingEvent):
+class RiskStateChangedEvent(TradingEvent):
     symbol: str
     drawdown: Decimal
+
+
+@dataclass
+class ConsensusEvaluatedEvent(TradingEvent):
+    symbol: str
+    decision: str = "HOLD"
+    buy_votes: int = 0
+    sell_votes: int = 0
+    total_strategies: int = 0
+    quorum_met: bool = False
+    evaluated_at: float = 0.0
+    factors: dict = None
+

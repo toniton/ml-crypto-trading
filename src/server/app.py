@@ -40,9 +40,11 @@ from src.server.services.order_heatmap_service import OrderHeatmapService
 from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
 from src.server.agent_event_projector import AgentEventProjector
+from src.server.timeline_projector import TimelineProjector
 from src.server.agent_websocket import AgentWebSocketHandler
 from src.server.routes.agent_action_routes import create_agent_action_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
+from src.server.routes.timeline_routes import create_timeline_router
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
@@ -128,6 +130,7 @@ class ChatApp:
                 pass
             yield
             runtime_collector.stop_monitoring()
+            timeline_projector.close()
 
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0", lifespan=lifespan)
         app.state.agent = agent
@@ -161,6 +164,10 @@ class ChatApp:
         agent_event_projector.subscribe()
         app.state.agent_event_projector = agent_event_projector
 
+        timeline_projector = TimelineProjector(event_bus=event_bus)
+        timeline_projector.subscribe()
+        app.state.timeline_projector = timeline_projector
+
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
         app.include_router(create_runtime_debug_router(runtime_debug_service))
@@ -171,6 +178,7 @@ class ChatApp:
                 compare_backtest=compare_backtest,
             )
         )
+        app.include_router(create_timeline_router(timeline_projector))
 
         agent_ws_handler = AgentWebSocketHandler(event_bus)
 

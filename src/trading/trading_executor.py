@@ -20,11 +20,11 @@ from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.events import (
-    BalanceChanged,
+    BalanceChangedEvent,
     MarketDataEvent,
-    MarketStateChanged,
-    OrderSubmitted,
-    PositionChanged,
+    MarketStateChangedEvent,
+    OrderSubmittedEvent,
+    PositionChangedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
 )
@@ -155,7 +155,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         fees = self.fees_manager.get_instrument_fees(asset.exchange.value, asset.ticker_symbol)
         candles = self.market_data_manager.get_candles(asset)
 
-        self._publish_event(MarketStateChanged(
+        self._publish_event(MarketStateChangedEvent(
             symbol=asset.ticker_symbol,
             price=market_data.close_price,
             market_timestamp=market_data.timestamp,
@@ -164,7 +164,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             ticker_symbol=asset.ticker_symbol,
             market_data=market_data,
         ))
-        self._publish_event(BalanceChanged(
+        self._publish_event(BalanceChangedEvent(
             symbol=asset.ticker_symbol,
             currency=asset.quote_ticker_symbol,
             balance=quote_balance.available_balance,
@@ -232,11 +232,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     quantity=Decimal(quantity), price=price
                 )
 
-                self._publish_event(OrderSubmitted(
+                self._publish_event(OrderSubmittedEvent(
                     symbol=asset.ticker_symbol,
                     order=buy_order,
                 ))
-                self._publish_event(PositionChanged(
+                self._publish_event(PositionChangedEvent(
                     symbol=asset.ticker_symbol,
                     action=TradeAction.BUY.value,
                     quantity=Decimal(quantity),
@@ -306,11 +306,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         quantity=Decimal(quantity), price=price
                     )
 
-                    self._publish_event(OrderSubmitted(
+                    self._publish_event(OrderSubmittedEvent(
                         symbol=asset.ticker_symbol,
                         order=sell_order,
                     ))
-                    self._publish_event(PositionChanged(
+                    self._publish_event(PositionChangedEvent(
                         symbol=asset.ticker_symbol,
                         action=TradeAction.SELL.value,
                         quantity=Decimal(quantity),

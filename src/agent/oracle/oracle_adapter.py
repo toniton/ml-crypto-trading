@@ -8,14 +8,24 @@ from src.agent.oracle.oracle_context import (
     OracleContext,
     OrderObservation,
 )
+from src.backtest.events import BalanceUpdateEvent, PortfolioSnapshotEvent
 from src.core.interfaces.event import Event
+from src.trading.events import (
+    BalanceChangedEvent,
+    MarketDataEvent,
+    MarketStateChangedEvent,
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderSubmittedEvent,
+    PositionChangedEvent,
+)
 
-_MARKET_TYPES = {"MarketStateChanged", "MarketDataEvent"}
-_ORDER_SUBMITTED_TYPES = {"OrderSubmitted", "OrderSubmittedEvent"}
-_ORDER_FILLED_TYPES = {"OrderExecuted", "OrderFilledEvent"}
-_ORDER_CANCELLED_TYPES = {"OrderCancelled", "OrderCancelledEvent"}
-_POSITION_TYPES = {"PositionChanged", "PortfolioSnapshotEvent"}
-_BALANCE_TYPES = {"BalanceChanged", "BalanceUpdateEvent"}
+_MARKET_TYPES = {MarketStateChangedEvent.__name__, MarketDataEvent.__name__}
+_ORDER_SUBMITTED_TYPES = {OrderSubmittedEvent.__name__}
+_ORDER_FILLED_TYPES = {OrderFilledEvent.__name__}
+_ORDER_CANCELLED_TYPES = {OrderCancelledEvent.__name__}
+_POSITION_TYPES = {PositionChangedEvent.__name__, PortfolioSnapshotEvent.__name__}
+_BALANCE_TYPES = {BalanceChangedEvent.__name__, BalanceUpdateEvent.__name__}
 
 
 def _to_decimal(value) -> Decimal | None:

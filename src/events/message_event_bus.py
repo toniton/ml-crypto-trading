@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
@@ -10,7 +10,7 @@ from src.core.interfaces.event_subscription import EventSubscription
 
 
 class CallbackSubscription(EventSubscription):
-    def __init__(self, callback: Callable[[Event], None]) -> None:
+    def __init__(self, callback: Callable[[Any], None]) -> None:
         self._callback = callback
 
     def put(self, event: Event) -> None:

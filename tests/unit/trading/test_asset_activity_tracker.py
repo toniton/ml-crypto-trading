@@ -9,8 +9,8 @@ from src.events.message_event_bus import MessageEventBus
 from src.trading.activity.asset_activity_tracker import AssetActivityTracker
 from src.trading.events import (
     MarketDataEvent,
-    OrderExecuted,
-    OrderSubmitted,
+    OrderFilledEvent,
+    OrderSubmittedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
 )
@@ -44,8 +44,8 @@ def test_tracks_all_activity_signals():
     ))
     bus.publish(StrategyEvaluatedEvent(symbol="BTC_USD", evaluated_at=200.0))
     bus.publish(SignalGeneratedEvent(symbol="BTC_USD", action="BUY", generated_at=300.0))
-    bus.publish(OrderSubmitted(symbol="BTC_USD", order=_order("BTC_USD", 400.0)))
-    bus.publish(OrderExecuted(symbol="BTC_USD", order=_order("BTC_USD", 400.0, executed=500.0)))
+    bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order("BTC_USD", 400.0)))
+    bus.publish(OrderFilledEvent(symbol="BTC_USD", order=_order("BTC_USD", 400.0, executed=500.0)))
 
     state = tracker.state_for("BTC_USD")
     assert state is not None
@@ -80,5 +80,5 @@ def test_execution_falls_back_to_created_time():
     bus = MessageEventBus()
     tracker = AssetActivityTracker()
     tracker.subscribe(bus)
-    bus.publish(OrderExecuted(symbol="BTC_USD", order=_order("BTC_USD", 400.0)))
+    bus.publish(OrderFilledEvent(symbol="BTC_USD", order=_order("BTC_USD", 400.0)))
     assert tracker.state_for("BTC_USD").last_execution_at == 400.0

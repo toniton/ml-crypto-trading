@@ -138,11 +138,11 @@ class SemanticMergeEngine:
 
     @classmethod
     def _merge_single_asset(
-        cls,
-        asset_key: str,
-        base: Dict[str, Any],
-        ours: Dict[str, Any],
-        theirs: Dict[str, Any],
+            cls,
+            asset_key: str,
+            base: Dict[str, Any],
+            ours: Dict[str, Any],
+            theirs: Dict[str, Any],
     ) -> Tuple[Dict[str, Any], List[FieldConflict]]:
         merged: Dict[str, Any] = {}
         conflicts: List[FieldConflict] = []

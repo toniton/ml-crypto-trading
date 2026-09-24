@@ -5,21 +5,28 @@ from typing import Optional
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.events.message_event_bus import CallbackSubscription
+from src.events.runtime_events import (
+    RuntimeErrorCapturedEvent,
+    RuntimeIncidentCreatedEvent,
+    RuntimeIncidentUpdatedEvent,
+)
 from src.metrics.models.metric_type import AggregationType, MetricType
 from src.metrics.services.metric_service import MetricService
+from src.trading.events import (
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderRejectedEvent,
+    OrderSubmittedEvent,
+)
 
 DEFAULT_EVENT_METRICS = {
-    "OrderSubmitted": "orders.submitted",
-    "OrderSubmittedEvent": "orders.submitted",
-    "OrderExecuted": "orders.executed",
-    "OrderFilledEvent": "orders.executed",
-    "OrderCancelled": "orders.cancelled",
-    "OrderCancelledEvent": "orders.cancelled",
-    "OrderRejected": "orders.rejected",
-    "OrderRejectedEvent": "orders.rejected",
-    "RuntimeErrorCapturedEvent": "runtime.errors.total",
-    "RuntimeIncidentCreatedEvent": "runtime.incidents.total",
-    "RuntimeIncidentUpdatedEvent": "runtime.incident.occurrences",
+    OrderSubmittedEvent.__name__: "orders.submitted",
+    OrderFilledEvent.__name__: "orders.executed",
+    OrderCancelledEvent.__name__: "orders.cancelled",
+    OrderRejectedEvent.__name__: "orders.rejected",
+    RuntimeErrorCapturedEvent.__name__: "runtime.errors.total",
+    RuntimeIncidentCreatedEvent.__name__: "runtime.incidents.total",
+    RuntimeIncidentUpdatedEvent.__name__: "runtime.incident.occurrences",
 }
 
 

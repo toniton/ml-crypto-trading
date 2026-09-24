@@ -18,6 +18,7 @@ from src.database.repositories.providers.postgres_runtime_incident_repository im
     PostgresRuntimeIncidentRepository,
 )
 from src.events.runtime_events import (
+    RuntimeErrorCapturedEvent,
     RuntimeIncidentCreatedEvent,
     RuntimeIncidentUpdatedEvent,
 )
@@ -50,7 +51,7 @@ class IncidentAggregator(ApplicationLoggingMixin):
         self._event_bus = event_bus
         from src.events.message_event_bus import CallbackSubscription
         self._subscription_id = event_bus.subscribe(
-            "RuntimeErrorCapturedEvent",
+            RuntimeErrorCapturedEvent.__name__,
             CallbackSubscription(self._on_error_captured_event),
         )
         return self._subscription_id

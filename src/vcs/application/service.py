@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional, Union
 from pydantic import BaseModel
 
 from src.core.interfaces.database_manager import DatabaseManager
+from src.configuration.trading_config import TradingConfig
 from src.database.repositories.providers.postgres_blob_repository import PostgresBlobRepository
 from src.database.repositories.providers.postgres_commit_repository import PostgresCommitRepository
 from src.database.repositories.providers.postgres_ref_repository import PostgresRefRepository
@@ -291,7 +292,7 @@ class VCSService(ApplicationLoggingMixin):
         if not merge_base:
             merge_base = target_hash
 
-        can_fast_forward = (merge_base == target_hash)
+        can_fast_forward = merge_base == target_hash
 
         if source_hash == target_hash:
             return MergePreview(
@@ -313,7 +314,6 @@ class VCSService(ApplicationLoggingMixin):
         # Validate merged configuration structure
         validation_errors: List[str] = []
         try:
-            from src.configuration.trading_config import TradingConfig
             TradingConfig.model_validate(merged_config)
         except Exception as exc:
             validation_errors.append(str(exc))
@@ -334,20 +334,22 @@ class VCSService(ApplicationLoggingMixin):
         )
 
     def merge(
-        self,
-        source_ref_or_commit: str,
-        target_ref: str = "refs/heads/main",
-        author: str = "user",
-        message: Optional[str] = None,
-        expected_target_head: Optional[str] = None,
-        resolved_config: Optional[Dict[str, Any]] = None,
+            self,
+            source_ref_or_commit: str,
+            target_ref: str = "refs/heads/main",
+            author: str = "user",
+            message: Optional[str] = None,
+            expected_target_head: Optional[str] = None,
+            resolved_config: Optional[Dict[str, Any]] = None,
     ) -> MergeResult:
         source_hash = self.resolve_commit_hash(source_ref_or_commit)
         target_hash = self.resolve_commit_hash(target_ref)
 
         if expected_target_head and target_hash != expected_target_head:
+            exp_short = expected_target_head[:8]
+            act_short = target_hash[:8]
             raise VcsError(
-                f"Target HEAD changed since merge preview: expected {expected_target_head[:8]}, actual is {target_hash[:8]}."
+                f"Target HEAD changed since merge preview: expected {exp_short}, actual is {act_short}."
             )
 
         final_config: Dict[str, Any]
@@ -363,8 +365,6 @@ class VCSService(ApplicationLoggingMixin):
                 raise VcsError("Merged configuration is empty.")
             final_config = preview.merged_config
 
-        # Validate final config with Pydantic
-        from src.configuration.trading_config import TradingConfig
         validated = TradingConfig.model_validate(final_config)
 
         canonical_dict = Serializer.to_canonical_dict(validated)
@@ -435,4 +435,3 @@ class VCSService(ApplicationLoggingMixin):
                 message=merge_msg,
                 parents=[target_hash, source_hash],
             )
-

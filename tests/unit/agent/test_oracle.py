@@ -22,7 +22,11 @@ from src.backtest.events.domain_events import (
 )
 from src.core.interfaces.event import Event
 from src.events.message_event_bus import CallbackSubscription, MessageEventBus
-from src.trading.events import MarketStateChanged, OrderSubmitted, PositionChanged
+from src.trading.events import (
+    MarketStateChangedEvent,
+    OrderSubmittedEvent as LiveOrderSubmittedEvent,
+    PositionChangedEvent,
+)
 
 
 def _make_order(symbol: str = "BTC_USD", action: TradeAction = TradeAction.BUY) -> Order:
@@ -57,7 +61,7 @@ class TestOracleContext:
         context = OracleContext()
         for _ in range(MAX_OBSERVATIONS + 10):
             OracleEventAdapter().apply(
-                OrderSubmitted(symbol="BTC_USD", order=_make_order()),
+                LiveOrderSubmittedEvent(symbol="BTC_USD", order=_make_order()),
                 context,
             )
         assert len(context.symbol("BTC_USD").recent_orders) == MAX_OBSERVATIONS
@@ -67,7 +71,7 @@ class TestOracleEventAdapter:
     def test_market_state_live(self):
         context = OracleContext()
         OracleEventAdapter().apply(
-            MarketStateChanged(symbol="BTC_USD", price=Decimal("101.5"), market_timestamp=1_700_000_000.0),
+            MarketStateChangedEvent(symbol="BTC_USD", price=Decimal("101.5"), market_timestamp=1_700_000_000.0),
             context,
         )
         assert context.symbol("BTC_USD").current_price == Decimal("101.5")
@@ -84,7 +88,7 @@ class TestOracleEventAdapter:
     def test_order_submitted_live(self):
         context = OracleContext()
         OracleEventAdapter().apply(
-            OrderSubmitted(symbol="BTC_USD", order=_make_order()),
+            LiveOrderSubmittedEvent(symbol="BTC_USD", order=_make_order()),
             context,
         )
         assert context.symbol("BTC_USD").recent_orders[0].order_id == "order-1"
@@ -107,7 +111,7 @@ class TestOracleEventAdapter:
     def test_position_changed_live(self):
         context = OracleContext()
         OracleEventAdapter().apply(
-            PositionChanged(
+            PositionChangedEvent(
                 symbol="BTC_USD",
                 action="BUY",
                 quantity=Decimal("1.5"),
@@ -154,7 +158,7 @@ class TestOracleService:
 
         for _ in range(100):
             service.observe(
-                MarketStateChanged(symbol="BTC_USD", price=Decimal("100"), market_timestamp=1_700_000_000.0)
+                MarketStateChangedEvent(symbol="BTC_USD", price=Decimal("100"), market_timestamp=1_700_000_000.0)
             )
 
         assert llm.generate.call_count == 1
@@ -180,7 +184,7 @@ class TestOracleService:
 
         service = OracleService(llm, publish_bus=bus)
         service.observe(
-            MarketStateChanged(symbol="BTC_USD", price=Decimal("100"), market_timestamp=1_700_000_000.0)
+            MarketStateChangedEvent(symbol="BTC_USD", price=Decimal("100"), market_timestamp=1_700_000_000.0)
         )
 
         assert len(collected) == 1
