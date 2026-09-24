@@ -29,48 +29,43 @@ from src.events.runtime_events import (
     RuntimeIncidentCreatedEvent,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.logging.factory import LoggingFactory
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
 from src.trading.events import ConsensusEvaluatedEvent
 from src.vcs.application.events import RefChangedEvent
 
-TIMELINE_EVENT_CLASSES: tuple[type[Event], ...] = (
-    ConsensusEvaluatedEvent,
-    TradingActivityAnomalyDetectedEvent,
-    AgentDecisionRecordedEvent,
-    AgentActionCreatedEvent,
-    AgentActionCompletedEvent,
-    AgentActionFailedEvent,
-    AgentApprovalRequestedEvent,
-    AgentApprovalResolvedEvent,
-    OracleSummaryEvent,
-    RefChangedEvent,
-    RuntimeErrorCapturedEvent,
-    RuntimeIncidentCreatedEvent,
-)
-
-
-def _event_names_for(cls: type[Event]) -> set[str]:
-    names = {cls.__name__}
-    if cls.EVENT_TYPE:
-        names.add(cls.EVENT_TYPE)
-    else:
-        LoggingFactory.get_application_logger(__name__).debug(
-            "Event class '%s' has no EVENT_TYPE alias; projecting via class name.",
-            cls.__name__,
-        )
-    return names
-
-
-TIMELINE_EVENT_TYPES = tuple(
-    name
-    for cls in TIMELINE_EVENT_CLASSES
-    for name in _event_names_for(cls)
-)
-
 
 class TimelineProjector(ApplicationLoggingMixin):
     """Projects significant domain events into indexable TimelineItem read models."""
+
+    EVENT_CLASSES: tuple[type[Event], ...] = (
+        ConsensusEvaluatedEvent,
+        TradingActivityAnomalyDetectedEvent,
+        AgentDecisionRecordedEvent,
+        AgentActionCreatedEvent,
+        AgentActionCompletedEvent,
+        AgentActionFailedEvent,
+        AgentApprovalRequestedEvent,
+        AgentApprovalResolvedEvent,
+        OracleSummaryEvent,
+        RefChangedEvent,
+        RuntimeErrorCapturedEvent,
+        RuntimeIncidentCreatedEvent,
+    )
+
+    @classmethod
+    def _event_names_for(cls, event_cls: type[Event]) -> set[str]:
+        names = {event_cls.__name__}
+        if event_cls.EVENT_TYPE:
+            names.add(event_cls.EVENT_TYPE)
+        return names
+
+    @classmethod
+    def _derive_event_types(cls) -> tuple[str, ...]:
+        return tuple(
+            name
+            for event_cls in cls.EVENT_CLASSES
+            for name in cls._event_names_for(event_cls)
+        )
 
     def __init__(
             self,
@@ -173,7 +168,7 @@ class TimelineProjector(ApplicationLoggingMixin):
 
     def subscribe(self) -> None:
         callback_sub = CallbackSubscription(self._on_event)
-        for event_type in TIMELINE_EVENT_TYPES:
+        for event_type in self._derive_event_types():
             self._subscriptions.append(
                 self._event_bus.subscribe(event_type, callback_sub)
             )

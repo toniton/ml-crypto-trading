@@ -9,12 +9,11 @@ from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 
 
 class TestCCXTRestExecution(unittest.TestCase):
-    @patch('src.exchange.clients.ccxt.ccxt_rest_service.EnvironmentConfig')
-    @patch('ccxt.binance')
-    def setUp(self, mock_binance, _mock_env_config):
+    def setUp(self):
         self.mock_exchange = MagicMock()
-        mock_binance.return_value = self.mock_exchange
-        self.service = CCXTExchangeRestService(ExchangeProvidersEnum.CCXT_BINANCE)
+        with patch.dict(CCXTExchangeRestService._CLASS_MAP, {ExchangeProvidersEnum.CCXT_BINANCE: MagicMock(return_value=self.mock_exchange)}), \
+             patch('src.exchange.clients.ccxt.ccxt_rest_service.EnvironmentConfig'):
+            self.service = CCXTExchangeRestService(ExchangeProvidersEnum.CCXT_BINANCE)
         self.builder = CCXTExchangeRestBuilder(ExchangeProvidersEnum.CCXT_BINANCE.value)
 
     def test_execute_market_data(self):

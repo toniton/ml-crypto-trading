@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional, TypeVar
 
 from pydantic import BaseModel
+from src.core.interfaces.dict_serializable import DictSerializable
 from src.core.interfaces.event import Event
 
 T = TypeVar("T")
@@ -60,7 +61,7 @@ class MessageEvent(Event[T]):
     def _serialize_payload(payload: Any) -> Any:
         if payload is None:
             return None
-        if isinstance(payload, Event):
+        if isinstance(payload, DictSerializable):
             return payload.to_dict()
         if isinstance(payload, BaseModel):
             return payload.model_dump()

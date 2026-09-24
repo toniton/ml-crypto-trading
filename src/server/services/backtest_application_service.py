@@ -18,15 +18,13 @@ from src.backtest.runner.backtest_runner import BacktestRunner
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
-from src.logging.factory import LoggingFactory
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.recorder.market_data_store import MarketDataStore
 from src.server.services.dataset_service import DatasetService
 from src.vcs.application.service import VCSService
 
-logger = LoggingFactory.get_application_logger(__name__)
 
-
-class BacktestApplicationService:
+class BacktestApplicationService(ApplicationLoggingMixin):
     def __init__(
             self,
             db_manager: DatabaseManager,
@@ -113,16 +111,16 @@ class BacktestApplicationService:
 
     def _execute_run(self, runner: BacktestRunner, session: BacktestSession) -> None:
         try:
-            logger.info(f"Starting backtest simulation for session {session.id} ({session.ticker_symbol})")
+            self.app_logger.info(f"Starting backtest simulation for session {session.id} ({session.ticker_symbol})")
             result = runner.run_session(session)
             metrics = self._calculator.calculate(result)
             with self._db_manager.get_unit_of_work() as uow:
                 repo = uow.get_repository(PostgresBacktestRepository)
                 repo.save_session(session)
                 repo.save_result(result, metrics=metrics)
-            logger.info(f"Backtest simulation completed for session {session.id}")
+            self.app_logger.info(f"Backtest simulation completed for session {session.id}")
         except Exception as exc:  # pylint: disable=broad-except
-            logger.error(f"Backtest simulation failed for session {session.id}: {exc}", exc_info=True)
+            self.app_logger.error(f"Backtest simulation failed for session {session.id}: {exc}", exc_info=True)
             session.fail(str(exc))
             with self._db_manager.get_unit_of_work() as uow:
                 repo = uow.get_repository(PostgresBacktestRepository)

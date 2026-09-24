@@ -1,6 +1,15 @@
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+# Ensure required environment variables exist during pytest module collection
+os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("DATABASE_CONNECTION_HOST", "localhost")
+os.environ.setdefault("POSTGRES_USER", "postgres")
+os.environ.setdefault("POSTGRES_PASSWORD", "password")
+os.environ.setdefault("POSTGRES_DATABASE", "trading_bot")
+
 from src.configuration.environment_config import EnvironmentConfig
 
 
