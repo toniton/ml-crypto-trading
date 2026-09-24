@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from fastapi import WebSocket, WebSocketDisconnect
 
+from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.events.agent_events import (
     AgentActionCompletedEvent,
@@ -15,30 +16,42 @@ from src.events.agent_events import (
     AgentApprovalRequestedEvent,
     AgentApprovalResolvedEvent,
     AgentMessageCreatedEvent,
+    TradingActivityAnomalyDetectedEvent,
 )
+from src.events.decision_models import AgentDecisionRecordedEvent
 from src.events.message_subscription import MessageSubscription
+from src.trading.events import ConsensusEvaluatedEvent
+
+
+AGENT_EVENT_CLASSES: tuple[type[Event], ...] = (
+    AgentMessageCreatedEvent,
+    AgentActionCreatedEvent,
+    AgentActionUpdatedEvent,
+    AgentApprovalRequestedEvent,
+    AgentApprovalResolvedEvent,
+    AgentActionCompletedEvent,
+    AgentActionFailedEvent,
+    AgentDecisionRecordedEvent,
+    TradingActivityAnomalyDetectedEvent,
+    ConsensusEvaluatedEvent,
+)
+
+
+def _derive_event_types(classes: tuple[type[Event], ...]) -> tuple[str, ...]:
+    types: list[str] = []
+    for cls in classes:
+        if cls.EVENT_TYPE and cls.EVENT_TYPE not in types:
+            types.append(cls.EVENT_TYPE)
+        if cls.__name__ not in types:
+            types.append(cls.__name__)
+    return tuple(types)
 
 
 class AgentWebSocketHandler:
     HEARTBEAT_INTERVAL_SECONDS = 30.0
     SEND_TIMEOUT_SECONDS = 5.0
 
-    AGENT_EVENT_TYPES = [
-        AgentMessageCreatedEvent.EVENT_TYPE,
-        "AgentMessageCreatedEvent",
-        AgentActionCreatedEvent.EVENT_TYPE,
-        "AgentActionCreatedEvent",
-        AgentActionUpdatedEvent.EVENT_TYPE,
-        "AgentActionUpdatedEvent",
-        AgentApprovalRequestedEvent.EVENT_TYPE,
-        "AgentApprovalRequestedEvent",
-        AgentApprovalResolvedEvent.EVENT_TYPE,
-        "AgentApprovalResolvedEvent",
-        AgentActionCompletedEvent.EVENT_TYPE,
-        "AgentActionCompletedEvent",
-        AgentActionFailedEvent.EVENT_TYPE,
-        "AgentActionFailedEvent",
-    ]
+    AGENT_EVENT_TYPES = _derive_event_types(AGENT_EVENT_CLASSES)
 
     def __init__(self, bus: EventBus) -> None:
         self._bus = bus

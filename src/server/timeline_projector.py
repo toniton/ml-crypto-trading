@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import threading
+from datetime import timezone
 from typing import Optional
 
-from src.logging.factory import LoggingFactory
-
 from src.agent.oracle.events import OracleSummaryEvent
+from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
+from src.database.dao.runtime_incident_dao import RuntimeIncidentDao
+from src.database.repositories.providers.postgres_timeline_repository import PostgresTimelineRepository
+from src.database.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.events.agent_events import (
     AgentActionCompletedEvent,
     AgentActionCreatedEvent,
@@ -26,25 +29,12 @@ from src.events.runtime_events import (
     RuntimeIncidentCreatedEvent,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.factory import LoggingFactory
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
-from src.trading.events import (
-    ConsensusEvaluatedEvent,
-    OrderCancelledEvent,
-    OrderFilledEvent,
-    OrderRejectedEvent,
-    OrderSubmittedEvent,
-    PositionChangedEvent,
-    RiskStateChangedEvent,
-)
+from src.trading.events import ConsensusEvaluatedEvent
 from src.vcs.application.events import RefChangedEvent
 
-TIMELINE_EVENT_CLASSES = (
-    OrderSubmittedEvent,
-    OrderFilledEvent,
-    OrderCancelledEvent,
-    OrderRejectedEvent,
-    PositionChangedEvent,
-    RiskStateChangedEvent,
+TIMELINE_EVENT_CLASSES: tuple[type[Event], ...] = (
     ConsensusEvaluatedEvent,
     TradingActivityAnomalyDetectedEvent,
     AgentDecisionRecordedEvent,
@@ -82,12 +72,104 @@ TIMELINE_EVENT_TYPES = tuple(
 class TimelineProjector(ApplicationLoggingMixin):
     """Projects significant domain events into indexable TimelineItem read models."""
 
-    def __init__(self, event_bus: EventBus, max_items: int = 1000):
+    def __init__(
+            self,
+            event_bus: EventBus,
+            max_items: int = 2000,
+            db_manager: Optional[DatabaseManager] = None,
+            flush_interval_seconds: float = 30.0,
+    ):
         self._event_bus = event_bus
         self._max_items = max_items
+        self._db_manager = db_manager
+        self._flush_interval_seconds = flush_interval_seconds
         self._items: list[TimelineItem] = []
+        self._unpersisted_items: list[TimelineItem] = []
         self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._flush_thread: Optional[threading.Thread] = None
         self._subscriptions: list[str] = []
+        if self._db_manager:
+            self._hydrate_from_db()
+            if self._flush_interval_seconds > 0:
+                self._start_flush_thread()
+
+    def _start_flush_thread(self) -> None:
+        self._flush_thread = threading.Thread(
+            target=self._run_flush_loop,
+            daemon=True,
+            name="TimelineProjectorFlush",
+        )
+        self._flush_thread.start()
+
+    def _run_flush_loop(self) -> None:
+        while not self._stop_event.wait(self._flush_interval_seconds):
+            self.flush()
+
+    def flush(self) -> None:
+        if not self._db_manager:
+            return
+        with self._lock:
+            if not self._unpersisted_items:
+                return
+            items_to_flush = list(self._unpersisted_items)
+            self._unpersisted_items.clear()
+
+        try:
+            with self._db_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresTimelineRepository)
+                repo.save_batch(items_to_flush)
+        except Exception as err:
+            self.app_logger.warning(f"Failed to flush timeline items to database: {err}")
+            with self._lock:
+                self._unpersisted_items = items_to_flush + self._unpersisted_items
+
+    def _hydrate_from_db(self) -> None:
+        if not self._db_manager:
+            return
+        try:
+            with self._db_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresTimelineRepository)
+                persisted = repo.list_items(limit=self._max_items)
+                if persisted:
+                    with self._lock:
+                        self._items = list(reversed(persisted))
+                    return
+
+                if not isinstance(uow, SqlAlchemyUnitOfWork):
+                    return
+
+                session = uow.session
+                incidents = (
+                    session.query(RuntimeIncidentDao)
+                    .order_by(RuntimeIncidentDao.first_seen.asc())
+                    .limit(200)
+                    .all()
+                )
+                for inc in incidents:
+                    seen_dt = inc.first_seen
+                    if seen_dt:
+                        if seen_dt.tzinfo is None:
+                            seen_dt = seen_dt.replace(tzinfo=timezone.utc)
+                        self._items.append(
+                            TimelineItem(
+                                timestamp=seen_dt.isoformat(),
+                                category=TimelineCategory.RUNTIME,
+                                severity=inc.severity.upper() if inc.severity else "ERROR",
+                                title=f"Runtime Incident: {inc.id[:8] if inc.id else ''}",
+                                summary=inc.notes or f"Incident in {inc.component}: {inc.category}",
+                                correlation_id=None,
+                                causation_id=None,
+                                actor_type="WATCHDOG",
+                                primary_entity=EntityRef(type="ASSET", id=inc.asset) if inc.asset else None,
+                                entities=[EntityRef(type="INCIDENT", id=inc.id)] if inc.id else [],
+                                metadata={"incident_id": inc.id, "component": inc.component},
+                            )
+                        )
+
+                self._items.sort(key=lambda x: x.timestamp)
+        except Exception as err:
+            self.app_logger.warning(f"Failed to hydrate timeline from database: {err}")
 
     def subscribe(self) -> None:
         callback_sub = CallbackSubscription(self._on_event)
@@ -97,9 +179,13 @@ class TimelineProjector(ApplicationLoggingMixin):
             )
 
     def close(self) -> None:
+        self._stop_event.set()
+        if self._flush_thread and self._flush_thread.is_alive():
+            self._flush_thread.join(timeout=2.0)
         for sub_id in self._subscriptions:
             self._event_bus.unsubscribe(sub_id)
         self._subscriptions.clear()
+        self.flush()
 
     def _on_event(self, event: Event) -> None:
         item = self._project_event(event)
@@ -107,25 +193,20 @@ class TimelineProjector(ApplicationLoggingMixin):
             self._append_item(item)
 
     def _append_item(self, item: TimelineItem) -> None:
+        should_flush_evicted = False
         with self._lock:
             self._items.append(item)
+            if self._db_manager:
+                self._unpersisted_items.append(item)
             if len(self._items) > self._max_items:
                 self._items.pop(0)
+                should_flush_evicted = True
+
+        if should_flush_evicted:
+            self.flush()
 
     # pylint: disable=too-many-return-statements,too-many-branches
     def _project_event(self, event: Event) -> Optional[TimelineItem]:
-        if isinstance(event, OrderSubmittedEvent):
-            return self._project_order_submitted(event)
-        if isinstance(event, OrderFilledEvent):
-            return self._project_order_filled(event)
-        if isinstance(event, OrderCancelledEvent):
-            return self._project_order_cancelled(event)
-        if isinstance(event, OrderRejectedEvent):
-            return self._project_order_rejected(event)
-        if isinstance(event, PositionChangedEvent):
-            return self._project_position_changed(event)
-        if isinstance(event, RiskStateChangedEvent):
-            return self._project_risk_state_changed(event)
         if isinstance(event, ConsensusEvaluatedEvent):
             return self._project_consensus(event)
         if isinstance(event, TradingActivityAnomalyDetectedEvent):
@@ -151,150 +232,6 @@ class TimelineProjector(ApplicationLoggingMixin):
         if isinstance(event, RuntimeIncidentCreatedEvent):
             return self._project_runtime_incident(event)
         return None
-
-    def _project_order_submitted(self, event: OrderSubmittedEvent) -> TimelineItem:
-        order = event.order
-        symbol = event.symbol
-        order_id = order.uuid if order else ""
-        action = order.trade_action if order else ""
-        qty = str(order.quantity) if order else ""
-        price = str(order.price) if order else ""
-        entities = []
-        if symbol:
-            entities.append(EntityRef(type="ASSET", id=symbol))
-        if order_id:
-            entities.append(EntityRef(type="ORDER", id=order_id))
-        return TimelineItem(
-            timestamp=event.timestamp,
-            category=TimelineCategory.TRADING,
-            severity="INFO",
-            title=f"Order Submitted: {symbol} {action}",
-            summary=f"Submitted {action} order for {qty} {symbol} @ {price}",
-            correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
-            actor_type=event.actor_type,
-            primary_entity=EntityRef(type="ORDER", id=order_id) if order_id else None,
-            entities=entities,
-            metadata={"order_id": order_id, "symbol": symbol, "action": str(action)},
-        )
-
-    def _project_order_filled(self, event: OrderFilledEvent) -> TimelineItem:
-        order = event.order
-        symbol = event.symbol
-        order_id = order.uuid if order else ""
-        fill_price = str(order.fill_price or order.price) if order else ""
-        entities = []
-        if symbol:
-            entities.append(EntityRef(type="ASSET", id=symbol))
-        if order_id:
-            entities.append(EntityRef(type="ORDER", id=order_id))
-        return TimelineItem(
-            timestamp=event.timestamp,
-            category=TimelineCategory.TRADING,
-            severity="INFO",
-            title=f"Order Filled: {symbol}",
-            summary=f"Order {order_id} filled @ {fill_price}",
-            correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
-            actor_type="EXCHANGE",
-            primary_entity=EntityRef(type="ORDER", id=order_id) if order_id else None,
-            entities=entities,
-            metadata={"order_id": order_id, "symbol": symbol, "fill_price": fill_price},
-        )
-
-    def _project_order_cancelled(self, event: OrderCancelledEvent) -> TimelineItem:
-        order = event.order
-        symbol = event.symbol
-        order_id = order.uuid if order else ""
-        entities = []
-        if symbol:
-            entities.append(EntityRef(type="ASSET", id=symbol))
-        if order_id:
-            entities.append(EntityRef(type="ORDER", id=order_id))
-        return TimelineItem(
-            timestamp=event.timestamp,
-            category=TimelineCategory.TRADING,
-            severity="WARNING",
-            title=f"Order Cancelled: {symbol}",
-            summary=f"Order {order_id} was cancelled",
-            correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
-            actor_type="EXCHANGE",
-            primary_entity=EntityRef(type="ORDER", id=order_id) if order_id else None,
-            entities=entities,
-            metadata={"order_id": order_id, "symbol": symbol},
-        )
-
-    def _project_order_rejected(self, event: OrderRejectedEvent) -> TimelineItem:
-        order = event.order
-        symbol = event.symbol
-        reason = event.reason
-        order_id = order.uuid if order else ""
-        entities = []
-        if symbol:
-            entities.append(EntityRef(type="ASSET", id=symbol))
-        if order_id:
-            entities.append(EntityRef(type="ORDER", id=order_id))
-        return TimelineItem(
-            timestamp=event.timestamp,
-            category=TimelineCategory.TRADING,
-            severity="WARNING",
-            title=f"Order Rejected: {symbol}",
-            summary=f"Order rejected: {reason}",
-            correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
-            actor_type="EXCHANGE",
-            primary_entity=EntityRef(type="ORDER", id=order_id) if order_id else None,
-            entities=entities,
-            metadata={"order_id": order_id, "reason": reason},
-        )
-
-    def _project_position_changed(self, event: PositionChangedEvent) -> TimelineItem:
-        symbol = event.symbol
-        action = event.action
-        qty = str(event.quantity)
-        price = str(event.price)
-        pos_qty = str(event.position_qty)
-        pnl = str(event.realized_pnl)
-        entities = [EntityRef(type="ASSET", id=symbol)] if symbol else []
-        return TimelineItem(
-            timestamp=event.timestamp,
-            category=TimelineCategory.TRADING,
-            severity="INFO",
-            title=f"Position Changed: {symbol} ({action})",
-            summary=f"Position {action} {qty} @ {price} -> Total Qty: {pos_qty}, PnL: {pnl}",
-            correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
-            actor_type=event.actor_type,
-            primary_entity=EntityRef(type="ASSET", id=symbol) if symbol else None,
-            entities=entities,
-            metadata={
-                "symbol": symbol,
-                "action": action,
-                "quantity": qty,
-                "price": price,
-                "position_qty": pos_qty,
-                "realized_pnl": pnl,
-            },
-        )
-
-    def _project_risk_state_changed(self, event: RiskStateChangedEvent) -> TimelineItem:
-        symbol = event.symbol
-        drawdown = str(event.drawdown)
-        entities = [EntityRef(type="ASSET", id=symbol)] if symbol else []
-        return TimelineItem(
-            timestamp=event.timestamp,
-            category=TimelineCategory.TRADING,
-            severity="WARNING",
-            title=f"Risk State Changed: {symbol}",
-            summary=f"Drawdown changed to {drawdown}",
-            correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
-            actor_type=event.actor_type,
-            primary_entity=EntityRef(type="ASSET", id=symbol) if symbol else None,
-            entities=entities,
-            metadata={"symbol": symbol, "drawdown": drawdown},
-        )
 
     def _project_consensus(self, event: ConsensusEvaluatedEvent) -> TimelineItem:
         symbol = event.symbol
@@ -544,6 +481,24 @@ class TimelineProjector(ApplicationLoggingMixin):
             limit: int = 50,
             offset: int = 0,
     ) -> list[dict]:
+        if self._db_manager:
+            self.flush()
+            try:
+                with self._db_manager.get_unit_of_work() as uow:
+                    repo = uow.get_repository(PostgresTimelineRepository)
+                    db_items = repo.list_items(
+                        category=category,
+                        severity=severity,
+                        entity_type=entity_type,
+                        entity_id=entity_id,
+                        limit=limit,
+                        offset=offset,
+                    )
+                    if db_items:
+                        return [i.to_dict() for i in db_items]
+            except Exception as err:
+                self.app_logger.debug(f"Querying DB for timeline items failed, falling back to memory: {err}")
+
         with self._lock:
             items = list(self._items)
 
@@ -564,3 +519,4 @@ class TimelineProjector(ApplicationLoggingMixin):
 
         items.reverse()  # Newest first
         return [i.to_dict() for i in items[offset:offset + limit]]
+

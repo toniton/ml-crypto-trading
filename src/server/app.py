@@ -165,7 +165,10 @@ class ChatApp:
         agent_event_projector.subscribe()
         app.state.agent_event_projector = agent_event_projector
 
-        timeline_projector = TimelineProjector(event_bus=event_bus)
+        timeline_projector = TimelineProjector(
+            event_bus=event_bus,
+            db_manager=db_manager,
+        )
         timeline_projector.subscribe()
         app.state.timeline_projector = timeline_projector
 

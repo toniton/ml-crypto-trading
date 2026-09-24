@@ -1,18 +1,15 @@
 from __future__ import annotations
 
-from decimal import Decimal
-
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from api.interfaces.order import Order
-from api.interfaces.trade_action import TradeAction
 from src.agent import AgentGateway
 from src.events.message_event_bus import MessageEventBus
 from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
-from src.trading.events import ConsensusEvaluatedEvent, OrderSubmittedEvent
+from src.trading.events import ConsensusEvaluatedEvent
+from src.vcs.application.events import RefChangedEvent
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
 from tests.unit.api_server.helpers import make_db_manager
@@ -69,16 +66,7 @@ def test_get_timeline_empty(client):
 
 
 def test_get_timeline_with_events_and_filters(client, event_bus):
-    order = Order(
-        uuid="ord-abc",
-        provider_name="CRYPTO_DOT_COM",
-        ticker_symbol="BTC_USD",
-        price=Decimal("45000"),
-        quantity="0.1",
-        trade_action=TradeAction.BUY,
-        created_time=100.0,
-    )
-    event_bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=order))
+    event_bus.publish(RefChangedEvent(ref="refs/heads/main", commit_hash="abc12345"))
     event_bus.publish(ConsensusEvaluatedEvent(
         symbol="ETH_USD",
         decision="SELL",
@@ -94,10 +82,10 @@ def test_get_timeline_with_events_and_filters(client, event_bus):
     assert len(data) == 2
 
     # Filter category
-    res_trading = client.get("/api/v1/timeline?category=TRADING")
-    assert res_trading.status_code == 200
-    assert len(res_trading.json()) == 1
-    assert res_trading.json()[0]["category"] == "TRADING"
+    res_vcs = client.get("/api/v1/timeline?category=VCS")
+    assert res_vcs.status_code == 200
+    assert len(res_vcs.json()) == 1
+    assert res_vcs.json()[0]["category"] == "VCS"
 
     # Filter entity_type & entity_id
     res_asset = client.get("/api/v1/timeline?entity_type=ASSET&entity_id=ETH_USD")
