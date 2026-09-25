@@ -38,6 +38,7 @@ from src.backtest.analysis.drift_detector import BacktestDriftDetector
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.core.interfaces.database_manager import DatabaseManager
+from src.core.interfaces.event_bus import EventBus
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.server import ApiServer
@@ -139,6 +140,7 @@ class Application(ApplicationLoggingMixin):
         self._agent_action_executor: Optional[AgentActionExecutor] = None
         self._automation: Optional[AutomationController] = None
         self._conversation_service: Optional[ConversationService] = None
+        self._event_bus: Optional[EventBus] = None
 
         atexit.register(self.shutdown)
 
@@ -537,6 +539,8 @@ class Application(ApplicationLoggingMixin):
         if event.ref != self._vcs_ref:
             return
         self._apply_config_update(event.commit_hash)
+        if self._event_bus is not None:
+            self._event_bus.publish(event)
 
     def _apply_config_update(self, commit_hash: str) -> None:
         try:

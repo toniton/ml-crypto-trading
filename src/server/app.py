@@ -19,6 +19,7 @@ from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
+from src.events.agent_events import AgentApprovalResolvedEvent
 from src.metrics.api.metric_routes import create_metric_router
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.request_metrics_collector import (
@@ -666,6 +667,18 @@ class ChatApp:
             if decision.action == ProposalDecision.REJECT:
                 await asyncio.to_thread(proposal_store.remove, message_id)
                 await ChatApp._record_decision(store, message_id, proposal, ProposalDecision.REJECT)
+                if event_bus:
+                    event_bus.publish(
+                        AgentApprovalResolvedEvent(
+                            approval_id=message_id,
+                            decision="reject",
+                            approval_payload={
+                                "approval_id": message_id,
+                                "title": proposal.summary,
+                                "status": "REJECTED",
+                            },
+                        )
+                    )
                 return {"action": decision.action.value, "message_id": message_id}
 
             validation = await asyncio.to_thread(configuration_service.validate_proposal, proposal)
@@ -682,6 +695,19 @@ class ChatApp:
             await ChatApp._record_decision(
                 store, message_id, proposal, ProposalDecision.APPROVE, commit_hash=commit.hash
             )
+            if event_bus:
+                event_bus.publish(
+                    AgentApprovalResolvedEvent(
+                        approval_id=message_id,
+                        decision="approve",
+                        approval_payload={
+                            "approval_id": message_id,
+                            "title": proposal.summary,
+                            "commit_hash": commit.hash,
+                            "status": "APPROVED",
+                        },
+                    )
+                )
 
             return {
                 "action": decision.action.value,

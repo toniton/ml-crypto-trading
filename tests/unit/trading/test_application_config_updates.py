@@ -70,6 +70,7 @@ def _make_app(vcs):
     )
     app._trading_engine = _FakeEngine()
     app._managers = None
+    app._event_bus = None
     return app
 
 
