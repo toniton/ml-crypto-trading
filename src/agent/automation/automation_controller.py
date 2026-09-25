@@ -143,19 +143,20 @@ class AutomationController(ApplicationLoggingMixin):
                 author=event.author,
                 decision_notes=event.decision_notes,
             )
-        except ValueError as exc:
+        except (ValueError, KeyError) as exc:
             self.app_logger.warning(
                 f"Approval {event.approval_id} could not be resolved: {exc}"
             )
+            error_code = "APPROVAL_CONFLICT" if isinstance(exc, ValueError) else "APPROVAL_NOT_FOUND"
             self._emit(
                 AgentApprovalResolvedEvent(
                     approval_id=event.approval_id,
                     decision="error",
-                    error_code="APPROVAL_CONFLICT",
+                    error_code=error_code,
                     error_message=str(exc),
                     approval_payload={
                         "approval_id": event.approval_id,
-                        "error_code": "APPROVAL_CONFLICT",
+                        "error_code": error_code,
                         "error_message": str(exc),
                     },
                 ),

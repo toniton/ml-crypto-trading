@@ -41,6 +41,7 @@ from src.core.interfaces.database_manager import DatabaseManager
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.server import ApiServer
+from src.server.services.conversation_service import ConversationService
 from src.server.services.dataset_service import DatasetService
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
@@ -137,6 +138,7 @@ class Application(ApplicationLoggingMixin):
         self._activity_tracker: Optional[AssetActivityTracker] = None
         self._agent_action_executor: Optional[AgentActionExecutor] = None
         self._automation: Optional[AutomationController] = None
+        self._conversation_service: Optional[ConversationService] = None
 
         atexit.register(self.shutdown)
 
@@ -422,6 +424,7 @@ class Application(ApplicationLoggingMixin):
             configuration_service=configuration_service,
             action_service=action_service,
             event_bus=self._event_bus,
+            conversation_store=self._conversation_service,
         )
         try:
             backtest_service = self._build_backtest_service()

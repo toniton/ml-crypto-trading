@@ -12,7 +12,7 @@ from src.agent.actions.models import (
 from src.agent.actions.notification_policy import NotificationPolicy
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.models import ConfigChange, ConfigurationProposal
-from src.core.interfaces.conversation_store import ConversationStore
+from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
 from src.core.interfaces.event_bus import EventBus
 from src.events.agent_events import (
     AgentActionCompletedEvent,
@@ -194,7 +194,58 @@ class AgentApprovalService(AgentLoggingMixin):
         return request
 
     def get_approval(self, approval_id: str) -> Optional[AgentApprovalRequest]:
-        return self._approvals.get(approval_id)
+        approval = self._approvals.get(approval_id)
+        if approval is not None:
+            return approval
+        return self._find_persisted_approval(approval_id)
+
+    def _find_persisted_approval(self, approval_id: str) -> Optional[AgentApprovalRequest]:
+        if self._conversation_store is None:
+            return None
+
+        # Look up directly by message_id
+        message = self._conversation_store.get_message(approval_id)
+        if message and message.payload:
+            parsed = self._parse_approval_from_message(message, approval_id)
+            if parsed:
+                self._approvals[approval_id] = parsed
+                return parsed
+
+        # Fallback: scan user sessions for approval block
+        try:
+            for session in self._conversation_store.list_sessions():
+                for msg in self._conversation_store.messages(session.id):
+                    if msg.payload and "blocks" in msg.payload:
+                        parsed = self._parse_approval_from_message(msg, approval_id)
+                        if parsed:
+                            self._approvals[approval_id] = parsed
+                            return parsed
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _parse_approval_from_message(message: ConversationMessage, approval_id: str) -> Optional[AgentApprovalRequest]:
+        for block in message.payload.get("blocks", []):
+            if isinstance(block, dict) and block.get("type") == "agent_approval" and block.get("approval_id") == approval_id:
+                status_val = block.get("status", "pending").upper()
+                try:
+                    status = ApprovalStatus(status_val)
+                except ValueError:
+                    status = ApprovalStatus.PENDING
+                return AgentApprovalRequest(
+                    id=approval_id,
+                    agent_action_id=block.get("action_id") or block.get("agent_action_id") or approval_id,
+                    action_type=block.get("action_type") or "CREATE_PROPOSAL",
+                    title=block.get("title") or "Approval Request",
+                    description=block.get("description") or "",
+                    proposed_change=block.get("proposed_change") or {},
+                    base_commit=block.get("base_commit") or "",
+                    asset=block.get("asset"),
+                    status=status,
+                    conversation_id=message.conversation_id,
+                )
+        return None
 
     def list_approvals(
             self, status: Optional[ApprovalStatus] = None, limit: int = 50
@@ -213,7 +264,7 @@ class AgentApprovalService(AgentLoggingMixin):
             decision_notes: Optional[str] = None,
     ) -> Tuple[AgentApprovalRequest, Optional[str], List[str]]:
         """Resolves an approval. If approved, checks base_commit against current VCS HEAD."""
-        approval = self._approvals.get(approval_id)
+        approval = self.get_approval(approval_id)
         if not approval:
             raise KeyError(f"Approval request '{approval_id}' not found.")
 

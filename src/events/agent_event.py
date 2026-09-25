@@ -48,3 +48,13 @@ class AgentEvent(TradingEvent):
     @property
     def sequence_number(self) -> int:
         return self.agent_metadata.sequence_number
+
+    def to_dict(self) -> dict:
+        data = super().to_dict()
+        if "agent_metadata" in data.get("payload", {}):
+            meta = data["payload"]["agent_metadata"]
+            if isinstance(meta, dict):
+                for key in ("request_id", "correlation_id", "causation_id"):
+                    if meta.get(key) is not None:
+                        meta[key] = str(meta[key])
+        return data

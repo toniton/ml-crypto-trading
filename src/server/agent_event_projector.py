@@ -26,6 +26,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
         self._actions: dict[str, dict] = {}
         self._approvals: dict[str, dict] = {}
         self._seen_event_ids: set[str] = set()
+        self._hydrated: bool = False
         self._lock = threading.Lock()
         self._subscriptions: list[str] = []
 
@@ -118,7 +119,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
             ConversationMessage(
                 role="assistant",
                 content=f"Approval requested: {payload.get('title', '')}",
-                message_id=event.event_id,
+                message_id=event.approval_id,
                 payload={
                     "blocks": [
                         {
@@ -150,8 +151,32 @@ class AgentEventProjector(ApplicationLoggingMixin):
                 approval["error_message"] = event.error_message
             else:
                 approval["status"] = event.decision.upper()
+                approval.pop("error_code", None)
+                approval.pop("error_message", None)
             if event.approval_payload:
                 approval.update(event.approval_payload)
+
+        if not event.error_code:
+            conversation_id = self._resolve_conversation(event)
+            decision_label = "Approved" if event.decision.lower() == "approve" else "Rejected"
+            title = approval.get("title") or "configuration change"
+            decision_data = {
+                "action": event.decision.lower(),
+                "approval_id": event.approval_id,
+                "title": title,
+            }
+            if event.approval_payload and event.approval_payload.get("commit_hash"):
+                decision_data["commit_hash"] = event.approval_payload["commit_hash"]
+            self._conversation_store.append(
+                conversation_id,
+                ConversationMessage(
+                    role="assistant",
+                    content=f"{decision_label} configuration change: {title}",
+                    message_id=f"decision:{event.approval_id}",
+                    payload={"decision": decision_data},
+                    conversation_id=conversation_id,
+                ),
+            )
 
     def _upsert_action(self, action_id: str, payload: dict) -> None:
         with self._lock:
@@ -159,15 +184,46 @@ class AgentEventProjector(ApplicationLoggingMixin):
             existing.update(payload)
             self._actions[action_id] = existing
 
+    def _ensure_hydrated(self) -> None:
+        if self._hydrated:
+            return
+        with self._lock:
+            if self._hydrated:
+                return
+            self._hydrated = True
+            try:
+                for session in self._conversation_store.list_sessions():
+                    for msg in self._conversation_store.messages(session.id):
+                        if not msg.payload:
+                            continue
+                        action_data = msg.payload.get("agent_action")
+                        if isinstance(action_data, dict) and "id" in action_data:
+                            self._actions.setdefault(action_data["id"], action_data)
+                        for block in msg.payload.get("blocks", []):
+                            if isinstance(block, dict) and block.get("type") == "agent_approval":
+                                app_id = block.get("approval_id")
+                                if app_id:
+                                    self._approvals.setdefault(app_id, block)
+            except Exception:
+                pass
+
     def _resolve_conversation(self, event: Any) -> str:
         conversation_id = None
         if isinstance(event, AgentMessageCreatedEvent):
             conversation_id = event.conversation_id
-        elif isinstance(event, AgentApprovalRequestedEvent) and event.approval_payload:
+        elif isinstance(event, (AgentApprovalRequestedEvent, AgentApprovalResolvedEvent)) and event.approval_payload:
             conversation_id = event.approval_payload.get("conversation_id")
 
         if conversation_id:
             return conversation_id
+
+        try:
+            sessions = self._conversation_store.list_sessions()
+            user_sessions = [s for s in sessions if not s.id.startswith("system:")]
+            if user_sessions:
+                return user_sessions[0].id
+        except Exception:
+            pass
 
         agent_context_id = (
             event.agent_context_id
@@ -195,6 +251,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
             status: Optional[str] = None,
             limit: int = 50,
     ) -> List[dict]:
+        self._ensure_hydrated()
         with self._lock:
             actions = list(self._actions.values())
         if conversation_id:
@@ -205,10 +262,12 @@ class AgentEventProjector(ApplicationLoggingMixin):
         return actions[:limit]
 
     def get_action(self, action_id: str) -> Optional[dict]:
+        self._ensure_hydrated()
         with self._lock:
             return self._actions.get(action_id)
 
     def list_approvals(self, status: Optional[str] = None, limit: int = 50) -> List[dict]:
+        self._ensure_hydrated()
         with self._lock:
             approvals = list(self._approvals.values())
         if status:
@@ -217,5 +276,17 @@ class AgentEventProjector(ApplicationLoggingMixin):
         return approvals[:limit]
 
     def get_approval(self, approval_id: str) -> Optional[dict]:
+        self._ensure_hydrated()
         with self._lock:
-            return self._approvals.get(approval_id)
+            approval = self._approvals.get(approval_id)
+        if approval is not None:
+            return approval
+        # Check in conversation store
+        message = self._conversation_store.get_message(approval_id)
+        if message and message.payload:
+            for block in message.payload.get("blocks", []):
+                if isinstance(block, dict) and block.get("type") == "agent_approval" and block.get("approval_id") == approval_id:
+                    with self._lock:
+                        self._approvals[approval_id] = block
+                    return block
+        return None

@@ -5,6 +5,7 @@ import queue
 from datetime import datetime, timezone
 
 from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
@@ -128,9 +129,10 @@ class AgentWebSocketHandler:
 
     async def _send_json(self, websocket: WebSocket, payload) -> bool:
         try:
-            await asyncio.wait_for(websocket.send_json(payload), timeout=self.SEND_TIMEOUT_SECONDS)
+            encoded_payload = jsonable_encoder(payload)
+            await asyncio.wait_for(websocket.send_json(encoded_payload), timeout=self.SEND_TIMEOUT_SECONDS)
             return True
-        except (asyncio.TimeoutError, WebSocketDisconnect, RuntimeError):
+        except Exception:
             return False
 
     def _heartbeat(self, subscription: MessageSubscription) -> dict:
