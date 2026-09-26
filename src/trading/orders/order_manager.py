@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import queue
 import threading
 from decimal import Decimal
@@ -7,18 +9,23 @@ from uuid import uuid4
 
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
-from api.interfaces.trade_action import TradeAction
-from api.interfaces.trade_action import OrderStatus
-from src.core.interfaces.event_bus import EventBus
+from api.interfaces.trade_action import OrderStatus, TradeAction
+from src.agent.runtime_debug.error_extractor import ErrorExtractor
 from src.core.interfaces.database_manager import DatabaseManager
-from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.trading_journal import TradingJournal
-from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.events.runtime_events import RuntimeErrorCapturedEvent
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
-from src.events.runtime_events import RuntimeErrorCapturedEvent
-from src.agent.runtime_debug.error_extractor import extract_runtime_error_from_order_exception
-from src.trading.events import OrderCancelledEvent, OrderFilledEvent, OrderRejectedEvent
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.events import (
+    OrderCancelledEvent,
+    OrderFilledEvent,
+    OrderRejectedEvent,
+    PositionChangedEvent,
+)
+from src.trading.session.session_manager import SessionManager
 
 
 class OrderManager(ApplicationLoggingMixin):
@@ -28,16 +35,23 @@ class OrderManager(ApplicationLoggingMixin):
     }
 
     def __init__(
-            self, database_manager: DatabaseManager, trading_journal: TradingJournal,
-            rest_manager: RestManager, websocket_manager: WebSocketManager,
+            self,
+            database_manager: DatabaseManager,
+            trading_journal: TradingJournal,
+            rest_manager: RestManager,
+            websocket_manager: WebSocketManager,
+            session_manager: SessionManager,
+            event_bus: EventBus,
             synchronous_execution: bool = False,
-            event_bus: Optional[EventBus] = None,
     ):
         self._database_manager = database_manager
         self._rest_manager = rest_manager
         self._websocket_manager = websocket_manager
+        self._session_manager = session_manager
         self._event_bus = event_bus
         self._order_queue = Queue()
+        self._intent_lock = threading.Lock()
+        self._in_flight_orders: dict[str, tuple[str, TradeAction]] = {}
         self._trading_journal = trading_journal
         self._assets = []
         self._synchronous_execution = synchronous_execution
@@ -73,16 +87,17 @@ class OrderManager(ApplicationLoggingMixin):
                     self.app_logger.info(f"Order executed: {order.uuid}")
                 except RuntimeError as exc:
                     self.app_logger.error(f"Executing order failed. Order={order}: {exc}", exc_info=True)
-                    if self._event_bus:
-                        self._event_bus.publish(OrderRejectedEvent(
-                            symbol=order.ticker_symbol,
-                            order=order,
-                            reason=str(exc),
-                        ))
-                        runtime_err = extract_runtime_error_from_order_exception(exc, order=order)
-                        self._event_bus.publish(RuntimeErrorCapturedEvent(
-                            event_payload=runtime_err.to_dict(),
-                        ))
+                    with self._intent_lock:
+                        self._in_flight_orders.pop(order.uuid, None)
+                    self._event_bus.publish(OrderRejectedEvent(
+                        symbol=order.ticker_symbol,
+                        order=order,
+                        reason=str(exc),
+                    ))
+                    runtime_err = ErrorExtractor.extract_runtime_error_from_order_exception(exc, order=order)
+                    self._event_bus.publish(RuntimeErrorCapturedEvent(
+                        event_payload=runtime_err.to_dict(),
+                    ))
             except queue.Empty:
                 pass
         self.app_logger.info("Order processing thread exiting")
@@ -100,18 +115,55 @@ class OrderManager(ApplicationLoggingMixin):
             with self._database_manager.get_unit_of_work() as uow:
                 for order in orders:
                     self.app_logger.debug(f"Order update received, saving to DB: {order}")
+                    if order.status not in self.OPEN_STATUSES:
+                        with self._intent_lock:
+                            self._in_flight_orders.pop(order.uuid, None)
+
                     if order.status == OrderStatus.COMPLETED:
                         self._trading_journal.record_fill(order)
-                        if self._event_bus:
-                            self._event_bus.publish(OrderFilledEvent(symbol=order.ticker_symbol, order=order))
+                        self._session_manager.record_order_fill(order)
+                        ctx = self._session_manager.get_trading_context_by_symbol(order.ticker_symbol)
+                        if ctx:
+                            fill_price = (
+                                order.fill_price
+                                if (order.fill_price is not None and order.fill_price > Decimal(0))
+                                else order.price
+                            )
+                            self._event_bus.publish(PositionChangedEvent(
+                                symbol=order.ticker_symbol,
+                                action=order.trade_action.value,
+                                quantity=Decimal(str(order.quantity)),
+                                price=fill_price,
+                                position_qty=ctx.position_qty,
+                                realized_pnl=ctx.realized_pnl,
+                            ))
+                        self._event_bus.publish(OrderFilledEvent(symbol=order.ticker_symbol, order=order))
                     elif order.status == OrderStatus.CANCELLED:
-                        if self._event_bus:
-                            self._event_bus.publish(OrderCancelledEvent(symbol=order.ticker_symbol, order=order))
+                        self._event_bus.publish(OrderCancelledEvent(symbol=order.ticker_symbol, order=order))
                     order_repository = uow.get_repository(PostgresOrderRepository)
                     order_repository.upsert(order)
         except Exception as e:
             self.app_logger.error(f"Failed to save orders: {e}", exc_info=True)
             raise
+
+    def has_outstanding_intent(
+            self, ticker_symbol: str, trade_action: Optional[TradeAction] = None
+    ) -> bool:
+        with self._intent_lock:
+            for sym, action in self._in_flight_orders.values():
+                if sym == ticker_symbol:
+                    if trade_action is None or action == trade_action:
+                        return True
+        try:
+            for order in self._get_non_terminal_orders():
+                if order.ticker_symbol == ticker_symbol and order.status in self.OPEN_STATUSES:
+                    if trade_action is None or order.trade_action == trade_action:
+                        return True
+        except Exception as exc:
+            self.app_logger.warning(
+                f"Error checking outstanding intent for {ticker_symbol}: {exc}"
+            )
+        return False
 
     def initialize(self, assets: list[Asset]):
         self._assets = assets
@@ -199,6 +251,9 @@ class OrderManager(ApplicationLoggingMixin):
             created_time=timestamp,
             commit_hash=commit_hash,
         )
+        with self._intent_lock:
+            self._in_flight_orders[order.uuid] = (order.ticker_symbol, order.trade_action)
+
         if self._synchronous_execution:
             self.execute_order(order)
         else:
@@ -257,6 +312,8 @@ class OrderManager(ApplicationLoggingMixin):
         self._stop_order_executions()
         self.reconcile_pending_orders()
         self._cancel_open_orders()
+        with self._intent_lock:
+            self._in_flight_orders.clear()
         for asset in self._assets:
             self._websocket_manager.unsubscribe_order_update(
                 exchange=asset.exchange.value,

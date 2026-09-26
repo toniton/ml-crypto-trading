@@ -27,12 +27,20 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.mock_db_manager = MagicMock(spec=SqlAlchemyDatabaseManager)
         self.mock_uow = MagicMock(spec=UnitOfWork)
         self.mock_db_manager.get_unit_of_work.return_value = self.mock_uow
-        self.mock_uow.__enter__.return_value = self.mock_uow
         self.mock_journal = MagicMock(spec=TradingJournal)
         self.mock_websocket_manager = MagicMock()
         self.mock_rest_manager = MagicMock()
         self.mock_rest_manager.get_registered_services.return_value = ["p1"]
-        self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal, self.mock_rest_manager, self.mock_websocket_manager)
+        self.mock_session_manager = MagicMock()
+        self.mock_event_bus = MagicMock()
+        self.order_manager = OrderManager(
+            self.mock_db_manager,
+            self.mock_journal,
+            self.mock_rest_manager,
+            self.mock_websocket_manager,
+            session_manager=self.mock_session_manager,
+            event_bus=self.mock_event_bus,
+        )
 
     def tearDown(self):
         self.order_manager.shutdown()

@@ -8,8 +8,11 @@ from typing import Optional
 
 from api.interfaces.asset import Asset
 from api.interfaces.market_data import MarketData
+from api.interfaces.order import Order
 from api.interfaces.position_entry import PositionEntry
+from api.interfaces.position_lot import PositionLot
 from api.interfaces.session_time import SessionTime
+from api.interfaces.trade import Trade
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.trading_session import TradingSession
@@ -86,6 +89,15 @@ class SessionManager:
                 return None
             return self.current_session.trading_contexts.get(asset_key)
 
+    def get_trading_context_by_symbol(self, ticker_symbol: str) -> Optional[TradingContext]:
+        with self._lock:
+            if not self.current_session:
+                return None
+            for ctx in self.current_session.trading_contexts.values():
+                if ctx.ticker_symbol == ticker_symbol:
+                    return ctx
+            return None
+
     def update_available_balance(self, asset_key: int, available_balance: Decimal) -> None:
         with self._lock:
             if not self.current_session:
@@ -93,6 +105,169 @@ class SessionManager:
             ctx = self.current_session.trading_contexts.get(asset_key)
             if ctx is not None:
                 ctx.available_balance = available_balance
+
+    def record_order_fill(self, order: Order) -> list[Trade]:
+        with self._lock:
+            if not self.current_session:
+                return []
+
+            ctx = self._find_context(order.ticker_symbol)
+            if ctx is None:
+                return []
+
+            fill_price = (
+                order.fill_price
+                if (order.fill_price is not None and order.fill_price > Decimal(0))
+                else order.price
+            )
+            quantity = Decimal(str(order.quantity))
+            fee = order.fees if order.fees is not None else Decimal(0)
+            timestamp = float(
+                order.executed_time
+                if order.executed_time is not None
+                else order.created_time
+            )
+            ctx.last_market_activity_time = timestamp
+
+            if order.trade_action == TradeAction.BUY:
+                self._record_buy_fill(ctx, order, fill_price, quantity, fee, timestamp)
+                return []
+
+            if order.trade_action == TradeAction.SELL:
+                return self._record_sell_fill(ctx, order, fill_price, quantity, fee, timestamp)
+
+            return []
+
+    def _find_context(self, ticker_symbol: str) -> Optional[TradingContext]:
+        if not self.current_session:
+            return None
+        for ctx in self.current_session.trading_contexts.values():
+            if ctx.ticker_symbol == ticker_symbol:
+                return ctx
+        return None
+
+    def _record_buy_fill(
+            self,
+            ctx: TradingContext,
+            order: Order,
+            fill_price: Decimal,
+            quantity: Decimal,
+            fee: Decimal,
+            timestamp: float,
+    ) -> None:
+        ctx.lowest_buy = min(ctx.lowest_buy, fill_price)
+        ctx.highest_buy = max(ctx.highest_buy, fill_price)
+        ctx.open_positions.append(PositionEntry(
+            price=fill_price,
+            quantity=quantity,
+            timestamp=timestamp,
+        ))
+        lot = PositionLot.create(
+            order_uuid=order.uuid,
+            ticker_symbol=order.ticker_symbol,
+            price=fill_price,
+            quantity=quantity,
+            fee=fee,
+            timestamp=timestamp,
+        )
+        ctx.position_lots.append(lot)
+        if quantity > Decimal(0):
+            total_cost = (ctx.position_qty * ctx.avg_entry_price) + (quantity * fill_price)
+            ctx.position_qty += quantity
+            ctx.avg_entry_price = total_cost / ctx.position_qty
+
+    def _record_sell_fill(
+            self,
+            ctx: TradingContext,
+            order: Order,
+            fill_price: Decimal,
+            quantity: Decimal,
+            fee: Decimal,
+            timestamp: float,
+    ) -> list[Trade]:
+        ctx.lowest_sell = min(ctx.lowest_sell, fill_price)
+        ctx.highest_sell = max(ctx.highest_sell, fill_price)
+        ctx.close_positions.append(PositionEntry(
+            price=fill_price,
+            quantity=quantity,
+            timestamp=timestamp,
+        ))
+        if quantity > Decimal(0):
+            total_exit_value = (ctx.exit_qty * ctx.avg_exit_price) + (quantity * fill_price)
+            ctx.exit_qty += quantity
+            ctx.avg_exit_price = total_exit_value / ctx.exit_qty
+
+        completed_trades = self._match_fifo_lots(ctx, order, fill_price, quantity, fee, timestamp)
+        ctx.position_qty = max(Decimal(0), ctx.position_qty - quantity)
+        if ctx.position_qty == Decimal(0):
+            ctx.avg_entry_price = Decimal(0)
+        return completed_trades
+
+    def _match_fifo_lots(
+            self,
+            ctx: TradingContext,
+            order: Order,
+            fill_price: Decimal,
+            quantity: Decimal,
+            fee: Decimal,
+            timestamp: float,
+    ) -> list[Trade]:
+        completed_trades: list[Trade] = []
+        sell_remaining = quantity
+        sell_fee_per_unit = (fee / quantity) if quantity > Decimal(0) else Decimal(0)
+
+        while sell_remaining > Decimal(0) and ctx.position_lots:
+            lot = ctx.position_lots[0]
+            matched_qty = min(sell_remaining, lot.remaining_quantity)
+            trade = self._match_single_lot(
+                ctx=ctx,
+                order=order,
+                fill_price=fill_price,
+                matched_qty=matched_qty,
+                lot=lot,
+                sell_fee_per_unit=sell_fee_per_unit,
+                timestamp=timestamp,
+            )
+            completed_trades.append(trade)
+
+            lot.remaining_quantity -= matched_qty
+            sell_remaining -= matched_qty
+            if lot.remaining_quantity <= Decimal(0):
+                ctx.position_lots.pop(0)
+
+        if sell_remaining > Decimal(0):
+            fallback_gross = (fill_price - ctx.avg_entry_price) * sell_remaining
+            fallback_exit_fee = sell_fee_per_unit * sell_remaining
+            ctx.realized_pnl += (fallback_gross - fallback_exit_fee)
+
+        return completed_trades
+
+    def _match_single_lot(
+            self,
+            ctx: TradingContext,
+            order: Order,
+            fill_price: Decimal,
+            matched_qty: Decimal,
+            lot: PositionLot,
+            sell_fee_per_unit: Decimal,
+            timestamp: float,
+    ) -> Trade:
+        trade = Trade.create(
+            ticker_symbol=order.ticker_symbol,
+            entry_order_uuid=lot.order_uuid,
+            exit_order_uuid=order.uuid,
+            entry_price=lot.price,
+            exit_price=fill_price,
+            quantity=matched_qty,
+            entry_fee=lot.fee_per_unit * matched_qty,
+            exit_fee=sell_fee_per_unit * matched_qty,
+            entry_timestamp=lot.timestamp,
+            exit_timestamp=timestamp,
+            commit_hash=order.commit_hash or ctx.commit_hash,
+        )
+        ctx.trades.append(trade)
+        ctx.realized_pnl += trade.net_pnl
+        return trade
 
     def record_position(self, asset_id: int, market_data: MarketData, trade_action: TradeAction,
                         quantity: Decimal = Decimal(0), price: Decimal = Decimal(0)) -> None:

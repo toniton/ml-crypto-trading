@@ -1,4 +1,3 @@
-from src.agent.backtest.backtest_service import BacktestService
 from src.agent.backtest.graph import BacktestGraph
 from src.agent.backtest.models import (
     BacktestAgentRequest,
@@ -13,7 +12,6 @@ __all__ = [
     "BacktestGraph",
     "BacktestPresentation",
     "BacktestQuality",
-    "BacktestService",
     "BacktestTimeRange",
     "BacktestValidation",
 ]

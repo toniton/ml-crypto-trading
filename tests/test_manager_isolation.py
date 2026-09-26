@@ -113,13 +113,25 @@ class TestManagerIsolation(unittest.TestCase):
         journal1 = Mock()
         ws_manager1 = Mock()
         rest_manager1 = Mock()
-        manager1 = OrderManager(db_manager1, journal1, rest_manager1, ws_manager1)
+        session_manager1 = Mock()
+        event_bus1 = Mock()
+        manager1 = OrderManager(
+            db_manager1, journal1, rest_manager1, ws_manager1,
+            session_manager=session_manager1, event_bus=event_bus1
+        )
 
         db_manager2 = Mock(spec=SqlAlchemyDatabaseManager)
         journal2 = Mock()
         ws_manager2 = Mock()
         rest_manager2 = Mock()
-        manager2 = OrderManager(db_manager2, journal2, rest_manager2, ws_manager2)
+        session_manager2 = Mock()
+        event_bus2 = Mock()
+        manager2 = OrderManager(
+            db_manager2, journal2, rest_manager2, ws_manager2,
+            session_manager=session_manager2, event_bus=event_bus2
+        )
 
         self.assertNotEqual(manager1._database_manager, manager2._database_manager)
         self.assertNotEqual(manager1._trading_journal, manager2._trading_journal)
+        self.assertNotEqual(manager1._session_manager, manager2._session_manager)
+        self.assertNotEqual(manager1._event_bus, manager2._event_bus)

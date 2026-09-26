@@ -19,13 +19,12 @@ from src.agent.configuration.nodes.present_proposal import PresentProposalNode
 from src.agent.configuration.nodes.validate_proposal import ValidateProposalNode
 from src.agent.events import AIEvent
 from src.core.interfaces.conversation_store import ConversationStore
-from src.agent.gateway import AgentGateway, AgentResult
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from src.agent.router.nodes.route import RouteNode
 from src.agent.router.nodes.understand_goal import UnderstandGoalNode
+from src.agent.gateway import AgentGateway, AgentResult
 from src.agent.runtime.registry import AgentRegistry
 
-build_default_registry = AgentGateway.build_default_registry
 
 __all__ = [
     "AIEvent",
@@ -55,5 +54,4 @@ __all__ = [
     "UnderstandGoalNode",
     "ValidateProposalNode",
     "ValidationResult",
-    "build_default_registry",
 ]

@@ -37,9 +37,11 @@ class ManagerFactory:
         rest_manager = ClientFactory.create_rest_manager(
             is_simulated, metrics_collector=collector
         )
+        session_manager = SessionManager(config_vcs=config_vcs)
         order_manager = OrderManager(
             database_manager, trading_journal, rest_manager, websocket_manager,
-            synchronous_execution=synchronous_execution, event_bus=event_bus
+            synchronous_execution=synchronous_execution, event_bus=event_bus,
+            session_manager=session_manager,
         )
 
         container = ManagerContainer(
@@ -49,7 +51,7 @@ class ManagerFactory:
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
             consensus_manager=ConsensusManager(event_bus=event_bus),
             protection_manager=ProtectionManager(),
-            session_manager=SessionManager(config_vcs=config_vcs),
+            session_manager=session_manager,
             websocket_manager=websocket_manager,
             rest_manager=rest_manager,
         )

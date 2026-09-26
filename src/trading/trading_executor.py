@@ -24,7 +24,6 @@ from src.trading.events import (
     MarketDataEvent,
     MarketStateChangedEvent,
     OrderSubmittedEvent,
-    PositionChangedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
 )
@@ -208,6 +207,13 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     f"Fees={fees}",
                     f"Available balance={account_balance.available_balance}"
                 ])
+                if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.BUY):
+                    self.app_logger.debug(
+                        "Skipping BUY for %s: outstanding order intent already in progress",
+                        asset.ticker_symbol
+                    )
+                    continue
+
                 quantity_val = self._calculate_quantity(asset, TradeAction.BUY, market_data, decision)
                 if quantity_val is None:
                     self.app_logger.warning(
@@ -236,22 +242,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     commit_hash=commit_hash,
                 )
                 self.activity_queue.put_nowait(buy_order.model_dump_json())
-                self.session_manager.record_position(
-                    asset.key, market_data, TradeAction.BUY,
-                    quantity=Decimal(quantity), price=price
-                )
 
                 self._publish_event(OrderSubmittedEvent(
                     symbol=asset.ticker_symbol,
                     order=buy_order,
-                ))
-                self._publish_event(PositionChangedEvent(
-                    symbol=asset.ticker_symbol,
-                    action=TradeAction.BUY.value,
-                    quantity=Decimal(quantity),
-                    price=price,
-                    position_qty=trading_context.position_qty,
-                    realized_pnl=trading_context.realized_pnl,
                 ))
 
                 self.trading_logger.info(f"Order opened: {asset.ticker_symbol} BUY {quantity} @ {price}")
@@ -280,6 +274,14 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 if not trading_context or not trading_context.open_positions:
                     self.app_logger.debug(f"No open positions for {asset}")
                     continue
+
+                if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.SELL):
+                    self.app_logger.debug(
+                        "Skipping SELL for %s: outstanding order intent already in progress",
+                        asset.ticker_symbol
+                    )
+                    continue
+
                 _, market_data, candles, fees = self._prepare_trade_context(asset)
                 base_balance = self.account_manager.get_base_balance(asset, asset.exchange.value)
 
@@ -310,22 +312,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         commit_hash=commit_hash,
                     )
                     self.activity_queue.put_nowait(sell_order.model_dump_json())
-                    self.session_manager.record_position(
-                        asset.key, market_data, TradeAction.SELL,
-                        quantity=Decimal(quantity), price=price
-                    )
 
                     self._publish_event(OrderSubmittedEvent(
                         symbol=asset.ticker_symbol,
                         order=sell_order,
-                    ))
-                    self._publish_event(PositionChangedEvent(
-                        symbol=asset.ticker_symbol,
-                        action=TradeAction.SELL.value,
-                        quantity=Decimal(quantity),
-                        price=price,
-                        position_qty=trading_context.position_qty,
-                        realized_pnl=trading_context.realized_pnl,
                     ))
 
                     self.trading_logger.info(
