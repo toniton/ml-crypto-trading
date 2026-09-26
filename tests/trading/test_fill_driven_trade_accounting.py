@@ -189,3 +189,45 @@ def test_order_manager_has_outstanding_intent():
     assert order_mgr.has_outstanding_intent("BTC_USD", TradeAction.BUY)
     assert not order_mgr.has_outstanding_intent("BTC_USD", TradeAction.SELL)
     assert not order_mgr.has_outstanding_intent("ETH_USD", TradeAction.BUY)
+
+
+def test_strategy_metadata_propagates_from_order_to_lot_and_trade():
+    session_mgr = SessionManager()
+    session_mgr.create_session("sess_strategy").start_session()
+    asset = _create_test_asset()
+    session_mgr.init_asset_balance(asset, starting_balance=Decimal("1000"))
+
+    buy_order = Order(
+        uuid="buy_strat",
+        provider_name="simulated",
+        ticker_symbol="BTC_USD",
+        price=Decimal("100"),
+        quantity="1.0",
+        trade_action=TradeAction.BUY,
+        created_time=100.0,
+        fill_price=Decimal("100"),
+        fees=Decimal("1"),
+        status=OrderStatus.COMPLETED,
+        winning_strategy="HammerStrategy",
+        strategy_votes={"HammerStrategy": "TRUE", "GridStrategy": "FALSE"},
+    )
+    session_mgr.record_order_fill(buy_order)
+
+    ctx = session_mgr.get_trading_context_by_symbol("BTC_USD")
+    assert ctx.position_lots[0].winning_strategy == "HammerStrategy"
+
+    sell_order = Order(
+        uuid="sell_strat",
+        provider_name="simulated",
+        ticker_symbol="BTC_USD",
+        price=Decimal("110"),
+        quantity="1.0",
+        trade_action=TradeAction.SELL,
+        created_time=150.0,
+        fill_price=Decimal("110"),
+        fees=Decimal("1"),
+        status=OrderStatus.COMPLETED,
+    )
+    trades = session_mgr.record_order_fill(sell_order)
+    assert trades[0].winning_strategy == "HammerStrategy"
+

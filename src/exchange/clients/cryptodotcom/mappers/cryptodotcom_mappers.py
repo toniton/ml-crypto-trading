@@ -49,7 +49,9 @@ class CryptoDotComMarketDataMapper(Mapper[CryptoDotComMarketDataResponseDto, Opt
             low_price=Decimal(data.l),
             high_price=Decimal(data.h),
             volume=Decimal(data.vv),
-            timestamp=int(data.t) / self.MILLISECONDS_PER_SECOND
+            timestamp=int(data.t) / self.MILLISECONDS_PER_SECOND,
+            bid_price=Decimal(data.b) if data.b is not None else None,
+            ask_price=Decimal(data.k) if data.k is not None else None,
         )
 
 

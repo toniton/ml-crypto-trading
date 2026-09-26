@@ -25,6 +25,8 @@ class Trade:
     exit_timestamp: float
     slippage: Decimal = Decimal(0)
     commit_hash: Optional[str] = None
+    winning_strategy: Optional[str] = None
+    strategy_votes: Optional[dict[str, str]] = None
 
     @classmethod
     def create(
@@ -42,6 +44,8 @@ class Trade:
             slippage: Decimal = Decimal(0),
             commit_hash: Optional[str] = None,
             trade_id: Optional[str] = None,
+            winning_strategy: Optional[str] = None,
+            strategy_votes: Optional[dict[str, str]] = None,
     ) -> Trade:
         gross_pnl = (exit_price - entry_price) * quantity
         total_fees = entry_fee + exit_fee
@@ -67,4 +71,6 @@ class Trade:
             entry_timestamp=entry_timestamp,
             exit_timestamp=exit_timestamp,
             commit_hash=commit_hash,
+            winning_strategy=winning_strategy,
+            strategy_votes=strategy_votes,
         )

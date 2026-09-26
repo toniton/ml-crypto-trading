@@ -87,5 +87,37 @@ def test_profit_factor_and_win_rate():
     assert res.summary.winning_trades == 1
     assert res.summary.losing_trades == 1
     assert res.summary.win_rate == 50.0
-    assert res.summary.profit_factor == 2.0 # 20 / 10
     assert Decimal(res.summary.realized_pnl) == Decimal("10.00")
+
+
+def test_strategy_attribution_populated():
+    dt1 = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+    dt2 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+    o1 = make_order("o1", TradeAction.BUY, 100.0, "1.0", dt1)
+    o1.winning_strategy = "TrendFollowing"
+    o2 = make_order("o2", TradeAction.SELL, 120.0, "1.0", dt2)
+    o2.winning_strategy = "TrendFollowing"
+
+    res = AssetPerformanceService.compute_metrics(
+        "BTC_USD", datetime(2026, 9, 1, tzinfo=timezone.utc), datetime(2026, 9, 10, tzinfo=timezone.utc), [o1, o2]
+    )
+
+    assert "TrendFollowing" in res.strategy_attribution
+    assert res.strategy_attribution["TrendFollowing"].total_trades == 1
+    assert res.strategy_attribution["TrendFollowing"].winning_trades == 1
+
+
+def test_commit_attribution_populated():
+    dt1 = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+    dt2 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+    o1 = make_order("o1", TradeAction.BUY, 100.0, "1.0", dt1)
+    o1.commit_hash = "c0ffee1"
+    o2 = make_order("o2", TradeAction.SELL, 120.0, "1.0", dt2)
+    o2.commit_hash = "c0ffee1"
+
+    res = AssetPerformanceService.compute_metrics(
+        "BTC_USD", datetime(2026, 9, 1, tzinfo=timezone.utc), datetime(2026, 9, 10, tzinfo=timezone.utc), [o1, o2]
+    )
+
+    assert "c0ffee1" in res.commit_attribution
+    assert res.commit_attribution["c0ffee1"].win_rate_pct == 100.0

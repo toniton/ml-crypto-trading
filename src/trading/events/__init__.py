@@ -1,6 +1,9 @@
+from src.events.trading_event import TradingEvent
 from .domain_events import (
     BalanceChangedEvent,
     ConsensusEvaluatedEvent,
+    DecisionRejectedEvent,
+    DecisionRejectedReason,
     MarketDataEvent,
     MarketStateChangedEvent,
     OrderCancelledEvent,
@@ -11,12 +14,14 @@ from .domain_events import (
     RiskStateChangedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
+    TradeClosedEvent,
 )
-from src.events.trading_event import TradingEvent
 
 __all__ = [
     "BalanceChangedEvent",
     "ConsensusEvaluatedEvent",
+    "DecisionRejectedEvent",
+    "DecisionRejectedReason",
     "MarketDataEvent",
     "MarketStateChangedEvent",
     "OrderCancelledEvent",
@@ -27,5 +32,6 @@ __all__ = [
     "RiskStateChangedEvent",
     "SignalGeneratedEvent",
     "StrategyEvaluatedEvent",
+    "TradeClosedEvent",
     "TradingEvent",
 ]

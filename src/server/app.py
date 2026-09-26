@@ -286,6 +286,46 @@ class ChatApp:
                 end=end_dt,
             )
 
+        @app.get("/api/v1/performance/attribution/{ticker_symbol}")
+        async def performance_attribution_endpoint(
+                ticker_symbol: str,
+                start: Optional[str] = None,
+                end: Optional[str] = None,
+        ):
+            now = datetime.now(timezone.utc)
+            try:
+                start_dt = datetime.fromisoformat(start) if start else now - timedelta(days=30)
+                end_dt = datetime.fromisoformat(end) if end else now
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Invalid date format: {exc}",
+                ) from exc
+
+            if start_dt.tzinfo is None:
+                start_dt = start_dt.replace(tzinfo=timezone.utc)
+            if end_dt.tzinfo is None:
+                end_dt = end_dt.replace(tzinfo=timezone.utc)
+
+            if start_dt > end_dt:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="'start' date must be before or equal to 'end' date.",
+                )
+
+            perf = await asyncio.to_thread(
+                asset_performance_service.calculate_performance,
+                ticker_symbol=ticker_symbol,
+                start=start_dt,
+                end=end_dt,
+            )
+            return {
+                "ticker_symbol": ticker_symbol,
+                "period": perf.period,
+                "strategy_attribution": perf.strategy_attribution,
+                "commit_attribution": perf.commit_attribution,
+            }
+
         dataset_service = DatasetService()
         app.state.dataset_service = dataset_service
 

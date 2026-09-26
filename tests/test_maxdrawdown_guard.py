@@ -36,4 +36,64 @@ class MaxDrawDownGuardTest(TestCase):
         )
         trading_context.available_balance = 5
         draw_down_guard = MaxDrawDownGuard(self.config)
-        assert draw_down_guard.can_trade(TradeAction.BUY, trading_context, None) is True
+        self.assertTrue(draw_down_guard.can_trade(TradeAction.BUY, trading_context, None))
+
+    def test_can_trade_sell_always_permitted(self):
+        trading_context = TradingContext(
+            exchange="",
+            ticker_symbol="",
+            starting_balance=1000,
+        )
+        draw_down_guard = MaxDrawDownGuard(self.config)
+        self.assertTrue(draw_down_guard.can_trade(TradeAction.SELL, trading_context, None))
+
+    def test_can_trade_returns_false_when_starting_balance_zero(self):
+        trading_context = TradingContext(
+            exchange="",
+            ticker_symbol="",
+            starting_balance=0,
+        )
+        draw_down_guard = MaxDrawDownGuard(self.config)
+        self.assertFalse(draw_down_guard.can_trade(TradeAction.BUY, trading_context, None))
+
+    def test_can_trade_returns_false_when_drawdown_exceeds_threshold(self):
+        strict_config = GuardConfig(
+            cooldown_timeout=100,
+            max_drawdown_percentage=0.2,
+            max_drawdown_period=10
+        )
+        trading_context = TradingContext(
+            exchange="",
+            ticker_symbol="",
+            starting_balance=1000,
+            open_positions=[
+                PositionEntry(price=500, quantity=1.0, timestamp=1),
+            ],
+            close_positions=[
+                PositionEntry(price=200, quantity=1.0, timestamp=2),
+            ]
+        )
+        draw_down_guard = MaxDrawDownGuard(strict_config)
+        self.assertFalse(draw_down_guard.can_trade(TradeAction.BUY, trading_context, None))
+
+    def test_can_trade_honors_rolling_period_window(self):
+        rolling_config = GuardConfig(
+            cooldown_timeout=100,
+            max_drawdown_percentage=0.2,
+            max_drawdown_period=2
+        )
+        trading_context = TradingContext(
+            exchange="",
+            ticker_symbol="",
+            starting_balance=1000,
+            open_positions=[
+                PositionEntry(price=500, quantity=1.0, timestamp=1),
+                PositionEntry(price=100, quantity=1.0, timestamp=3),
+            ],
+            close_positions=[
+                PositionEntry(price=200, quantity=1.0, timestamp=2),
+                PositionEntry(price=100, quantity=1.0, timestamp=4),
+            ]
+        )
+        draw_down_guard = MaxDrawDownGuard(rolling_config)
+        self.assertTrue(draw_down_guard.can_trade(TradeAction.BUY, trading_context, None))

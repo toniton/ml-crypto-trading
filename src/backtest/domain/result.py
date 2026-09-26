@@ -7,8 +7,10 @@ from pydantic.dataclasses import dataclass
 
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
+from api.interfaces.trade import Trade
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.backtest_request import ExecutionConfiguration
+from src.trading.analytics.trade_attribution_service import AttributionMetrics
 
 
 @dataclass(frozen=True)
@@ -35,6 +37,7 @@ class PortfolioSnapshot:
     equity: Decimal
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclass
 class BacktestResult:
     session_id: str
@@ -47,3 +50,6 @@ class BacktestResult:
     fills: list[BacktestFill] = field(default_factory=list)
     portfolio_snapshots: list[PortfolioSnapshot] = field(default_factory=list)
     market_series: list[MarketData] = field(default_factory=list)
+    trades: list[Trade] = field(default_factory=list)
+    strategy_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)
+    commit_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)

@@ -14,6 +14,7 @@ from src.metrics.collectors.runtime_metrics_collector import (
     ProcessStatsTracker,
     RuntimeMetricsCollector,
 )
+from src.metrics.collectors.trading_metrics_collector import TradingMetricsCollector
 
 __all__ = [
     "DEFAULT_EVENT_METRICS",
@@ -25,5 +26,7 @@ __all__ = [
     "EventLoopLagMonitor",
     "ProcessStatsTracker",
     "RuntimeMetricsCollector",
+    "TradingMetricsCollector",
 ]
+
 

@@ -169,6 +169,8 @@ class SessionManager:
             quantity=quantity,
             fee=fee,
             timestamp=timestamp,
+            winning_strategy=order.winning_strategy,
+            strategy_votes=order.strategy_votes,
         )
         ctx.position_lots.append(lot)
         if quantity > Decimal(0):
@@ -264,6 +266,8 @@ class SessionManager:
             entry_timestamp=lot.timestamp,
             exit_timestamp=timestamp,
             commit_hash=order.commit_hash or ctx.commit_hash,
+            winning_strategy=order.winning_strategy or lot.winning_strategy,
+            strategy_votes=order.strategy_votes or lot.strategy_votes,
         )
         ctx.trades.append(trade)
         ctx.realized_pnl += trade.net_pnl

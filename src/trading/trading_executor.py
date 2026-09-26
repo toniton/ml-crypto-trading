@@ -21,6 +21,8 @@ from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.events import (
     BalanceChangedEvent,
+    DecisionRejectedEvent,
+    DecisionRejectedReason,
     MarketDataEvent,
     MarketStateChangedEvent,
     OrderSubmittedEvent,
@@ -123,6 +125,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             market_data: MarketData, candles: list[Candle]
     ) -> Optional[ConsensusDecision]:
         if not self.protection_manager.can_trade(asset.key, action, trading_context, market_data):
+            self._publish_event(DecisionRejectedEvent(
+                symbol=asset.ticker_symbol,
+                action=action.value,
+                reason=DecisionRejectedReason.GUARD_HALT.value,
+                details={"reason": "Protection manager prevented trade"},
+            ))
             return None
 
         decision = self.consensus_manager.evaluate(
@@ -137,6 +145,17 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 symbol=asset.ticker_symbol,
                 action=action.value,
                 generated_at=float(market_data.timestamp),
+            ))
+        elif decision is not None and not decision.quorum:
+            self._publish_event(DecisionRejectedEvent(
+                symbol=asset.ticker_symbol,
+                action=action.value,
+                reason=DecisionRejectedReason.NO_QUORUM.value,
+                details={
+                    "buy_votes": decision.true_count if action == TradeAction.BUY else 0,
+                    "sell_votes": decision.true_count if action == TradeAction.SELL else 0,
+                    "total": decision.total,
+                },
             ))
         self.app_logger.debug(f"Consensus={decision.quorum} for asset={asset}")
         return decision
@@ -177,88 +196,111 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 self.app_logger.debug("Skipping BUY for disabled asset %s", asset.ticker_symbol)
                 continue
             try:
-                if self.session_manager and self.session_manager.get_trading_context(asset.key) is None:
-                    if self.account_manager and not self.account_manager.init_asset_balance(
-                            asset, self.session_manager
-                    ):
-                        self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
-                        continue
-                account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
-                trading_context = (
-                    self.session_manager.get_trading_context(asset.key)
-                    if self.session_manager else None
-                )
-                if trading_context is None and self.session_manager is not None:
-                    self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
-                    continue
-                decision = self._evaluate_decision(
-                    asset, TradeAction.BUY, trading_context, market_data, candles
-                )
-                if decision is None or not decision.quorum:
-                    self.app_logger.debug(f"No consensus to buy {asset.ticker_symbol}")
-                    continue
-
-                self.app_logger.info(f"Consensus reached to buy {asset.ticker_symbol}")
-
-                price = self._calculate_price(asset, market_data, fees)
-
-                self.app_logger.debug([
-                    f"Calculated price for {asset}: Price={price}",
-                    f"Fees={fees}",
-                    f"Available balance={account_balance.available_balance}"
-                ])
-                if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.BUY):
-                    self.app_logger.debug(
-                        "Skipping BUY for %s: outstanding order intent already in progress",
-                        asset.ticker_symbol
-                    )
-                    continue
-
-                quantity_val = self._calculate_quantity(asset, TradeAction.BUY, market_data, decision)
-                if quantity_val is None:
-                    self.app_logger.warning(
-                        "Rejected BUY for %s: quantity calculation failed",
-                        asset.ticker_symbol,
-                    )
-                    continue
-
-                order_cost = price * quantity_val
-                if order_cost > account_balance.available_balance:
-                    self.app_logger.warning(
-                        "Rejected BUY for %s: required cost %s exceeds available balance %s",
-                        asset.ticker_symbol, order_cost, account_balance.available_balance
-                    )
-                    continue
-
-                quantity = format(quantity_val, "f")
-                commit_hash = self.session_manager.get_current_commit_hash()
-                buy_order = self.order_manager.open_order(
-                    ticker_symbol=asset.ticker_symbol,
-                    quantity=quantity,
-                    price=price,
-                    provider_name=asset.exchange.value,
-                    trade_action=TradeAction.BUY,
-                    timestamp=market_data.timestamp,
-                    commit_hash=commit_hash,
-                )
-                self.activity_queue.put_nowait(buy_order.model_dump_json())
-
-                self._publish_event(OrderSubmittedEvent(
-                    symbol=asset.ticker_symbol,
-                    order=buy_order,
-                ))
-
-                self.trading_logger.info(f"Order opened: {asset.ticker_symbol} BUY {quantity} @ {price}")
-
-                self.log_audit_event(
-                    event_type='order_opened',
-                    asset=asset.ticker_symbol,
-                    action=TradeAction.BUY.value,
-                    market_data=market_data,
-                    context=f'order_id={buy_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
-                )
-            except Exception as exc:
+                self._process_buy_asset(asset)
+            except Exception as exc:  # pylint: disable=broad-except
                 self.app_logger.error(f"Error processing asset {asset}: {exc}", exc_info=True)
+
+    def _process_buy_asset(self, asset: Asset) -> None:
+        if self.session_manager and self.session_manager.get_trading_context(asset.key) is None:
+            if self.account_manager and not self.account_manager.init_asset_balance(
+                    asset, self.session_manager
+            ):
+                self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
+                return
+
+        account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
+        trading_context = (
+            self.session_manager.get_trading_context(asset.key)
+            if self.session_manager else None
+        )
+        if trading_context is None and self.session_manager is not None:
+            self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
+            return
+
+        decision = self._evaluate_decision(asset, TradeAction.BUY, trading_context, market_data, candles)
+        if decision is None or not decision.quorum:
+            self.app_logger.debug("No consensus to buy %s", asset.ticker_symbol)
+            return
+
+        self.app_logger.info("Consensus reached to buy %s", asset.ticker_symbol)
+        price = self._calculate_price(asset, market_data, fees)
+
+        if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.BUY):
+            self.app_logger.debug(
+                "Skipping BUY for %s: outstanding order intent already in progress",
+                asset.ticker_symbol
+            )
+            self._publish_event(DecisionRejectedEvent(
+                symbol=asset.ticker_symbol,
+                action=TradeAction.BUY.value,
+                reason=DecisionRejectedReason.OUTSTANDING_INTENT.value,
+            ))
+            return
+
+        if not self._validate_execution_edge(asset, TradeAction.BUY, market_data, fees):
+            return
+
+        quantity_val = self._calculate_quantity(asset, TradeAction.BUY, market_data, decision)
+        if quantity_val is None:
+            return
+
+        order_cost = price * quantity_val
+        if order_cost > account_balance.available_balance:
+            self.app_logger.warning(
+                "Rejected BUY for %s: required cost %s exceeds available balance %s",
+                asset.ticker_symbol, order_cost, account_balance.available_balance
+            )
+            self._publish_event(DecisionRejectedEvent(
+                symbol=asset.ticker_symbol,
+                action=TradeAction.BUY.value,
+                reason=DecisionRejectedReason.INSUFFICIENT_BALANCE.value,
+                details={
+                    "order_cost": str(order_cost),
+                    "available_balance": str(account_balance.available_balance),
+                },
+            ))
+            return
+
+        quantity = format(quantity_val, "f")
+        self._submit_buy_order(asset, price, quantity, market_data, decision)
+
+    def _submit_buy_order(
+            self,
+            asset: Asset,
+            price: Decimal,
+            quantity: str,
+            market_data: MarketData,
+            decision: ConsensusDecision,
+    ) -> None:
+        commit_hash = self.session_manager.get_current_commit_hash()
+        winning_strategy = self._resolve_winning_strategy(decision)
+        strategy_votes = self._format_strategy_votes(decision)
+        buy_order = self.order_manager.open_order(
+            ticker_symbol=asset.ticker_symbol,
+            quantity=quantity,
+            price=price,
+            provider_name=asset.exchange.value,
+            trade_action=TradeAction.BUY,
+            timestamp=market_data.timestamp,
+            commit_hash=commit_hash,
+            winning_strategy=winning_strategy,
+            strategy_votes=strategy_votes,
+        )
+        self.activity_queue.put_nowait(buy_order.model_dump_json())
+
+        self._publish_event(OrderSubmittedEvent(
+            symbol=asset.ticker_symbol,
+            order=buy_order,
+        ))
+
+        self.trading_logger.info("Order opened: %s BUY %s @ %s", asset.ticker_symbol, quantity, price)
+        self.log_audit_event(
+            event_type='order_opened',
+            asset=asset.ticker_symbol,
+            action=TradeAction.BUY.value,
+            market_data=market_data,
+            context=f'order_id={buy_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
+        )
 
     def create_sell_order(self, assets: list[Asset]):
         for asset in assets:
@@ -266,75 +308,85 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 self.app_logger.debug("Skipping SELL for disabled asset %s", asset.ticker_symbol)
                 continue
             try:
-                trading_context = self.session_manager.get_trading_context(asset.key) if self.session_manager else None
-                if trading_context is None and self.session_manager and self.account_manager:
-                    if not self.account_manager.init_asset_balance(asset, self.session_manager):
-                        continue
-                    trading_context = self.session_manager.get_trading_context(asset.key)
-                if not trading_context or not trading_context.open_positions:
-                    self.app_logger.debug(f"No open positions for {asset}")
-                    continue
-
-                if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.SELL):
-                    self.app_logger.debug(
-                        "Skipping SELL for %s: outstanding order intent already in progress",
-                        asset.ticker_symbol
-                    )
-                    continue
-
-                _, market_data, candles, fees = self._prepare_trade_context(asset)
-                base_balance = self.account_manager.get_base_balance(asset, asset.exchange.value)
-
-                price = self._calculate_price(asset, market_data, fees)
-
-                self.app_logger.debug(f"Current price for {asset}: {price}, Fees={fees}")
-
-                decision = self._evaluate_decision(
-                    asset, TradeAction.SELL, trading_context, market_data, candles
-                )
-                if decision is None or not decision.quorum:
-                    continue
-
-                quantity_val = self._calculate_quantity(asset, TradeAction.SELL, market_data, decision)
-                if quantity_val is None:
-                    self.app_logger.warning(
-                        "Rejected SELL for %s: quantity calculation failed",
-                        asset.ticker_symbol,
-                    )
-                    continue
-                quantity = format(quantity_val, "f")
-                if base_balance.available_balance >= quantity_val:
-                    commit_hash = self.session_manager.get_current_commit_hash()
-                    sell_order = self.order_manager.open_order(
-                        price=price, trade_action=TradeAction.SELL,
-                        quantity=quantity, provider_name=asset.exchange.value,
-                        ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp,
-                        commit_hash=commit_hash,
-                    )
-                    self.activity_queue.put_nowait(sell_order.model_dump_json())
-
-                    self._publish_event(OrderSubmittedEvent(
-                        symbol=asset.ticker_symbol,
-                        order=sell_order,
-                    ))
-
-                    self.trading_logger.info(
-                        f"Order closed: {asset.ticker_symbol} SELL {quantity} @ {price}")
-
-                    self.log_audit_event(
-                        event_type='order_closed',
-                        asset=asset.ticker_symbol,
-                        action=TradeAction.SELL.value,
-                        market_data=market_data,
-                        context=(
-                            f'order_id={sell_order.uuid},price={price},'
-                            f'quantity={quantity},commit_hash={commit_hash}'
-                        )
-                    )
-
-            except Exception as exc:
+                self._process_sell_asset(asset)
+            except Exception as exc:  # pylint: disable=broad-except
                 self.app_logger.error(f"Error finalizing asset {asset}: {exc}", exc_info=True)
         self.app_logger.debug("Check unclosed orders completed")
+
+    def _process_sell_asset(self, asset: Asset) -> None:
+        trading_context = self.session_manager.get_trading_context(asset.key) if self.session_manager else None
+        if trading_context is None and self.session_manager and self.account_manager:
+            if not self.account_manager.init_asset_balance(asset, self.session_manager):
+                return
+            trading_context = self.session_manager.get_trading_context(asset.key)
+        if not trading_context or not trading_context.open_positions:
+            self.app_logger.debug("No open positions for %s", asset)
+            return
+
+        if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.SELL):
+            self.app_logger.debug(
+                "Skipping SELL for %s: outstanding order intent already in progress",
+                asset.ticker_symbol
+            )
+            self._publish_event(DecisionRejectedEvent(
+                symbol=asset.ticker_symbol,
+                action=TradeAction.SELL.value,
+                reason=DecisionRejectedReason.OUTSTANDING_INTENT.value,
+            ))
+            return
+
+        _, market_data, candles, fees = self._prepare_trade_context(asset)
+        base_balance = self.account_manager.get_base_balance(asset, asset.exchange.value)
+
+        price = self._calculate_price(asset, market_data, fees)
+        decision = self._evaluate_decision(asset, TradeAction.SELL, trading_context, market_data, candles)
+        if decision is None or not decision.quorum:
+            return
+
+        if not self._validate_execution_edge(asset, TradeAction.SELL, market_data, fees):
+            return
+
+        quantity_val = self._calculate_quantity(asset, TradeAction.SELL, market_data, decision)
+        if quantity_val is None:
+            return
+        quantity = format(quantity_val, "f")
+        if base_balance.available_balance >= quantity_val:
+            self._submit_sell_order(asset, price, quantity, market_data, decision)
+
+    def _submit_sell_order(
+            self,
+            asset: Asset,
+            price: Decimal,
+            quantity: str,
+            market_data: MarketData,
+            decision: ConsensusDecision,
+    ) -> None:
+        commit_hash = self.session_manager.get_current_commit_hash()
+        winning_strategy = self._resolve_winning_strategy(decision)
+        strategy_votes = self._format_strategy_votes(decision)
+        sell_order = self.order_manager.open_order(
+            price=price, trade_action=TradeAction.SELL,
+            quantity=quantity, provider_name=asset.exchange.value,
+            ticker_symbol=asset.ticker_symbol, timestamp=market_data.timestamp,
+            commit_hash=commit_hash,
+            winning_strategy=winning_strategy,
+            strategy_votes=strategy_votes,
+        )
+        self.activity_queue.put_nowait(sell_order.model_dump_json())
+
+        self._publish_event(OrderSubmittedEvent(
+            symbol=asset.ticker_symbol,
+            order=sell_order,
+        ))
+
+        self.trading_logger.info("Order closed: %s SELL %s @ %s", asset.ticker_symbol, quantity, price)
+        self.log_audit_event(
+            event_type='order_closed',
+            asset=asset.ticker_symbol,
+            action=TradeAction.SELL.value,
+            market_data=market_data,
+            context=f'order_id={sell_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
+        )
 
     def _publish_event(self, event: Event) -> None:
         if self.event_bus is None:
@@ -359,16 +411,79 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.info(session_summary)
         self.app_logger.info("------------------------------")
 
+    def _validate_execution_edge(
+            self,
+            asset: Asset,
+            action: TradeAction,
+            market_data: MarketData,
+            fees: Fees,
+    ) -> bool:
+        if fees is None:
+            return True
+
+        maker_fee_pct = Decimal(str(fees.maker_fee_pct)) if fees.maker_fee_pct is not None else Decimal(0)
+        taker_fee_pct = Decimal(str(fees.taker_fee_pct)) if fees.taker_fee_pct is not None else Decimal(0)
+        round_trip_friction_pct = maker_fee_pct + taker_fee_pct
+
+        spread_pct = Decimal(0)
+        if (
+                market_data.bid_price is not None
+                and market_data.ask_price is not None
+                and market_data.bid_price > Decimal(0)
+        ):
+            spread = market_data.ask_price - market_data.bid_price
+            spread_pct = (spread / market_data.bid_price) * Decimal(100)
+
+        total_cost_pct = round_trip_friction_pct + spread_pct
+
+        if total_cost_pct > Decimal("10.0"):
+            self.app_logger.warning(
+                "Rejected %s for %s: total execution friction %s%% exceeds maximum tolerable threshold",
+                action.value, asset.ticker_symbol, total_cost_pct,
+            )
+            self._publish_event(DecisionRejectedEvent(
+                symbol=asset.ticker_symbol,
+                action=action.value,
+                reason=DecisionRejectedReason.NEGATIVE_EDGE.value,
+                details={
+                    "total_cost_pct": str(total_cost_pct),
+                    "fees_pct": str(round_trip_friction_pct),
+                },
+            ))
+            return False
+
+        return True
+
     def _calculate_price(self, asset: Asset, market_data: MarketData, fees: Fees) -> Decimal:
         price = Decimal(market_data.close_price)
         fee_multiplier = Decimal("1") + (Decimal(fees.maker_fee_pct) / Decimal("100"))
         quantum = Decimal("1").scaleb(-asset.quote_decimals)
         return (price * fee_multiplier).quantize(quantum, rounding=ROUND_UP)
 
+    @staticmethod
+    def _resolve_winning_strategy(decision: Optional[ConsensusDecision]) -> Optional[str]:
+        if not decision or not decision.votes:
+            return None
+        positive_votes = [
+            (name, decision.weights.get(name, 1.0))
+            for name, vote in decision.votes.items()
+            if vote
+        ]
+        if not positive_votes:
+            return None
+        positive_votes.sort(key=lambda x: x[1], reverse=True)
+        return positive_votes[0][0]
+
+    @staticmethod
+    def _format_strategy_votes(decision: Optional[ConsensusDecision]) -> Optional[dict[str, str]]:
+        if not decision or not decision.votes:
+            return None
+        return {name: "TRUE" if vote else "FALSE" for name, vote in decision.votes.items()}
+
     def _calculate_quantity(
-            self, asset: Asset, action: TradeAction,  # pylint: disable=unused-argument
+            self, asset: Asset, _action: TradeAction,
             market_data: MarketData, decision: ConsensusDecision
-    ) -> Decimal | None:
+    ) -> Decimal:
         minimum_order_quantity = Decimal(str(asset.min_quantity))
 
         if self._dynamic_quantity_parser is None:
@@ -383,14 +498,21 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             quantum = Decimal("1").scaleb(-asset.quantity_decimals)
             quantity = quantity.quantize(quantum, rounding=ROUND_DOWN)
 
+            if quantity < minimum_order_quantity:
+                self.app_logger.info(
+                    "Calculated quantity %s for %s is below min_quantity %s; fallback to min_quantity",
+                    quantity, asset.ticker_symbol, minimum_order_quantity,
+                )
+                return minimum_order_quantity
+
             return max(quantity, minimum_order_quantity)
 
         except Exception:
             self.app_logger.exception(
-                "Failed to calculate dynamic quantity; rejecting trade.",
+                "Failed to calculate dynamic quantity; fallback to min_quantity.",
                 extra={"asset": asset.ticker_symbol},
             )
-            return None
+            return minimum_order_quantity
 
     def _evaluate_dynamic_quantity(
             self,

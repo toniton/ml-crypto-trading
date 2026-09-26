@@ -28,12 +28,16 @@ class CCXTBaseMapper:
 
 class CCXTTickerMapper(Mapper[Dict[str, Any], MarketData], CCXTBaseMapper):
     def map(self, source: Dict[str, Any]) -> MarketData:
+        bid = source.get('bid')
+        ask = source.get('ask')
         return MarketData(
             volume=Decimal(str(source.get('baseVolume', 0))),
             high_price=Decimal(str(source.get('high', 0))),
             low_price=Decimal(str(source.get('low', 0))),
             close_price=Decimal(str(source.get('close', 0))),
-            timestamp=source.get('timestamp', 0) / 1000.0 if source.get('timestamp') else 0
+            timestamp=source.get('timestamp', 0) / 1000.0 if source.get('timestamp') else 0,
+            bid_price=Decimal(str(bid)) if bid is not None else None,
+            ask_price=Decimal(str(ask)) if ask is not None else None,
         )
 
 

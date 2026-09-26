@@ -1,4 +1,6 @@
+from decimal import Decimal
 from src.exchange.clients.cryptodotcom.mappers.cryptodotcom_mappers import (
+    CryptoDotComMarketDataMapper,
     CryptoDotComOrderMapper,
     CryptoDotComOrdersMapper,
 )
@@ -64,3 +66,45 @@ class TestCryptoDotComOrdersMapper:
             },
         })
         assert orders[0].executed_time == UPDATE_TIME_MS / 1000
+
+
+class TestCryptoDotComMarketDataMapper:
+    def _sample_ticker_payload(self, **overrides):
+        data = {
+            "h": "65000.0",
+            "l": "63000.0",
+            "a": "64000.0",
+            "i": "BTC_USD",
+            "v": "120.5",
+            "vv": "7712000.0",
+            "b": "63990.0",
+            "k": "64010.0",
+            "t": 1700000000000,
+        }
+        data.update(overrides)
+        return {
+            "id": 1,
+            "method": "subscribe",
+            "code": 0,
+            "result": {
+                "channel": "ticker.BTC_USD",
+                "subscription": "ticker.BTC_USD",
+                "data": [data],
+            },
+        }
+
+    def test_bid_price_mapped_correctly(self):
+        market_data = CryptoDotComMarketDataMapper().map(self._sample_ticker_payload())
+        assert market_data.bid_price == Decimal("63990.0")
+
+    def test_ask_price_mapped_correctly(self):
+        market_data = CryptoDotComMarketDataMapper().map(self._sample_ticker_payload())
+        assert market_data.ask_price == Decimal("64010.0")
+
+    def test_bid_price_none_when_missing(self):
+        market_data = CryptoDotComMarketDataMapper().map(self._sample_ticker_payload(b=None))
+        assert market_data.bid_price is None
+
+    def test_ask_price_none_when_missing(self):
+        market_data = CryptoDotComMarketDataMapper().map(self._sample_ticker_payload(k=None))
+        assert market_data.ask_price is None

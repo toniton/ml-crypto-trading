@@ -24,6 +24,7 @@ from src.trading.events import (
     OrderFilledEvent,
     OrderRejectedEvent,
     PositionChangedEvent,
+    TradeClosedEvent,
 )
 from src.trading.session.session_manager import SessionManager
 
@@ -89,15 +90,16 @@ class OrderManager(ApplicationLoggingMixin):
                     self.app_logger.error(f"Executing order failed. Order={order}: {exc}", exc_info=True)
                     with self._intent_lock:
                         self._in_flight_orders.pop(order.uuid, None)
-                    self._event_bus.publish(OrderRejectedEvent(
-                        symbol=order.ticker_symbol,
-                        order=order,
-                        reason=str(exc),
-                    ))
-                    runtime_err = ErrorExtractor.extract_runtime_error_from_order_exception(exc, order=order)
-                    self._event_bus.publish(RuntimeErrorCapturedEvent(
-                        event_payload=runtime_err.to_dict(),
-                    ))
+                    if self._event_bus:
+                        self._event_bus.publish(OrderRejectedEvent(
+                            symbol=order.ticker_symbol,
+                            order=order,
+                            reason=str(exc),
+                        ))
+                        runtime_err = ErrorExtractor.extract_runtime_error_from_order_exception(exc, order=order)
+                        self._event_bus.publish(RuntimeErrorCapturedEvent(
+                            event_payload=runtime_err.to_dict(),
+                        ))
             except queue.Empty:
                 pass
         self.app_logger.info("Order processing thread exiting")
@@ -121,25 +123,32 @@ class OrderManager(ApplicationLoggingMixin):
 
                     if order.status == OrderStatus.COMPLETED:
                         self._trading_journal.record_fill(order)
-                        self._session_manager.record_order_fill(order)
-                        ctx = self._session_manager.get_trading_context_by_symbol(order.ticker_symbol)
-                        if ctx:
-                            fill_price = (
-                                order.fill_price
-                                if (order.fill_price is not None and order.fill_price > Decimal(0))
-                                else order.price
-                            )
-                            self._event_bus.publish(PositionChangedEvent(
-                                symbol=order.ticker_symbol,
-                                action=order.trade_action.value,
-                                quantity=Decimal(str(order.quantity)),
-                                price=fill_price,
-                                position_qty=ctx.position_qty,
-                                realized_pnl=ctx.realized_pnl,
-                            ))
-                        self._event_bus.publish(OrderFilledEvent(symbol=order.ticker_symbol, order=order))
+                        trades = self._session_manager.record_order_fill(order)
+                        if self._event_bus:
+                            for trade in trades:
+                                self._event_bus.publish(TradeClosedEvent(
+                                    symbol=order.ticker_symbol,
+                                    trade=trade,
+                                ))
+                            ctx = self._session_manager.get_trading_context_by_symbol(order.ticker_symbol)
+                            if ctx:
+                                fill_price = (
+                                    order.fill_price
+                                    if (order.fill_price is not None and order.fill_price > Decimal(0))
+                                    else order.price
+                                )
+                                self._event_bus.publish(PositionChangedEvent(
+                                    symbol=order.ticker_symbol,
+                                    action=order.trade_action.value,
+                                    quantity=Decimal(str(order.quantity)),
+                                    price=fill_price,
+                                    position_qty=ctx.position_qty,
+                                    realized_pnl=ctx.realized_pnl,
+                                ))
+                            self._event_bus.publish(OrderFilledEvent(symbol=order.ticker_symbol, order=order))
                     elif order.status == OrderStatus.CANCELLED:
-                        self._event_bus.publish(OrderCancelledEvent(symbol=order.ticker_symbol, order=order))
+                        if self._event_bus:
+                            self._event_bus.publish(OrderCancelledEvent(symbol=order.ticker_symbol, order=order))
                     order_repository = uow.get_repository(PostgresOrderRepository)
                     order_repository.upsert(order)
         except Exception as e:
@@ -236,10 +245,13 @@ class OrderManager(ApplicationLoggingMixin):
                 f"Failed to mark order {order.uuid} as reconciliation-required: {exc}"
             )
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
             price: Decimal, trade_action: TradeAction,
-            timestamp: float, commit_hash: str = "HEAD", uuid: str = None
+            timestamp: float, commit_hash: str = "HEAD", uuid: str = None,
+            winning_strategy: Optional[str] = None,
+            strategy_votes: Optional[dict[str, str]] = None,
     ):
         order = Order(
             uuid=uuid or str(uuid4()),
@@ -250,6 +262,8 @@ class OrderManager(ApplicationLoggingMixin):
             ticker_symbol=ticker_symbol,
             created_time=timestamp,
             commit_hash=commit_hash,
+            winning_strategy=winning_strategy,
+            strategy_votes=strategy_votes,
         )
         with self._intent_lock:
             self._in_flight_orders[order.uuid] = (order.ticker_symbol, order.trade_action)

@@ -47,6 +47,7 @@ from src.server.services.dataset_service import DatasetService
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
+from src.metrics.collectors.trading_metrics_collector import TradingMetricsCollector
 from src.metrics.services.metric_service import MetricService
 from src.metrics.services.retention_engine import RetentionEngine
 from src.metrics.services.retention_scheduler import RetentionScheduler
@@ -86,6 +87,7 @@ from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
 from src.llm.tools.session_summary_tool import SessionSummaryTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
+from src.llm.tools.trade_attribution_tool import TradeAttributionTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.trading.orders.order_reconciler import OrderReconciler
@@ -122,6 +124,7 @@ class Application(ApplicationLoggingMixin):
         self._retention_engine: Optional[RetentionEngine] = None
         self._retention_scheduler: Optional[RetentionScheduler] = None
         self._event_metric_collector: Optional[EventMetricCollector] = None
+        self._trading_metrics_collector: Optional[TradingMetricsCollector] = None
         self._order_lifecycle_collector: Optional[OrderLifecycleCollector] = None
         self._runtime_metrics_collector: Optional[RuntimeMetricsCollector] = None
         self._strategies_config: Optional[StrategiesConfig] = None
@@ -226,6 +229,7 @@ class Application(ApplicationLoggingMixin):
         self._db_manager = db_manager
         self._metric_service = MetricService(db_manager)
         self._event_metric_collector = EventMetricCollector(self._metric_service)
+        self._trading_metrics_collector = TradingMetricsCollector(self._metric_service)
         self._strategies_config = StrategiesConfig()
         self._strategies_registry = StrategyRegistry(self._strategies_config.strategies)
 
@@ -291,6 +295,7 @@ class Application(ApplicationLoggingMixin):
         trading_scheduler.register_assets(self._assets)
         self._market_data_recorder.subscribe(self._trading_event_bus)
         self._event_metric_collector.subscribe(self._trading_event_bus)
+        self._trading_metrics_collector.subscribe(self._trading_event_bus)
         self._retention_scheduler.start()
         trading_executor = TradingExecutor(
             self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
@@ -374,6 +379,10 @@ class Application(ApplicationLoggingMixin):
                 drift_detector=BacktestDriftDetector(backtest_service, self._trading_journal)
             )
             metrics_tool = MetricsTool(metric_service=self._metric_service)
+            trade_attribution_tool = TradeAttributionTool(
+                database_manager=self._db_manager,
+                session_manager=self._managers.session_manager,
+            )
 
             llm_tools = [
                 context_tool,
@@ -393,6 +402,7 @@ class Application(ApplicationLoggingMixin):
                 backtest_tool,
                 backtest_drift_tool,
                 metrics_tool,
+                trade_attribution_tool,
             ]
             api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(

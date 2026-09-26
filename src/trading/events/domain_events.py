@@ -1,12 +1,37 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal
-from typing import Optional
+from enum import Enum
+from typing import Any, Optional
 
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
+from api.interfaces.trade import Trade
 from src.events.trading_event import TradingEvent
+
+
+class DecisionRejectedReason(str, Enum):
+    NO_QUORUM = "NO_QUORUM"
+    GUARD_HALT = "GUARD_HALT"
+    RISK_REJECTED = "RISK_REJECTED"
+    BELOW_MIN_QUANTITY = "BELOW_MIN_QUANTITY"
+    INSUFFICIENT_BALANCE = "INSUFFICIENT_BALANCE"
+    NEGATIVE_EDGE = "NEGATIVE_EDGE"
+    OUTSTANDING_INTENT = "OUTSTANDING_INTENT"
+    QUANTITY_CALCULATION_FAILED = "QUANTITY_CALCULATION_FAILED"
+
+
+@dataclass
+class DecisionRejectedEvent(TradingEvent):
+    EVENT_TYPE = "DecisionRejectedEvent"
+    symbol: str = ""
+    action: str = ""
+    reason: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
+
+    def _resolve_asset(self) -> Optional[str]:
+        return self.symbol
 
 
 @dataclass
@@ -126,6 +151,15 @@ class ConsensusEvaluatedEvent(TradingEvent):
     quorum_met: bool = False
     evaluated_at: float = 0.0
     factors: Optional[dict] = None
+
+    def _resolve_asset(self) -> Optional[str]:
+        return self.symbol
+
+
+@dataclass
+class TradeClosedEvent(TradingEvent):
+    symbol: str
+    trade: Trade
 
     def _resolve_asset(self) -> Optional[str]:
         return self.symbol

@@ -58,6 +58,21 @@ class TestFetchMetricsNode:
         })
 
 
+    def test_fetches_trade_attribution_when_strategy_focus(self):
+        metrics_tool = Mock()
+        metrics_tool.name = "query_metrics"
+        metrics_tool.invoke.return_value = "Metrics Data"
+        attr_tool = Mock()
+        attr_tool.name = "get_trade_attribution"
+        attr_tool.invoke.return_value = "Trade Attribution: Win Rate 80%"
+        llm = FakeLlmAdapter(tools=[metrics_tool, attr_tool])
+
+        node = FetchMetricsNode(llm)
+        intent = MetricQueryIntent(analysis_focus="strategy attribution", lookback_seconds=86400)
+        out = node({"query_intent": intent})
+
+        assert "Trade Attribution: Win Rate 80%" in out["metric_data"]
+
     def test_returns_fallback_when_tool_missing(self):
         llm = FakeLlmAdapter()
         node = FetchMetricsNode(llm)

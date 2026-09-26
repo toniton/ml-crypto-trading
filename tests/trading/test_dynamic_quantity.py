@@ -1,3 +1,4 @@
+# pylint: disable=protected-access,attribute-defined-outside-init
 import unittest
 from decimal import Decimal
 from queue import Queue
@@ -110,13 +111,13 @@ class TestDynamicQuantity(unittest.TestCase):
             Decimal("2110.0"),
         )
 
-    def test_calculate_quantity_with_error_rejects_trade(self):
+    def test_calculate_quantity_with_error_falls_back_to_min_quantity(self):
         executor, _ = self._setup_executor(dynamic_quantity="unknown_var + 1")
         self._stub_data_sources()
 
-        # Expression error -> reject (None), not fallback
-        self.assertIsNone(
+        self.assertEqual(
             executor._calculate_quantity(self._asset(), TradeAction.BUY, self._market(), _decision()),
+            Decimal("0.001"),
         )
 
     def test_calculate_quantity_returns_none_falls_back(self):
@@ -156,7 +157,7 @@ class TestDynamicQuantity(unittest.TestCase):
             executor._calculate_quantity(self._asset(), TradeAction.BUY, self._market(), buy_decision),
             Decimal("1.0"),
         )
-        # SELL -> signal = -1 -> -1.0 -> clamped to min_qty 0.001
+        # SELL -> signal = -1 -> -1.0 -> below min_qty 0.001 -> fallback to min_qty 0.001
         sell_decision = ConsensusDecision(TradeAction.SELL, "BTC_USD", {"a": True}, {"a": 1.0}, 0.5)
         self.assertEqual(
             executor._calculate_quantity(self._asset(), TradeAction.SELL, self._market(), sell_decision),
