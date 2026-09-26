@@ -26,8 +26,8 @@ class SellStopLossStrategy(RuleBasedTradingStrategy):
         open_positions = trading_context.open_positions
 
         for position in open_positions:
-            price_diff = position.close_price - current_price
-            loss_pct = price_diff / position.close_price
+            price_diff = position.price - current_price
+            loss_pct = price_diff / position.price
             if loss_pct >= self.stop_loss_pct:
                 return True
 

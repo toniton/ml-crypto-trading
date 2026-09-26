@@ -46,6 +46,6 @@ class AccountBalanceTool(BaseTool, ApplicationLoggingMixin):
         self.app_logger.info(f"Account balance for {asset.ticker_symbol} requested by LLM.")
         return (
             f"Account Balance for {asset.ticker_symbol} on {provider}:\n"
-            f"  Base ({base.currency}): {format_decimal(base.available_balance)}\n"
-            f"  Quote ({quote.currency}): {format_decimal(quote.available_balance)}"
+            f"  Base ({base.currency}): {format_decimal(base.available_balance)} {base.currency}\n"
+            f"  Quote ({quote.currency}): ${format_decimal(quote.available_balance)} {quote.currency}"
         )

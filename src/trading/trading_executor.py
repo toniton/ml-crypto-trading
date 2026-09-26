@@ -215,6 +215,15 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         asset.ticker_symbol,
                     )
                     continue
+
+                order_cost = price * quantity_val
+                if order_cost > account_balance.available_balance:
+                    self.app_logger.warning(
+                        "Rejected BUY for %s: required cost %s exceeds available balance %s",
+                        asset.ticker_symbol, order_cost, account_balance.available_balance
+                    )
+                    continue
+
                 quantity = format(quantity_val, "f")
                 commit_hash = self.session_manager.get_current_commit_hash()
                 buy_order = self.order_manager.open_order(

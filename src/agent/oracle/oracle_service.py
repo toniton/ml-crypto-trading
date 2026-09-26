@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from src.agent.oracle.events import (
     ORACLE_EVENT_TYPES,
@@ -109,24 +110,59 @@ class OracleService(AgentLoggingMixin):
             "",
             "Per-asset context:",
         ]
+
+        total_cash = Decimal("0")
+        total_crypto_val = Decimal("0")
+        cash_seen = False
+
         for symbol in sorted(context.symbols):
             symbol_context = context.symbols[symbol]
+            base, quote = symbol.split("_") if "_" in symbol else (symbol, "USD")
+
+            if symbol_context.balance is not None and not cash_seen:
+                total_cash = symbol_context.balance
+                cash_seen = True
+
+            if symbol_context.position is not None and symbol_context.current_price is not None:
+                total_crypto_val += symbol_context.position * symbol_context.current_price
+
+            price_str = f"${symbol_context.current_price:f} {quote}" if symbol_context.current_price is not None else "None"
+            pos_str = f"{symbol_context.position:f} {base}" if symbol_context.position is not None else f"0 {base}"
+            bal_str = f"${symbol_context.balance:f} {quote}" if symbol_context.balance is not None else "None"
+            pnl_str = f"${symbol_context.pnl:f} {quote}" if symbol_context.pnl is not None else f"$0 {quote}"
+            dd_str = f"{symbol_context.drawdown:f}%" if symbol_context.drawdown is not None else "0%"
+
             lines.append(f"- {symbol}:")
-            lines.append(f"    price={symbol_context.current_price}")
-            lines.append(f"    position={symbol_context.position}")
-            lines.append(f"    balance={symbol_context.balance}")
-            lines.append(f"    pnl={symbol_context.pnl}")
-            lines.append(f"    drawdown={symbol_context.drawdown}")
+            lines.append(f"    price={price_str}")
+            lines.append(f"    position={pos_str}")
+            lines.append(f"    balance={bal_str}")
+            lines.append(f"    pnl={pnl_str}")
+            lines.append(f"    drawdown={dd_str}")
             lines.append(f"    recent orders={len(symbol_context.recent_orders)}")
             lines.append(f"    recent executions={len(symbol_context.recent_executions)}")
             for execution in symbol_context.recent_executions[-5:]:
                 lines.append(
-                    f"      fill: {execution.action} {execution.quantity} @ {execution.price} "
+                    f"      fill: {execution.action} {execution.quantity} @ ${execution.price:f} {quote} "
                     f"(fee={execution.fee})"
                 )
 
         if not context.symbols:
             lines.append("- (no market/trading events observed yet)")
+        else:
+            quote_currency = next(
+                (symbol.split("_")[1] for symbol in sorted(context.symbols) if "_" in symbol),
+                "USD"
+            )
+            total_equity = total_cash + total_crypto_val
+            exposure_pct = (total_crypto_val / total_equity * Decimal("100")) if total_equity > Decimal("0") else Decimal("0")
+            lines += [
+                "",
+                "Ground Truth Portfolio State:",
+                f"- Cash Balance: ${total_cash:f} {quote_currency}",
+                f"- Crypto Holdings Market Value: ${total_crypto_val:f} {quote_currency}",
+                f"- Total Account Equity: ${total_equity:f} {quote_currency}",
+                f"- Crypto Exposure: {exposure_pct:.2f}% of total equity",
+            ]
 
         lines += [
             "",

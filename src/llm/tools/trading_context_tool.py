@@ -66,33 +66,19 @@ class TradingContextTool(BaseTool, ApplicationLoggingMixin):
 
         open_positions_str = "None"
         if target_ctx.open_positions:
-            open_positions_list = []
-            for p in target_ctx.open_positions:
-                pos_str = (
-                    f"MarketData(close_price={format_decimal(p.close_price)}, "
-                    f"high_price={format_decimal(p.high_price)}, "
-                    f"low_price={format_decimal(p.low_price)}, "
-                    f"volume={format_decimal(p.volume)}, "
-                    f"timestamp={p.timestamp})"
-                )
-                open_positions_list.append(pos_str)
-            open_positions_str = "\n  - ".join(open_positions_list)
-            open_positions_str = "\n  - " + open_positions_str
+            open_positions_list = [
+                f"PositionEntry(price={format_decimal(p.price)}, quantity={format_decimal(p.quantity)}, timestamp={p.timestamp})"
+                for p in target_ctx.open_positions
+            ]
+            open_positions_str = "\n  - " + "\n  - ".join(open_positions_list)
 
         close_positions_str = "None"
         if target_ctx.close_positions:
-            close_positions_list = []
-            for p in target_ctx.close_positions:
-                pos_str = (
-                    f"MarketData(close_price={format_decimal(p.close_price)}, "
-                    f"high_price={format_decimal(p.high_price)}, "
-                    f"low_price={format_decimal(p.low_price)}, "
-                    f"volume={format_decimal(p.volume)}, "
-                    f"timestamp={p.timestamp})"
-                )
-                close_positions_list.append(pos_str)
-            close_positions_str = "\n  - ".join(close_positions_list)
-            close_positions_str = "\n  - " + close_positions_str
+            close_positions_list = [
+                f"PositionEntry(price={format_decimal(p.price)}, quantity={format_decimal(p.quantity)}, timestamp={p.timestamp})"
+                for p in target_ctx.close_positions
+            ]
+            close_positions_str = "\n  - " + "\n  - ".join(close_positions_list)
 
         context_report = (
             f"Trading Context for {target_symbol} on {target_ctx.exchange}:\n"

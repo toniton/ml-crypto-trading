@@ -8,6 +8,7 @@ from typing import Optional
 
 from api.interfaces.asset import Asset
 from api.interfaces.market_data import MarketData
+from api.interfaces.position_entry import PositionEntry
 from api.interfaces.session_time import SessionTime
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
@@ -115,7 +116,12 @@ class SessionManager:
                              quantity: Decimal, price: Decimal) -> None:
         context.lowest_buy = min(context.lowest_buy, market_data.close_price)
         context.highest_buy = max(context.highest_buy, market_data.close_price)
-        context.open_positions.append(market_data)
+        pos_entry = PositionEntry(
+            price=price if price > 0 else Decimal(str(market_data.close_price)),
+            quantity=quantity if quantity > 0 else Decimal(str(market_data.volume)),
+            timestamp=float(market_data.timestamp),
+        )
+        context.open_positions.append(pos_entry)
 
         if quantity > 0:
             total_cost = (context.position_qty * context.avg_entry_price) + (quantity * price)
@@ -127,7 +133,12 @@ class SessionManager:
                               quantity: Decimal, price: Decimal) -> None:
         context.lowest_sell = min(context.lowest_sell, market_data.close_price)
         context.highest_sell = max(context.highest_sell, market_data.close_price)
-        context.close_positions.append(market_data)
+        pos_entry = PositionEntry(
+            price=price if price > 0 else Decimal(str(market_data.close_price)),
+            quantity=quantity if quantity > 0 else Decimal(str(market_data.volume)),
+            timestamp=float(market_data.timestamp),
+        )
+        context.close_positions.append(pos_entry)
 
         if quantity > 0:
             # Accumulate avg exit price

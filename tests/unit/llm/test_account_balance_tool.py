@@ -21,8 +21,8 @@ class TestAccountBalanceTool(unittest.TestCase):
         tool = AccountBalanceTool(account_manager=account_manager, assets=[self._asset()])
         result = tool._run("BTC_USD")
         self.assertIn("Account Balance for BTC_USD on CRYPTO_DOT_COM", result)
-        self.assertIn("Base (BTC): 1.5", result)
-        self.assertIn("Quote (USD): 9500", result)
+        self.assertIn("Base (BTC): 1.5 BTC", result)
+        self.assertIn("Quote (USD): $9500 USD", result)
 
     def test_asset_not_found(self):
         tool = AccountBalanceTool(account_manager=MagicMock(spec=AccountManager), assets=[])

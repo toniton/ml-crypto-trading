@@ -101,13 +101,11 @@ class Asset:
     @model_validator(mode="before")
     @classmethod
     def _map_decimal_places_alias(cls, data) -> "dict | object":
-        kwargs = getattr(data, "kwargs", None)
-        mapping = kwargs if isinstance(kwargs, dict) else (data if isinstance(data, dict) else None)
-        if isinstance(mapping, dict) and "decimal_places" in mapping and "quote_decimals" not in mapping:
+        if isinstance(data, dict) and "decimal_places" in data and "quote_decimals" not in data:
             warnings.warn(
                 "Asset.decimal_places is deprecated; use 'quote_decimals' instead.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            mapping["quote_decimals"] = mapping.pop("decimal_places")
+            data["quote_decimals"] = data.pop("decimal_places")
         return data

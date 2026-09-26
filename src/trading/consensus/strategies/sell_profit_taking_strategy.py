@@ -26,7 +26,7 @@ class SellProfitTakingStrategy(RuleBasedTradingStrategy):
         open_positions = trading_context.open_positions
 
         for position in open_positions:
-            threshold = position.close_price * (Decimal("1") + (self.take_profit_pct / Decimal("100")))
+            threshold = position.price * (Decimal("1") + (self.take_profit_pct / Decimal("100")))
             if current_price >= threshold:
                 return True
 

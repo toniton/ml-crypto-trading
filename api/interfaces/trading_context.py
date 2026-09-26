@@ -4,7 +4,7 @@ from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
-from api.interfaces.market_data import MarketData
+from api.interfaces.position_entry import PositionEntry
 
 
 @dataclass
@@ -18,8 +18,8 @@ class TradingContext:
     highest_buy: Decimal = Decimal('-inf')
     lowest_sell: Decimal = Decimal('inf')
     highest_sell: Decimal = Decimal('-inf')
-    open_positions: list[MarketData] = field(default_factory=list)
-    close_positions: list[MarketData] = field(default_factory=list)
+    open_positions: list[PositionEntry] = field(default_factory=list)
+    close_positions: list[PositionEntry] = field(default_factory=list)
     position_qty: Decimal = Decimal(0)
     avg_entry_price: Decimal = Decimal(0)
     exit_qty: Decimal = Decimal(0)

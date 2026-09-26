@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
+from api.interfaces.position_entry import PositionEntry
 from api.interfaces.trading_context import TradingContext
 from src.llm import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
@@ -33,11 +34,9 @@ class TestTradingContextTool(unittest.TestCase):
             lowest_buy=Decimal("50000.00"),
             highest_buy=Decimal("52000.00"),
             open_positions=[
-                MarketData(
-                    volume=Decimal("150.50"),
-                    high_price=Decimal("52000.00"),
-                    low_price=Decimal("50000.00"),
-                    close_price=Decimal("51000.00"),
+                PositionEntry(
+                    quantity=Decimal("150.50"),
+                    price=Decimal("51000.00"),
                     timestamp=123456.78
                 )
             ],

@@ -35,8 +35,7 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         self.order_manager = OrderManager(self.mock_db_manager, self.mock_journal, self.mock_rest_manager, self.mock_websocket_manager)
 
     def tearDown(self):
-        if hasattr(self, 'order_manager'):
-            self.order_manager.shutdown()
+        self.order_manager.shutdown()
 
     def test_save_orders_uses_isolated_unit_of_work(self):
         orders = [
