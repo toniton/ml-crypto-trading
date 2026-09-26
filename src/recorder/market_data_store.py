@@ -6,7 +6,7 @@ from api.interfaces.market_data import MarketData
 
 
 class MarketDataStore:
-    DEFAULT_MAX_OBSERVATIONS = 1000
+    DEFAULT_MAX_OBSERVATIONS = 10000
 
     def __init__(self, max_observations: int = DEFAULT_MAX_OBSERVATIONS) -> None:
         self._lock = Lock()

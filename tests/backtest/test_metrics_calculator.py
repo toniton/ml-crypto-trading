@@ -114,3 +114,9 @@ class TestBacktestMetricsCalculator:
         assert metrics.sharpe_ratio is not None
         assert len(metrics.equity_curve) == 3
         assert metrics.equity_curve[0]["equity"] == 10000.0
+
+    def test_calculates_time_range_from_snapshots(self):
+        result = _result([], equity="10000.0")
+        metrics = BacktestMetricsCalculator().calculate(result)
+        assert metrics.start_time == datetime(1970, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
+        assert metrics.end_time == datetime(1970, 1, 1, 0, 0, 2, tzinfo=timezone.utc)

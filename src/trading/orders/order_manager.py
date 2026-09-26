@@ -15,6 +15,7 @@ from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.trading_journal import TradingJournal
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.events.runtime_events import RuntimeErrorCapturedEvent
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
@@ -29,6 +30,7 @@ from src.trading.events import (
 from src.trading.session.session_manager import SessionManager
 
 
+# pylint: disable=too-many-instance-attributes
 class OrderManager(ApplicationLoggingMixin):
     OPEN_STATUSES = {
         OrderStatus.PENDING,
@@ -124,6 +126,9 @@ class OrderManager(ApplicationLoggingMixin):
                     if order.status == OrderStatus.COMPLETED:
                         self._trading_journal.record_fill(order)
                         trades = self._session_manager.record_order_fill(order)
+                        trade_repository = uow.get_repository(PostgresTradeRepository)
+                        for trade in trades:
+                            trade_repository.upsert(trade)
                         if self._event_bus:
                             for trade in trades:
                                 self._event_bus.publish(TradeClosedEvent(

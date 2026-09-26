@@ -18,6 +18,7 @@ from src.backtest.data.backtest_data_set import BacktestDataSet
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
+from src.backtest.events.domain_events import OrderFilledEvent
 from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
 from src.backtest.execution.execution_model import ExecutionModel
 from src.backtest.execution.fees.percentage_fee import PercentageFee
@@ -29,7 +30,9 @@ from src.database.noop_database_manager import NoopDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.recorder.market_data_store import MarketDataStore
 from src.server.services.dataset_service import DatasetService
+from src.trading.events.domain_events import TradeClosedEvent
 from src.trading.managers.manager_factory import ManagerFactory
+from src.trading.session.session_manager import SessionManager
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
@@ -71,12 +74,12 @@ class BacktestRunner:
             return []
 
         assets = [self._resolve_asset(request.ticker_symbol) for request in requests]
-        engine, bus = self._build_engine(requests, assets)
+        engine, bus, managers = self._build_engine(requests, assets)
 
         results = []
         for asset, request in zip(assets, requests):
             session = BacktestSession(ticker_symbol=request.ticker_symbol, request=request)
-            results.append(self._run_session(session, asset, engine, bus))
+            results.append(self._run_session(session, asset, engine, bus, managers.session_manager))
         return results
 
     def run_one(self, request: BacktestRequest) -> BacktestResult:
@@ -84,8 +87,8 @@ class BacktestRunner:
 
     def run_session(self, session: BacktestSession) -> BacktestResult:
         asset = self._resolve_asset(session.request.ticker_symbol)
-        engine, bus = self._build_engine([session.request], [asset])
-        return self._run_session(session, asset, engine, bus)
+        engine, bus, managers = self._build_engine([session.request], [asset])
+        return self._run_session(session, asset, engine, bus, managers.session_manager)
 
     def _build_engine(self, requests, assets):  # pylint: disable=too-many-locals
         first = requests[0]
@@ -119,7 +122,7 @@ class BacktestRunner:
         engine = BacktestEngine(scheduler, executor, infrastructure=infrastructure, assets=assets)
 
         engine.start_application()
-        return engine, bus
+        return engine, bus, managers
 
     @staticmethod
     def _run_session(
@@ -127,8 +130,23 @@ class BacktestRunner:
             asset: Asset,
             engine: BacktestEngine,
             bus: BacktestEventBus,
+            session_manager: SessionManager,
     ) -> BacktestResult:
         collector = BacktestResultCollector(bus)
+        if session_manager.is_running.is_set():
+            session_manager.end_session()
+        session_manager.create_session(session_id=session.id, commit_hash="HEAD")
+        session_manager.init_asset_balance(asset, starting_balance=session.request.initial_balance)
+        session_manager.start_session()
+
+        def _on_order_filled(event: OrderFilledEvent) -> None:
+            if event.order:
+                trades = session_manager.record_order_fill(event.order)
+                for trade in trades:
+                    bus.publish(TradeClosedEvent(symbol=event.order.ticker_symbol, trade=trade))
+
+        bus.subscribe_callback(OrderFilledEvent, _on_order_filled)
+
         session.start()
         try:
             engine.run([asset])
@@ -136,6 +154,9 @@ class BacktestRunner:
         except Exception as exc:  # pylint: disable=broad-except
             session.fail(str(exc))
             raise
+        finally:
+            if session_manager.is_running.is_set():
+                session_manager.end_session()
         session.complete(result)
         return result
 

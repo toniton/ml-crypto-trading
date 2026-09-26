@@ -68,6 +68,7 @@ class TestBacktestService:
         result.portfolio_snapshots = []
         result.fills = []
         result.orders = []
+        result.market_series = []
         runner.run_session.return_value = result
 
         db_manager = MagicMock()
@@ -117,4 +118,3 @@ class TestBacktestService:
         assert service.get("bt_db_123") is db_session
         assert service.result("bt_db_123") is db_result
         assert service.list_sessions() == [db_session]
-

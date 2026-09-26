@@ -16,6 +16,7 @@ from api.interfaces.trade import Trade
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.trading_session import TradingSession
+from src.trading.session.fifo_trade_matcher import FifoTradeMatcher
 from src.vcs.application import VCSService
 
 
@@ -214,64 +215,29 @@ class SessionManager:
             fee: Decimal,
             timestamp: float,
     ) -> list[Trade]:
-        completed_trades: list[Trade] = []
-        sell_remaining = quantity
-        sell_fee_per_unit = (fee / quantity) if quantity > Decimal(0) else Decimal(0)
-
-        while sell_remaining > Decimal(0) and ctx.position_lots:
-            lot = ctx.position_lots[0]
-            matched_qty = min(sell_remaining, lot.remaining_quantity)
-            trade = self._match_single_lot(
-                ctx=ctx,
-                order=order,
-                fill_price=fill_price,
-                matched_qty=matched_qty,
-                lot=lot,
-                sell_fee_per_unit=sell_fee_per_unit,
-                timestamp=timestamp,
-            )
-            completed_trades.append(trade)
-
-            lot.remaining_quantity -= matched_qty
-            sell_remaining -= matched_qty
-            if lot.remaining_quantity <= Decimal(0):
-                ctx.position_lots.pop(0)
+        completed_trades, sell_remaining = FifoTradeMatcher.match_lots(
+            lots=ctx.position_lots,
+            ticker_symbol=order.ticker_symbol,
+            exit_order_uuid=order.uuid,
+            exit_price=fill_price,
+            exit_quantity=quantity,
+            exit_fee=fee,
+            exit_timestamp=timestamp,
+            commit_hash=order.commit_hash or ctx.commit_hash,
+            winning_strategy=order.winning_strategy,
+            strategy_votes=order.strategy_votes,
+        )
+        for trade in completed_trades:
+            ctx.trades.append(trade)
+            ctx.realized_pnl += trade.net_pnl
 
         if sell_remaining > Decimal(0):
+            sell_fee_per_unit = (fee / quantity) if quantity > Decimal(0) else Decimal(0)
             fallback_gross = (fill_price - ctx.avg_entry_price) * sell_remaining
             fallback_exit_fee = sell_fee_per_unit * sell_remaining
             ctx.realized_pnl += (fallback_gross - fallback_exit_fee)
 
         return completed_trades
-
-    def _match_single_lot(
-            self,
-            ctx: TradingContext,
-            order: Order,
-            fill_price: Decimal,
-            matched_qty: Decimal,
-            lot: PositionLot,
-            sell_fee_per_unit: Decimal,
-            timestamp: float,
-    ) -> Trade:
-        trade = Trade.create(
-            ticker_symbol=order.ticker_symbol,
-            entry_order_uuid=lot.order_uuid,
-            exit_order_uuid=order.uuid,
-            entry_price=lot.price,
-            exit_price=fill_price,
-            quantity=matched_qty,
-            entry_fee=lot.fee_per_unit * matched_qty,
-            exit_fee=sell_fee_per_unit * matched_qty,
-            entry_timestamp=lot.timestamp,
-            exit_timestamp=timestamp,
-            commit_hash=order.commit_hash or ctx.commit_hash,
-            winning_strategy=order.winning_strategy or lot.winning_strategy,
-            strategy_votes=order.strategy_votes or lot.strategy_votes,
-        )
-        ctx.trades.append(trade)
-        ctx.realized_pnl += trade.net_pnl
-        return trade
 
     def record_position(self, asset_id: int, market_data: MarketData, trade_action: TradeAction,
                         quantity: Decimal = Decimal(0), price: Decimal = Decimal(0)) -> None:

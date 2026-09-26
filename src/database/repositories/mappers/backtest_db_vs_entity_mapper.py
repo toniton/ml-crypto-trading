@@ -110,35 +110,42 @@ class BacktestDBVSEntityMapper:
         )
 
     @staticmethod
+    def _serialize_metrics(metrics: Optional[BacktestMetrics | dict[str, Any]]) -> dict[str, Any]:
+        if metrics is None:
+            return {}
+        if isinstance(metrics, dict):
+            raw_metrics = metrics
+        elif isinstance(metrics, BacktestMetrics) or (is_dataclass(metrics) and not isinstance(metrics, type)):
+            raw_metrics = asdict(metrics)
+        else:
+            raw_metrics = {}
+
+        metrics_dict: dict[str, Any] = {}
+        for k, v in raw_metrics.items():
+            if isinstance(v, Decimal):
+                metrics_dict[k] = str(v)
+            elif isinstance(v, datetime):
+                metrics_dict[k] = v.isoformat()
+            else:
+                metrics_dict[k] = v
+
+        for alias, source in (
+                ("total_pnl", "absolute_pnl"),
+                ("total_trades", "round_trips"),
+                ("total_orders", "orders_submitted"),
+                ("total_fills", "orders_filled"),
+        ):
+            if alias not in metrics_dict and source in metrics_dict:
+                metrics_dict[alias] = metrics_dict[source]
+
+        return metrics_dict
+
+    @staticmethod
     def result_to_dao(
             result: BacktestResult,
             metrics: Optional[BacktestMetrics | dict[str, Any]] = None,
     ) -> BacktestResultDao:
-        metrics_dict: dict[str, Any] = {}
-        if metrics is not None:
-            if isinstance(metrics, dict):
-                raw_metrics = metrics
-            elif isinstance(metrics, BacktestMetrics):
-                raw_metrics = asdict(metrics)
-            elif is_dataclass(metrics) and not isinstance(metrics, type):
-                raw_metrics = asdict(metrics)
-            else:
-                raw_metrics = {}
-            for k, v in raw_metrics.items():
-                if isinstance(v, Decimal):
-                    metrics_dict[k] = str(v)
-                else:
-                    metrics_dict[k] = v
-
-            if "total_pnl" not in metrics_dict and "absolute_pnl" in metrics_dict:
-                metrics_dict["total_pnl"] = metrics_dict["absolute_pnl"]
-            if "total_trades" not in metrics_dict and "round_trips" in metrics_dict:
-                metrics_dict["total_trades"] = metrics_dict["round_trips"]
-            if "total_orders" not in metrics_dict and "orders_submitted" in metrics_dict:
-                metrics_dict["total_orders"] = metrics_dict["orders_submitted"]
-            if "total_fills" not in metrics_dict and "orders_filled" in metrics_dict:
-                metrics_dict["total_fills"] = metrics_dict["orders_filled"]
-
+        metrics_dict = BacktestDBVSEntityMapper._serialize_metrics(metrics)
         execution_dict = {
             "latency_ms": result.execution.latency_ms,
             "slippage_ticks": result.execution.slippage_ticks,

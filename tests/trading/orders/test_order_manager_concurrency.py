@@ -68,10 +68,30 @@ class TestOrderManagerConcurrency(unittest.TestCase):
     def test_save_orders_updates_journal_for_completed_order(self):
         order = _make_order(uuid="2", price="101", quantity="1", provider_name="p1",
                             status=OrderStatus.COMPLETED)
+        self.mock_session_manager.record_order_fill.return_value = []
 
         self.order_manager._save_orders_to_database([order])
 
         self.mock_journal.record_fill.assert_called_once_with(order)
+
+    def test_save_orders_persists_closed_trades_to_database(self):
+        order = _make_order(uuid="2", price="101", quantity="1", provider_name="p1",
+                            status=OrderStatus.COMPLETED)
+        mock_trade = MagicMock()
+        self.mock_session_manager.record_order_fill.return_value = [mock_trade]
+        mock_trade_repo = MagicMock()
+        mock_order_repo = MagicMock()
+
+        def get_repo(repo_cls):
+            if "Trade" in repo_cls.__name__:
+                return mock_trade_repo
+            return mock_order_repo
+
+        self.mock_uow.__enter__.return_value.get_repository.side_effect = get_repo
+
+        self.order_manager._save_orders_to_database([order])
+
+        mock_trade_repo.upsert.assert_called_once_with(mock_trade)
 
     def test_execute_order_uses_isolated_unit_of_work(self):
         self.mock_rest_manager.place_order.return_value = None

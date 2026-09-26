@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from decimal import Decimal
 
 from typing import Any, Optional
@@ -7,6 +8,7 @@ from typing import Any, Optional
 from pydantic.dataclasses import dataclass
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclass(frozen=True)
 class BacktestMetrics:
     initial_balance: Decimal
@@ -31,6 +33,9 @@ class BacktestMetrics:
     total_orders: Optional[int] = None
     total_fills: Optional[int] = None
     equity_curve: Optional[list[dict[str, Any]]] = None
+    data_points: int = 0
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
 
 
 @dataclass(frozen=True)
@@ -44,3 +49,6 @@ class BacktestSummary:
     round_trips: int
     orders_filled: int
     orders_cancelled: int
+    data_points: int = 0
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None

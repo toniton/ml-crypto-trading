@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from api.interfaces.asset import Asset
 from api.interfaces.backtest_request import (
     BacktestDataSourceRequest,
     BacktestDataSourceType,
@@ -13,6 +14,8 @@ from src.backtest.backtest_result_collector import BacktestResultCollector
 from src.backtest.domain.session import BacktestSession
 from src.backtest.events.domain_events import OrderFilledEvent, OrderSubmittedEvent
 from src.backtest.execution.execution_types import ExecutionResult
+from src.trading.events.domain_events import TradeClosedEvent
+from src.trading.session.session_manager import SessionManager
 
 
 def _make_backtest_session(ticker_symbol: str = "BTC_USD") -> BacktestSession:
@@ -29,9 +32,37 @@ def _make_backtest_session(ticker_symbol: str = "BTC_USD") -> BacktestSession:
     )
 
 
-def test_collector_computes_strategy_attribution_from_fills():
+def _make_asset(ticker_symbol: str = "BTC_USD") -> Asset:
+    base, quote = ticker_symbol.split("_")
+    return Asset(
+        base_ticker_symbol=base,
+        quote_ticker_symbol=quote,
+        quote_decimals=2,
+        name=base,
+        exchange="BACKTEST",
+        min_quantity=0.001,
+        quantity_decimals=3,
+        schedule=0,
+        candles_timeframe="MIN1",
+    )
+
+
+def test_collector_computes_strategy_attribution_from_trades():
     bus = BacktestEventBus()
     collector = BacktestResultCollector(bus)
+    session_manager = SessionManager()
+    session_manager.create_session("session-1", commit_hash="abc1234")
+    asset = _make_asset("BTC_USD")
+    session_manager.init_asset_balance(asset, Decimal("10000.0"))
+    session_manager.start_session()
+
+    def _on_order_filled(event: OrderFilledEvent) -> None:
+        if event.order:
+            trades = session_manager.record_order_fill(event.order)
+            for trade in trades:
+                bus.publish(TradeClosedEvent(symbol=event.order.ticker_symbol, trade=trade))
+
+    bus.subscribe_callback(OrderFilledEvent, _on_order_filled)
 
     buy_order = Order(
         uuid="buy-1",

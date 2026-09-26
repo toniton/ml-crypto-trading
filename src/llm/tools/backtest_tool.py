@@ -49,9 +49,19 @@ class BacktestTool(BaseTool, ApplicationLoggingMixin):
     ) -> str:
         summary = self.backtest_service.run_asset(ticker_symbol, source_type=data_source)
         self.app_logger.info(f"Backtest for {ticker_symbol} requested by LLM: session={summary.session_id}")
+        time_range = ""
+        if summary.start_time and summary.end_time:
+            fmt = "%Y-%m-%d %H:%M:%S UTC"
+            time_range = f"  Time range: {summary.start_time.strftime(fmt)} to {summary.end_time.strftime(fmt)}\n"
+        elif summary.start_time:
+            fmt = "%Y-%m-%d %H:%M:%S UTC"
+            time_range = f"  Start time: {summary.start_time.strftime(fmt)}\n"
+
         return (
             f"Backtest {summary.ticker_symbol} (session {summary.session_id}):\n"
             f"  Status: {summary.status}\n"
+            f"  Data points: {summary.data_points}\n"
+            f"{time_range}"
             f"  Return: {summary.return_pct:.4f}%\n"
             f"  PnL: {summary.absolute_pnl:.4f}\n"
             f"  Max drawdown: {summary.max_drawdown_pct:.4f}%\n"

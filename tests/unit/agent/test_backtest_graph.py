@@ -210,6 +210,25 @@ class TestPresentResultNode:
         assert "Fills: 5" in content
         assert "few fills" in content
 
+    def test_presents_summary_with_time_range(self):
+        summary = BacktestSummary(
+            session_id="s",
+            ticker_symbol="BTC_USD",
+            status="COMPLETED",
+            return_pct=Decimal("1.5"),
+            absolute_pnl=Decimal("10"),
+            max_drawdown_pct=Decimal("2"),
+            round_trips=3,
+            orders_filled=5,
+            orders_cancelled=1,
+            data_points=100,
+            start_time=datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+            end_time=datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc),
+        )
+        out = PresentResultNode()({"summary": summary})
+        content = out["presentation"].blocks[0].content
+        assert "Time range: 2026-01-01 10:00:00 UTC to 2026-01-01 12:00:00 UTC" in content
+
 
 class TestBacktestGraph:
     def _route(self):

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import math
 from decimal import Decimal
 from typing import Any, Optional
@@ -10,8 +11,13 @@ from src.backtest.domain.result import BacktestFill, BacktestResult, PortfolioSn
 from src.backtest.domain.session import BacktestSession
 
 
+def _timestamp_to_datetime(timestamp: float | int) -> datetime:
+    ts = (timestamp / 1000.0) if timestamp > 100000000000 else float(timestamp)
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
+
+
 class BacktestMetricsCalculator:
-    def calculate(self, result: BacktestResult) -> BacktestMetrics:
+    def calculate(self, result: BacktestResult) -> BacktestMetrics:  # pylint: disable=too-many-locals
         initial = result.initial_balance
         final = result.final_equity
         absolute_pnl = final - initial
@@ -37,6 +43,15 @@ class BacktestMetricsCalculator:
         sharpe_ratio = self._calculate_sharpe_ratio(result.portfolio_snapshots)
         equity_curve = self._build_equity_curve(result.portfolio_snapshots)
 
+        start_time: Optional[datetime] = None
+        end_time: Optional[datetime] = None
+        if result.market_series:
+            start_time = _timestamp_to_datetime(result.market_series[0].timestamp)
+            end_time = _timestamp_to_datetime(result.market_series[-1].timestamp)
+        elif result.portfolio_snapshots:
+            start_time = _timestamp_to_datetime(result.portfolio_snapshots[0].timestamp)
+            end_time = _timestamp_to_datetime(result.portfolio_snapshots[-1].timestamp)
+
         return BacktestMetrics(
             initial_balance=initial,
             final_equity=final,
@@ -60,6 +75,9 @@ class BacktestMetricsCalculator:
             total_orders=len(orders),
             total_fills=len(fills),
             equity_curve=equity_curve,
+            data_points=len(result.market_series) if isinstance(result.market_series, (list, tuple)) else 0,
+            start_time=start_time,
+            end_time=end_time,
         )
 
     def summarize(self, session: BacktestSession, metrics: BacktestMetrics) -> BacktestSummary:
@@ -73,10 +91,13 @@ class BacktestMetricsCalculator:
             round_trips=metrics.round_trips,
             orders_filled=metrics.orders_filled,
             orders_cancelled=metrics.orders_cancelled,
+            data_points=metrics.data_points,
+            start_time=metrics.start_time,
+            end_time=metrics.end_time,
         )
 
     @staticmethod
-    def _calculate_trade_metrics(fills: list[BacktestFill]) -> tuple[int, Optional[Decimal], Optional[Decimal]]:
+    def _calculate_trade_metrics(fills: list[BacktestFill]) -> tuple[int, Optional[Decimal], Optional[Decimal]]:  # pylint: disable=too-many-locals
         """Calculate completed round-trip trades, win rate percentage, and profit factor using FIFO matching."""
         buy_lots: list[list[Decimal]] = []
         trade_pnls: list[Decimal] = []
