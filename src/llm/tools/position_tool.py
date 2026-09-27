@@ -5,8 +5,8 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 from src.trading.session.session_manager import SessionManager
 
 
@@ -52,10 +52,10 @@ class PositionTool(BaseTool, ApplicationLoggingMixin):
         self.app_logger.info(f"Position for {target} requested by LLM.")
         return (
             f"Position for {ctx.ticker_symbol} on {ctx.exchange}:\n"
-            f"  Position Qty: {format_decimal(ctx.position_qty)}\n"
-            f"  Avg Entry Price: {format_decimal(ctx.avg_entry_price)}\n"
-            f"  Avg Exit Price: {format_decimal(ctx.avg_exit_price)}\n"
-            f"  Realized PnL: {format_decimal(ctx.realized_pnl)}\n"
+            f"  Position Qty: {FormatHelper.format_decimal(ctx.position_qty)}\n"
+            f"  Avg Entry Price: {FormatHelper.format_decimal(ctx.avg_entry_price)}\n"
+            f"  Avg Exit Price: {FormatHelper.format_decimal(ctx.avg_exit_price)}\n"
+            f"  Realized PnL: {FormatHelper.format_decimal(ctx.realized_pnl)}\n"
             f"  Open Positions: {len(ctx.open_positions)}\n"
             f"  Closed Positions: {len(ctx.close_positions)}"
         )

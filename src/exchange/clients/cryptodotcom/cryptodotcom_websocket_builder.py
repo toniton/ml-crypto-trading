@@ -78,7 +78,11 @@ class CryptoDotComWebSocketBuilder(ExchangeWebSocketBuilder):
             },
             visibility=visibility,
             parser=parser,
-            filter=lambda d: d.get("result", {}).get("subscription") == channel
+            filter=lambda d: (
+                    d.get("result", {}).get("subscription") == channel
+                    or d.get("result", {}).get("channel") == channel
+                    or d.get("channel") == channel
+            )
         )
 
     def get_unsubscribe_payload(self, subscribe_payload: dict[str, Any]) -> dict[str, Any]:

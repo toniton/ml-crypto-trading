@@ -166,7 +166,7 @@ class AssetPerformanceService:
             qty = Decimal(str(order.quantity or "0"))
             fill_price_val = Decimal(str(order.fill_price or order.price or "0"))
             fee_val = Decimal(str(order.fees or "0"))
-            slippage_val = Decimal(str(getattr(order, "slippage", None) or "0"))
+            slippage_val = Decimal(str(order.slippage or "0"))
             exec_dt = get_exec_dt(order)
 
             if side == "BUY":
@@ -265,7 +265,7 @@ class AssetPerformanceService:
             qty = Decimal(str(order.quantity or "0"))
             fill_price_val = Decimal(str(order.fill_price or order.price or "0"))
             fee_val = Decimal(str(order.fees or "0"))
-            slippage_val = Decimal(str(getattr(order, "slippage", None) or "0"))
+            slippage_val = Decimal(str(order.slippage or "0"))
 
             order_volume = (qty * fill_price_val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             total_volume += order_volume

@@ -33,6 +33,7 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         self._last_heartbeat: dict[str, float] = {}
         self._callback: Optional[Callable] = None
         self._connection_events: dict[str, threading.Event] = {}
+        self._auth_events: dict[str, threading.Event] = {}
 
     @classmethod
     def get_supported_providers(cls) -> set[str]:
@@ -78,6 +79,8 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         url = service.get_websocket_url(visibility)
         conn_id = f"{exchange}-{visibility.value}"
         self._connection_events[conn_id] = threading.Event()
+        if visibility == SubscriptionVisibility.PRIVATE:
+            self._auth_events[conn_id] = threading.Event()
 
         handler = WebSocketApp(
             url=url,
@@ -129,7 +132,6 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
             auth_request = self.get_auth_request()
             if auth_request:
                 handler.send(json.dumps(auth_request))
-                self._authenticated_connections.add(conn_id)
                 self.app_logger.info(f"Sent auth request for {conn_id}")
 
         self._notify_reconnect()
@@ -147,14 +149,30 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         exchange = self.get_provider_name()
         self._ensure_connection(self, sub_data.visibility)
 
-        # Ensure connection is ready before sending
         conn_id = f"{exchange}-{sub_data.visibility.value}"
-        self._connection_events[conn_id].wait()
+        if not self._connection_events[conn_id].wait(timeout=5):
+            self.app_logger.warning(
+                f"Cannot subscribe to {key}: WebSocket connection {conn_id} was not established within 5s"
+            )
+            return
+
+        if sub_data.visibility == SubscriptionVisibility.PRIVATE:
+            if conn_id in self._auth_events:
+                if not self._auth_events[conn_id].wait(timeout=5):
+                    self.app_logger.warning(
+                        f"Timeout waiting for WebSocket authentication on {conn_id} before subscribing to {key}"
+                    )
 
         with self._lock:
-            handler = self._connections[exchange][sub_data.visibility]
-            handler.send(json.dumps(sub_data.payload))
-            self.app_logger.info(f"Subscribed to {key} on {exchange}")
+            handler = self._connections.get(exchange, {}).get(sub_data.visibility)
+            if handler is None:
+                self.app_logger.warning(f"Cannot subscribe to {key}: No active handler for {conn_id}")
+                return
+            try:
+                handler.send(json.dumps(sub_data.payload))
+                self.app_logger.info(f"Subscribed to {key} on {exchange}")
+            except Exception as e:
+                self.app_logger.error(f"Failed to send subscription payload for {key} on {exchange}: {e}")
 
     def _handle_message(self, exchange: str, visibility: SubscriptionVisibility, message: str):
         try:
@@ -167,7 +185,12 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         # Auth handling
         auth_handler = self.get_auth_handler()
         if auth_handler and auth_handler.is_auth_response(data):
-            auth_handler.handle_auth_response(data)
+            code = auth_handler.handle_auth_response(data)
+            conn_id = f"{exchange}-{visibility.value}"
+            if code == 0:
+                self._authenticated_connections.add(conn_id)
+                if conn_id in self._auth_events:
+                    self._auth_events[conn_id].set()
             return
 
         # Heartbeat handling
@@ -183,6 +206,10 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
                 handler.send(json.dumps(response))
             return
 
+        # Error response logging
+        if data.get("code") not in (0, None):
+            self.app_logger.warning(f"Exchange response error on {exchange} ({visibility.value}): {data}")
+
         # Pass everything else to the central manager
         if self._callback:
             self._callback(exchange, visibility, data)
@@ -194,6 +221,9 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         with self._lock:
             if conn_id in self._authenticated_connections:
                 self._authenticated_connections.remove(conn_id)
+
+            if conn_id in self._auth_events:
+                self._auth_events[conn_id].clear()
 
             if exchange in self._connections:
                 self._connections[exchange].pop(visibility, None)

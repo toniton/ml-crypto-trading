@@ -50,7 +50,7 @@ def _make_asset(ticker_symbol: str = "BTC_USD") -> Asset:
 def test_collector_computes_strategy_attribution_from_trades():
     bus = BacktestEventBus()
     collector = BacktestResultCollector(bus)
-    session_manager = SessionManager()
+    session_manager = SessionManager(event_bus=bus)
     session_manager.create_session("session-1", commit_hash="abc1234")
     asset = _make_asset("BTC_USD")
     session_manager.init_asset_balance(asset, Decimal("10000.0"))

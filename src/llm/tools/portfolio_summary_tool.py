@@ -6,8 +6,8 @@ from typing import Any, Optional, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class PortfolioSummaryInput(BaseModel):
@@ -65,23 +65,23 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
                 val = qty * price
                 conc = p.get_asset_concentration(ticker) * Decimal("100")
                 pos_lines.append(
-                    f"    • {ticker}: {format_decimal(qty)} units @ ${format_decimal(price)} "
-                    f"= ${format_decimal(val)} {p.quote_currency} ({format_decimal(conc)}% of portfolio)"
+                    f"    • {ticker}: {FormatHelper.format_decimal(qty)} units @ ${FormatHelper.format_decimal(price)} "
+                    f"= ${FormatHelper.format_decimal(val)} {p.quote_currency} ({FormatHelper.format_decimal(conc)}% of portfolio)"
                 )
             pos_text = "\n".join(pos_lines) if pos_lines else "    • (No open base asset positions)"
 
-            dd_limit_str = f"{format_decimal(p_mgr.max_portfolio_drawdown)}%" if p_mgr.max_portfolio_drawdown else "Not set"
-            conc_limit_str = f"{format_decimal(p_mgr.max_asset_concentration)}%" if p_mgr.max_asset_concentration else "Not set"
+            dd_limit_str = f"{FormatHelper.format_decimal(p_mgr.max_portfolio_drawdown)}%" if p_mgr.max_portfolio_drawdown else "Not set"
+            conc_limit_str = f"{FormatHelper.format_decimal(p_mgr.max_asset_concentration)}%" if p_mgr.max_asset_concentration else "Not set"
             current_dd_pct = abs(p.get_drawdown()) * Decimal("100")
 
             section = (
                 f"Portfolio [{p.exchange} / {p.quote_currency}]:\n"
-                f"  Total Mark-to-Market Equity: ${format_decimal(p.get_total_equity())} {p.quote_currency}\n"
-                f"  Available Cash:             ${format_decimal(p.available_cash)} {p.quote_currency}\n"
-                f"  Reserved Order Cash:        ${format_decimal(p.reserved_cash)} {p.quote_currency}\n"
-                f"  Total Cash Balance:         ${format_decimal(p.total_cash)} {p.quote_currency}\n"
-                f"  Peak Equity (HWM):          ${format_decimal(p.peak_equity)} {p.quote_currency}\n"
-                f"  Current Drawdown:           {format_decimal(current_dd_pct)}% (Limit: {dd_limit_str})\n"
+                f"  Total Mark-to-Market Equity: ${FormatHelper.format_decimal(p.get_total_equity())} {p.quote_currency}\n"
+                f"  Available Cash:             ${FormatHelper.format_decimal(p.available_cash)} {p.quote_currency}\n"
+                f"  Reserved Order Cash:        ${FormatHelper.format_decimal(p.reserved_cash)} {p.quote_currency}\n"
+                f"  Total Cash Balance:         ${FormatHelper.format_decimal(p.total_cash)} {p.quote_currency}\n"
+                f"  Peak Equity (HWM):          ${FormatHelper.format_decimal(p.peak_equity)} {p.quote_currency}\n"
+                f"  Current Drawdown:           {FormatHelper.format_decimal(current_dd_pct)}% (Limit: {dd_limit_str})\n"
                 f"  Max Concentration Limit:    {conc_limit_str}\n"
                 f"  Positions Breakdown:\n{pos_text}"
             )

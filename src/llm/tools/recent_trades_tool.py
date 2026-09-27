@@ -6,8 +6,8 @@ from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.core.interfaces.trading_journal import TradingJournal
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class RecentTradesInput(BaseModel):
@@ -44,8 +44,8 @@ class RecentTradesTool(BaseTool, ApplicationLoggingMixin):
         lines = [f"Recent trades for {ticker_symbol} ({len(recent)} shown):"]
         for order in recent:
             lines.append(
-                f"  {order.trade_action.value} qty={format_decimal(order.quantity)} "
-                f"price={format_decimal(order.price)} status={order.status.value} "
+                f"  {order.trade_action.value} qty={FormatHelper.format_decimal(order.quantity)} "
+                f"price={FormatHelper.format_decimal(order.price)} status={order.status.value} "
                 f"exchange={order.provider_name}"
             )
         return "\n".join(lines)

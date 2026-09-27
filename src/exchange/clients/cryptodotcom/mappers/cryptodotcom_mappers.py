@@ -80,13 +80,34 @@ class CryptoDotComAccountBalanceMapper(Mapper[CryptoDotComUserBalanceResponseDto
         if not dto.result or not dto.result.data:
             return []
 
-        return [
-            AccountBalance(
-                currency=balance.instrument_name,
-                available_balance=Decimal(balance.max_withdrawal_balance or 0.0)
-            )
-            for balance in dto.result.data[0].position_balances
-        ]
+        balances: list[AccountBalance] = []
+        currencies_seen: set[str] = set()
+
+        for data_item in dto.result.data:
+            for pos in data_item.position_balances:
+                curr = pos.instrument_name
+                avail = pos.max_withdrawal_balance if pos.max_withdrawal_balance is not None else pos.quantity
+                balances.append(
+                    AccountBalance(
+                        currency=curr,
+                        available_balance=Decimal(str(avail or 0)),
+                    )
+                )
+                currencies_seen.add(curr.upper())
+
+            if data_item.instrument_name:
+                top_curr = data_item.instrument_name.upper()
+                if top_curr not in currencies_seen:
+                    top_avail = data_item.total_available_balance or data_item.total_cash_balance or "0"
+                    balances.append(
+                        AccountBalance(
+                            currency=data_item.instrument_name,
+                            available_balance=Decimal(str(top_avail)),
+                        )
+                    )
+                    currencies_seen.add(top_curr)
+
+        return balances
 
 
 class CryptoDotComFeesMapper(Mapper[CryptoDotComUserFeesResponseDto, Fees], CryptoDotComBaseMapper):

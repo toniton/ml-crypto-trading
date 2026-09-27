@@ -21,8 +21,13 @@ class TestAccountManager(unittest.TestCase):
         self.mock_websocket_manager = MagicMock()
         self.mock_rest_manager = MagicMock()
         self.mock_session_manager = MagicMock(spec=SessionManager)
+        self.mock_event_bus = MagicMock()
         self.account_manager = AccountManager(
-            self.assets, self.mock_rest_manager, self.mock_websocket_manager, self.mock_session_manager
+            self.assets,
+            self.mock_rest_manager,
+            self.mock_websocket_manager,
+            self.mock_session_manager,
+            self.mock_event_bus,
         )
 
     def test_init_websocket(self):

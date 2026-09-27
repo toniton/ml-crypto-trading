@@ -5,9 +5,9 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class AccountBalanceInput(BaseModel):
@@ -46,6 +46,6 @@ class AccountBalanceTool(BaseTool, ApplicationLoggingMixin):
         self.app_logger.info(f"Account balance for {asset.ticker_symbol} requested by LLM.")
         return (
             f"Account Balance for {asset.ticker_symbol} on {provider}:\n"
-            f"  Base ({base.currency}): {format_decimal(base.available_balance)} {base.currency}\n"
-            f"  Quote ({quote.currency}): ${format_decimal(quote.available_balance)} {quote.currency}"
+            f"  Base ({base.currency}): {FormatHelper.format_decimal(base.available_balance)} {base.currency}\n"
+            f"  Quote ({quote.currency}): ${FormatHelper.format_decimal(quote.available_balance)} {quote.currency}"
         )

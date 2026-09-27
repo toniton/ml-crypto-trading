@@ -3,8 +3,8 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 from src.trading.markets.market_data_manager import MarketDataManager
 
 
@@ -46,10 +46,10 @@ class MarketStatisticsTool(BaseTool, ApplicationLoggingMixin):
 
             market_data_info = (
                 f"Market Statistics for {target_symbol} on {asset.exchange.value}:\n"
-                f"  Close Price: {format_decimal(market_data.close_price)}\n"
-                f"  High Price: {format_decimal(market_data.high_price)}\n"
-                f"  Low Price: {format_decimal(market_data.low_price)}\n"
-                f"  Trading Volume: {format_decimal(market_data.volume)}\n"
+                f"  Close Price: {FormatHelper.format_decimal(market_data.close_price)}\n"
+                f"  High Price: {FormatHelper.format_decimal(market_data.high_price)}\n"
+                f"  Low Price: {FormatHelper.format_decimal(market_data.low_price)}\n"
+                f"  Trading Volume: {FormatHelper.format_decimal(market_data.volume)}\n"
                 f"  Timestamp: {market_data.timestamp}"
             )
             self.app_logger.info(f"Market statistics for {target_symbol} requested by LLM.")

@@ -82,7 +82,9 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
     def update_cash_balance(self, exchange: str, quote_currency: str, balance: Decimal) -> None:
         with self._lock:
             portfolio = self.get_portfolio(exchange, quote_currency)
-            portfolio.update_cash(balance)
+            target_dec = Decimal(str(balance))
+            if portfolio.total_cash != target_dec:
+                portfolio.update_cash(target_dec)
 
     def update_market_data(self, asset: Asset, market_data: MarketData) -> None:
         with self._lock:
@@ -200,6 +202,18 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
 
     def _on_balance_changed(self, event: BalanceChangedEvent) -> None:
         with self._lock:
-            for portfolio in self.portfolios.values():
-                if portfolio.quote_currency == event.currency:
-                    portfolio.update_cash(Decimal(str(event.balance)))
+            for (exchange, quote_currency), portfolio in self.portfolios.items():
+                if event.exchange and exchange.upper() != event.exchange.upper():
+                    continue
+                if quote_currency.upper() == event.currency.upper():
+                    target_total = event.total if event.total is not None else event.available
+                    target_total_dec = Decimal(str(target_total))
+                    if portfolio.total_cash != target_total_dec:
+                        portfolio.update_cash(target_total_dec)
+                        self.app_logger.info(
+                            "Updated quote portfolio [%s / %s] cash balance to %s (source: %s)",
+                            exchange,
+                            quote_currency,
+                            target_total,
+                            event.source,
+                        )

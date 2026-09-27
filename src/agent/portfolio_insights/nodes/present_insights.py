@@ -1,14 +1,16 @@
-from __future__ import annotations
-
 from src.agent.configuration.models import MarkdownBlock
 from src.agent.portfolio_insights.models import PortfolioAnalysisResult, PortfolioInsightsPresentation
 from src.agent.portfolio_insights.state import PortfolioInsightsState
-from src.llm.tools.trading_context_tool import format_decimal
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class PresentInsightsNode:
     def __call__(self, state: PortfolioInsightsState) -> dict:
-        analysis: PortfolioAnalysisResult = state.get("analysis") or PortfolioAnalysisResult()
+        analysis: PortfolioAnalysisResult = (
+            state["analysis"]
+            if "analysis" in state and state["analysis"] is not None
+            else PortfolioAnalysisResult()
+        )
         blocks = self._build_blocks(analysis)
         presentation = PortfolioInsightsPresentation(blocks=blocks)
         return {"presentation": presentation}
@@ -37,9 +39,9 @@ class PresentInsightsNode:
             lines = [
                 f"#### Portfolio: `{s.exchange}` ({s.quote_currency})",
                 "",
-                f"- **Total Mark-to-Market Equity:** `${format_decimal(s.total_equity)} {s.quote_currency}`",
-                f"- **Available Cash / Reserved Cash:** `${format_decimal(s.available_cash)}` / `${format_decimal(s.reserved_cash)}`",
-                f"- **Drawdown from Peak:** `{format_decimal(s.current_drawdown_pct)}%` (Peak: `${format_decimal(s.peak_equity)}`)",
+                f"- **Total Mark-to-Market Equity:** `${FormatHelper.format_decimal(s.total_equity)} {s.quote_currency}`",
+                f"- **Available Cash / Reserved Cash:** `${FormatHelper.format_decimal(s.available_cash)}` / `${FormatHelper.format_decimal(s.reserved_cash)}`",
+                f"- **Drawdown from Peak:** `{FormatHelper.format_decimal(s.current_drawdown_pct)}%` (Peak: `${FormatHelper.format_decimal(s.peak_equity)}`)",
                 "",
             ]
 
@@ -48,8 +50,8 @@ class PresentInsightsNode:
                 lines.append("| :--- | :--- | :--- | :--- | :--- |")
                 for a in s.allocations:
                     lines.append(
-                        f"| **{a.ticker_symbol}** | {format_decimal(a.quantity)} | ${format_decimal(a.mark_price)} "
-                        f"| ${format_decimal(a.position_value)} | `{format_decimal(a.weight_pct)}%` |"
+                        f"| **{a.ticker_symbol}** | {FormatHelper.format_decimal(a.quantity)} | ${FormatHelper.format_decimal(a.mark_price)} "
+                        f"| ${FormatHelper.format_decimal(a.position_value)} | `{FormatHelper.format_decimal(a.weight_pct)}%` |"
                     )
                 lines.append("")
 

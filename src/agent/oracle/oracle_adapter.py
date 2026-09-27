@@ -125,7 +125,7 @@ class OracleEventAdapter:
                 if pos is not None:
                     symbol_context.position = _to_decimal(pos)
         elif isinstance(event, BalanceChangedEvent):
-            balance = _to_decimal(event.balance)
+            balance = _to_decimal(event.available)
             if balance is not None:
                 context.symbol(event.symbol).balance = balance
         elif isinstance(event, BalanceUpdateEvent):

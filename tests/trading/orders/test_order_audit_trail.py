@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction, OrderStatus
 from src.database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
+from src.events.message_event_bus import MessageEventBus
 from src.trading.session.session_manager import SessionManager
 from src.vcs.application.service import VCSService
 
@@ -32,7 +33,7 @@ class TestOrderAuditTrailTraceability(unittest.TestCase):
         head_commit.hash = "56339b9"
         mock_vcs.head.return_value = head_commit
 
-        session_manager = SessionManager(config_vcs=mock_vcs)
+        session_manager = SessionManager(event_bus=MessageEventBus(), config_vcs=mock_vcs)
         session_manager.create_session("sess-1")
 
         self.assertEqual(session_manager.get_current_commit_hash(), "56339b9")

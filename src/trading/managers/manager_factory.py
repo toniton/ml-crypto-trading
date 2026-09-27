@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 
+from src.events.message_event_bus import MessageEventBus
 from src.exchange.factories.client_factory import ClientFactory
 from src.metrics.collectors.exchange_metrics_collector import ExchangeMetricsCollector
 from src.metrics.services.metric_service import MetricService
@@ -28,6 +29,7 @@ class ManagerFactory:
             metrics_collector: Optional[ExchangeMetricsCollector] = None,
             config_vcs: Optional[VCSService] = None,
     ) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
+        event_bus = event_bus or MessageEventBus()
         trading_journal = InMemoryTradingJournal()
         collector = metrics_collector or (
             ExchangeMetricsCollector(metric_service) if metric_service else None
@@ -38,7 +40,7 @@ class ManagerFactory:
         rest_manager = ClientFactory.create_rest_manager(
             is_simulated, metrics_collector=collector
         )
-        session_manager = SessionManager(config_vcs=config_vcs)
+        session_manager = SessionManager(event_bus=event_bus, config_vcs=config_vcs)
         order_manager = OrderManager(
             database_manager, trading_journal, rest_manager, websocket_manager,
             synchronous_execution=synchronous_execution, event_bus=event_bus,
@@ -47,7 +49,9 @@ class ManagerFactory:
         portfolio_risk_manager = PortfolioRiskManager(assets=assets, event_bus=event_bus)
 
         container = ManagerContainer(
-            account_manager=AccountManager(assets, rest_manager, websocket_manager, session_manager),
+            account_manager=AccountManager(
+                assets, rest_manager, websocket_manager, session_manager, event_bus=event_bus
+            ),
             fees_manager=FeesManager(assets, rest_manager),
             order_manager=order_manager,
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),

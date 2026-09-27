@@ -16,16 +16,21 @@ from api.interfaces.trade import Trade
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from api.interfaces.trading_session import TradingSession
+from src.core.interfaces.event_bus import EventBus
+from src.events.message_event_bus import CallbackSubscription
+from src.trading.events import BalanceChangedEvent
 from src.trading.session.fifo_trade_matcher import FifoTradeMatcher
 from src.vcs.application import VCSService
 
 
 class SessionManager:
-    def __init__(self, config_vcs: VCSService = None):
+    def __init__(self, event_bus: EventBus, config_vcs: Optional[VCSService] = None):
         self.current_session: Optional[TradingSession] = None
         self.is_running: Event = Event()
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
         self._config_vcs = config_vcs
+        self._event_bus = event_bus
+        self.subscribe(event_bus)
 
     def create_session(self, session_id: str, commit_hash: Optional[str] = None) -> SessionManager:
         with self._lock:
@@ -125,6 +130,21 @@ class SessionManager:
                     return ctx
             return None
 
+    def subscribe(self, event_bus: EventBus) -> None:
+        self._event_bus = event_bus
+        event_bus.subscribe(BalanceChangedEvent.__name__, CallbackSubscription(self._on_balance_changed))
+
+    def _on_balance_changed(self, event: BalanceChangedEvent) -> None:
+        with self._lock:
+            if not self.current_session:
+                return
+            for ctx in self.current_session.trading_contexts.values():
+                if event.exchange and ctx.exchange and event.exchange.upper() != ctx.exchange.upper():
+                    continue
+                quote = ctx.ticker_symbol.split("_")[-1] if "_" in ctx.ticker_symbol else None
+                if quote and quote.upper() == event.currency.upper():
+                    ctx.available_balance = event.available
+
     def update_available_balance(self, asset_key: int, available_balance: Decimal) -> None:
         with self._lock:
             if not self.current_session:
@@ -150,6 +170,7 @@ class SessionManager:
             if ctx is None:
                 return []
 
+            order.commit_hash = order.commit_hash or ctx.commit_hash or self.get_current_commit_hash()
             fill_price = (
                 order.fill_price
                 if (order.fill_price is not None and order.fill_price > Decimal(0))
@@ -157,7 +178,7 @@ class SessionManager:
             )
             quantity = Decimal(str(order.quantity))
             fee = order.fees if order.fees is not None else Decimal(0)
-            slippage = order.slippage if getattr(order, "slippage", None) is not None else Decimal(0)
+            slippage = order.slippage if order.slippage is not None else Decimal(0)
             timestamp = float(
                 order.executed_time
                 if order.executed_time is not None

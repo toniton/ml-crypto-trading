@@ -277,8 +277,8 @@ class TradingMetricsCollector:
     def _handle_strategy_evaluated(self, event: StrategyEvaluatedEvent) -> None:
         with self._lock:
             self._funnel_by_symbol[event.symbol].evaluations += 1
-        commit = getattr(event, "commit_hash", None) or FallbackValue.UNKNOWN.value
-        strategy = getattr(event, "strategy_name", None) or FallbackValue.UNKNOWN.value
+        commit = event.commit_hash or FallbackValue.UNKNOWN.value
+        strategy = event.strategy_name or FallbackValue.UNKNOWN.value
         labels = {
             MetricLabelKey.SYMBOL.value: event.symbol,
             MetricLabelKey.STRATEGY.value: str(strategy),
@@ -290,8 +290,8 @@ class TradingMetricsCollector:
     def _handle_signal_generated(self, event: SignalGeneratedEvent) -> None:
         with self._lock:
             self._funnel_by_symbol[event.symbol].signals += 1
-        commit = getattr(event, "commit_hash", None) or FallbackValue.UNKNOWN.value
-        strategy = getattr(event, "strategy_name", None) or FallbackValue.UNKNOWN.value
+        commit = event.commit_hash or FallbackValue.UNKNOWN.value
+        strategy = event.strategy_name or FallbackValue.UNKNOWN.value
         labels = {
             MetricLabelKey.SYMBOL.value: event.symbol,
             MetricLabelKey.ACTION.value: event.action,
@@ -302,8 +302,8 @@ class TradingMetricsCollector:
         self._metric_service.flush()
 
     def _handle_consensus_evaluated(self, event: ConsensusEvaluatedEvent) -> None:
-        commit = getattr(event, "commit_hash", None) or FallbackValue.UNKNOWN.value
-        exchange = getattr(event, "exchange", None) or FallbackValue.UNKNOWN.value
+        commit = event.commit_hash or FallbackValue.UNKNOWN.value
+        exchange = event.exchange or FallbackValue.UNKNOWN.value
         labels = {
             MetricLabelKey.SYMBOL.value: event.symbol,
             MetricLabelKey.EXCHANGE.value: str(exchange),
@@ -324,13 +324,17 @@ class TradingMetricsCollector:
             self._funnel_by_symbol[event.symbol].rejections[event.reason] += 1
 
         exchange = (
-            getattr(event, "exchange", None)
-            or event.details.get(MetricLabelKey.EXCHANGE.value, FallbackValue.UNKNOWN.value)
+            event.exchange
+            or (event.details[MetricLabelKey.EXCHANGE.value] if MetricLabelKey.EXCHANGE.value in event.details else FallbackValue.UNKNOWN.value)
         )
-        strategy = event.details.get(MetricLabelKey.STRATEGY.value, FallbackValue.UNKNOWN.value)
+        strategy = (
+            event.details[MetricLabelKey.STRATEGY.value]
+            if MetricLabelKey.STRATEGY.value in event.details
+            else FallbackValue.UNKNOWN.value
+        )
         commit = (
-            getattr(event, "commit_hash", None)
-            or event.details.get(MetricLabelKey.COMMIT_HASH.value, FallbackValue.UNKNOWN.value)
+            event.commit_hash
+            or (event.details[MetricLabelKey.COMMIT_HASH.value] if MetricLabelKey.COMMIT_HASH.value in event.details else FallbackValue.UNKNOWN.value)
         )
         labels = {
             MetricLabelKey.SYMBOL.value: event.symbol,
@@ -379,8 +383,8 @@ class TradingMetricsCollector:
         self._metric_service.flush()
 
     def _handle_position_changed(self, event: PositionChangedEvent) -> None:
-        commit = getattr(event, "commit_hash", None) or FallbackValue.UNKNOWN.value
-        exchange = getattr(event, "exchange", None) or FallbackValue.UNKNOWN.value
+        commit = event.commit_hash or FallbackValue.UNKNOWN.value
+        exchange = event.exchange or FallbackValue.UNKNOWN.value
         labels = {
             MetricLabelKey.SYMBOL.value: event.symbol,
             MetricLabelKey.EXCHANGE.value: str(exchange),
@@ -396,8 +400,8 @@ class TradingMetricsCollector:
             self._funnel_by_symbol[event.symbol].trades_closed += 1
             self._closed_trades.append(trade)
 
-        exchange = getattr(event, "exchange", None) or FallbackValue.UNKNOWN.value
-        commit = trade.commit_hash or getattr(event, "commit_hash", None) or FallbackValue.UNKNOWN.value
+        exchange = event.exchange or FallbackValue.UNKNOWN.value
+        commit = trade.commit_hash or event.commit_hash or FallbackValue.UNKNOWN.value
         strategy = trade.winning_strategy or FallbackValue.UNKNOWN.value
         labels = {
             MetricLabelKey.SYMBOL.value: event.symbol or trade.ticker_symbol,
@@ -426,9 +430,9 @@ class TradingMetricsCollector:
             if isinstance(order.trade_action, TradeAction)
             else str(order.trade_action)
         )
-        exchange = order.provider_name or getattr(event, "exchange", None) or FallbackValue.UNKNOWN.value
+        exchange = order.provider_name or event.exchange or FallbackValue.UNKNOWN.value
         strategy = order.winning_strategy or FallbackValue.UNKNOWN.value
-        commit = order.commit_hash or getattr(event, "commit_hash", None) or FallbackValue.UNKNOWN.value
+        commit = order.commit_hash or event.commit_hash or FallbackValue.UNKNOWN.value
         return {
             MetricLabelKey.SYMBOL.value: event.symbol or order.ticker_symbol,
             MetricLabelKey.EXCHANGE.value: str(exchange),

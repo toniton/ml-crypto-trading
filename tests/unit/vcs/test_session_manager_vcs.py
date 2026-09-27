@@ -5,6 +5,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from api.interfaces.asset import Asset
+from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.session.session_manager import SessionManager
@@ -12,7 +13,7 @@ from src.vcs.domain.commit import Commit
 
 
 def test_session_manager_pins_commit_hash():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     dummy_commit_hash = "a" * 64
 
     # 1. Create session with pinned commit_hash
@@ -45,7 +46,7 @@ def test_session_manager_auto_fetches_head_commit_hash():
         message="head", created_at=datetime.now(timezone.utc),
     )
 
-    session_mgr = SessionManager(config_vcs=mock_vcs)
+    session_mgr = SessionManager(event_bus=MessageEventBus(), config_vcs=mock_vcs)
     session_mgr.create_session(session_id="auto_fetch_session")
 
     assert session_mgr.current_session.commit_hash == commit_hash
@@ -54,7 +55,7 @@ def test_session_manager_auto_fetches_head_commit_hash():
 
 def test_session_manager_explicit_hash_overrides_auto_fetch():
     mock_vcs = MagicMock()
-    session_mgr = SessionManager(config_vcs=mock_vcs)
+    session_mgr = SessionManager(event_bus=MessageEventBus(), config_vcs=mock_vcs)
     explicit_hash = "c" * 64
 
     session_mgr.create_session(session_id="explicit_session", commit_hash=explicit_hash)
@@ -63,13 +64,13 @@ def test_session_manager_explicit_hash_overrides_auto_fetch():
     mock_vcs.head.assert_not_called()
 
 def test_session_manager_uninitialized_asset_returns_none():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session(session_id="test_safe_get")
     assert session_mgr.get_trading_context(99999) is None
 
 
 def test_session_manager_init_asset_balance_idempotent():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session(session_id="test_idempotent")
     mock_asset = MagicMock()
     mock_asset.key = 123
@@ -83,7 +84,7 @@ def test_session_manager_init_asset_balance_idempotent():
 
 
 def test_session_manager_init_asset_balance_with_initial_position():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session(session_id="test_init_pos")
     mock_asset = MagicMock()
     mock_asset.key = 456
@@ -121,7 +122,7 @@ def test_manager_factory_injects_config_vcs_into_session_manager():
 
 
 def test_session_manager_close_asset_balance_and_end_session():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session(session_id="close_test")
     session_mgr.start_session()
 

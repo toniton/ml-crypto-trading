@@ -8,19 +8,20 @@ from api.interfaces.position_entry import PositionEntry
 from api.interfaces.trading_context import TradingContext
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
-from src.llm.tools.trading_context_tool import TradingContextTool, format_decimal
+from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.fees.fees_manager import FeesManager
+from src.trading.helpers.format_helper import FormatHelper
 from src.trading.markets.market_data_manager import MarketDataManager
 
 
 class TestTradingContextTool(unittest.TestCase):
     def test_format_decimal(self):
-        self.assertEqual(format_decimal(Decimal('7.8E-7')), '0.00000078')
-        self.assertEqual(format_decimal(Decimal('0.000000')), '0')
-        self.assertEqual(format_decimal(Decimal('1.5000')), '1.5')
-        self.assertEqual(format_decimal(Decimal('100.0')), '100')
-        self.assertEqual(format_decimal(Decimal('inf')), 'Infinity')
-        self.assertEqual(format_decimal(None), 'None')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('7.8E-7')), '0.00000078')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('0.000000')), '0')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('1.5000')), '1.5')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('100.0')), '100')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('inf')), 'Infinity')
+        self.assertEqual(FormatHelper.format_decimal(None), 'None')
 
     def test_tool_execution(self):
         mock_session_manager = MagicMock()

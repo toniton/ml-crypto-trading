@@ -3,9 +3,9 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.fees.fees_manager import FeesManager
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class ExchangeFeesInput(BaseModel):
@@ -41,8 +41,8 @@ class ExchangeFeesTool(BaseTool, ApplicationLoggingMixin):
 
             fee_info = (
                 f"Exchange Fees for {target_symbol} on {asset.exchange.value}:\n"
-                f"  Maker Fee Pct: {format_decimal(fees.maker_fee_pct)}%\n"
-                f"  Taker Fee Pct: {format_decimal(fees.taker_fee_pct)}%"
+                f"  Maker Fee Pct: {FormatHelper.format_decimal(fees.maker_fee_pct)}%\n"
+                f"  Taker Fee Pct: {FormatHelper.format_decimal(fees.taker_fee_pct)}%"
             )
             self.app_logger.info(f"Exchange fees for {target_symbol} requested by LLM.")
             return fee_info
