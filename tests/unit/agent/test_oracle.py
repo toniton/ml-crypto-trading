@@ -1,12 +1,14 @@
-from __future__ import annotations
-
+import threading
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+import pytest
+
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.agent.oracle.events import (
+    ORACLE_EVENT_TYPES,
     ORACLE_SUMMARY_EVENT_TYPE,
     OracleSummaryEvent,
 )
@@ -210,6 +212,61 @@ class TestOracleService:
         assert summary.symbol == "BTC_USD"
         assert summary.market_state == "active"
         assert summary.model == "m"
+
+    def test_oracle_event_types_has_no_duplicates(self):
+        assert len(ORACLE_EVENT_TYPES) == len(set(ORACLE_EVENT_TYPES))
+
+    def test_concurrent_events_during_slow_llm_do_not_trigger_multiple_generations(self):
+        started_event = threading.Event()
+        release_event = threading.Event()
+
+        def slow_generate(_prompt):
+            started_event.set()
+            release_event.wait(timeout=2.0)
+            return "slow summary"
+
+        llm = MagicMock()
+        llm.generate.side_effect = slow_generate
+        context = OracleContext(summary_interval=timedelta(hours=1))
+        service = OracleService(llm, context)
+
+        thread1 = threading.Thread(
+            target=service.observe,
+            args=(MarketStateChangedEvent(symbol="BTC_USD", price=Decimal("100"), market_timestamp=1_700_000_000.0),),
+        )
+        thread1.start()
+
+        started_event.wait(timeout=2.0)
+        assert started_event.is_set()
+
+        for _ in range(10):
+            service.observe(
+                MarketStateChangedEvent(symbol="ETH_USD", price=Decimal("200"), market_timestamp=1_700_000_001.0)
+            )
+
+        release_event.set()
+        thread1.join()
+
+        assert llm.generate.call_count == 1
+        assert service.get_latest_summary().summary == "slow summary"
+
+    def test_failure_cooldown_prevents_immediate_retry_storm(self):
+        llm = MagicMock()
+        llm.generate.side_effect = RuntimeError("LLM error")
+        context = OracleContext(summary_interval=timedelta(hours=1))
+        service = OracleService(llm, context, failure_cooldown=timedelta(seconds=60))
+
+        t0 = datetime(2026, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+        service.observe(
+            MarketStateChangedEvent(symbol="BTC_USD", price=Decimal("100"), market_timestamp=1_700_000_000.0)
+        )
+
+        # Before 60s cooldown expires, should return None
+        assert service.summarize_if_due(t0 + timedelta(seconds=10)) is None
+        assert service.summarize_if_due(t0 + timedelta(seconds=59)) is None
+        # Once 60s cooldown passes, is_due is True and it can attempt again
+        with pytest.raises(RuntimeError):
+            service.summarize(t0 + timedelta(seconds=61))
 
 
 class TestOracleTools:
