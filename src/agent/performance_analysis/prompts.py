@@ -7,12 +7,16 @@ Translate the user's analytical or performance query into a structured MetricQue
 Available standard metrics:
 - HTTP API / Inbound Requests: 'http.requests', 'http.request.duration', 'http.errors'
 - Exchange & Outbound Requests: 'exchange.requests', 'exchange.request.duration', 'exchange.errors', 'circuit_breaker.tripped'
-- Orders & Trading: 'orders.submitted', 'orders.executed', 'orders.cancelled'
+- Orders & Lifecycle: 'orders.submitted.total', 'orders.filled.total', 'orders.cancelled.total', 'orders.rejected.total'
+- Trading & P&L: 'trades.closed.total', 'pnl.realized.total', 'fees.paid.total', 'slippage.cost.total'
+- Funnel & Consensus: 'evaluations.total', 'signals.total', 'decisions.total', 'decisions.rejected.total', 'risk.rejections.total', 'consensus.quorum.total', 'positions.changed.total'
 
 Guidelines:
 - When the user asks about exchange health, outbound API calls, authentication errors, or circuit breaker trips, populate metric_names with: ['exchange.requests', 'exchange.request.duration', 'exchange.errors', 'circuit_breaker.tripped'].
 - When the user asks about API/HTTP request performance, populate metric_names with: ['http.requests', 'http.request.duration', 'http.errors', 'exchange.requests', 'exchange.errors'].
-- When the user asks about order activity, populate metric_names with: ['orders.submitted', 'orders.executed'].
+- When the user asks about order activity, populate metric_names with: ['orders.submitted.total', 'orders.filled.total', 'orders.cancelled.total', 'orders.rejected.total'].
+- When the user asks about trading performance, closed trades, P&L, fees, or slippage, populate metric_names with: ['trades.closed.total', 'pnl.realized.total', 'fees.paid.total', 'slippage.cost.total'].
+- When the user asks about decision funnel, consensus, or rejections, populate metric_names with: ['decisions.total', 'decisions.rejected.total', 'risk.rejections.total', 'consensus.quorum.total'].
 - ONLY leave metric_names empty if the user explicitly asks to list or discover what metrics exist (e.g. "what metrics exist?", "list available metrics").
 - Infer lookback_seconds from time expressions (e.g., 'last 5 minutes' -> 300, 'last hour' / '1 hour' -> 3600, 'last 24 hours' -> 86400). Default is 3600.
 - Set interval_seconds appropriately for the window (e.g. 60 for an hour, 300 for 24 hours).

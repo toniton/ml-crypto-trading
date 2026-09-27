@@ -8,6 +8,7 @@ from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.metrics.models.constants import MetricName, MetricUnit
 from src.metrics.models.metric_type import AggregationType, MetricType
 from src.metrics.models.metric_query import MetricQuery
 from src.metrics.services.metric_service import MetricService
@@ -28,58 +29,58 @@ class OrderLifecycleCollector:
 
     def _register_definitions(self) -> None:
         self._metric_service.register(
-            "orders.pending",
+            MetricName.ORDERS_PENDING.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Current pending orders count",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.processing",
+            MetricName.ORDERS_PROCESSING.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Current processing orders count",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.reconciliation_required",
+            MetricName.ORDERS_RECONCILIATION_REQUIRED.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Current reconciliation required orders count",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.unknown",
+            MetricName.ORDERS_UNKNOWN.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Current unknown status orders count",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.state_mismatch",
+            MetricName.ORDERS_STATE_MISMATCH.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Orders with persistence state mismatches",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.stuck_5m",
+            MetricName.ORDERS_STUCK_5M.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Orders open and stuck for more than 5 minutes",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.pending_gt_30s",
+            MetricName.ORDERS_PENDING_GT_30S.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Orders pending for more than 30 seconds",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "orders.orphaned",
+            MetricName.ORDERS_ORPHANED.value,
             metric_type=MetricType.GAUGE,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Orphaned orders without exchange match",
             aggregation=AggregationType.LAST,
         )
@@ -89,14 +90,20 @@ class OrderLifecycleCollector:
         now = datetime.now(timezone.utc)
 
         consistency = snapshot["consistency"]
-        self._metric_service.gauge("orders.pending", consistency["pending"], timestamp=now)
-        self._metric_service.gauge("orders.processing", consistency["processing"], timestamp=now)
-        self._metric_service.gauge("orders.reconciliation_required", consistency["reconciliation"], timestamp=now)
-        self._metric_service.gauge("orders.unknown", consistency["unknown"], timestamp=now)
-        self._metric_service.gauge("orders.state_mismatch", consistency["state_mismatches"], timestamp=now)
-        self._metric_service.gauge("orders.stuck_5m", consistency["stuck_5m"], timestamp=now)
-        self._metric_service.gauge("orders.pending_gt_30s", consistency["pending_gt_30s"], timestamp=now)
-        self._metric_service.gauge("orders.orphaned", consistency["orphaned"], timestamp=now)
+        self._metric_service.gauge(MetricName.ORDERS_PENDING.value, consistency["pending"], timestamp=now)
+        self._metric_service.gauge(MetricName.ORDERS_PROCESSING.value, consistency["processing"], timestamp=now)
+        self._metric_service.gauge(
+            MetricName.ORDERS_RECONCILIATION_REQUIRED.value, consistency["reconciliation"], timestamp=now
+        )
+        self._metric_service.gauge(MetricName.ORDERS_UNKNOWN.value, consistency["unknown"], timestamp=now)
+        self._metric_service.gauge(
+            MetricName.ORDERS_STATE_MISMATCH.value, consistency["state_mismatches"], timestamp=now
+        )
+        self._metric_service.gauge(MetricName.ORDERS_STUCK_5M.value, consistency["stuck_5m"], timestamp=now)
+        self._metric_service.gauge(
+            MetricName.ORDERS_PENDING_GT_30S.value, consistency["pending_gt_30s"], timestamp=now
+        )
+        self._metric_service.gauge(MetricName.ORDERS_ORPHANED.value, consistency["orphaned"], timestamp=now)
         self._metric_service.flush()
 
         return snapshot
@@ -172,10 +179,10 @@ class OrderLifecycleCollector:
     def _calculate_funnel_counts(
             self, pending: int, processing: int, reconciliation: int, unknown: int
     ) -> Dict[str, int]:
-        submitted = self._query_metric_sum("orders.submitted")
-        executed = self._query_metric_sum("orders.executed")
-        cancelled = self._query_metric_sum("orders.cancelled")
-        rejected = self._query_metric_sum("orders.rejected")
+        submitted = self._query_metric_sum(MetricName.ORDERS_SUBMITTED_TOTAL.value)
+        executed = self._query_metric_sum(MetricName.ORDERS_FILLED_TOTAL.value)
+        cancelled = self._query_metric_sum(MetricName.ORDERS_CANCELLED_TOTAL.value)
+        rejected = self._query_metric_sum(MetricName.ORDERS_REJECTED_TOTAL.value)
 
         return {
             "submitted": int(submitted),
@@ -189,9 +196,9 @@ class OrderLifecycleCollector:
         }
 
     def _calculate_stage_latencies(self) -> Dict[str, float]:
-        submit_p95 = self._query_metric_value("order.latency.submit", AggregationType.P95)
-        execution_p95 = self._query_metric_value("order.latency.execution", AggregationType.P95)
-        terminal_p95 = self._query_metric_value("order.latency.terminal", AggregationType.P95)
+        submit_p95 = self._query_metric_value(MetricName.ORDER_LATENCY_SUBMIT.value, AggregationType.P95)
+        execution_p95 = self._query_metric_value(MetricName.ORDER_LATENCY_EXECUTION.value, AggregationType.P95)
+        terminal_p95 = self._query_metric_value(MetricName.ORDER_LATENCY_TERMINAL.value, AggregationType.P95)
 
         return {
             "submit_ms_p95": round(submit_p95, 2),
@@ -217,10 +224,10 @@ class OrderLifecycleCollector:
             series = self._metric_service.query(MetricQuery(
                 metric_names=(name,),
                 aggregation=aggregation,
-                interval_seconds=86400 * 30,
+                interval_seconds=86400,
             ))
             if series and series[0].points:
-                return float(series[0].points[-1].value)
+                return series[0].points[-1].value
         except Exception:
             pass
         return 0.0

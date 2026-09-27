@@ -16,7 +16,8 @@ class MetricsQueryInput(BaseModel):
     metric_names: Optional[list[str]] = Field(
         default=None,
         description=(
-            "Names of metrics to query (e.g. ['orders.submitted', 'orders.executed', 'http.requests']). "
+            "Names of metrics to query (e.g. ['orders.submitted.total', 'orders.filled.total', "
+            "'trades.closed.total', 'pnl.realized.total', 'http.requests']). "
             "If omitted or empty, returns all registered metric names."
         ),
     )
@@ -30,11 +31,11 @@ class MetricsQueryInput(BaseModel):
     )
     aggregation: Optional[str] = Field(
         default=None,
-        description="Aggregation function ('sum', 'avg', 'min', 'max', 'last', 'count').",
+        description="Aggregation function ('sum', 'avg', 'min', 'max', 'last', 'count', 'p95').",
     )
     labels: Optional[dict[str, str]] = Field(
         default=None,
-        description="Optional key-value labels to filter metric samples.",
+        description="Optional key-value labels to filter metric samples (e.g. {'symbol': 'BTC_USD', 'strategy': 'HammerStrategy'}).",
     )
 
 
@@ -42,8 +43,9 @@ class MetricsTool(BaseTool, ApplicationLoggingMixin):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     name: str = "query_metrics"
     description: str = (
-        "Query historical time-series metrics (e.g. order submission/execution counts, "
-        "HTTP request latency/errors) or discover registered metrics for performance and system analysis."
+        "Query historical time-series metrics (e.g. canonical trading metrics 'orders.submitted.total', "
+        "'orders.filled.total', 'trades.closed.total', 'pnl.realized.total', 'risk.rejections.total' "
+        "or HTTP/exchange health metrics) or discover registered metrics for performance and quantitative analysis."
     )
     args_schema: Type[BaseModel] = MetricsQueryInput
     metric_service: MetricService

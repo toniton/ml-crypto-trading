@@ -11,8 +11,11 @@ from src.trading.events import (
     ConsensusEvaluatedEvent,
     DecisionRejectedEvent,
     DecisionRejectedReason,
+    OrderCancelledEvent,
     OrderFilledEvent,
+    OrderRejectedEvent,
     OrderSubmittedEvent,
+    PositionChangedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
     TradeClosedEvent,
@@ -22,13 +25,14 @@ from src.trading.events import (
 def _order() -> Order:
     return Order(
         uuid="test-order-1",
-        provider_name="BACKTEST",
+        provider_name="BINANCE",
         ticker_symbol="BTC_USD",
         price=Decimal("50000"),
         quantity="1.0",
         trade_action=TradeAction.BUY,
         created_time=100.0,
         commit_hash="abc1234",
+        winning_strategy="HammerStrategy",
     )
 
 
@@ -44,6 +48,7 @@ def _closed_trade() -> Trade:
         exit_fee=Decimal("52"),
         entry_timestamp=100.0,
         exit_timestamp=200.0,
+        slippage=Decimal("5"),
         commit_hash="abc1234",
         winning_strategy="HammerStrategy",
     )
@@ -62,6 +67,20 @@ class TestTradingMetricsCollector:
         snapshot = collector.get_funnel_snapshot("BTC_USD")
         assert snapshot["evaluations"] == 1
 
+        series = service.query(MetricQuery(
+            metric_names=("evaluations.total",),
+            labels={"symbol": "BTC_USD"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in series.points] == [1.0]
+
+        sig_series = service.query(MetricQuery(
+            metric_names=("signals.total",),
+            labels={"symbol": "BTC_USD", "action": "BUY"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in sig_series.points] == [1.0]
+
     def test_tracks_consensus_passed_metrics(self, db_manager):
         service = MetricService(db_manager)
         collector = TradingMetricsCollector(service)
@@ -79,7 +98,14 @@ class TestTradingMetricsCollector:
         snapshot = collector.get_funnel_snapshot("BTC_USD")
         assert snapshot["consensus_passed"] == 1
 
-    def test_tracks_rejections_grouped_by_reason(self, db_manager):
+        quorum_series = service.query(MetricQuery(
+            metric_names=("consensus.quorum.total",),
+            labels={"symbol": "BTC_USD", "action": "BUY", "quorum_met": "true"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in quorum_series.points] == [1.0]
+
+    def test_tracks_rejections_and_risk_metrics(self, db_manager):
         service = MetricService(db_manager)
         collector = TradingMetricsCollector(service)
         bus = MessageEventBus()
@@ -93,29 +119,77 @@ class TestTradingMetricsCollector:
         bus.publish(DecisionRejectedEvent(
             symbol="BTC_USD",
             action="BUY",
-            reason=DecisionRejectedReason.NEGATIVE_EDGE.value,
+            reason=DecisionRejectedReason.RISK_REJECTED.value,
         ))
 
         snapshot = collector.get_funnel_snapshot("BTC_USD")
         assert snapshot["rejections"] == {
             DecisionRejectedReason.BELOW_MIN_QUANTITY.value: 1,
-            DecisionRejectedReason.NEGATIVE_EDGE.value: 1,
+            DecisionRejectedReason.RISK_REJECTED.value: 1,
         }
 
-    def test_tracks_orders_and_fills_in_funnel(self, db_manager):
+        rej_series = service.query(MetricQuery(
+            metric_names=("decisions.rejected.total",),
+            labels={"symbol": "BTC_USD", "reason": DecisionRejectedReason.RISK_REJECTED.value},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in rej_series.points] == [1.0]
+
+        risk_series = service.query(MetricQuery(
+            metric_names=("risk.rejections.total",),
+            labels={"symbol": "BTC_USD"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in risk_series.points] == [2.0]
+
+    def test_tracks_order_lifecycle_metrics_with_labels(self, db_manager):
         service = MetricService(db_manager)
         collector = TradingMetricsCollector(service)
         bus = MessageEventBus()
         collector.subscribe(bus)
 
         order = _order()
+        order.executed_time = 100.25  # 250ms execution latency
+
         bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=order))
         bus.publish(OrderFilledEvent(symbol="BTC_USD", order=order))
+        bus.publish(OrderCancelledEvent(symbol="BTC_USD", order=order))
+        bus.publish(OrderRejectedEvent(symbol="BTC_USD", order=order, reason="INSUFFICIENT_MARGIN"))
 
         snapshot = collector.get_funnel_snapshot("BTC_USD")
         assert snapshot["orders_submitted"] == 1
+        assert snapshot["orders_filled"] == 1
 
-    def test_records_closed_trade_metrics(self, db_manager):
+        # Test canonical order metrics with labels
+        sub_series = service.query(MetricQuery(
+            metric_names=("orders.submitted.total",),
+            labels={"symbol": "BTC_USD", "exchange": "BINANCE", "action": "BUY", "strategy": "HammerStrategy"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in sub_series.points] == [1.0]
+
+        fill_series = service.query(MetricQuery(
+            metric_names=("orders.filled.total",),
+            labels={"symbol": "BTC_USD", "exchange": "BINANCE", "action": "BUY", "strategy": "HammerStrategy"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in fill_series.points] == [1.0]
+
+        cancel_series = service.query(MetricQuery(
+            metric_names=("orders.cancelled.total",),
+            labels={"symbol": "BTC_USD"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in cancel_series.points] == [1.0]
+
+        rej_series = service.query(MetricQuery(
+            metric_names=("orders.rejected.total",),
+            labels={"symbol": "BTC_USD", "reason": "INSUFFICIENT_MARGIN"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in rej_series.points] == [1.0]
+
+    def test_records_closed_trade_financial_metrics(self, db_manager):
         service = MetricService(db_manager)
         collector = TradingMetricsCollector(service)
         bus = MessageEventBus()
@@ -127,32 +201,57 @@ class TestTradingMetricsCollector:
         snapshot = collector.get_funnel_snapshot("BTC_USD")
         assert snapshot["trades_closed"] == 1
 
-    def test_funnel_conversion_rates_calculation(self, db_manager):
-        service = MetricService(db_manager)
-        collector = TradingMetricsCollector(service)
-        bus = MessageEventBus()
-        collector.subscribe(bus)
+        # Check trades.closed.total
+        closed_series = service.query(MetricQuery(
+            metric_names=("trades.closed.total",),
+            labels={"symbol": "BTC_USD", "strategy": "HammerStrategy", "commit_hash": "abc1234"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in closed_series.points] == [1.0]
 
-        bus.publish(StrategyEvaluatedEvent(symbol="BTC_USD", evaluated_at=100.0))
-        bus.publish(StrategyEvaluatedEvent(symbol="BTC_USD", evaluated_at=101.0))
-        bus.publish(SignalGeneratedEvent(symbol="BTC_USD", action="BUY", generated_at=100.0))
-        bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order()))
-        bus.publish(OrderFilledEvent(symbol="BTC_USD", order=_order()))
+        # Check pnl.realized.total (net_pnl = 2000 - 102 - 5 = 1893)
+        pnl_series = service.query(MetricQuery(
+            metric_names=("pnl.realized.total",),
+            labels={"symbol": "BTC_USD", "strategy": "HammerStrategy"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in pnl_series.points] == [1893.0]
 
-        snapshot = collector.get_funnel_snapshot("BTC_USD")
-        assert snapshot["conversion_rates"]["eval_to_signal_pct"] == 50.0
-
-    def test_query_metric_service_counters(self, db_manager):
-        service = MetricService(db_manager)
-        collector = TradingMetricsCollector(service)
-        bus = MessageEventBus()
-        collector.subscribe(bus)
-
-        bus.publish(StrategyEvaluatedEvent(symbol="BTC_USD", evaluated_at=100.0))
-
-        series = service.query(MetricQuery(
-            metric_names=("trading.evaluations.total",),
+        # Check fees.paid.total (50 + 52 = 102)
+        fees_series = service.query(MetricQuery(
+            metric_names=("fees.paid.total",),
             labels={"symbol": "BTC_USD"},
             interval_seconds=60,
         ))[0]
+        assert [point.value for point in fees_series.points] == [102.0]
+
+        # Check slippage.cost.total
+        slip_series = service.query(MetricQuery(
+            metric_names=("slippage.cost.total",),
+            labels={"symbol": "BTC_USD"},
+            interval_seconds=60,
+        ))[0]
+        assert [point.value for point in slip_series.points] == [5.0]
+
+    def test_records_position_changed_metrics(self, db_manager):
+        service = MetricService(db_manager)
+        collector = TradingMetricsCollector(service)
+        bus = MessageEventBus()
+        collector.subscribe(bus)
+
+        bus.publish(PositionChangedEvent(
+            symbol="BTC_USD",
+            action="BUY",
+            quantity=Decimal("1.0"),
+            price=Decimal("50000"),
+            position_qty=Decimal("1.0"),
+            realized_pnl=Decimal("0"),
+        ))
+
+        series = service.query(MetricQuery(
+            metric_names=("positions.changed.total",),
+            labels={"symbol": "BTC_USD", "action": "BUY"},
+            interval_seconds=60,
+        ))[0]
         assert [point.value for point in series.points] == [1.0]
+

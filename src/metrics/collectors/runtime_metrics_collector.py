@@ -9,6 +9,7 @@ import threading
 import time
 from typing import Any, Deque, Dict, Optional
 
+from src.metrics.models.constants import MetricName, MetricUnit
 from src.metrics.models.metric_type import AggregationType, MetricType
 from src.metrics.services.metric_service import MetricService
 
@@ -139,44 +140,44 @@ class RuntimeMetricsCollector:
 
     def _register_definitions(self) -> None:
         self._metric_service.register(
-            "runtime.uptime",
+            MetricName.RUNTIME_UPTIME.value,
             metric_type=MetricType.GAUGE,
-            unit="s",
+            unit=MetricUnit.SECONDS.value,
             description="Process uptime in seconds",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "runtime.memory",
+            MetricName.RUNTIME_MEMORY.value,
             metric_type=MetricType.GAUGE,
-            unit="MB",
+            unit=MetricUnit.MEGABYTES.value,
             description="Process resident set memory in MB",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "runtime.cpu",
+            MetricName.RUNTIME_CPU.value,
             metric_type=MetricType.GAUGE,
-            unit="%",
+            unit=MetricUnit.PERCENT_SIGN.value,
             description="Process CPU utilization percentage",
             aggregation=AggregationType.AVG,
         )
         self._metric_service.register(
-            "runtime.threads",
+            MetricName.RUNTIME_THREADS.value,
             metric_type=MetricType.GAUGE,
-            unit="count",
+            unit=MetricUnit.COUNT.value,
             description="Active thread count",
             aggregation=AggregationType.LAST,
         )
         self._metric_service.register(
-            "runtime.event_loop_lag",
+            MetricName.RUNTIME_EVENT_LOOP_LAG.value,
             metric_type=MetricType.HISTOGRAM,
-            unit="ms",
+            unit=MetricUnit.MILLISECONDS.value,
             description="Event loop tick lag in milliseconds",
             aggregation=AggregationType.P95,
         )
         self._metric_service.register(
-            "runtime.last_heartbeat",
+            MetricName.RUNTIME_LAST_HEARTBEAT.value,
             metric_type=MetricType.GAUGE,
-            unit="timestamp",
+            unit=MetricUnit.TIMESTAMP.value,
             description="Timestamp of the latest runtime heartbeat",
             aggregation=AggregationType.LAST,
         )
@@ -205,12 +206,12 @@ class RuntimeMetricsCollector:
         threads_count = self._process_tracker.get_threads_count()
         lag_stats = self._lag_monitor.get_stats()
 
-        self._metric_service.gauge("runtime.uptime", uptime_seconds, timestamp=now)
-        self._metric_service.gauge("runtime.memory", rss_mb, timestamp=now)
-        self._metric_service.gauge("runtime.cpu", cpu_percent, timestamp=now)
-        self._metric_service.gauge("runtime.threads", float(threads_count), timestamp=now)
-        self._metric_service.gauge("runtime.last_heartbeat", now.timestamp(), timestamp=now)
-        self._metric_service.observe("runtime.event_loop_lag", lag_stats["p95_ms"], timestamp=now)
+        self._metric_service.gauge(MetricName.RUNTIME_UPTIME.value, uptime_seconds, timestamp=now)
+        self._metric_service.gauge(MetricName.RUNTIME_MEMORY.value, rss_mb, timestamp=now)
+        self._metric_service.gauge(MetricName.RUNTIME_CPU.value, cpu_percent, timestamp=now)
+        self._metric_service.gauge(MetricName.RUNTIME_THREADS.value, float(threads_count), timestamp=now)
+        self._metric_service.gauge(MetricName.RUNTIME_LAST_HEARTBEAT.value, now.timestamp(), timestamp=now)
+        self._metric_service.observe(MetricName.RUNTIME_EVENT_LOOP_LAG.value, lag_stats["p95_ms"], timestamp=now)
         self._metric_service.flush()
 
         return self.get_health_snapshot(

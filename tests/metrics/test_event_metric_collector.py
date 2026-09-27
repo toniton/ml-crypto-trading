@@ -4,6 +4,7 @@ from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.events.message_event_bus import MessageEventBus
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
+from src.metrics.models.constants import MetricLabelKey, MetricName
 from src.metrics.models.metric_query import MetricQuery
 from src.metrics.services.metric_service import MetricService
 from src.trading.events import OrderFilledEvent, OrderSubmittedEvent
@@ -32,7 +33,10 @@ class TestEventMetricCollector:
         bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order()))
         bus.publish(OrderSubmittedEvent(symbol="BTC_USD", order=_order()))
 
-        series = service.query(MetricQuery(metric_names=("orders.submitted",), interval_seconds=60))[0]
+        series = service.query(MetricQuery(
+            metric_names=(MetricName.ORDERS_SUBMITTED_TOTAL.value,),
+            interval_seconds=60,
+        ))[0]
         assert [point.value for point in series.points] == [2.0]
 
     def test_increments_counter_with_labels_and_observes_latency(self, db_manager):
@@ -46,14 +50,18 @@ class TestEventMetricCollector:
         bus.publish(OrderFilledEvent(symbol="BTC_USD", order=order))
 
         series = service.query(MetricQuery(
-            metric_names=("orders.executed",),
-            labels={"provider": "BACKTEST", "symbol": "BTC_USD", "action": "BUY"},
+            metric_names=(MetricName.ORDERS_FILLED_TOTAL.value,),
+            labels={
+                MetricLabelKey.PROVIDER.value: "BACKTEST",
+                MetricLabelKey.SYMBOL.value: "BTC_USD",
+                MetricLabelKey.ACTION.value: "BUY",
+            },
             interval_seconds=60,
         ))[0]
         assert [point.value for point in series.points] == [1.0]
 
         latency_series = service.query(MetricQuery(
-            metric_names=("order.latency.execution",),
+            metric_names=(MetricName.ORDER_LATENCY_EXECUTION.value,),
             interval_seconds=60,
         ))[0]
         assert [point.value for point in latency_series.points] == [500.0]
@@ -68,5 +76,3 @@ class TestEventMetricCollector:
 
         series = service.query(MetricQuery(metric_names=("custom.orders",), interval_seconds=60))[0]
         assert [point.value for point in series.points] == [1.0]
-
-

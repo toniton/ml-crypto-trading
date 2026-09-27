@@ -4,6 +4,7 @@ import time
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from src.metrics.models.constants import MetricName
 from src.metrics.services.metric_service import MetricService
 
 
@@ -27,10 +28,10 @@ class RequestMetricsCollector:
             "route": route,
             "status_class": RequestMetricsCollector._status_class(status_code),
         }
-        self._metric_service.increment("http.requests", labels=labels)
-        self._metric_service.observe("http.request.duration", duration_ms, labels=labels)
+        self._metric_service.increment(MetricName.HTTP_REQUESTS.value, labels=labels)
+        self._metric_service.observe(MetricName.HTTP_REQUEST_DURATION.value, duration_ms, labels=labels)
         if status_code >= 400:
-            self._metric_service.increment("http.errors", labels=labels)
+            self._metric_service.increment(MetricName.HTTP_ERRORS.value, labels=labels)
         self._metric_service.flush()
 
 

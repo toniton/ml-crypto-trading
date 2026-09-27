@@ -13,6 +13,7 @@ from src.events.runtime_events import (
     RuntimeIncidentUpdatedEvent,
 )
 from src.events.trading_event import TradingEvent
+from src.metrics.models.constants import MetricLabelKey, MetricName, MetricUnit
 from src.metrics.models.metric_type import AggregationType, MetricType
 from src.metrics.services.metric_service import MetricService
 from src.trading.events import (
@@ -22,15 +23,23 @@ from src.trading.events import (
     OrderSubmittedEvent,
 )
 
-DEFAULT_EVENT_METRICS = {
-    OrderSubmittedEvent.__name__: "orders.submitted",
-    OrderFilledEvent.__name__: "orders.executed",
-    OrderCancelledEvent.__name__: "orders.cancelled",
-    OrderRejectedEvent.__name__: "orders.rejected",
-    RuntimeErrorCapturedEvent.__name__: "runtime.errors.total",
-    RuntimeIncidentCreatedEvent.__name__: "runtime.incidents.total",
-    RuntimeIncidentUpdatedEvent.__name__: "runtime.incident.occurrences",
+DEFAULT_EVENT_METRICS: dict[str, str] = {
+    OrderSubmittedEvent.__name__: MetricName.ORDERS_SUBMITTED_TOTAL.value,
+    OrderFilledEvent.__name__: MetricName.ORDERS_FILLED_TOTAL.value,
+    OrderCancelledEvent.__name__: MetricName.ORDERS_CANCELLED_TOTAL.value,
+    OrderRejectedEvent.__name__: MetricName.ORDERS_REJECTED_TOTAL.value,
+    RuntimeErrorCapturedEvent.__name__: MetricName.RUNTIME_ERRORS_TOTAL.value,
+    RuntimeIncidentCreatedEvent.__name__: MetricName.RUNTIME_INCIDENTS_TOTAL.value,
+    RuntimeIncidentUpdatedEvent.__name__: MetricName.RUNTIME_INCIDENT_OCCURRENCES.value,
 }
+
+_INCIDENT_PAYLOAD_LABEL_KEYS: tuple[str, ...] = (
+    MetricLabelKey.EXCHANGE.value,
+    "asset",
+    MetricLabelKey.SEVERITY.value,
+    MetricLabelKey.CATEGORY.value,
+    MetricLabelKey.COMPONENT.value,
+)
 
 
 class EventMetricCollector:
@@ -48,72 +57,72 @@ class EventMetricCollector:
 
     def _register_definitions(self) -> None:
         self._metric_service.register(
-            "runtime.errors.total",
+            MetricName.RUNTIME_ERRORS_TOTAL.value,
             metric_type=MetricType.COUNTER,
-            unit="errors",
+            unit=MetricUnit.ERRORS.value,
             description="Total captured runtime error count",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "runtime.incidents.total",
+            MetricName.RUNTIME_INCIDENTS_TOTAL.value,
             metric_type=MetricType.COUNTER,
-            unit="incidents",
+            unit=MetricUnit.INCIDENTS.value,
             description="Total created runtime incidents",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "runtime.incident.occurrences",
+            MetricName.RUNTIME_INCIDENT_OCCURRENCES.value,
             metric_type=MetricType.COUNTER,
-            unit="occurrences",
+            unit=MetricUnit.OCCURRENCES.value,
             description="Total runtime incident occurrence increments",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "orders.submitted",
+            MetricName.ORDERS_SUBMITTED_TOTAL.value,
             metric_type=MetricType.COUNTER,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Total submitted orders count",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "orders.executed",
+            MetricName.ORDERS_FILLED_TOTAL.value,
             metric_type=MetricType.COUNTER,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Total executed/filled orders count",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "orders.cancelled",
+            MetricName.ORDERS_CANCELLED_TOTAL.value,
             metric_type=MetricType.COUNTER,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Total cancelled orders count",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "orders.rejected",
+            MetricName.ORDERS_REJECTED_TOTAL.value,
             metric_type=MetricType.COUNTER,
-            unit="orders",
+            unit=MetricUnit.ORDERS.value,
             description="Total rejected orders count",
             aggregation=AggregationType.SUM,
         )
         self._metric_service.register(
-            "order.latency.submit",
+            MetricName.ORDER_LATENCY_SUBMIT.value,
             metric_type=MetricType.HISTOGRAM,
-            unit="ms",
+            unit=MetricUnit.MILLISECONDS.value,
             description="Signal to order submit latency in ms",
             aggregation=AggregationType.P95,
         )
         self._metric_service.register(
-            "order.latency.execution",
+            MetricName.ORDER_LATENCY_EXECUTION.value,
             metric_type=MetricType.HISTOGRAM,
-            unit="ms",
+            unit=MetricUnit.MILLISECONDS.value,
             description="Order submit to fill execution latency in ms",
             aggregation=AggregationType.P95,
         )
         self._metric_service.register(
-            "order.latency.terminal",
+            MetricName.ORDER_LATENCY_TERMINAL.value,
             metric_type=MetricType.HISTOGRAM,
-            unit="ms",
+            unit=MetricUnit.MILLISECONDS.value,
             description="Order submit to terminal state latency in ms",
             aggregation=AggregationType.P95,
         )
@@ -143,8 +152,8 @@ class EventMetricCollector:
             return payload_labels
 
         labels = cls._extract_order_labels(event)
-        if "symbol" not in labels and isinstance(event, TradingEvent) and event.asset:
-            labels["symbol"] = str(event.asset)
+        if MetricLabelKey.SYMBOL.value not in labels and isinstance(event, TradingEvent) and event.asset:
+            labels[MetricLabelKey.SYMBOL.value] = str(event.asset)
         return labels
 
     @staticmethod
@@ -158,8 +167,7 @@ class EventMetricCollector:
         if not isinstance(payload, dict):
             return None
 
-        keys = ("exchange", "asset", "severity", "category", "component")
-        return {key: str(payload[key]) for key in keys if payload.get(key)}
+        return {key: str(payload[key]) for key in _INCIDENT_PAYLOAD_LABEL_KEYS if payload.get(key)}
 
     @staticmethod
     def _extract_order(event: Event) -> Optional[Order | dict]:
@@ -186,11 +194,13 @@ class EventMetricCollector:
             action = order.trade_action
 
         if provider:
-            labels["provider"] = str(provider)
+            labels[MetricLabelKey.PROVIDER.value] = str(provider)
         if symbol:
-            labels["symbol"] = str(symbol)
+            labels[MetricLabelKey.SYMBOL.value] = str(symbol)
         if action:
-            labels["action"] = action.value if isinstance(action, TradeAction) else str(action)
+            labels[MetricLabelKey.ACTION.value] = (
+                action.value if isinstance(action, TradeAction) else str(action)
+            )
 
         return labels
 
@@ -208,7 +218,12 @@ class EventMetricCollector:
 
         if created_time is not None and executed_time is not None and executed_time >= created_time:
             latency_ms = (executed_time - created_time) * 1000.0
-            if metric_name == "orders.executed":
-                self._metric_service.observe("order.latency.execution", latency_ms, labels=labels)
-            if metric_name in ("orders.executed", "orders.cancelled"):
-                self._metric_service.observe("order.latency.terminal", latency_ms, labels=labels)
+            if metric_name in (MetricName.ORDERS_FILLED_TOTAL.value, "orders.executed"):
+                self._metric_service.observe(MetricName.ORDER_LATENCY_EXECUTION.value, latency_ms, labels=labels)
+            if metric_name in (
+                    MetricName.ORDERS_FILLED_TOTAL.value,
+                    "orders.executed",
+                    MetricName.ORDERS_CANCELLED_TOTAL.value,
+                    "orders.cancelled",
+            ):
+                self._metric_service.observe(MetricName.ORDER_LATENCY_TERMINAL.value, latency_ms, labels=labels)
