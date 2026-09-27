@@ -3,6 +3,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 from api.interfaces.account_balance import AccountBalance
+from api.interfaces.asset_schedule import AssetSchedule
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.session.session_manager import SessionManager
 
@@ -11,12 +12,18 @@ class TestAccountManager(unittest.TestCase):
     def setUp(self):
         self.mock_asset = MagicMock()
         self.mock_asset.exchange.value = "BINANCE"
+        self.mock_asset.base_ticker_symbol = "BTC"
         self.mock_asset.quote_ticker_symbol = "USDT"
+        self.mock_asset.ticker_symbol = "BTC_USDT"
+        self.mock_asset.schedule = AssetSchedule.EVERY_MINUTE
         self.mock_asset.key = "BTC/USDT"
         self.assets = [self.mock_asset]
         self.mock_websocket_manager = MagicMock()
         self.mock_rest_manager = MagicMock()
-        self.account_manager = AccountManager(self.assets, self.mock_rest_manager, self.mock_websocket_manager)
+        self.mock_session_manager = MagicMock(spec=SessionManager)
+        self.account_manager = AccountManager(
+            self.assets, self.mock_rest_manager, self.mock_websocket_manager, self.mock_session_manager
+        )
 
     def test_init_websocket(self):
         # Mocking WebSocketManager to return a list of services
@@ -29,56 +36,69 @@ class TestAccountManager(unittest.TestCase):
         self.assertTrue(callable(kwargs.get('callback')), "Callback should be passed")
 
     def test_init_account_balances_success(self):
-        mock_session_manager = MagicMock(spec=SessionManager)
-        mock_session_manager.get_trading_context.return_value = None
+        self.mock_session_manager.get_trading_context.return_value = None
         mock_balance = AccountBalance(currency="USDT", available_balance=Decimal("1000.0"))
 
         with patch.object(self.account_manager, 'get_quote_balance', return_value=mock_balance) as mock_get_balance:
-            self.account_manager.init_account_balances(mock_session_manager)
+            self.account_manager.init_account_balances()
 
             mock_get_balance.assert_called_with(self.mock_asset, "BINANCE")
-            mock_session_manager.init_asset_balance.assert_called_once()
-            call_args = mock_session_manager.init_asset_balance.call_args
+            self.mock_session_manager.init_asset_balance.assert_called_once()
+            call_args = self.mock_session_manager.init_asset_balance.call_args
             self.assertEqual(self.mock_asset, call_args[0][0])
             self.assertEqual(Decimal("1000.0"), call_args[0][1])
 
     def test_init_account_balances_failure(self):
-        mock_session_manager = MagicMock(spec=SessionManager)
-        mock_session_manager.get_trading_context.return_value = None
+        self.mock_session_manager.get_trading_context.return_value = None
 
         with patch.object(self.account_manager, 'get_quote_balance', side_effect=Exception("API Error")):
             with self.assertLogs(self.account_manager.app_logger.name, level='ERROR') as log:
-                self.account_manager.init_account_balances(mock_session_manager)
+                self.account_manager.init_account_balances()
                 self.assertIn("Unable to initialize account balance", log.output[0])
 
-            mock_session_manager.init_asset_balance.assert_not_called()
+            self.mock_session_manager.init_asset_balance.assert_not_called()
 
     def test_init_asset_balance_already_initialized_returns_true(self):
-        mock_session_manager = MagicMock(spec=SessionManager)
-        mock_session_manager.get_trading_context.return_value = MagicMock()
+        self.mock_session_manager.get_trading_context.return_value = MagicMock()
 
         with patch.object(self.account_manager, 'get_quote_balance') as mock_get_balance:
-            result = self.account_manager.init_asset_balance(self.mock_asset, mock_session_manager)
+            result = self.account_manager.init_asset_balance(self.mock_asset)
             self.assertTrue(result)
             mock_get_balance.assert_not_called()
-            mock_session_manager.init_asset_balance.assert_not_called()
+            self.mock_session_manager.init_asset_balance.assert_not_called()
 
     def test_init_asset_balance_success_returns_true(self):
-        mock_session_manager = MagicMock(spec=SessionManager)
-        mock_session_manager.get_trading_context.return_value = None
+        self.mock_session_manager.get_trading_context.return_value = None
         mock_balance = AccountBalance(currency="USDT", available_balance=Decimal("500.0"))
 
         with patch.object(self.account_manager, 'get_quote_balance', return_value=mock_balance):
-            result = self.account_manager.init_asset_balance(self.mock_asset, mock_session_manager)
+            result = self.account_manager.init_asset_balance(self.mock_asset)
             self.assertTrue(result)
-            mock_session_manager.init_asset_balance.assert_called_once_with(self.mock_asset, Decimal("500.0"))
+            self.mock_session_manager.init_asset_balance.assert_called_once_with(self.mock_asset, Decimal("500.0"))
+
+    def test_init_asset_balance_with_base_balance_bootstraps_position(self):
+        self.mock_session_manager.get_trading_context.return_value = None
+        mock_quote_balance = AccountBalance(currency="USDT", available_balance=Decimal("500.0"))
+        mock_base_balance = AccountBalance(currency="BTC", available_balance=Decimal("0.5"))
+        self.mock_rest_manager.get_market_data.return_value = MagicMock(close_price=Decimal("50000.0"))
+
+        with patch.object(self.account_manager, 'get_quote_balance', return_value=mock_quote_balance), \
+             patch.object(self.account_manager, 'get_base_balance', return_value=mock_base_balance):
+            result = self.account_manager.init_asset_balance(self.mock_asset)
+            self.assertTrue(result)
+            self.mock_rest_manager.get_market_data.assert_called_once_with("BINANCE", "BTC_USDT")
+            self.mock_session_manager.init_asset_balance.assert_called_once_with(
+                self.mock_asset,
+                Decimal("500.0"),
+                initial_position_qty=Decimal("0.5"),
+                initial_entry_price=Decimal("50000.0"),
+            )
 
     def test_init_asset_balance_failure_returns_false(self):
-        mock_session_manager = MagicMock(spec=SessionManager)
-        mock_session_manager.get_trading_context.return_value = None
+        self.mock_session_manager.get_trading_context.return_value = None
 
         with patch.object(self.account_manager, 'get_quote_balance', side_effect=RuntimeError("Timeout")):
-            result = self.account_manager.init_asset_balance(self.mock_asset, mock_session_manager)
+            result = self.account_manager.init_asset_balance(self.mock_asset)
             self.assertFalse(result)
 
     def test_get_balance_cached(self):
@@ -142,3 +162,11 @@ class TestAccountManager(unittest.TestCase):
         self.account_manager._cache_balances(provider_name, [new_balance])
         self.assertIn(provider_name, self.account_manager.balances)
         self.assertEqual(self.account_manager.balances[provider_name]["EUR"], new_balance)
+
+    def test_close_account_balances(self):
+        closing_balance = AccountBalance(currency="USDT", available_balance=Decimal("1200.0"))
+        with patch.object(self.account_manager, "get_quote_balance", return_value=closing_balance):
+            self.account_manager.close_account_balances()
+            self.mock_session_manager.close_asset_balance.assert_called_once_with(
+                self.mock_asset.key, Decimal("1200.0")
+            )

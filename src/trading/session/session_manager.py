@@ -70,7 +70,14 @@ class SessionManager:
             self.current_session.session_time.start_time = time.time()
             self.is_running.set()
 
-    def init_asset_balance(self, asset: Asset, starting_balance: Decimal) -> None:
+    def init_asset_balance(
+            self,
+            asset: Asset,
+            starting_balance: Decimal,
+            initial_position_qty: Decimal = Decimal("0"),
+            initial_entry_price: Decimal = Decimal("0"),
+            timestamp: Optional[float] = None,
+    ) -> None:
         with self._lock:
             if not self.current_session:
                 raise ValueError("No active session.")
@@ -82,6 +89,25 @@ class SessionManager:
                 starting_balance=starting_balance, ticker_symbol=asset.ticker_symbol,
                 exchange=asset.exchange.value, commit_hash=self.current_session.commit_hash
             )
+            if initial_position_qty > Decimal("0"):
+                ctx.position_qty = initial_position_qty
+                ctx.avg_entry_price = initial_entry_price
+                ts = timestamp if timestamp is not None else time.time()
+                lot = PositionLot.create(
+                    order_uuid=f"BOOTSTRAP_{asset.ticker_symbol}",
+                    ticker_symbol=asset.ticker_symbol,
+                    price=initial_entry_price,
+                    quantity=initial_position_qty,
+                    fee=Decimal("0"),
+                    timestamp=ts,
+                    winning_strategy="BOOTSTRAP",
+                )
+                ctx.position_lots.append(lot)
+                ctx.open_positions.append(PositionEntry(
+                    price=initial_entry_price,
+                    quantity=initial_position_qty,
+                    timestamp=ts,
+                ))
             self.current_session.trading_contexts[asset.key] = ctx
 
     def get_trading_context(self, asset_key: int) -> Optional[TradingContext]:
@@ -106,6 +132,14 @@ class SessionManager:
             ctx = self.current_session.trading_contexts.get(asset_key)
             if ctx is not None:
                 ctx.available_balance = available_balance
+
+    def close_asset_balance(self, asset_key: int, closing_balance: Decimal) -> None:
+        with self._lock:
+            if not self.current_session:
+                return
+            ctx = self.current_session.trading_contexts.get(asset_key)
+            if ctx is not None:
+                ctx.closing_balance = closing_balance
 
     def record_order_fill(self, order: Order) -> list[Trade]:
         with self._lock:
@@ -366,13 +400,15 @@ class SessionManager:
                 return 0.0
             return ctx.profit_factor
 
-    def end_session(self) -> None:
+    def end_session(self) -> Optional[TradingSession]:
         with self._lock:
             if not self.current_session or not self.is_running.is_set():
-                return
+                return None
             self.current_session.session_time.end_time = time.time()
             self.is_running.clear()
+            session = self.current_session
             self.current_session = None
+            return session
 
     def reset_session(self) -> None:
         with self._lock:

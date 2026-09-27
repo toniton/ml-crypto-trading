@@ -82,6 +82,31 @@ def test_session_manager_init_asset_balance_idempotent():
     assert session_mgr.get_trading_context(123).starting_balance == Decimal("100.0")
 
 
+def test_session_manager_init_asset_balance_with_initial_position():
+    session_mgr = SessionManager()
+    session_mgr.create_session(session_id="test_init_pos")
+    mock_asset = MagicMock()
+    mock_asset.key = 456
+    mock_asset.ticker_symbol = "DOGE_USD"
+    mock_asset.exchange.value = "KRAKEN"
+
+    session_mgr.init_asset_balance(
+        mock_asset,
+        starting_balance=Decimal("50.0"),
+        initial_position_qty=Decimal("56.0"),
+        initial_entry_price=Decimal("0.10"),
+    )
+
+    ctx = session_mgr.get_trading_context(456)
+    assert ctx.position_qty == Decimal("56.0")
+    assert ctx.avg_entry_price == Decimal("0.10")
+    assert len(ctx.position_lots) == 1
+    assert ctx.position_lots[0].quantity == Decimal("56.0")
+    assert ctx.position_lots[0].price == Decimal("0.10")
+    assert ctx.position_lots[0].order_uuid == "BOOTSTRAP_DOGE_USD"
+    assert len(ctx.open_positions) == 1
+
+
 def test_manager_factory_injects_config_vcs_into_session_manager():
     mock_vcs = MagicMock()
     mock_db = MagicMock()
@@ -93,3 +118,26 @@ def test_manager_factory_injects_config_vcs_into_session_manager():
 
     # pylint: disable=protected-access
     assert container.session_manager._config_vcs is mock_vcs
+
+
+def test_session_manager_close_asset_balance_and_end_session():
+    session_mgr = SessionManager()
+    session_mgr.create_session(session_id="close_test")
+    session_mgr.start_session()
+
+    mock_asset = MagicMock()
+    mock_asset.key = 789
+    mock_asset.ticker_symbol = "ETH_USD"
+    mock_asset.exchange.value = "BINANCE"
+
+    session_mgr.init_asset_balance(mock_asset, starting_balance=Decimal("1000.0"))
+    session_mgr.close_asset_balance(789, Decimal("1150.0"))
+
+    ctx = session_mgr.get_trading_context(789)
+    assert ctx.closing_balance == Decimal("1150.0")
+
+    ended_session = session_mgr.end_session()
+    assert ended_session is not None
+    assert ended_session.session_id == "close_test"
+    assert ended_session.session_time.end_time is not None
+    assert session_mgr.current_session is None

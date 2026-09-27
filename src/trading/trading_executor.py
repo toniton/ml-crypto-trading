@@ -61,6 +61,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.consensus_manager.set_factors(self.assets)
         self.session_manager = manager_container.session_manager
         self.protection_manager = manager_container.protection_manager
+        self.portfolio_risk_manager = manager_container.portfolio_risk_manager
         self.websocket_manager = manager_container.websocket_manager
         self.activity_queue = activity_queue
         self._strategies_registry = strategies_registry or StrategyRegistry()
@@ -112,7 +113,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def init_application(self):
         self.session_manager.create_session(session_id=str(uuid.uuid4())).start_session()
-        self.account_manager.init_account_balances(self.session_manager)
+        self.account_manager.init_account_balances()
         self.fees_manager.init_fees()
         self.websocket_manager.connect()
         self.account_manager.init_websocket()
@@ -173,6 +174,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         fees = self.fees_manager.get_instrument_fees(asset.exchange.value, asset.ticker_symbol)
         candles = self.market_data_manager.get_candles(asset)
 
+        if self.portfolio_risk_manager:
+            self.portfolio_risk_manager.update_cash_balance(
+                asset.exchange.value, asset.quote_ticker_symbol, quote_balance.available_balance
+            )
+            self.portfolio_risk_manager.update_market_data(asset, market_data)
+
         self._publish_event(MarketStateChangedEvent(
             symbol=asset.ticker_symbol,
             price=market_data.close_price,
@@ -202,9 +209,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def _process_buy_asset(self, asset: Asset) -> None:
         if self.session_manager and self.session_manager.get_trading_context(asset.key) is None:
-            if self.account_manager and not self.account_manager.init_asset_balance(
-                    asset, self.session_manager
-            ):
+            if self.account_manager and not self.account_manager.init_asset_balance(asset):
                 self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
                 return
 
@@ -216,6 +221,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if trading_context is None and self.session_manager is not None:
             self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
             return
+
+        if self.portfolio_risk_manager and trading_context:
+            self.portfolio_risk_manager.update_position(asset, trading_context.position_qty)
 
         decision = self._evaluate_decision(asset, TradeAction.BUY, trading_context, market_data, candles)
         if decision is None or not decision.quorum:
@@ -261,6 +269,19 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             ))
             return
 
+        if self.portfolio_risk_manager:
+            can_trade, reject_reason = self.portfolio_risk_manager.can_trade(
+                asset, TradeAction.BUY, order_cost, market_data
+            )
+            if not can_trade:
+                self._publish_event(DecisionRejectedEvent(
+                    symbol=asset.ticker_symbol,
+                    action=TradeAction.BUY.value,
+                    reason=DecisionRejectedReason.RISK_REJECTED.value,
+                    details={"reason": reject_reason},
+                ))
+                return
+
         quantity = format(quantity_val, "f")
         self._submit_buy_order(asset, price, quantity, market_data, decision)
 
@@ -286,6 +307,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
         )
+        if self.portfolio_risk_manager:
+            self.portfolio_risk_manager.reserve_order_cash(
+                asset, buy_order.uuid, price * Decimal(quantity)
+            )
         self.activity_queue.put_nowait(buy_order.model_dump_json())
 
         self._publish_event(OrderSubmittedEvent(
@@ -316,7 +341,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     def _process_sell_asset(self, asset: Asset) -> None:
         trading_context = self.session_manager.get_trading_context(asset.key) if self.session_manager else None
         if trading_context is None and self.session_manager and self.account_manager:
-            if not self.account_manager.init_asset_balance(asset, self.session_manager):
+            if not self.account_manager.init_asset_balance(asset):
                 return
             trading_context = self.session_manager.get_trading_context(asset.key)
         if not trading_context or not trading_context.open_positions:
@@ -400,9 +425,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.market_data_manager.shutdown()
         self.order_manager.shutdown()
         self.account_manager.shutdown()
-        self.account_manager.close_account_balances(self.session_manager)
+        self.account_manager.close_account_balances()
         session = self.session_manager.end_session()
-        self._print_session_summary(session)
+        if session:
+            self._print_session_summary(session)
 
     def _print_session_summary(self, session: TradingSession) -> None:
         session_summary = self.session_manager.get_session_summary(session)

@@ -44,8 +44,10 @@ class ExecutionGuardrailsTest(TestCase):
         self.mock_session_mgr = MagicMock()
         self.mock_consensus_mgr = MagicMock()
         self.mock_protection_mgr = MagicMock()
+        self.mock_portfolio_risk_mgr = MagicMock()
 
         self.mock_protection_mgr.can_trade.return_value = True
+        self.mock_portfolio_risk_mgr.can_trade.return_value = (True, None)
 
         self.container = ManagerContainer(
             account_manager=self.mock_account_mgr,
@@ -55,6 +57,7 @@ class ExecutionGuardrailsTest(TestCase):
             session_manager=self.mock_session_mgr,
             consensus_manager=self.mock_consensus_mgr,
             protection_manager=self.mock_protection_mgr,
+            portfolio_risk_manager=self.mock_portfolio_risk_mgr,
             websocket_manager=MagicMock(),
             rest_manager=MagicMock(),
         )

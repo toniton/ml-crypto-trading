@@ -55,12 +55,14 @@ class TestManagerIsolation(unittest.TestCase):
 
         ws_manager1 = Mock()
         rest_manager1 = Mock()
-        manager1 = AccountManager([asset1], rest_manager1, ws_manager1)
+        session_manager1 = Mock()
+        manager1 = AccountManager([asset1], rest_manager1, ws_manager1, session_manager1)
         manager1.balances = {"provider1": {"USD": Mock(available_balance=1000)}}
 
         ws_manager2 = Mock()
         rest_manager2 = Mock()
-        manager2 = AccountManager([asset2], rest_manager2, ws_manager2)
+        session_manager2 = Mock()
+        manager2 = AccountManager([asset2], rest_manager2, ws_manager2, session_manager2)
 
         self.assertEqual(len(manager2.balances), 0, "New AccountManager should have empty balances")
         self.assertIn("provider1", manager1.balances, "Original AccountManager should retain balances")

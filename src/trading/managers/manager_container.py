@@ -6,6 +6,7 @@ from src.trading.session.session_manager import SessionManager
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
+from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.exchange.managers.rest_manager import RestManager
@@ -22,3 +23,4 @@ class ManagerContainer:
     session_manager: SessionManager
     websocket_manager: WebSocketManager
     rest_manager: RestManager
+    portfolio_risk_manager: PortfolioRiskManager

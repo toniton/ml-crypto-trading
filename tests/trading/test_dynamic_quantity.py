@@ -32,6 +32,8 @@ class TestDynamicQuantity(unittest.TestCase):
         self.fees_manager = MagicMock()
         self.order_manager = MagicMock()
         self.protection_manager = MagicMock()
+        self.portfolio_risk_manager = MagicMock()
+        self.portfolio_risk_manager.can_trade.return_value = (True, None)
         self.websocket_manager = MagicMock()
 
         manager_container.account_manager = self.account_manager
@@ -41,6 +43,7 @@ class TestDynamicQuantity(unittest.TestCase):
         manager_container.fees_manager = self.fees_manager
         manager_container.order_manager = self.order_manager
         manager_container.protection_manager = self.protection_manager
+        manager_container.portfolio_risk_manager = self.portfolio_risk_manager
         manager_container.websocket_manager = self.websocket_manager
 
         executor = TradingExecutor(assets, manager_container, activity_queue, dynamic_quantity=dynamic_quantity)

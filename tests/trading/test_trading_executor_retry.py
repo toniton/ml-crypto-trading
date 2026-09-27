@@ -29,6 +29,8 @@ class TestTradingExecutorRetry(unittest.TestCase):
         self.fees_manager = MagicMock()
         self.order_manager = MagicMock()
         self.protection_manager = MagicMock()
+        self.portfolio_risk_manager = MagicMock()
+        self.portfolio_risk_manager.can_trade.return_value = (True, None)
         self.websocket_manager = MagicMock()
 
         container = MagicMock(spec=ManagerContainer)
@@ -39,6 +41,7 @@ class TestTradingExecutorRetry(unittest.TestCase):
         container.fees_manager = self.fees_manager
         container.order_manager = self.order_manager
         container.protection_manager = self.protection_manager
+        container.portfolio_risk_manager = self.portfolio_risk_manager
         container.websocket_manager = self.websocket_manager
 
         self.activity_queue = Queue()
@@ -74,7 +77,7 @@ class TestTradingExecutorRetry(unittest.TestCase):
 
         self.executor.create_buy_order([self.asset])
 
-        self.account_manager.init_asset_balance.assert_called_once_with(self.asset, self.session_manager)
+        self.account_manager.init_asset_balance.assert_called_once_with(self.asset)
 
     def test_create_buy_order_skips_when_retry_fails(self):
         self.session_manager.get_trading_context.return_value = None
@@ -82,7 +85,7 @@ class TestTradingExecutorRetry(unittest.TestCase):
 
         self.executor.create_buy_order([self.asset])
 
-        self.account_manager.init_asset_balance.assert_called_once_with(self.asset, self.session_manager)
+        self.account_manager.init_asset_balance.assert_called_once_with(self.asset)
         self.market_data_manager.get_market_data.assert_not_called()
 
     def test_create_sell_order_retries_and_succeeds_when_uninitialized(self):
@@ -96,7 +99,7 @@ class TestTradingExecutorRetry(unittest.TestCase):
 
         self.executor.create_sell_order([self.asset])
 
-        self.account_manager.init_asset_balance.assert_called_once_with(self.asset, self.session_manager)
+        self.account_manager.init_asset_balance.assert_called_once_with(self.asset)
 
     def test_create_sell_order_skips_when_retry_fails(self):
         self.session_manager.get_trading_context.return_value = None
@@ -104,5 +107,5 @@ class TestTradingExecutorRetry(unittest.TestCase):
 
         self.executor.create_sell_order([self.asset])
 
-        self.account_manager.init_asset_balance.assert_called_once_with(self.asset, self.session_manager)
+        self.account_manager.init_asset_balance.assert_called_once_with(self.asset)
         self.market_data_manager.get_market_data.assert_not_called()

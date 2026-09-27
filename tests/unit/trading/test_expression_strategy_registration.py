@@ -18,6 +18,7 @@ from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.consensus.strategies.hammer_accumulation_strategy import HammerAccumulationStrategy
 from src.trading.strategies.expression_strategy import ExpressionStrategy
 from src.trading.strategies.strategy_registry import StrategyRegistry
+from src.trading.strategies.strategy_resolver import StrategyResolver
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -76,6 +77,7 @@ def _make_executor(predefined=None, assets=None):
         consensus_manager=consensus_manager,
         session_manager=None,
         protection_manager=None,
+        portfolio_risk_manager=None,
         websocket_manager=None,
     )
     return TradingExecutor(
@@ -161,7 +163,6 @@ def test_registers_builtin_static_strategy():
 
 
 def test_unknown_reference_fails_registration():
-    from src.trading.strategies.strategy_resolver import StrategyResolver
     with pytest.raises(ValueError, match="NoSuchStrategy"):
         StrategyResolver.resolve_asset(
             _asset(("BTC", "USD"), strategies=[_dynamic_reference("NoSuchStrategy")]), StrategyRegistry()

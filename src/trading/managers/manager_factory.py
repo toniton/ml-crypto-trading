@@ -9,6 +9,7 @@ from src.trading.fees.fees_manager import FeesManager
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
+from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
@@ -43,9 +44,10 @@ class ManagerFactory:
             synchronous_execution=synchronous_execution, event_bus=event_bus,
             session_manager=session_manager,
         )
+        portfolio_risk_manager = PortfolioRiskManager(assets=assets, event_bus=event_bus)
 
         container = ManagerContainer(
-            account_manager=AccountManager(assets, rest_manager, websocket_manager),
+            account_manager=AccountManager(assets, rest_manager, websocket_manager, session_manager),
             fees_manager=FeesManager(assets, rest_manager),
             order_manager=order_manager,
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
@@ -54,5 +56,6 @@ class ManagerFactory:
             session_manager=session_manager,
             websocket_manager=websocket_manager,
             rest_manager=rest_manager,
+            portfolio_risk_manager=portfolio_risk_manager,
         )
         return container, trading_journal

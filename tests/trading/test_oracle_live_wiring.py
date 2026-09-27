@@ -38,6 +38,8 @@ def _manager_container() -> MagicMock:
     manager_container.fees_manager = MagicMock()
     manager_container.order_manager = MagicMock()
     manager_container.protection_manager = MagicMock()
+    manager_container.portfolio_risk_manager = MagicMock()
+    manager_container.portfolio_risk_manager.can_trade.return_value = (True, None)
     manager_container.websocket_manager = MagicMock()
     return manager_container
 
