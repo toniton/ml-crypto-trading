@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 class AgentIntent(str, Enum):
     CONFIGURATION = "configuration"
     PERFORMANCE_ANALYSIS = "performance_analysis"
+    PORTFOLIO_REVIEW = "portfolio_review"
     RISK_ANALYSIS = "risk_analysis"
     MARKET_ANALYSIS = "market_analysis"
     REPORTING = "reporting"

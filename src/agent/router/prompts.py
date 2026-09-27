@@ -12,7 +12,10 @@ Known intents:
   guards, LLM settings).
 - "performance_analysis": the user asks why a strategy performed a certain way,
   or to analyze past trading performance.
-- "risk_analysis": the user asks about exposure, drawdown, position size risk,
+- "portfolio_review": the user asks to review, inspect, or summarize their portfolio,
+  asset allocations, total mark-to-market equity, available cash reserves, drawdown
+  against peak equity, or concentration risk.
+- "risk_analysis": the user asks about risk parameters, position size risk,
   or risk-adjusted returns.
 - "market_analysis": the user asks about the market, news, or sentiment.
 - "reporting": the user asks for a report or a summary of activity.

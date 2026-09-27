@@ -5,9 +5,11 @@ from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
 from src.llm.tools.configuration_tool import ConfigurationTool
 from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
+from src.llm.tools.exchange_read_tool import ExchangeReadOnlyTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
 from src.llm.tools.metrics_tool import MetricsTool
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
+from src.llm.tools.portfolio_summary_tool import PortfolioSummaryTool
 from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
 from src.llm.tools.session_summary_tool import SessionSummaryTool
@@ -23,9 +25,11 @@ __all__ = [
     "ConfigurationTool",
     "ConsensusTool",
     "ExchangeFeesTool",
+    "ExchangeReadOnlyTool",
     "GetOpenOrdersTool",
     "MarketStatisticsTool",
     "MetricsTool",
+    "PortfolioSummaryTool",
     "PositionTool",
     "RecentTradesTool",
     "SessionSummaryTool",

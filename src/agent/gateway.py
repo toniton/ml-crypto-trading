@@ -8,6 +8,7 @@ from src.agent.backtest.graph import BacktestGraph
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.graph import ConfigurationGraph
 from src.agent.configuration.models import ClarificationResult, ConfigurationResult, GeneralResult
+from src.agent.portfolio_insights.graph import PortfolioInsightsGraph
 from src.agent.performance_analysis.graph import PerformanceAnalysisGraph
 from src.agent.router.graph import RouterGraph
 from src.agent.router.models import AgentIntent, AgentRoute
@@ -174,7 +175,13 @@ class AgentGateway:
                 presentation_node="present_analysis",
                 capabilities=frozenset({"metrics.read", "reports.read", "logs.read", "trading_config.read"}),
             ),
-
+            AgentDefinition(
+                name="portfolio_review",
+                description="Analyzes total mark-to-market equity, quote portfolio cash reserves, drawdowns, and asset concentration",
+                graph=PortfolioInsightsGraph(llm).build(),
+                presentation_node="present_insights",
+                capabilities=frozenset({"portfolio.read", "exchange.read", "trading_config.read"}),
+            ),
             AgentDefinition(
                 name="risk_analysis",
                 description="Analyzes exposure, drawdown, position sizing, and risk-adjusted returns",
@@ -225,6 +232,7 @@ class AgentGateway:
         for intent, name in (
                 (AgentIntent.CONFIGURATION, "configuration"),
                 (AgentIntent.PERFORMANCE_ANALYSIS, "performance_analysis"),
+                (AgentIntent.PORTFOLIO_REVIEW, "portfolio_review"),
                 (AgentIntent.RISK_ANALYSIS, "risk_analysis"),
                 (AgentIntent.MARKET_ANALYSIS, "market_analysis"),
                 (AgentIntent.REPORTING, "reporting"),

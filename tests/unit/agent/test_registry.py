@@ -34,6 +34,13 @@ class TestDefaultRegistry:
         assert definition.graph is not None
         assert definition.presentation_node == "present_proposal"
 
+    def test_portfolio_review_agent_has_graph(self, vcs):
+        registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
+        definition = registry.get(AgentIntent.PORTFOLIO_REVIEW)
+        assert definition.name == "portfolio_review"
+        assert definition.graph is not None
+        assert definition.presentation_node == "present_insights"
+
     def test_specialized_agents_registered_as_stubs(self, vcs):
         registry = AgentGateway.build_default_registry(FakeLlmAdapter(), vcs=vcs)
         for intent in (
