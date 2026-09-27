@@ -14,6 +14,7 @@ def make_order(
         dt: datetime,
         fees: float = 0.0,
         fill_price: float = None,
+        slippage: float = 0.0,
 ) -> Order:
     return Order(
         uuid=uuid,
@@ -28,6 +29,7 @@ def make_order(
         commit_hash="56339b9",
         executed_time=dt.timestamp(),
         fees=Decimal(str(fees)),
+        slippage=Decimal(str(slippage)),
     )
 
 
@@ -121,3 +123,45 @@ def test_commit_attribution_populated():
 
     assert "c0ffee1" in res.commit_attribution
     assert res.commit_attribution["c0ffee1"].win_rate_pct == 100.0
+
+
+def test_extract_trades_and_compute_metrics_with_slippage():
+    # BUY 10 @ 100, fee 1.00, slippage 0.50 ($0.05/unit entry slippage)
+    # BUY 10 @ 100, fee 1.00, slippage 0.30 ($0.03/unit entry slippage)
+    # SELL 20 @ 110, fee 2.00, slippage 0.20 ($0.01/unit exit slippage)
+    #
+    # Trade 1: matched against Lot 1 (qty 10)
+    #   gross = (110 - 100) * 10 = +100
+    #   fees = 1.00 (entry) + 1.00 (exit) = 2.00
+    #   slippage = (0.05 * 10) + (0.01 * 10) = 0.50 + 0.10 = 0.60
+    #   net_pnl = 100 - 2.00 - 0.60 = 97.40
+    # Trade 2: matched against Lot 2 (qty 10)
+    #   gross = (110 - 100) * 10 = +100
+    #   fees = 1.00 (entry) + 1.00 (exit) = 2.00
+    #   slippage = (0.03 * 10) + (0.01 * 10) = 0.30 + 0.10 = 0.40
+    #   net_pnl = 100 - 2.00 - 0.40 = 97.60
+    #
+    # Total slippage conserved = 0.60 + 0.40 = 1.00 = 0.50 + 0.30 + 0.20
+    # Total realized net P&L = 97.40 + 97.60 = 195.00
+    dt1 = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+    dt2 = datetime(2026, 9, 1, 11, 0, 0, tzinfo=timezone.utc)
+    dt3 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+
+    orders = [
+        make_order("o1", TradeAction.BUY, 100.0, "10", dt1, fees=1.00, slippage=0.50),
+        make_order("o2", TradeAction.BUY, 100.0, "10", dt2, fees=1.00, slippage=0.30),
+        make_order("o3", TradeAction.SELL, 110.0, "20", dt3, fees=2.00, slippage=0.20),
+    ]
+
+    trades = AssetPerformanceService.extract_trades("BTC_USD", orders)
+    assert len(trades) == 2
+    assert trades[0].slippage == Decimal("0.60")
+    assert trades[1].slippage == Decimal("0.40")
+    assert trades[0].net_pnl == Decimal("97.40")
+    assert trades[1].net_pnl == Decimal("97.60")
+
+    res = AssetPerformanceService.compute_metrics(
+        "BTC_USD", datetime(2026, 9, 1, tzinfo=timezone.utc), datetime(2026, 9, 10, tzinfo=timezone.utc), orders
+    )
+    assert Decimal(res.summary.realized_pnl) == Decimal("195.00")
+

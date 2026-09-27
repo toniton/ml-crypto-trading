@@ -26,12 +26,14 @@ class FifoTradeMatcher:
         completed_trades: list[Trade] = []
         sell_remaining = exit_quantity
         sell_fee_per_unit = (exit_fee / exit_quantity) if exit_quantity > Decimal(0) else Decimal(0)
-        slippage_per_unit = (exit_slippage / exit_quantity) if exit_quantity > Decimal(0) else Decimal(0)
+        exit_slippage_per_unit = (exit_slippage / exit_quantity) if exit_quantity > Decimal(0) else Decimal(0)
 
         while sell_remaining > Decimal(0) and lots:
             lot = lots[0]
             matched_qty = min(sell_remaining, lot.remaining_quantity)
-            lot_slippage = slippage_per_unit * matched_qty
+            entry_slippage_portion = lot.slippage_per_unit * matched_qty
+            exit_slippage_portion = exit_slippage_per_unit * matched_qty
+            total_matched_slippage = entry_slippage_portion + exit_slippage_portion
 
             trade = Trade.create(
                 ticker_symbol=ticker_symbol,
@@ -44,7 +46,7 @@ class FifoTradeMatcher:
                 exit_fee=sell_fee_per_unit * matched_qty,
                 entry_timestamp=lot.timestamp,
                 exit_timestamp=exit_timestamp,
-                slippage=lot_slippage,
+                slippage=total_matched_slippage,
                 commit_hash=commit_hash,
                 winning_strategy=winning_strategy or lot.winning_strategy,
                 strategy_votes=strategy_votes or lot.strategy_votes,

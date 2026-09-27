@@ -123,6 +123,7 @@ class SessionManager:
             )
             quantity = Decimal(str(order.quantity))
             fee = order.fees if order.fees is not None else Decimal(0)
+            slippage = order.slippage if getattr(order, "slippage", None) is not None else Decimal(0)
             timestamp = float(
                 order.executed_time
                 if order.executed_time is not None
@@ -131,11 +132,11 @@ class SessionManager:
             ctx.last_market_activity_time = timestamp
 
             if order.trade_action == TradeAction.BUY:
-                self._record_buy_fill(ctx, order, fill_price, quantity, fee, timestamp)
+                self._record_buy_fill(ctx, order, fill_price, quantity, fee, slippage, timestamp)
                 return []
 
             if order.trade_action == TradeAction.SELL:
-                return self._record_sell_fill(ctx, order, fill_price, quantity, fee, timestamp)
+                return self._record_sell_fill(ctx, order, fill_price, quantity, fee, slippage, timestamp)
 
             return []
 
@@ -154,6 +155,7 @@ class SessionManager:
             fill_price: Decimal,
             quantity: Decimal,
             fee: Decimal,
+            slippage: Decimal,
             timestamp: float,
     ) -> None:
         ctx.lowest_buy = min(ctx.lowest_buy, fill_price)
@@ -172,6 +174,7 @@ class SessionManager:
             timestamp=timestamp,
             winning_strategy=order.winning_strategy,
             strategy_votes=order.strategy_votes,
+            slippage=slippage,
         )
         ctx.position_lots.append(lot)
         if quantity > Decimal(0):
@@ -186,6 +189,7 @@ class SessionManager:
             fill_price: Decimal,
             quantity: Decimal,
             fee: Decimal,
+            slippage: Decimal,
             timestamp: float,
     ) -> list[Trade]:
         ctx.lowest_sell = min(ctx.lowest_sell, fill_price)
@@ -200,7 +204,7 @@ class SessionManager:
             ctx.exit_qty += quantity
             ctx.avg_exit_price = total_exit_value / ctx.exit_qty
 
-        completed_trades = self._match_fifo_lots(ctx, order, fill_price, quantity, fee, timestamp)
+        completed_trades = self._match_fifo_lots(ctx, order, fill_price, quantity, fee, slippage, timestamp)
         ctx.position_qty = max(Decimal(0), ctx.position_qty - quantity)
         if ctx.position_qty == Decimal(0):
             ctx.avg_entry_price = Decimal(0)
@@ -213,6 +217,7 @@ class SessionManager:
             fill_price: Decimal,
             quantity: Decimal,
             fee: Decimal,
+            slippage: Decimal,
             timestamp: float,
     ) -> list[Trade]:
         completed_trades, sell_remaining = FifoTradeMatcher.match_lots(
@@ -226,6 +231,7 @@ class SessionManager:
             commit_hash=order.commit_hash or ctx.commit_hash,
             winning_strategy=order.winning_strategy,
             strategy_votes=order.strategy_votes,
+            exit_slippage=slippage,
         )
         for trade in completed_trades:
             ctx.trades.append(trade)
@@ -233,9 +239,11 @@ class SessionManager:
 
         if sell_remaining > Decimal(0):
             sell_fee_per_unit = (fee / quantity) if quantity > Decimal(0) else Decimal(0)
+            exit_slippage_per_unit = (slippage / quantity) if quantity > Decimal(0) else Decimal(0)
             fallback_gross = (fill_price - ctx.avg_entry_price) * sell_remaining
             fallback_exit_fee = sell_fee_per_unit * sell_remaining
-            ctx.realized_pnl += (fallback_gross - fallback_exit_fee)
+            fallback_slippage = exit_slippage_per_unit * sell_remaining
+            ctx.realized_pnl += (fallback_gross - fallback_exit_fee - fallback_slippage)
 
         return completed_trades
 
@@ -259,16 +267,23 @@ class SessionManager:
     @staticmethod
     def _record_buy_position(context: TradingContext, market_data: MarketData,
                              quantity: Decimal, price: Decimal) -> None:
-        context.lowest_buy = min(context.lowest_buy, market_data.close_price)
-        context.highest_buy = max(context.highest_buy, market_data.close_price)
-        pos_entry = PositionEntry(
-            price=price if price > 0 else Decimal(str(market_data.close_price)),
-            quantity=quantity if quantity > 0 else Decimal(str(market_data.volume)),
-            timestamp=float(market_data.timestamp),
+        context.lowest_buy = min(context.lowest_buy, market_data.lowest_price)
+        context.highest_buy = max(context.highest_buy, market_data.highest_price)
+        context.open_positions.append(PositionEntry(
+            price=price,
+            quantity=quantity,
+            timestamp=market_data.timestamp,
+        ))
+        lot = PositionLot.create(
+            order_uuid="legacy",
+            ticker_symbol=context.ticker_symbol,
+            price=price,
+            quantity=quantity,
+            fee=Decimal(0),
+            timestamp=market_data.timestamp,
         )
-        context.open_positions.append(pos_entry)
-
-        if quantity > 0:
+        context.position_lots.append(lot)
+        if quantity > Decimal(0):
             total_cost = (context.position_qty * context.avg_entry_price) + (quantity * price)
             context.position_qty += quantity
             context.avg_entry_price = total_cost / context.position_qty
@@ -276,78 +291,117 @@ class SessionManager:
     @staticmethod
     def _record_sell_position(context: TradingContext, market_data: MarketData,
                               quantity: Decimal, price: Decimal) -> None:
-        context.lowest_sell = min(context.lowest_sell, market_data.close_price)
-        context.highest_sell = max(context.highest_sell, market_data.close_price)
-        pos_entry = PositionEntry(
-            price=price if price > 0 else Decimal(str(market_data.close_price)),
-            quantity=quantity if quantity > 0 else Decimal(str(market_data.volume)),
-            timestamp=float(market_data.timestamp),
-        )
-        context.close_positions.append(pos_entry)
-
-        if quantity > 0:
-            # Accumulate avg exit price
+        context.lowest_sell = min(context.lowest_sell, market_data.lowest_price)
+        context.highest_sell = max(context.highest_sell, market_data.highest_price)
+        context.close_positions.append(PositionEntry(
+            price=price,
+            quantity=quantity,
+            timestamp=market_data.timestamp,
+        ))
+        if quantity > Decimal(0):
             total_exit_value = (context.exit_qty * context.avg_exit_price) + (quantity * price)
             context.exit_qty += quantity
             context.avg_exit_price = total_exit_value / context.exit_qty
+        completed_trades, sell_remaining = FifoTradeMatcher.match_lots(
+            lots=context.position_lots,
+            ticker_symbol=context.ticker_symbol,
+            exit_order_uuid="legacy",
+            exit_price=price,
+            exit_quantity=quantity,
+            exit_fee=Decimal(0),
+            exit_timestamp=market_data.timestamp,
+            commit_hash=context.commit_hash,
+        )
+        for trade in completed_trades:
+            context.trades.append(trade)
+            context.realized_pnl += trade.net_pnl
 
-            # Realized PnL
-            realized = (price - context.avg_entry_price) * quantity
-            context.realized_pnl += realized
+        if sell_remaining > Decimal(0):
+            fallback_gross = (price - context.avg_entry_price) * sell_remaining
+            context.realized_pnl += fallback_gross
 
-            # Reduce open position
-            context.position_qty = max(Decimal(0), context.position_qty - quantity)
-            if context.position_qty == 0:
-                context.avg_entry_price = Decimal(0)
+        context.position_qty = max(Decimal(0), context.position_qty - quantity)
+        if context.position_qty == Decimal(0):
+            context.avg_entry_price = Decimal(0)
 
-    def get_unrealized_pnl(self, asset_id: int, current_price: Decimal) -> Decimal:
+    def calculate_total_balance(self, asset_key: int, current_price: Decimal) -> Decimal:
         with self._lock:
-            ctx = self.current_session.trading_contexts[asset_id]
-            if ctx.position_qty == 0:
+            ctx = self.get_trading_context(asset_key)
+            if not ctx:
                 return Decimal(0)
-            return (current_price - ctx.avg_entry_price) * ctx.position_qty
+            return ctx.calculate_total_balance(current_price)
 
-    def close_asset_balance(self, asset_id: int, closing_balance: Decimal) -> None:
+    def get_realized_pnl(self, asset_key: int) -> Decimal:
         with self._lock:
-            if not self.current_session:
-                raise ValueError("No active session.")
+            ctx = self.get_trading_context(asset_key)
+            if not ctx:
+                return Decimal(0)
+            return ctx.realized_pnl
 
-            ctx = self.current_session.trading_contexts[asset_id]
-            ctx.closing_balance = closing_balance
-
-    def end_session(self) -> TradingSession:
+    def get_unrealized_pnl(self, asset_key: int, current_price: Decimal) -> Decimal:
         with self._lock:
-            if not self.current_session:
-                raise ValueError("No active session to end.")
+            ctx = self.get_trading_context(asset_key)
+            if not ctx:
+                return Decimal(0)
+            return ctx.calculate_unrealized_pnl(current_price)
 
-            self.is_running.clear()
+    def get_total_pnl(self, asset_key: int, current_price: Decimal) -> Decimal:
+        with self._lock:
+            ctx = self.get_trading_context(asset_key)
+            if not ctx:
+                return Decimal(0)
+            return ctx.calculate_total_pnl(current_price)
+
+    def get_win_loss_count(self, asset_key: int) -> tuple[int, int]:
+        with self._lock:
+            ctx = self.get_trading_context(asset_key)
+            if not ctx:
+                return 0, 0
+            return ctx.win_count, ctx.loss_count
+
+    def get_profit_factor(self, asset_key: int) -> float:
+        with self._lock:
+            ctx = self.get_trading_context(asset_key)
+            if not ctx:
+                return 0.0
+            return ctx.profit_factor
+
+    def end_session(self) -> None:
+        with self._lock:
+            if not self.current_session or not self.is_running.is_set():
+                return
             self.current_session.session_time.end_time = time.time()
-
-            completed_session = self.current_session
+            self.is_running.clear()
             self.current_session = None
-            return completed_session
+
+    def reset_session(self) -> None:
+        with self._lock:
+            if self.is_running.is_set():
+                self.is_running.clear()
+            self.current_session = None
 
     def get_session_summary(self, session: TradingSession) -> dict:
-        return {
-            'session_id': session.session_id,
-            'commit_hash': session.commit_hash,
-            'is_running': self.is_running.is_set(),
-            'duration': session.session_time.duration,
-            'assets': len(session.trading_contexts),
-            'contexts': {
-                asset_id: {
-                    'ticker_symbol': ctx.ticker_symbol,
-                    'exchange': ctx.exchange,
-                    'commit_hash': ctx.commit_hash,
-                    'starting_balance': ctx.starting_balance,
-                    'available_balance': ctx.available_balance,
-                    'closing_balance': ctx.closing_balance,
-                    'buy_count': ctx.buy_count,
-                    'lowest_buy': ctx.lowest_buy if ctx.lowest_buy != Decimal('inf') else None,
-                    'highest_buy': ctx.highest_buy if ctx.highest_buy != Decimal('-inf') else None,
-                    'lowest_sell': ctx.lowest_sell if ctx.lowest_sell != Decimal('inf') else None,
-                    'highest_sell': ctx.highest_sell if ctx.highest_sell != Decimal('-inf') else None,
-                }
-                for asset_id, ctx in session.trading_contexts.items()
+        with self._lock:
+            return {
+                "session_id": session.session_id,
+                "commit_hash": session.commit_hash,
+                "is_running": self.is_running.is_set(),
+                "duration": session.session_time.duration,
+                "assets": len(session.trading_contexts),
+                "contexts": {
+                    asset_id: {
+                        "ticker_symbol": ctx.ticker_symbol,
+                        "exchange": ctx.exchange,
+                        "commit_hash": ctx.commit_hash,
+                        "starting_balance": ctx.starting_balance,
+                        "available_balance": ctx.available_balance,
+                        "closing_balance": ctx.closing_balance,
+                        "buy_count": ctx.buy_count,
+                        "lowest_buy": ctx.lowest_buy if ctx.lowest_buy != float("inf") else None,
+                        "highest_buy": ctx.highest_buy if ctx.highest_buy != float("-inf") else None,
+                        "lowest_sell": ctx.lowest_sell if ctx.lowest_sell != float("inf") else None,
+                        "highest_sell": ctx.highest_sell if ctx.highest_sell != float("-inf") else None,
+                    }
+                    for asset_id, ctx in session.trading_contexts.items()
+                },
             }
-        }

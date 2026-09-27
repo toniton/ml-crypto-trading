@@ -9,6 +9,7 @@ def _make_lot(
         quantity: str,
         price: str,
         fee: str = "0.1",
+        slippage: str = "0.0",
         timestamp: float = 1700000000.0,
         strategy: str = "RsiStrategy",
 ) -> PositionLot:
@@ -18,6 +19,7 @@ def _make_lot(
         price=Decimal(price),
         quantity=Decimal(quantity),
         fee=Decimal(fee),
+        slippage=Decimal(slippage),
         timestamp=timestamp,
         winning_strategy=strategy,
         strategy_votes={strategy: "BUY"},
@@ -82,4 +84,53 @@ class TestFifoTradeMatcherMultiLotSlippage:
         assert len(trades) == 2
         assert trades[0].slippage == Decimal("0.10")
         assert trades[1].slippage == Decimal("0.10")
+        assert unallocated == Decimal("0")
+
+    def test_entry_and_exit_slippage_combined_and_conserved(self):
+        # Lot A: 10 units with $0.50 entry slippage ($0.05/unit)
+        # Lot B: 10 units with $0.30 entry slippage ($0.03/unit)
+        # SELL: 20 units with $0.20 exit slippage ($0.01/unit)
+        lot_a = _make_lot(order_uuid="entry-a", quantity="10", price="100", fee="1.0", slippage="0.50")
+        lot_b = _make_lot(order_uuid="entry-b", quantity="10", price="100", fee="1.0", slippage="0.30")
+        lots = [lot_a, lot_b]
+
+        trades, unallocated = FifoTradeMatcher.match_lots(
+            lots=lots,
+            ticker_symbol="BTC_USD",
+            exit_order_uuid="exit-1",
+            exit_price=Decimal("110"),
+            exit_quantity=Decimal("20"),
+            exit_fee=Decimal("2.0"),
+            exit_timestamp=1700001000.0,
+            exit_slippage=Decimal("0.20"),
+        )
+
+        assert len(trades) == 2
+        assert trades[0].slippage == Decimal("0.60")  # (0.05 * 10) + (0.01 * 10)
+        assert trades[1].slippage == Decimal("0.40")  # (0.03 * 10) + (0.01 * 10)
+        assert sum(t.slippage for t in trades) == Decimal("1.00")
+        assert unallocated == Decimal("0")
+
+    def test_partial_lot_entry_and_exit_slippage_conserved(self):
+        # Lot A: 10 units with $0.50 entry slippage ($0.05/unit)
+        # SELL: 4 units with $0.08 exit slippage ($0.02/unit)
+        lot_a = _make_lot(order_uuid="entry-a", quantity="10", price="100", fee="1.0", slippage="0.50")
+        lots = [lot_a]
+
+        trades, unallocated = FifoTradeMatcher.match_lots(
+            lots=lots,
+            ticker_symbol="BTC_USD",
+            exit_order_uuid="exit-1",
+            exit_price=Decimal("110"),
+            exit_quantity=Decimal("4"),
+            exit_fee=Decimal("0.4"),
+            exit_timestamp=1700001000.0,
+            exit_slippage=Decimal("0.08"),
+        )
+
+        assert len(trades) == 1
+        assert trades[0].slippage == Decimal("0.28")  # (0.05 * 4) + (0.02 * 4)
+        assert len(lots) == 1
+        assert lots[0].remaining_quantity == Decimal("6")
+        assert lots[0].slippage_per_unit == Decimal("0.05")
         assert unallocated == Decimal("0")

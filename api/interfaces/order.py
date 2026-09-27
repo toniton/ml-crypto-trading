@@ -24,6 +24,7 @@ class Order:
     fill_price: Optional[Decimal] = None
     winning_strategy: Optional[str] = None
     strategy_votes: Optional[dict[str, str]] = None
+    slippage: Optional[Decimal] = None
 
     def model_dump_json(self) -> str:
         return RootModel[Order](self).model_dump_json()

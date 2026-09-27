@@ -109,6 +109,7 @@ class BuyLot:
             buy_price: Decimal,
             fee_per_unit: Decimal,
             entry_timestamp: float,
+            slippage_per_unit: Decimal = Decimal("0"),
             commit_hash: Optional[str] = None,
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
@@ -118,6 +119,7 @@ class BuyLot:
         self.buy_price = buy_price
         self.fee_per_unit = fee_per_unit
         self.entry_timestamp = entry_timestamp
+        self.slippage_per_unit = slippage_per_unit
         self.commit_hash = commit_hash
         self.winning_strategy = winning_strategy
         self.strategy_votes = strategy_votes
@@ -164,10 +166,12 @@ class AssetPerformanceService:
             qty = Decimal(str(order.quantity or "0"))
             fill_price_val = Decimal(str(order.fill_price or order.price or "0"))
             fee_val = Decimal(str(order.fees or "0"))
+            slippage_val = Decimal(str(getattr(order, "slippage", None) or "0"))
             exec_dt = get_exec_dt(order)
 
             if side == "BUY":
                 fee_per_unit = (fee_val / qty) if qty > 0 else Decimal("0")
+                slippage_per_unit = (slippage_val / qty) if qty > 0 else Decimal("0")
                 buy_lots.append(
                     BuyLot(
                         order_uuid=order.uuid,
@@ -175,6 +179,7 @@ class AssetPerformanceService:
                         buy_price=fill_price_val,
                         fee_per_unit=fee_per_unit,
                         entry_timestamp=exec_dt.timestamp(),
+                        slippage_per_unit=slippage_per_unit,
                         commit_hash=order.commit_hash,
                         winning_strategy=order.winning_strategy,
                         strategy_votes=order.strategy_votes,
@@ -182,11 +187,15 @@ class AssetPerformanceService:
                 )
             else:
                 remaining_sell_qty = qty
+                exit_slippage_per_unit = (slippage_val / qty) if qty > 0 else Decimal("0")
                 while remaining_sell_qty > 0 and buy_lots:
                     oldest_lot = buy_lots[0]
                     match_qty = min(oldest_lot.remaining_qty, remaining_sell_qty)
                     buy_fee_portion = oldest_lot.fee_per_unit * match_qty
                     sell_fee_portion = (fee_val / qty * match_qty) if qty > 0 else Decimal("0")
+                    entry_slippage_portion = oldest_lot.slippage_per_unit * match_qty
+                    exit_slippage_portion = exit_slippage_per_unit * match_qty
+                    total_matched_slippage = entry_slippage_portion + exit_slippage_portion
 
                     matched_trades.append(
                         Trade.create(
@@ -200,6 +209,7 @@ class AssetPerformanceService:
                             exit_fee=sell_fee_portion,
                             entry_timestamp=oldest_lot.entry_timestamp,
                             exit_timestamp=exec_dt.timestamp(),
+                            slippage=total_matched_slippage,
                             commit_hash=order.commit_hash or oldest_lot.commit_hash,
                             winning_strategy=order.winning_strategy or oldest_lot.winning_strategy,
                             strategy_votes=order.strategy_votes or oldest_lot.strategy_votes,
@@ -255,6 +265,7 @@ class AssetPerformanceService:
             qty = Decimal(str(order.quantity or "0"))
             fill_price_val = Decimal(str(order.fill_price or order.price or "0"))
             fee_val = Decimal(str(order.fees or "0"))
+            slippage_val = Decimal(str(getattr(order, "slippage", None) or "0"))
 
             order_volume = (qty * fill_price_val).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             total_volume += order_volume
@@ -271,6 +282,7 @@ class AssetPerformanceService:
             if side == "BUY":
                 buy_count += 1
                 fee_per_unit = (fee_val / qty) if qty > 0 else Decimal("0")
+                slippage_per_unit = (slippage_val / qty) if qty > 0 else Decimal("0")
                 buy_lots.append(
                     BuyLot(
                         order_uuid=order.uuid,
@@ -278,6 +290,7 @@ class AssetPerformanceService:
                         buy_price=fill_price_val,
                         fee_per_unit=fee_per_unit,
                         entry_timestamp=exec_dt.timestamp(),
+                        slippage_per_unit=slippage_per_unit,
                         commit_hash=order.commit_hash,
                         winning_strategy=order.winning_strategy,
                         strategy_votes=order.strategy_votes,
@@ -287,6 +300,7 @@ class AssetPerformanceService:
                 sell_count += 1
                 remaining_sell_qty = qty
                 sell_pnl = Decimal("0")
+                exit_slippage_per_unit = (slippage_val / qty) if qty > 0 else Decimal("0")
 
                 while remaining_sell_qty > 0 and buy_lots:
                     oldest_lot = buy_lots[0]
@@ -295,8 +309,11 @@ class AssetPerformanceService:
                     gross_gain = (fill_price_val - oldest_lot.buy_price) * match_qty
                     buy_fee_portion = oldest_lot.fee_per_unit * match_qty
                     sell_fee_portion = (fee_val / qty * match_qty) if qty > 0 else Decimal("0")
+                    entry_slippage_portion = oldest_lot.slippage_per_unit * match_qty
+                    exit_slippage_portion = exit_slippage_per_unit * match_qty
+                    total_matched_slippage = entry_slippage_portion + exit_slippage_portion
 
-                    lot_net_pnl = gross_gain - buy_fee_portion - sell_fee_portion
+                    lot_net_pnl = gross_gain - buy_fee_portion - sell_fee_portion - total_matched_slippage
                     sell_pnl += lot_net_pnl
 
                     if lot_net_pnl > 0:
@@ -317,6 +334,7 @@ class AssetPerformanceService:
                         exit_fee=sell_fee_portion,
                         entry_timestamp=oldest_lot.entry_timestamp,
                         exit_timestamp=exec_dt.timestamp(),
+                        slippage=total_matched_slippage,
                         commit_hash=order.commit_hash or oldest_lot.commit_hash,
                         winning_strategy=order.winning_strategy or oldest_lot.winning_strategy,
                         strategy_votes=order.strategy_votes or oldest_lot.strategy_votes,
@@ -364,13 +382,13 @@ class AssetPerformanceService:
 
         daily_list = [
             DailyPerformance(
-                date=day_key,
+                date=d,
                 trades=data["trades"],
                 volume=f"{data['volume']:.2f}",
                 fees=f"{data['fees']:.4f}",
                 realized_pnl=f"{data['realized_pnl']:+.2f}",
             )
-            for day_key, data in sorted(daily_buckets.items())
+            for d, data in sorted(daily_buckets.items())
         ]
 
         summary = PerformanceSummary(
@@ -387,27 +405,24 @@ class AssetPerformanceService:
             sell_count=sell_count,
         )
 
-        raw_strategy_attribution = TradeAttributionService.attribute_by_strategy(matched_trades)
-        raw_commit_attribution = TradeAttributionService.attribute_by_commit(matched_trades)
-
-        strategy_attribution = {
-            k: StrategyAttributionModel.from_attribution_metrics(v)
-            for k, v in raw_strategy_attribution.items()
+        strategy_attribution = TradeAttributionService.attribute_by_strategy(matched_trades)
+        strategy_attribution_models = {
+            strat: StrategyAttributionModel.from_attribution_metrics(metrics)
+            for strat, metrics in strategy_attribution.items()
         }
-        commit_attribution = {
-            k: StrategyAttributionModel.from_attribution_metrics(v)
-            for k, v in raw_commit_attribution.items()
+
+        commit_attribution = TradeAttributionService.attribute_by_commit(matched_trades)
+        commit_attribution_models = {
+            c_hash: StrategyAttributionModel.from_attribution_metrics(metrics)
+            for c_hash, metrics in commit_attribution.items()
         }
 
         return AssetPerformanceResponse(
             ticker_symbol=ticker_symbol,
-            period=PeriodModel(
-                start=start.isoformat(),
-                end=end.isoformat(),
-            ),
+            period=PeriodModel(start=start.isoformat(), end=end.isoformat()),
             summary=summary,
             daily=daily_list,
             trades=execution_items,
-            strategy_attribution=strategy_attribution,
-            commit_attribution=commit_attribution,
+            strategy_attribution=strategy_attribution_models,
+            commit_attribution=commit_attribution_models,
         )
