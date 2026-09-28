@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from src.trading.helpers.format_helper import FormatHelper
@@ -26,3 +27,23 @@ class TestFormatHelper(unittest.TestCase):
 
     def test_format_decimal_with_invalid_string(self):
         self.assertEqual(FormatHelper.format_decimal("not_a_number"), "not_a_number")
+
+    def test_parse_iso_datetime_with_utc_z(self):
+        result = FormatHelper.parse_iso_datetime("2026-09-28T01:50:00Z")
+        expected = datetime(2026, 9, 28, 1, 50, 0, tzinfo=timezone.utc)
+        self.assertEqual(result, expected)
+
+    def test_parse_iso_datetime_with_offset(self):
+        result = FormatHelper.parse_iso_datetime("2026-09-28T03:50:00+02:00")
+        expected = datetime(2026, 9, 28, 1, 50, 0, tzinfo=timezone.utc)
+        self.assertEqual(result, expected)
+
+    def test_parse_iso_datetime_naive(self):
+        result = FormatHelper.parse_iso_datetime("2026-09-28T01:50:00")
+        expected = datetime(2026, 9, 28, 1, 50, 0, tzinfo=timezone.utc)
+        self.assertEqual(result, expected)
+
+    def test_parse_iso_datetime_invalid_string(self):
+        result = FormatHelper.parse_iso_datetime("invalid-timestamp")
+        expected = datetime.min.replace(tzinfo=timezone.utc)
+        self.assertEqual(result, expected)

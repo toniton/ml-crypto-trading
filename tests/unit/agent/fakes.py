@@ -24,16 +24,29 @@ class FakeLlmAdapter(LlmAdapter):
         self.text = text
         self.chunks = chunks if chunks is not None else [text]
         self.last_history: Optional[list] = None
+        self.last_system_prompt: Optional[str] = None
         self._tools: dict[str, Any] = {}
         if tools:
             self.bind_tools(tools)
 
-    def generate(self, prompt: str, history: Optional[list] = None) -> str:
+    def generate(
+            self,
+            prompt: str,
+            history: Optional[list] = None,
+            system_prompt: Optional[str] = None,
+    ) -> str:
         self.last_history = history
+        self.last_system_prompt = system_prompt
         return self.text
 
-    async def stream(self, prompt: str, history: Optional[list] = None) -> AsyncIterator[str]:
+    async def stream(
+            self,
+            prompt: str,
+            history: Optional[list] = None,
+            system_prompt: Optional[str] = None,
+    ) -> AsyncIterator[str]:
         self.last_history = history
+        self.last_system_prompt = system_prompt
         for chunk in self.chunks:
             yield chunk
 

@@ -81,6 +81,50 @@ class OracleSummaryEvent(Event):
     def timestamp(self) -> str:
         return self._timestamp
 
+    @property
+    def summary(self) -> str:
+        return self._summary.summary
+
+    @property
+    def market_state(self) -> str:
+        return self._summary.market_state
+
+    @property
+    def trading_state(self) -> str:
+        return self._summary.trading_state
+
+    @property
+    def risk_state(self) -> str:
+        return self._summary.risk_state
+
+    @property
+    def symbol(self) -> Optional[str]:
+        return self._summary.symbol
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._summary.session_id
+
+    @property
+    def correlation_id(self) -> str:
+        return self._summary.correlation_id
+
+    @property
+    def observations(self) -> tuple[str, ...]:
+        return self._summary.observations
+
+    @property
+    def recommendations(self) -> tuple[str, ...]:
+        return self._summary.recommendations
+
+    @property
+    def model(self) -> Optional[str]:
+        return self._summary.model
+
+    @property
+    def model_version(self) -> Optional[str]:
+        return self._summary.model_version
+
     def to_dict(self) -> dict:
         return {
             "id": self.id,

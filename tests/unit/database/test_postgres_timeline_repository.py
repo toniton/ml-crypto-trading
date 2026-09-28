@@ -86,3 +86,32 @@ def test_save_batch_and_list_items_with_filter():
     asset_items = repo.list_items(entity_type="ASSET", entity_id="BTC_USD")
     assert len(asset_items) == 1
     assert asset_items[0].timeline_id == "tl-1"
+
+
+def test_list_items_with_time_range_filter():
+    session = setup_in_memory_db()
+    repo = PostgresTimelineRepository(database_session=session)
+
+    item1 = TimelineItem(
+        timeline_id="tl-100",
+        timestamp=datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc).isoformat(),
+        category=TimelineCategory.AGENT,
+        title="Summary 1",
+    )
+    item2 = TimelineItem(
+        timeline_id="tl-200",
+        timestamp=datetime(2026, 9, 25, 12, 0, 0, tzinfo=timezone.utc).isoformat(),
+        category=TimelineCategory.AGENT,
+        title="Summary 2",
+    )
+    repo.save_batch([item1, item2])
+
+    since_dt = datetime(2026, 9, 22, 0, 0, 0, tzinfo=timezone.utc)
+    filtered = repo.list_items(since=since_dt)
+    assert len(filtered) == 1
+    assert filtered[0].timeline_id == "tl-200"
+
+    until_dt = datetime(2026, 9, 21, 0, 0, 0, tzinfo=timezone.utc)
+    filtered_until = repo.list_items(until=until_dt)
+    assert len(filtered_until) == 1
+    assert filtered_until[0].timeline_id == "tl-100"

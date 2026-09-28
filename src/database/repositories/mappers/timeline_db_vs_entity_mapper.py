@@ -6,14 +6,7 @@ from typing import Optional
 from src.database.dao.timeline_item_dao import TimelineItemDao
 from src.events.decision_models import ArtifactRef, EntityRef
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
-
-
-def _parse_iso_to_datetime(iso_str: str) -> datetime:
-    normalized = iso_str.replace("Z", "+00:00")
-    dt = datetime.fromisoformat(normalized)
-    if dt.tzinfo is None:
-        return dt.replace(tzinfo=timezone.utc)
-    return dt.astimezone(timezone.utc)
+from src.trading.helpers.format_helper import FormatHelper
 
 
 def _to_aware_utc(dt: Optional[datetime]) -> Optional[datetime]:
@@ -27,7 +20,7 @@ def _to_aware_utc(dt: Optional[datetime]) -> Optional[datetime]:
 class TimelineDBVSEntityMapper:
     @staticmethod
     def map_to_db(entity: TimelineItem) -> TimelineItemDao:
-        parsed_dt = _parse_iso_to_datetime(entity.timestamp)
+        parsed_dt = FormatHelper.parse_iso_datetime(entity.timestamp)
         primary_entity_type = entity.primary_entity.type if entity.primary_entity else None
         primary_entity_id = entity.primary_entity.id if entity.primary_entity else None
         entities_data = [e.to_dict() for e in entity.entities] if entity.entities else None

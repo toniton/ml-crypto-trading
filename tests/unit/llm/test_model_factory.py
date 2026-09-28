@@ -51,6 +51,7 @@ class TestModelFactory(unittest.TestCase):
         model = ModelFactory.create_model(config)
         self.assertIsInstance(model, LangChainGroqAdapter)
 
+
     @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")
     def test_selects_model_by_name(self, _mock_key):
         config = _config(

@@ -1,6 +1,5 @@
-from __future__ import annotations
-
 import abc
+from datetime import datetime
 from typing import List, Optional
 
 from src.database.repositories.base_repository import BaseRepository
@@ -20,6 +19,7 @@ class TimelineRepository(BaseRepository[TimelineItem], metaclass=abc.ABCMeta):
     def get(self, entity_id: str) -> Optional[TimelineItem]:
         raise NotImplementedError()
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     @abc.abstractmethod
     def list_items(
             self,
@@ -29,6 +29,8 @@ class TimelineRepository(BaseRepository[TimelineItem], metaclass=abc.ABCMeta):
             actor_type: Optional[str] = None,
             entity_type: Optional[str] = None,
             entity_id: Optional[str] = None,
+            since: Optional[datetime] = None,
+            until: Optional[datetime] = None,
             limit: int = 50,
             offset: int = 0,
     ) -> List[TimelineItem]:

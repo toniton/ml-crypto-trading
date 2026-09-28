@@ -13,11 +13,21 @@ class ChatTurn(BaseModel):
 
 class LlmAdapter(ABC):
     @abstractmethod
-    def generate(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> str:
+    def generate(
+            self,
+            prompt: str,
+            history: Optional[List[ChatTurn]] = None,
+            system_prompt: Optional[str] = None,
+    ) -> str:
         pass
 
     @abstractmethod
-    async def stream(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AsyncIterator[str]:
+    async def stream(
+            self,
+            prompt: str,
+            history: Optional[List[ChatTurn]] = None,
+            system_prompt: Optional[str] = None,
+    ) -> AsyncIterator[str]:
         pass
 
     @abstractmethod
@@ -31,4 +41,3 @@ class LlmAdapter(ABC):
     @abstractmethod
     def generate_structured(self, schema: Type[Structured], prompt: str, system_prompt: str) -> Structured:
         pass
-

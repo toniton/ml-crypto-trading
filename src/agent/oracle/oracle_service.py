@@ -18,6 +18,10 @@ from src.events.message_event_bus import CallbackSubscription
 from src.logging.agent_logging_mixin import AgentLoggingMixin
 
 DEFAULT_FAILURE_COOLDOWN = timedelta(seconds=60)
+ORACLE_SYSTEM_PROMPT = (
+    "You are an AI quantitative trading oracle. Analyze and summarize the provided "
+    "accumulated market and trading state for the trading agent based solely on the provided context."
+)
 
 
 class OracleService(AgentLoggingMixin):
@@ -112,7 +116,7 @@ class OracleService(AgentLoggingMixin):
             session_id = self._context.session_id
             primary_symbol = self._primary_symbol(self._context)
         self.agent_logger.info("Generating Oracle summary from accumulated context...")
-        summary_text = self._llm.generate(prompt)
+        summary_text = self._llm.generate(prompt, system_prompt=ORACLE_SYSTEM_PROMPT)
         return OracleSummary(
             summary=summary_text,
             market_state=market_state,

@@ -118,6 +118,8 @@ class OrderManager(ApplicationLoggingMixin):
         try:
             with self._database_manager.get_unit_of_work() as uow:
                 for order in orders:
+                    if not order.commit_hash and self._session_manager:
+                        order.commit_hash = self._session_manager.get_current_commit_hash()
                     self.app_logger.debug(f"Order update received, saving to DB: {order}")
                     if order.status not in self.OPEN_STATUSES:
                         with self._intent_lock:
@@ -254,10 +256,14 @@ class OrderManager(ApplicationLoggingMixin):
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
             price: Decimal, trade_action: TradeAction,
-            timestamp: float, commit_hash: str = "HEAD", uuid: str = None,
+            timestamp: float, commit_hash: Optional[str] = None, uuid: str = None,
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
     ):
+        resolved_commit_hash = (
+                commit_hash
+                or (self._session_manager.get_current_commit_hash() if self._session_manager else None)
+        )
         order = Order(
             uuid=uuid or str(uuid4()),
             price=price,
@@ -266,7 +272,7 @@ class OrderManager(ApplicationLoggingMixin):
             trade_action=trade_action,
             ticker_symbol=ticker_symbol,
             created_time=timestamp,
-            commit_hash=commit_hash,
+            commit_hash=resolved_commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
         )
@@ -281,6 +287,8 @@ class OrderManager(ApplicationLoggingMixin):
 
     def execute_order(self, order: Order):
         try:
+            if not order.commit_hash and self._session_manager:
+                order.commit_hash = self._session_manager.get_current_commit_hash()
             self.place_order(
                 order.provider_name,
                 order.uuid,

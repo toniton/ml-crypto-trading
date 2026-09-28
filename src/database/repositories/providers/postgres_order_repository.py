@@ -54,8 +54,8 @@ class PostgresOrderRepository(OrderRepository):
             OrderDao.status: order_dao.status,
             OrderDao.last_updated_timestamp: order_dao.last_updated_timestamp,
         }
-        if order_dao.commit_hash is not None:
-            set_values[OrderDao.commit_hash] = order_dao.commit_hash
+        if entity.commit_hash is not None:
+            set_values[OrderDao.commit_hash] = entity.commit_hash
         if order_dao.fees is not None:
             set_values[OrderDao.fees] = order_dao.fees
         if order_dao.fill_price is not None:

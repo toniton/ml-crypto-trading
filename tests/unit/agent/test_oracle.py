@@ -14,8 +14,10 @@ from src.agent.oracle.events import (
 )
 from src.agent.oracle.oracle_adapter import OracleEventAdapter
 from src.agent.oracle.oracle_context import MAX_OBSERVATIONS, OracleContext
-from src.agent.oracle.oracle_service import OracleService
+from src.agent.oracle.oracle_service import ORACLE_SYSTEM_PROMPT, OracleService
+from src.agent.oracle.oracle_summary import OracleSummary
 from src.agent.oracle.oracle_tool import AnalyzeTradingStateTool, GetTradingSummaryTool
+from src.server.timeline_projector import TimelineProjector
 from src.backtest.domain.result import PortfolioSnapshot
 from src.backtest.events.domain_events import (
     OrderFilledEvent,
@@ -212,6 +214,9 @@ class TestOracleService:
         assert summary.symbol == "BTC_USD"
         assert summary.market_state == "active"
         assert summary.model == "m"
+        llm.generate.assert_called_once()
+        _, kwargs = llm.generate.call_args
+        assert kwargs.get("system_prompt") == ORACLE_SYSTEM_PROMPT
 
     def test_oracle_event_types_has_no_duplicates(self):
         assert len(ORACLE_EVENT_TYPES) == len(set(ORACLE_EVENT_TYPES))
@@ -220,7 +225,7 @@ class TestOracleService:
         started_event = threading.Event()
         release_event = threading.Event()
 
-        def slow_generate(_prompt):
+        def slow_generate(_prompt, **_kwargs):
             started_event.set()
             release_event.wait(timeout=2.0)
             return "slow summary"
@@ -284,3 +289,80 @@ class TestOracleTools:
         tool = AnalyzeTradingStateTool(oracle_service=self._service())
         result = tool._run()
         assert "tool summary" in result
+
+    def test_oracle_summary_event_properties_accessible(self):
+        summary = OracleSummary(
+            summary="BTC is bullish",
+            market_state="active",
+            trading_state="flat",
+            risk_state="normal",
+            symbol="BTC_USD",
+            session_id="sess-42",
+        )
+        event = OracleSummaryEvent(summary)
+        assert event.summary == "BTC is bullish"
+        assert event.symbol == "BTC_USD"
+        assert event.market_state == "active"
+        assert event.session_id == "sess-42"
+        assert event.correlation_id == summary.correlation_id
+
+    def test_oracle_summary_event_projected_into_timeline(self):
+        bus = MessageEventBus()
+        projector = TimelineProjector(event_bus=bus)
+        projector.subscribe()
+
+        summary = OracleSummary(
+            summary="Market consolidation underway",
+            market_state="active",
+            trading_state="flat",
+            risk_state="normal",
+            symbol="CRO_USD",
+        )
+        event = OracleSummaryEvent(summary)
+        bus.publish(event)
+
+        items = projector.list_items(category="AGENT")
+        assert len(items) == 1
+        assert items[0]["title"] == "Oracle Summary: CRO_USD"
+        assert items[0]["metadata"]["symbol"] == "CRO_USD"
+        assert items[0]["metadata"]["summary"] == "Market consolidation underway"
+
+    def test_get_trading_summary_queries_historical_days(self):
+        bus = MessageEventBus()
+        projector = TimelineProjector(event_bus=bus)
+        projector.subscribe()
+
+        summary1 = OracleSummary(
+            summary="Day 1 overview",
+            market_state="active",
+            trading_state="flat",
+            risk_state="normal",
+            symbol="BTC_USD",
+        )
+        summary2 = OracleSummary(
+            summary="Day 2 overview",
+            market_state="active",
+            trading_state="position_open",
+            risk_state="normal",
+            symbol="BTC_USD",
+        )
+        bus.publish(OracleSummaryEvent(summary1))
+        bus.publish(OracleSummaryEvent(summary2))
+
+        service = self._service()
+        tool = GetTradingSummaryTool(oracle_service=service, timeline_projector=projector)
+
+        res = tool._run(days=3, symbol="BTC_USD")
+        assert "Found 2 Oracle trading summary event(s)" in res
+        assert "Day 1 overview" in res
+        assert "Day 2 overview" in res
+
+    def test_get_trading_summary_queries_historical_days_fallback_when_empty(self):
+        bus = MessageEventBus()
+        projector = TimelineProjector(event_bus=bus)
+        service = self._service()
+        tool = GetTradingSummaryTool(oracle_service=service, timeline_projector=projector)
+
+        res = tool._run(days=7, symbol="ETH_USD")
+        assert "No historical Oracle summaries found in the past 7 day(s) for ETH_USD." in res
+        assert "tool summary" in res

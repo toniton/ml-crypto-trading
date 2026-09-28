@@ -44,6 +44,7 @@ from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.server import ApiServer
 from src.server.services.conversation_service import ConversationService
 from src.server.services.dataset_service import DatasetService
+from src.server.timeline_projector import TimelineProjector
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
@@ -112,6 +113,7 @@ class Application(ApplicationLoggingMixin):
         self._event_bus: Optional[MessageEventBus] = None
         self._trading_event_bus = MessageEventBus()
         self._oracle_service: Optional[OracleService] = None
+        self._timeline_projector: Optional[TimelineProjector] = None
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -341,6 +343,13 @@ class Application(ApplicationLoggingMixin):
         oracle_service.subscribe(self._trading_event_bus)
         self._oracle_service = oracle_service
 
+        timeline_projector = TimelineProjector(
+            event_bus=self._trading_event_bus,
+            db_manager=self._db_manager,
+        )
+        timeline_projector.subscribe()
+        self._timeline_projector = timeline_projector
+
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
 
         if not self._application_config.headless:
@@ -373,7 +382,10 @@ class Application(ApplicationLoggingMixin):
             configuration_tool = ConfigurationTool(configuration_service=configuration_service)
             configuration_history_tool = ConfigurationHistoryTool(vcs=self._vcs)
             session_summary_tool = SessionSummaryTool(session_manager=self._managers.session_manager)
-            get_trading_summary_tool = GetTradingSummaryTool(oracle_service=self._oracle_service)
+            get_trading_summary_tool = GetTradingSummaryTool(
+                oracle_service=self._oracle_service,
+                timeline_projector=self._timeline_projector,
+            )
             analyze_trading_state_tool = AnalyzeTradingStateTool(oracle_service=self._oracle_service)
             backtest_service = self._build_backtest_service()
             backtest_tool = BacktestTool(backtest_service=backtest_service)
@@ -592,6 +604,9 @@ class Application(ApplicationLoggingMixin):
         if self._trading_event_bus:
             self._trading_event_bus.close()
             self._trading_event_bus = None
+        if self._timeline_projector:
+            self._timeline_projector.close()
+            self._timeline_projector = None
         self._oracle_service = None
         if self._config_listener:
             self._config_listener.stop()
