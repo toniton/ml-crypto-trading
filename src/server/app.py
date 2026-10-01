@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import AsyncGenerator, Callable, List, Optional
+from typing import AsyncGenerator, Callable, List, Literal, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,6 +93,13 @@ class ChatRequest(BaseModel):
                 detail="Either 'prompt' or 'query' must be provided.",
             )
         return raw.strip()
+
+
+class AppendMessageRequest(BaseModel):
+    message_id: Optional[str] = Field(default=None, description="Optional message ID.")
+    role: Literal["user", "assistant"] = Field(default="assistant", description="Message role.")
+    content: str = Field(default="", description="Message content.")
+    payload: Optional[dict] = Field(default=None, description="Structured block payload.")
 
 
 class ProposalDecisionRequest(BaseModel):
@@ -690,6 +697,21 @@ class ChatApp:
                 "session_id": session_id,
                 "messages": [message.model_dump(mode="json") for message in messages],
             }
+
+        @app.post("/api/v1/sessions/{session_id}/messages")
+        async def append_session_message_endpoint(session_id: str, msg_req: AppendMessageRequest, req: Request):
+            store: ConversationStore = req.app.state.conversation_service
+            session_id = await asyncio.to_thread(store.get_or_create, session_id)
+            message_id = msg_req.message_id or uuid.uuid4().hex
+            message = ConversationMessage(
+                message_id=message_id,
+                role=msg_req.role,
+                content=msg_req.content,
+                payload=msg_req.payload,
+                conversation_id=session_id,
+            )
+            await asyncio.to_thread(store.append, session_id, message)
+            return message.model_dump(mode="json")
 
         @app.post("/api/v1/proposals/{message_id}/decision")
         async def decide_proposal_endpoint(message_id: str, decision: ProposalDecisionRequest, req: Request):

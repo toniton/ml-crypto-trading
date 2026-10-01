@@ -23,8 +23,17 @@ class TimelineDBVSEntityMapper:
         parsed_dt = FormatHelper.parse_iso_datetime(entity.timestamp)
         primary_entity_type = entity.primary_entity.type if entity.primary_entity else None
         primary_entity_id = entity.primary_entity.id if entity.primary_entity else None
-        entities_data = [e.to_dict() for e in entity.entities] if entity.entities else None
-        artifacts_data = [a.to_dict() for a in entity.artifacts] if entity.artifacts else None
+        entities_data = (
+            FormatHelper.to_json_compatible([e.to_dict() for e in entity.entities])
+            if entity.entities
+            else None
+        )
+        artifacts_data = (
+            FormatHelper.to_json_compatible([a.to_dict() for a in entity.artifacts])
+            if entity.artifacts
+            else None
+        )
+        metadata_data = FormatHelper.to_json_compatible(entity.metadata or {})
         category_val = entity.category.value if isinstance(entity.category, TimelineCategory) else entity.category
 
         return TimelineItemDao(
@@ -42,7 +51,7 @@ class TimelineDBVSEntityMapper:
             primary_entity_id=primary_entity_id,
             entities=entities_data,
             artifacts=artifacts_data,
-            metadata_=entity.metadata or {},
+            metadata_=metadata_data,
         )
 
     @staticmethod

@@ -143,7 +143,7 @@ def _stale_market_data_event(ticker: str) -> MarketDataEvent:
     )
 
 
-def test_watchdog_detects_starvation_and_agent_posts_diagnostic(system):
+def test_watchdog_detects_starvation_and_suppresses_autonomous_chat_message(system):
     bus = system["bus"]
     store = system["store"]
     # Simulate an asset whose market data feed has been silent well beyond the threshold.
@@ -154,16 +154,11 @@ def test_watchdog_detects_starvation_and_agent_posts_diagnostic(system):
     assert emitted[0].asset == "BTC_USD"
     assert emitted[0].anomaly_kind == "NO_MARKET_DATA"
 
-    def diagnostic_landed():
-        for session in store.list_sessions():
-            for message in store.messages(session.id):
-                if "BTC_USD" in message.content and "Anomaly kind" in message.content:
-                    return message
-        return None
-
-    message = wait_for(diagnostic_landed)
-    assert "NO_MARKET_DATA" in message.content
-    assert "Connectivity" in message.content
+    # Give worker time to process and ensure no autonomous chat messages land in store
+    time.sleep(0.2)
+    sessions = store.list_sessions()
+    for session in sessions:
+        assert len(store.messages(session.id)) == 0
 
 
 def test_watchdog_agent_proposes_pause_for_config_gating(system):

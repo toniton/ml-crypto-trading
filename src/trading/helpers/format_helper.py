@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
+from enum import Enum
 from typing import Any
+from uuid import UUID
 
 
 class FormatHelper:
@@ -35,3 +37,25 @@ class FormatHelper:
             return dt.astimezone(timezone.utc)
         except Exception:
             return datetime.min.replace(tzinfo=timezone.utc)
+
+    @staticmethod
+    def to_json_compatible(val: Any) -> Any:
+        if val is None or isinstance(val, (str, int, float, bool)):
+            result = val
+        elif isinstance(val, Decimal):
+            result = int(val) if val % 1 == 0 else float(val)
+        elif isinstance(val, (datetime, date)):
+            result = val.isoformat()
+        elif isinstance(val, Enum):
+            result = val.value
+        elif isinstance(val, UUID):
+            result = str(val)
+        elif isinstance(val, dict):
+            result = {str(k): FormatHelper.to_json_compatible(v) for k, v in val.items()}
+        elif isinstance(val, (list, tuple, set)):
+            result = [FormatHelper.to_json_compatible(x) for x in val]
+        elif hasattr(val, "to_dict") and callable(val.to_dict):
+            result = FormatHelper.to_json_compatible(val.to_dict())
+        else:
+            result = str(val)
+        return result

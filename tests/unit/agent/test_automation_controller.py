@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 from __future__ import annotations
 
 import time
@@ -28,7 +29,7 @@ class FakeProvider:
     def started_at(self) -> float:
         return self._started
 
-    def state_for(self, ticker_symbol: str) -> Optional[AssetActivityState]:
+    def state_for(self, _ticker_symbol: str) -> Optional[AssetActivityState]:
         return self._state
 
     def states(self) -> list:
@@ -71,9 +72,7 @@ def test_action_plan_executed_with_correlation_ids():
     event = AgentActionPlanRequestedEvent(
         action_type="SEND_MESSAGE",
         title="Hello",
-        agent_metadata=AgentEventMetadata(
-            request_id=request_id, correlation_id=correlation_id
-        ),
+        agent_metadata=AgentEventMetadata(request_id=request_id, correlation_id=correlation_id),
     )
     controller._dispatch(event)
     assert executor.plan_and_execute.call_count == 1
@@ -131,7 +130,7 @@ def test_user_actions_bypass_authority_gate():
     assert executor.plan_and_execute.call_count == 1
 
 
-def test_anomaly_emits_diagnostic_message():
+def test_anomaly_suppresses_autonomous_chat_message():
     executor = MagicMock()
     stale = AssetActivityState(ticker_symbol="BTC_USD", last_market_data_at=time.time() - 10000)
     controller, _bus = _controller(
@@ -143,11 +142,7 @@ def test_anomaly_emits_diagnostic_message():
         threshold=240.0,
     )
     controller._dispatch(event)
-    assert executor.plan_and_execute.call_count == 1
-    action = executor.plan_and_execute.call_args.args[0]
-    assert action.type == AgentActionType.SEND_MESSAGE
-    assert action.reason.trigger == "STARVATION_DETECTED"
-    assert "BTC_USD" in action.reason.related_entities
+    assert executor.plan_and_execute.call_count == 0
 
 
 def test_approval_decision_dispatched():
@@ -157,11 +152,12 @@ def test_approval_decision_dispatched():
         approval_id="ap-1",
         decision="approve",
         author="alice",
+        conversation_id="sess-1",
         agent_metadata=AgentEventMetadata(request_id=uuid.uuid4(), correlation_id=uuid.uuid4()),
     )
     controller._dispatch(event)
     approval_service.decide_approval.assert_called_once_with(
-        "ap-1", "approve", author="alice", decision_notes=None
+        "ap-1", "approve", author="alice", decision_notes=None, conversation_id="sess-1"
     )
 
 

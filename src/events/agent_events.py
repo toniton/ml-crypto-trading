@@ -83,6 +83,7 @@ class AgentApprovalDecisionRequestedEvent(AgentEvent):
     decision: str = ""
     author: str = "user"
     decision_notes: Optional[str] = None
+    conversation_id: Optional[str] = None
 
 
 @dataclass

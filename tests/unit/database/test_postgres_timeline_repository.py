@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -115,3 +116,35 @@ def test_list_items_with_time_range_filter():
     filtered_until = repo.list_items(until=until_dt)
     assert len(filtered_until) == 1
     assert filtered_until[0].timeline_id == "tl-100"
+
+
+def test_save_timeline_item_with_decimal_metadata():
+    session = setup_in_memory_db()
+    repo = PostgresTimelineRepository(database_session=session)
+
+    item = TimelineItem(
+        timeline_id="tl-dec-1",
+        timestamp=datetime(2026, 9, 28, 10, 0, 0, tzinfo=timezone.utc).isoformat(),
+        category=TimelineCategory.DECISION,
+        severity="INFO",
+        title="Decision with Decimals",
+        summary="Testing decimal serialization",
+        metadata={
+            "fill_count_drift": Decimal("1.0"),
+            "quantity_drift": Decimal("258.50"),
+            "nested": {
+                "score": Decimal("0.85"),
+                "counts": [Decimal("1"), Decimal("2.5")],
+            },
+        },
+    )
+
+    saved = repo.save(item)
+    assert saved.timeline_id == "tl-dec-1"
+
+    fetched = repo.get("tl-dec-1")
+    assert fetched is not None
+    assert fetched.metadata["fill_count_drift"] == 1
+    assert fetched.metadata["quantity_drift"] == 258.5
+    assert fetched.metadata["nested"]["score"] == 0.85
+    assert fetched.metadata["nested"]["counts"] == [1, 2.5]

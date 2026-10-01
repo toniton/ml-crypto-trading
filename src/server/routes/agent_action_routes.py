@@ -14,7 +14,6 @@ from src.agent.actions.models import (
     BacktestComparisonResult,
 )
 from src.core.interfaces.event_bus import EventBus
-from src.events.agent_event_metadata import AgentEventMetadata
 from src.events.agent_events import (
     AgentActionPlanRequestedEvent,
     AgentApprovalDecisionRequestedEvent,
@@ -37,6 +36,7 @@ class ApprovalDecisionRequest(BaseModel):
     action: str = Field(description="Decision: 'approve' or 'reject'")
     author: Optional[str] = Field(default="user", description="Author")
     decision_notes: Optional[str] = Field(default=None, description="Optional notes")
+    conversation_id: Optional[str] = Field(default=None, description="Optional conversation id")
 
 
 def create_agent_action_router(
@@ -58,7 +58,6 @@ def create_agent_action_router(
             reason=req.reason.model_dump() if req.reason else None,
             severity=req.severity.value,
             requires_approval=req.requires_approval,
-            agent_metadata=AgentEventMetadata(request_id=request_id, correlation_id=uuid.uuid4()),
         )
         event_bus.publish(event)
         return {"request_id": str(request_id), "status": "accepted"}
@@ -114,7 +113,7 @@ def create_agent_action_router(
             decision=payload.action.lower(),
             author=payload.author or "user",
             decision_notes=payload.decision_notes,
-            agent_metadata=AgentEventMetadata(request_id=request_id, correlation_id=uuid.uuid4()),
+            conversation_id=payload.conversation_id,
         )
         event_bus.publish(event)
         return {

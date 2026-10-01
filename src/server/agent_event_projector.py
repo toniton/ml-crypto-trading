@@ -184,6 +184,19 @@ class AgentEventProjector(ApplicationLoggingMixin):
             existing.update(payload)
             self._actions[action_id] = existing
 
+    def _hydrate_session(self, session_id: str) -> None:
+        for msg in self._conversation_store.messages(session_id):
+            if not msg.payload:
+                continue
+            action_data = msg.payload.get("agent_action")
+            if isinstance(action_data, dict) and "id" in action_data:
+                self._actions.setdefault(action_data["id"], action_data)
+            for block in msg.payload.get("blocks", []):
+                if isinstance(block, dict) and block.get("type") == "agent_approval":
+                    app_id = block.get("approval_id")
+                    if app_id:
+                        self._approvals.setdefault(app_id, block)
+
     def _ensure_hydrated(self) -> None:
         if self._hydrated:
             return
@@ -193,17 +206,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
             self._hydrated = True
             try:
                 for session in self._conversation_store.list_sessions():
-                    for msg in self._conversation_store.messages(session.id):
-                        if not msg.payload:
-                            continue
-                        action_data = msg.payload.get("agent_action")
-                        if isinstance(action_data, dict) and "id" in action_data:
-                            self._actions.setdefault(action_data["id"], action_data)
-                        for block in msg.payload.get("blocks", []):
-                            if isinstance(block, dict) and block.get("type") == "agent_approval":
-                                app_id = block.get("approval_id")
-                                if app_id:
-                                    self._approvals.setdefault(app_id, block)
+                    self._hydrate_session(session.id)
             except Exception:
                 pass
 
@@ -216,14 +219,6 @@ class AgentEventProjector(ApplicationLoggingMixin):
 
         if conversation_id:
             return conversation_id
-
-        try:
-            sessions = self._conversation_store.list_sessions()
-            user_sessions = [s for s in sessions if not s.id.startswith("system:")]
-            if user_sessions:
-                return user_sessions[0].id
-        except Exception:
-            pass
 
         agent_context_id = (
             event.agent_context_id
@@ -285,7 +280,11 @@ class AgentEventProjector(ApplicationLoggingMixin):
         message = self._conversation_store.get_message(approval_id)
         if message and message.payload:
             for block in message.payload.get("blocks", []):
-                if isinstance(block, dict) and block.get("type") == "agent_approval" and block.get("approval_id") == approval_id:
+                if (
+                        isinstance(block, dict)
+                        and block.get("type") == "agent_approval"
+                        and block.get("approval_id") == approval_id
+                ):
                     with self._lock:
                         self._approvals[approval_id] = block
                     return block

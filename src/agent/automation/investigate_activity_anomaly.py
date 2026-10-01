@@ -99,6 +99,9 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             summary=title,
             rationale=body,
             drift=drift,
+            state=state,
+            content=content,
+            blocks=blocks,
         )
         return AnomalyDecision(kind="diagnostic", asset=event.asset, content=content, blocks=blocks)
 
@@ -133,6 +136,9 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             summary=title,
             rationale=body,
             drift=drift,
+            state=state,
+            content=content,
+            blocks=blocks,
         )
         return AnomalyDecision(
             kind="proposal",
@@ -148,6 +154,9 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             summary: str,
             rationale: str,
             drift: Optional[DriftReport],
+            state: Optional[AssetActivityState] = None,
+            content: str = "",
+            blocks: Optional[list[dict]] = None,
             proposed_action_id: Optional[str] = None,
     ) -> None:
         if self._event_bus is None:
@@ -156,6 +165,28 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             evidence_ids = [event.event_id]
             if drift is not None:
                 evidence_ids.append(f"drift:{event.asset}:{drift.drifted}")
+
+            parameters: dict = {
+                "content": content,
+                "blocks": blocks or [],
+                "asset": event.asset,
+                "anomaly_kind": event.anomaly_kind,
+                "threshold": event.threshold,
+            }
+            if drift is not None:
+                parameters["drift"] = {
+                    "fill_count_drift": drift.fill_count_drift,
+                    "quantity_drift": drift.quantity_drift,
+                    "drifted": drift.drifted,
+                }
+            if state is not None:
+                parameters["activity_state"] = {
+                    "last_market_data_at": state.last_market_data_at,
+                    "last_evaluation_at": state.last_evaluation_at,
+                    "last_signal_at": state.last_signal_at,
+                    "last_order_at": state.last_order_at,
+                    "last_execution_at": state.last_execution_at,
+                }
 
             record = DecisionRecord(
                 actor_type=ActorType.AGENT,
@@ -166,6 +197,7 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
                 evidence_ids=evidence_ids,
                 entities=[EntityRef(type="ASSET", id=event.asset)],
                 proposed_action_id=proposed_action_id,
+                parameters=parameters,
             )
             decision_event = AgentDecisionRecordedEvent(decision=record)
             causation = str(event.causation_id) if event.causation_id else event.event_id

@@ -284,6 +284,9 @@ class TimelineProjector(ApplicationLoggingMixin):
         entities = decision.entities if decision else []
         actor_type = decision.actor_type.value if decision else "AGENT"
         primary_entity = entities[0] if entities else None
+        metadata = decision.to_dict() if decision else {}
+        if decision and decision.parameters:
+            metadata.update(decision.parameters)
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.DECISION,
@@ -295,7 +298,7 @@ class TimelineProjector(ApplicationLoggingMixin):
             actor_type=actor_type,
             primary_entity=primary_entity,
             entities=list(entities),
-            metadata=decision.to_dict() if decision else {},
+            metadata=metadata,
         )
 
     def _project_approval_requested(self, event: AgentApprovalRequestedEvent) -> TimelineItem:

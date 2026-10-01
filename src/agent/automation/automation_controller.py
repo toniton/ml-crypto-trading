@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import uuid
 from typing import Optional, Set
 
 from src.agent.actions.executor import AgentActionExecutor
@@ -34,6 +35,7 @@ from src.events.agent_events import (
     TradingActivityAnomalyDetectedEvent,
     with_metadata,
 )
+from src.events.message_event_bus import CallbackSubscription
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
@@ -78,8 +80,6 @@ class AutomationController(ApplicationLoggingMixin):
                 "AgentApprovalDecisionRequestedEvent",
                 "TradingActivityAnomalyDetectedEvent",
         ):
-            from src.events.message_event_bus import CallbackSubscription
-
             self._subscriptions.append(
                 self._event_bus.subscribe(
                     event_type, CallbackSubscription(self._on_event)
@@ -142,6 +142,7 @@ class AutomationController(ApplicationLoggingMixin):
                 event.decision,
                 author=event.author,
                 decision_notes=event.decision_notes,
+                conversation_id=event.conversation_id,
             )
         except (ValueError, KeyError) as exc:
             self.app_logger.warning(
@@ -188,15 +189,12 @@ class AutomationController(ApplicationLoggingMixin):
                 self._executor.plan_and_execute(action)
             return
 
-        action = self._build_action(
-            AgentActionType.SEND_MESSAGE,
-            event,
-            title=f"Starvation diagnostic — {decision.asset}",
-            description=decision.content,
-            payload={"blocks": decision.blocks},
-            severity=ActionSeverity.WARNING,
+        # Autonomous sending of chat messages is disabled; decisions are recorded in timeline stream instead.
+        self.app_logger.info(
+            "Anomaly decision recorded to timeline for %s (kind=%s). Autonomous chat message suppressed.",
+            event.asset,
+            decision.kind,
         )
-        self._executor.plan_and_execute(action)
 
     def _build_action(
             self,
@@ -234,7 +232,6 @@ class AutomationController(ApplicationLoggingMixin):
         causation = source.request_id
         if causation is None and source.event_id:
             try:
-                import uuid
                 causation = uuid.UUID(source.event_id)
             except (ValueError, TypeError, AttributeError):
                 causation = None
