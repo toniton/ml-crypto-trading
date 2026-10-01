@@ -136,9 +136,13 @@ class TradingExpressionFactory:
             "max": max,
             "min": min,
             "avg": lambda *args: sum(args) / len(args) if args else 0.0,
+            "abs": abs,
+            "clamp": lambda val, min_v, max_v: max(min_v, min(val, max_v)),
+            "round": round,
             "sma": lambda n: sum(float(c.close) for c in candles[-n:]) / n if candles and len(candles) >= n else 0.0,
             "ema": TradingExpressionFactory._calculate_ema(candles),
-            "rsi": TradingExpressionFactory._calculate_rsi(candles)
+            "rsi": TradingExpressionFactory._calculate_rsi(candles),
+            "atr": TradingExpressionFactory._calculate_atr(candles),
         }
 
     @staticmethod
@@ -176,3 +180,30 @@ class TradingExpressionFactory:
             return 100.0 - (100.0 / (1 + rs))
 
         return rsi
+
+    @staticmethod
+    def _calculate_atr(candles: List[Candle]):
+        def atr(n):
+            if n <= 0:
+                raise ValueError("ATR period must be > 0")
+            if not candles or len(candles) <= 1:
+                return 0.0
+
+            true_ranges = []
+            for i in range(1, len(candles)):
+                curr = candles[i]
+                prev = candles[i - 1]
+                high = float(curr.high)
+                low = float(curr.low)
+                prev_close = float(prev.close)
+                tr = max(high - low, abs(high - prev_close), abs(low - prev_close))
+                true_ranges.append(tr)
+
+            if not true_ranges:
+                return 0.0
+
+            window = true_ranges[-n:]
+            return sum(window) / len(window)
+
+        return atr
+

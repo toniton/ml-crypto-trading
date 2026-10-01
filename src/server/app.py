@@ -44,6 +44,7 @@ from src.server.agent_event_projector import AgentEventProjector
 from src.server.timeline_projector import TimelineProjector
 from src.server.agent_websocket import AgentWebSocketHandler
 from src.server.routes.agent_action_routes import create_agent_action_router
+from src.server.routes.expression_routes import create_expression_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
 from src.agent.runtime_debug.service import RuntimeDebugService
@@ -191,6 +192,7 @@ class ChatApp:
             )
         )
         app.include_router(create_timeline_router(timeline_projector))
+        app.include_router(create_expression_router())
 
         agent_ws_handler = AgentWebSocketHandler(event_bus)
 
