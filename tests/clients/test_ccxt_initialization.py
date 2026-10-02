@@ -5,15 +5,23 @@ from src.application import Application
 from src.configuration.application_config import ApplicationConfig
 from src.configuration.environment_config import AppEnvEnum, EnvironmentConfig
 from src.configuration.llm_config import LlmConfig
+from src.core.interfaces.database_manager import DatabaseManager
 from src.exchange.clients.ccxt.ccxt_rest_service import CCXTExchangeRestService
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+from src.vcs.application.service import VCSService
 
 
 class TestCCXTInitialization(unittest.TestCase):
     def setUp(self):
-        self.app_config = MagicMock(spec=ApplicationConfig)
-        self.app_config.simulated = False
-        self.app_config.trading_config_filepath = None
+        self.argv_patcher = patch("sys.argv", ["pytest"])
+        self.argv_patcher.start()
+        self.addCleanup(self.argv_patcher.stop)
+
+        self.app_config = ApplicationConfig(
+            trading_config_filepath="/tmp/assets.json",
+            simulated=False,
+            headless=True,
+        )
 
         self.env_config = EnvironmentConfig(
             app_env=AppEnvEnum.STAGING,
@@ -29,10 +37,12 @@ class TestCCXTInitialization(unittest.TestCase):
     @patch('src.application.VCSService')
     @patch('src.application.RefChangeListener')
     @patch('src.application.TradingEngine')
-    @patch('src.application.ModelFactory')
+    @patch('src.application.LlmRuntimeManager')
     def test_application_initializes_all_ccxt_providers(
-            self, mock_model_factory, mock_engine, mock_ref_listener, mock_vcs, mock_db, mock_setup_config
+            self, mock_llm_runtime_manager, mock_engine, mock_ref_listener, mock_vcs, mock_db, mock_setup_config
     ):
+        mock_vcs.return_value = MagicMock(spec=VCSService)
+        mock_db.return_value = MagicMock(spec=DatabaseManager)
         with patch('src.exchange.clients.ccxt.ccxt_rest_service.CCXTExchangeRestService.__init__',
                    autospec=True) as mock_rest_init, \
                 patch('src.exchange.clients.ccxt.ccxt_websocket_service.CCXTExchangeWebSocketService.__init__',
@@ -55,6 +65,7 @@ class TestCCXTInitialization(unittest.TestCase):
                 trading_config=self.trading_config,
                 llm_config=LlmConfig()
             )
+            self.addCleanup(app.shutdown)
             app.startup()
 
         # Supported providers: 'binance', 'kraken', 'coinbase', 'bybit', 'kucoin' (5) + 'cryptodotcom' (1)
