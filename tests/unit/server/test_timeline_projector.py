@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.agent.monitoring.starvation_watchdog import TradingActivityAnomalyDetectedEvent
+from src.database.repositories.providers.postgres_timeline_repository import PostgresTimelineRepository
 from src.events.agent_events import (
     AgentActionCompletedEvent,
     AgentActionFailedEvent,
@@ -16,8 +17,10 @@ from src.events.decision_models import (
 )
 from src.events.message_event_bus import MessageEventBus
 from src.server.timeline_projector import TimelineProjector
+from src.timeline.timeline_models import TimelineCategory, TimelineItem
 from src.trading.events import ConsensusEvaluatedEvent
 from src.vcs.application.events import RefChangedEvent
+from tests.unit.api_server.helpers import make_db_manager
 
 
 def test_agent_decision_events_projected():
@@ -209,9 +212,6 @@ def test_action_completed_and_failed_projected():
 
 
 def test_projector_flush_and_persistence(tmp_path):
-    from tests.unit.api_server.helpers import make_db_manager
-    from src.database.repositories.providers.postgres_timeline_repository import PostgresTimelineRepository
-
     db_mgr = make_db_manager(str(tmp_path / "app.db"))
     bus = MessageEventBus()
     projector = TimelineProjector(event_bus=bus, db_manager=db_mgr, flush_interval_seconds=0)
@@ -237,9 +237,6 @@ def test_projector_flush_and_persistence(tmp_path):
 
 
 def test_projector_eviction_boundary_flush(tmp_path):
-    from tests.unit.api_server.helpers import make_db_manager
-    from src.database.repositories.providers.postgres_timeline_repository import PostgresTimelineRepository
-
     db_mgr = make_db_manager(str(tmp_path / "app.db"))
     bus = MessageEventBus()
     projector = TimelineProjector(event_bus=bus, max_items=2, db_manager=db_mgr, flush_interval_seconds=0)
@@ -266,10 +263,6 @@ def test_projector_eviction_boundary_flush(tmp_path):
 
 
 def test_projector_hydration_from_persisted_timeline(tmp_path):
-    from tests.unit.api_server.helpers import make_db_manager
-    from src.database.repositories.providers.postgres_timeline_repository import PostgresTimelineRepository
-    from src.timeline.timeline_models import TimelineCategory, TimelineItem
-
     db_mgr = make_db_manager(str(tmp_path / "app.db"))
     with db_mgr.get_unit_of_work() as uow:
         repo = uow.get_repository(PostgresTimelineRepository)

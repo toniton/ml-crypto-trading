@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import tempfile
 import unittest
@@ -128,8 +129,6 @@ class TestApiServerApp(unittest.TestCase):
         self.assertTrue(server._server.should_exit)
 
     def test_configuration_prompt_streams_proposal_through_gateway(self):
-        import json
-
         llm = FakeLlmAdapter([
             AgentRoute(
                 intent=AgentIntent.CONFIGURATION,
@@ -406,8 +405,6 @@ class TestConversationSessions(unittest.TestCase):
 
 
 def _extract_session_id(content):
-    import json
-
     for frame in content.split("\n\n"):
         if "event: session" not in frame:
             continue

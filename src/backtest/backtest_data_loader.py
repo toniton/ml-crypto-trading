@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import glob
 import os
 from dataclasses import dataclass
 from decimal import Decimal
@@ -56,7 +57,6 @@ class BacktestDataLoader:
                 potential_filenames.append(f"{name}*.log")
                 potential_filenames.append(f"{name}*.csv")
 
-            import glob
             file_path = None
             for pattern in potential_filenames:
                 candidate_pattern = os.path.join(self.data_path, pattern)

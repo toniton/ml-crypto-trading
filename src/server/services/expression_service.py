@@ -1,8 +1,10 @@
-import time
 from datetime import datetime, timezone
+from decimal import Decimal
+import time
 from typing import Any, Dict, List, Set
 
 from api.interfaces.candle import Candle
+from api.interfaces.market_data import MarketData
 from src.core.expressions.catalog import ExpressionCatalog
 from src.core.expressions.default_context import DefaultContext
 from src.core.expressions.expression_parser import ExpressionParser
@@ -72,9 +74,18 @@ class ExpressionService:
         close_price = float(variables.get("close", 64000.0))
         high_price = float(variables.get("high", close_price * 1.01))
         low_price = float(variables.get("low", close_price * 0.99))
+        volume = float(variables.get("volume", 1500.0))
         sample_candles = cls._generate_sample_candles(close_price, high_price, low_price, count=50)
 
-        functions = TradingExpressionFactory._build_functions(sample_candles)
+        sample_market_data = MarketData(
+            volume=Decimal(str(volume)),
+            high_price=Decimal(str(high_price)),
+            low_price=Decimal(str(low_price)),
+            close_price=Decimal(str(close_price)),
+            timestamp=datetime.now(timezone.utc).timestamp(),
+        )
+
+        functions = TradingExpressionFactory._build_functions(sample_candles, sample_market_data)
 
         resolved_for_response: Dict[str, Any] = {
             k: variables[k]
@@ -109,7 +120,6 @@ class ExpressionService:
 
     @staticmethod
     def _generate_sample_candles(close: float, high: float, low: float, count: int = 50) -> List[Candle]:
-        from decimal import Decimal
         candles: List[Candle] = []
         now_ts = datetime.now(timezone.utc).timestamp()
         step = (high - low) / (count if count > 0 else 1)

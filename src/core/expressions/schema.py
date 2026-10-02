@@ -14,6 +14,7 @@ class ExpressionScope(str, Enum):
 class ExpressionValueType(str, Enum):
     NUMBER = "number"
     BOOLEAN = "boolean"
+    STRING = "string"
     SERIES = "series"
     ANY = "any"
 

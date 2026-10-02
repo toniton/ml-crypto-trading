@@ -7,6 +7,7 @@ from src.events.agent_events import (
     AgentActionPlanRequestedEvent,
     AgentApprovalDecisionRequestedEvent,
     AgentMessageCreatedEvent,
+    with_metadata,
 )
 
 
@@ -61,8 +62,6 @@ def test_event_payload_contains_metadata():
 
 
 def test_with_metadata_attaches_envelope():
-    from src.events.agent_events import with_metadata
-
     metadata = AgentEventMetadata(correlation_id=uuid.uuid4())
     event = with_metadata(AgentActionPlanRequestedEvent(), metadata)
     assert event.correlation_id == metadata.correlation_id

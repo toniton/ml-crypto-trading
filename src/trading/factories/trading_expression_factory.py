@@ -9,9 +9,13 @@ from api.interfaces.trading_context import TradingContext
 from src.core.expressions.default_context import DefaultContext
 from src.core.interfaces.expression_context import ExpressionContext
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.regimes.market_regime import MarketRegime
+from src.trading.regimes.market_regime_detector import MarketRegimeDetector
 
 
 class TradingExpressionFactory:
+    _detector = MarketRegimeDetector()
+
     @staticmethod
     def create_context(
             asset: Asset,
@@ -29,6 +33,7 @@ class TradingExpressionFactory:
 
         variables = {
             **TradingExpressionFactory._build_market_variables(market_data),
+            **TradingExpressionFactory._build_regime_variables(candles, market_data),
 
             # Account
             "balance": available_balance,
@@ -52,7 +57,7 @@ class TradingExpressionFactory:
 
         return DefaultContext(
             variables=variables,
-            functions=TradingExpressionFactory._build_functions(candles)
+            functions=TradingExpressionFactory._build_functions(candles, market_data)
         )
 
     @staticmethod
@@ -90,14 +95,33 @@ class TradingExpressionFactory:
         close = float(market_data.close_price)
         variables = {
             **TradingExpressionFactory._build_market_variables(market_data),
+            **TradingExpressionFactory._build_regime_variables(candles, market_data),
             **TradingExpressionFactory._build_position_variables(trading_context, close),
             "candles": candles
         }
 
         return DefaultContext(
             variables=variables,
-            functions=TradingExpressionFactory._build_functions(candles)
+            functions=TradingExpressionFactory._build_functions(candles, market_data)
         )
+
+    @staticmethod
+    def _build_regime_variables(candles: List[Candle], market_data: MarketData) -> dict:
+        metrics = TradingExpressionFactory._detector.detect(candles, market_data)
+        return {
+            "regime": metrics.regime.value,
+            "volatility": metrics.volatility,
+            "trend_strength": metrics.trend_strength,
+            "liquidity": metrics.liquidity,
+            "spread": metrics.spread,
+            "TRENDING_UP": MarketRegime.TRENDING_UP.value,
+            "TRENDING_DOWN": MarketRegime.TRENDING_DOWN.value,
+            "RANGING": MarketRegime.RANGING.value,
+            "HIGH_VOLATILITY": MarketRegime.HIGH_VOLATILITY.value,
+            "LOW_VOLATILITY": MarketRegime.LOW_VOLATILITY.value,
+            "ILLIQUID": MarketRegime.ILLIQUID.value,
+            "UNKNOWN": MarketRegime.UNKNOWN.value,
+        }
 
     @staticmethod
     def _build_market_variables(market_data: MarketData) -> dict:
@@ -131,7 +155,8 @@ class TradingExpressionFactory:
         }
 
     @staticmethod
-    def _build_functions(candles: List[Candle]) -> dict:
+    def _build_functions(candles: List[Candle], market_data: Optional[MarketData] = None) -> dict:
+        close = float(market_data.close_price) if market_data else 0.0
         return {
             "max": max,
             "min": min,
@@ -143,6 +168,19 @@ class TradingExpressionFactory:
             "ema": TradingExpressionFactory._calculate_ema(candles),
             "rsi": TradingExpressionFactory._calculate_rsi(candles),
             "atr": TradingExpressionFactory._calculate_atr(candles),
+            "regime": (
+                lambda period=20: TradingExpressionFactory._detector.detect(candles, market_data, period).regime.value
+            ),
+            "volatility": (
+                lambda period=20: TradingExpressionFactory._detector.calculate_volatility(candles, close, period)
+            ),
+            "trend_strength": (
+                lambda period=20: TradingExpressionFactory._detector.calculate_trend_strength(candles, period)
+            ),
+            "liquidity": (
+                lambda period=20: TradingExpressionFactory._detector.calculate_liquidity(candles, market_data, period)
+            ),
+            "spread": lambda: TradingExpressionFactory._detector.calculate_spread(market_data, close),
         }
 
     @staticmethod
@@ -206,4 +244,3 @@ class TradingExpressionFactory:
             return sum(window) / len(window)
 
         return atr
-

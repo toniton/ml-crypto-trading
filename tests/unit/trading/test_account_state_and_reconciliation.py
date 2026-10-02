@@ -7,7 +7,7 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
-from src.events.message_event_bus import MessageEventBus
+from src.events.message_event_bus import CallbackSubscription, MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
@@ -105,7 +105,6 @@ class TestAccountManagerAndEventDrivenSync:
     def test_deduplication_of_identical_balance_frames(self):
         event_bus = MessageEventBus()
         events_received = []
-        from src.events.message_event_bus import CallbackSubscription
         event_bus.subscribe(
             BalanceChangedEvent.__name__,
             CallbackSubscription(lambda e: events_received.append(e)),

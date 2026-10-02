@@ -64,7 +64,11 @@ class LlmRuntimeManager(ApplicationLoggingMixin):
         with self._lock:
             if self._active_adapter is None:
                 self.rebuild_active_adapter()
-            assert self._active_adapter is not None
+            if self._active_adapter is None:
+                raise ValueError(
+                    f"No API key configured for active model '{self._active_model_id}'. "
+                    f"Please configure it in Settings or environment variables."
+                )
             return self._active_adapter
 
     def resolve_active_model_id(self) -> str:
@@ -81,7 +85,7 @@ class LlmRuntimeManager(ApplicationLoggingMixin):
 
         return self._llm_config.default_model.model_id
 
-    def rebuild_active_adapter(self) -> LlmAdapter:
+    def rebuild_active_adapter(self) -> Optional[LlmAdapter]:
         with self._lock:
             model_id = self.resolve_active_model_id()
             model_config = self._llm_config.get_model(model_id)
@@ -98,24 +102,33 @@ class LlmRuntimeManager(ApplicationLoggingMixin):
             except Exception as exc:  # pylint: disable=broad-except
                 self.app_logger.debug(f"Could not read credentials for '{model_id}' from DB: {exc}")
 
-            adapter = ModelFactory.create_model(
-                self._llm_config,
-                model_name=model_config.name,
-            )
-
-            # Bind enabled tools
-            tools_to_bind = self._bound_tools or ToolFactory.get_enabled_tools(
-                self._tool_map, self._llm_config
-            )
-            if tools_to_bind:
-                adapter.bind_tools(tools_to_bind)
-
             self._active_model_id = model_id
-            self._active_adapter = adapter
-            self.app_logger.info(
-                f"Active LLM model set to '{model_id}' ({model_config.name} / {model_config.provider.value})"
-            )
-            return adapter
+            try:
+                adapter = ModelFactory.create_model(
+                    self._llm_config,
+                    model_name=model_config.name,
+                    api_key=api_key,
+                    api_base_url=api_base_url,
+                )
+
+                # Bind enabled tools
+                tools_to_bind = self._bound_tools or ToolFactory.get_enabled_tools(
+                    self._tool_map, self._llm_config
+                )
+                if tools_to_bind:
+                    adapter.bind_tools(tools_to_bind)
+
+                self._active_adapter = adapter
+                self.app_logger.info(
+                    f"Active LLM model set to '{model_id}' ({model_config.name} / {model_config.provider.value})"
+                )
+                return adapter
+            except Exception as exc:  # pylint: disable=broad-except
+                self._active_adapter = None
+                self.app_logger.warning(
+                    f"Could not initialize active LLM model '{model_id}': {exc}"
+                )
+                return None
 
     def switch_active_model(self, model_id: str) -> dict:
         with self._lock:

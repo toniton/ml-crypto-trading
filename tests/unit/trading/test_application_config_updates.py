@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from queue import Queue
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 from sqlalchemy import create_engine
@@ -10,6 +11,7 @@ from sqlalchemy.orm import sessionmaker
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.application import Application
 from src.configuration.trading_config import TradingConfig
+from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
 from src.vcs.application.events import RefChangedEvent
@@ -159,7 +161,6 @@ class TestTradingEngineUpdateConfig:
         assert executor.configs == [config]
 
     def test_delegates_to_scheduler(self):
-        from unittest.mock import Mock
         engine = object.__new__(TradingEngine)
         executor = _FakeEngine()
         scheduler = Mock()
@@ -177,8 +178,6 @@ class TestTradingEngineUpdateConfig:
 
 
 def _make_executor(dynamic_quantity="min_qty"):
-    from src.trading.consensus.consensus_manager import ConsensusManager
-
     consensus_manager = ConsensusManager()
     container = SimpleNamespace(
         account_manager=None,

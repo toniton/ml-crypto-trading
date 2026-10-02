@@ -267,6 +267,8 @@ class ExpressionParser:
                 return ExpressionValueType.BOOLEAN
             if isinstance(node.value, (int, float)):
                 return ExpressionValueType.NUMBER
+            if isinstance(node.value, str):
+                return ExpressionValueType.STRING
         if isinstance(node, ast.IfExp):
             return cls._infer_node_type(node.body)
         return ExpressionValueType.NUMBER

@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from api.interfaces.trade_action import TradeAction
 from src.configuration.strategy_config import StrategyConfig, StrategyType
+from src.configuration.trading_config import TradingConfig
 
 
 def test_strategy_config_parses_inline_expression():
@@ -92,8 +93,6 @@ def test_strategy_config_rejects_unsupported_nodes():
 
 
 def test_trading_config_rejects_duplicate_asset_strategy_names():
-    from src.configuration.trading_config import TradingConfig
-
     with pytest.raises(ValidationError):
         TradingConfig.model_validate(
             {
@@ -130,8 +129,6 @@ def test_trading_config_rejects_duplicate_asset_strategy_names():
 
 
 def test_trading_config_parses_asset_strategies():
-    from src.configuration.trading_config import TradingConfig
-
     config = TradingConfig.model_validate(
         {
             "assets": [

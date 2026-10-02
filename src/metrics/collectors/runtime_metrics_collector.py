@@ -94,29 +94,21 @@ class ProcessStatsTracker:
         self._last_proc_time = time.process_time()
 
     def get_memory_rss_bytes(self) -> int:
-        try:
-            import psutil  # pylint: disable=import-outside-toplevel,import-error
-            return int(psutil.Process().memory_info().rss)
-        except Exception:  # pylint: disable=broad-except
-            usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-            if sys.platform == "darwin":
-                return int(usage)
-            return int(usage * 1024)
+        usage = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+        if sys.platform == "darwin":
+            return int(usage)
+        return int(usage * 1024)
 
     def get_cpu_percent(self) -> float:
-        try:
-            import psutil  # pylint: disable=import-outside-toplevel,import-error
-            return float(round(psutil.Process().cpu_percent(interval=None), 2))
-        except Exception:  # pylint: disable=broad-except
-            now = time.perf_counter()
-            proc_now = time.process_time()
-            elapsed = now - self._last_perf_time
-            if elapsed <= 0:
-                return 0.0
-            cpu = ((proc_now - self._last_proc_time) / elapsed) * 100.0
-            self._last_perf_time = now
-            self._last_proc_time = proc_now
-            return float(round(max(0.0, cpu), 2))
+        now = time.perf_counter()
+        proc_now = time.process_time()
+        elapsed = now - self._last_perf_time
+        if elapsed <= 0:
+            return 0.0
+        cpu = ((proc_now - self._last_proc_time) / elapsed) * 100.0
+        self._last_perf_time = now
+        self._last_proc_time = proc_now
+        return float(round(max(0.0, cpu), 2))
 
     @staticmethod
     def get_threads_count() -> int:

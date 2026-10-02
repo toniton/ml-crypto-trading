@@ -1,17 +1,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import src.application
 from main import main
 
 
 class TestBuildAndStartup(unittest.TestCase):
 
     def test_imports(self):
-        # pylint: disable=import-outside-toplevel, unused-import
-        try:
-            import src.application
-        except ImportError as e:
-            self.fail(f"Failed to import modules: {e}")
+        self.assertIsNotNone(src.application)
 
     @patch('main.TradingConfig')
     @patch('main.ApplicationConfig')

@@ -1,5 +1,6 @@
 from decimal import Decimal
 from src.exchange.clients.cryptodotcom.mappers.cryptodotcom_mappers import (
+    CryptoDotComAccountBalanceMapper,
     CryptoDotComMarketDataMapper,
     CryptoDotComOrderMapper,
     CryptoDotComOrdersMapper,
@@ -112,8 +113,6 @@ class TestCryptoDotComMarketDataMapper:
 
 class TestCryptoDotComAccountBalanceMapper:
     def test_user_balance_official_spec_payload_mapping(self):
-        from src.exchange.clients.cryptodotcom.mappers.cryptodotcom_mappers import CryptoDotComAccountBalanceMapper
-
         payload = {
             "id": -1,
             "method": "subscribe",

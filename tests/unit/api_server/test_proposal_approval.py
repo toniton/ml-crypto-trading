@@ -10,6 +10,7 @@ from src.agent import AgentGateway, ConfigChange, ConfigurationProposal
 from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.core.interfaces.conversation_store import ConversationMessage
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
@@ -247,6 +248,4 @@ class TestConfigurationServiceApplyToVcs:
 
 
 def _assistant_message(message_id, payload):
-    from src.core.interfaces.conversation_store import ConversationMessage
-
     return ConversationMessage(role="assistant", content="proposal", message_id=message_id, payload=payload)

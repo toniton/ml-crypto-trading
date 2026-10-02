@@ -1,32 +1,29 @@
-try:
-    from src.agent.configuration.configuration_service import ConfigurationService
-    from src.agent.configuration.models import (
-        ApprovalBlock,
-        ClarificationResult,
-        ConfigChange,
-        ConfigurationGoal,
-        ConfigurationPresentation,
-        ConfigurationProposal,
-        ConfigurationResult,
-        ConfigurationViewBlock,
-        GeneralResult,
-        MarkdownBlock,
-        ProposalDecision,
-        ValidationResult,
-    )
-    from src.agent.configuration.nodes.generate_proposal import GenerateProposalNode
-    from src.agent.configuration.nodes.present_configuration import PresentConfigurationNode
-    from src.agent.configuration.nodes.present_proposal import PresentProposalNode
-    from src.agent.configuration.nodes.validate_proposal import ValidateProposalNode
-    from src.agent.events import AIEvent
-    from src.core.interfaces.conversation_store import ConversationStore
-    from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
-    from src.agent.router.nodes.route import RouteNode
-    from src.agent.router.nodes.understand_goal import UnderstandGoalNode
-    from src.agent.gateway import AgentGateway, AgentResult
-    from src.agent.runtime.registry import AgentRegistry
-except ImportError:
-    pass
+from src.agent.configuration.configuration_service import ConfigurationService
+from src.agent.configuration.models import (
+    ApprovalBlock,
+    ClarificationResult,
+    ConfigChange,
+    ConfigurationGoal,
+    ConfigurationPresentation,
+    ConfigurationProposal,
+    ConfigurationResult,
+    ConfigurationViewBlock,
+    GeneralResult,
+    MarkdownBlock,
+    ProposalDecision,
+    ValidationResult,
+)
+from src.agent.configuration.nodes.generate_proposal import GenerateProposalNode
+from src.agent.configuration.nodes.present_configuration import PresentConfigurationNode
+from src.agent.configuration.nodes.present_proposal import PresentProposalNode
+from src.agent.configuration.nodes.validate_proposal import ValidateProposalNode
+from src.agent.events import AIEvent
+from src.core.interfaces.conversation_store import ConversationStore
+from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
+from src.agent.router.nodes.route import RouteNode
+from src.agent.router.nodes.understand_goal import UnderstandGoalNode
+from src.agent.gateway import AgentGateway, AgentResult
+from src.agent.runtime.registry import AgentRegistry
 
 
 

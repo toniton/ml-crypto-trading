@@ -1,7 +1,10 @@
 import yaml
 
-from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent import ConfigChange, ConfigurationProposal
+from src.agent.configuration.configuration_service import ConfigurationService
+from src.vcs.application.service import VCSService
+from tests.unit.agent.conftest import SAMPLE_CONFIG
+from tests.unit.api_server.helpers import make_temp_db_manager
 
 
 class TestConfigurationService:
@@ -173,9 +176,6 @@ class TestConfigurationService:
         assert view.signal_window.buy == 1.3 and view.signal_window.sell == 0.5  # pylint: disable=no-member
 
     def test_build_configuration_view_includes_strategies(self):
-        from src.vcs.application.service import VCSService
-        from tests.unit.api_server.helpers import make_temp_db_manager
-
         with open("examples/configurations/trading-config.yaml", encoding="utf-8") as stream:
             content = yaml.safe_load(stream)
 
@@ -226,10 +226,6 @@ class TestValueNormalization:
 class TestPreExistingConfigErrors:
     @staticmethod
     def _vcs_with_stale_value():
-        from tests.unit.agent.conftest import SAMPLE_CONFIG
-        from src.vcs.application.service import VCSService
-        from tests.unit.api_server.helpers import make_temp_db_manager
-
         db_mgr = make_temp_db_manager()
         vcs = VCSService(db_mgr)
         raw = yaml.safe_load(SAMPLE_CONFIG)
@@ -292,9 +288,6 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
 """
 
     def test_model_level_error_reports_the_changed_leaf(self):
-        from src.vcs.application.service import VCSService
-        from tests.unit.api_server.helpers import make_temp_db_manager
-
         db_mgr = make_temp_db_manager()
         vcs = VCSService(db_mgr)
         vcs.commit(yaml.safe_load(self.CONFIG_WITH_STRATEGY), author="test", message="seed")
@@ -316,9 +309,6 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
         assert not any("{" in error for error in validation.errors)
 
     def test_empty_expression_is_rejected(self):
-        from src.vcs.application.service import VCSService
-        from tests.unit.api_server.helpers import make_temp_db_manager
-
         db_mgr = make_temp_db_manager()
         vcs = VCSService(db_mgr)
         vcs.commit(yaml.safe_load(self.CONFIG_WITH_STRATEGY), author="test", message="seed")

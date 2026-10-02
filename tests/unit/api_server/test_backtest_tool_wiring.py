@@ -1,10 +1,16 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.application import Application
 from src.configuration.application_config import ApplicationConfig
+from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.llm_config import LlmConfig
+from src.configuration.trading_config import TradingConfig
+from src.core.interfaces.database_manager import DatabaseManager
+from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
 from src.llm.tools.backtest_tool import BacktestTool
 from src.llm.tools.metrics_tool import MetricsTool
-
+from src.vcs.application.service import VCSService
 
 
 class TestBacktestToolWiring(unittest.TestCase):
@@ -27,14 +33,6 @@ class TestBacktestToolWiring(unittest.TestCase):
             mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager,
             mock_setup_config, _mock_setup_clients,
     ):
-        from src.application import Application
-        from src.configuration.environment_config import EnvironmentConfig
-        from src.configuration.llm_config import LlmConfig
-        from src.configuration.trading_config import TradingConfig
-        from src.core.interfaces.database_manager import DatabaseManager
-        from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
-        from src.vcs.application.service import VCSService
-
         mock_vcs.return_value = MagicMock(spec=VCSService)
         mock_db_manager.return_value = MagicMock(spec=DatabaseManager)
         mock_client_factory.create_rest_manager.return_value = MagicMock(spec=ExchangeRestManager)
