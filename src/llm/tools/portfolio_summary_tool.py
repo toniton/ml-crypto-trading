@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional, Type
+from typing import Optional, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.helpers.format_helper import FormatHelper
+from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 
 
 class PortfolioSummaryInput(BaseModel):
@@ -29,9 +30,9 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
         "reserved order cash, current drawdown %, peak equity, and single-asset concentration levels."
     )
     args_schema: Type[BaseModel] = PortfolioSummaryInput
-    portfolio_risk_manager: Any
+    portfolio_risk_manager: PortfolioRiskManager
 
-    def __init__(self, portfolio_risk_manager: Any):
+    def __init__(self, portfolio_risk_manager: PortfolioRiskManager):
         super().__init__(portfolio_risk_manager=portfolio_risk_manager)
 
     def _run(  # pylint: disable=arguments-differ

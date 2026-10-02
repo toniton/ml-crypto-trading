@@ -3,6 +3,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.asset import Asset
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.helpers.format_helper import FormatHelper
 from src.trading.orders.order_manager import OrderManager
@@ -35,9 +36,9 @@ class GetOpenOrdersTool(BaseTool, ApplicationLoggingMixin):
     )
     args_schema: Type[BaseModel] = OpenOrdersInput
     order_manager: OrderManager
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, order_manager: OrderManager, assets: list):
+    def __init__(self, order_manager: OrderManager, assets: list[Asset]):
         super().__init__(
             order_manager=order_manager,
             assets=assets

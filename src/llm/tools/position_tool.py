@@ -5,6 +5,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.asset import Asset
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.helpers.format_helper import FormatHelper
 from src.trading.session.session_manager import SessionManager
@@ -25,9 +26,9 @@ class PositionTool(BaseTool, ApplicationLoggingMixin):
     )
     args_schema: Type[BaseModel] = PositionInput
     session_manager: SessionManager
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, session_manager: SessionManager, assets: list):
+    def __init__(self, session_manager: SessionManager, assets: list[Asset]):
         super().__init__(session_manager=session_manager, assets=assets)
 
     def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ

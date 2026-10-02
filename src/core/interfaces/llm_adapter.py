@@ -1,6 +1,9 @@
-from abc import ABC, abstractmethod
-from typing import Any, AsyncIterator, List, Literal, Optional, Type, TypeVar
+from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from typing import AsyncIterator, List, Literal, Optional, Type, TypeVar
+
+from langchain_core.tools import BaseTool
 from pydantic import BaseModel, Field
 
 Structured = TypeVar("Structured", bound=BaseModel)
@@ -31,11 +34,11 @@ class LlmAdapter(ABC):
         pass
 
     @abstractmethod
-    def bind_tools(self, tools: List[Any]) -> None:
+    def bind_tools(self, tools: List[BaseTool]) -> None:
         pass
 
     @abstractmethod
-    def get_tool(self, name: str) -> Optional[Any]:
+    def get_tool(self, name: str) -> Optional[BaseTool]:
         pass
 
     @abstractmethod

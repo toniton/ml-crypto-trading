@@ -5,6 +5,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.asset import Asset
 from src.core.interfaces.trading_journal import TradingJournal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.helpers.format_helper import FormatHelper
@@ -25,9 +26,9 @@ class RecentTradesTool(BaseTool, ApplicationLoggingMixin):
     )
     args_schema: Type[BaseModel] = RecentTradesInput
     trading_journal: TradingJournal
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, trading_journal: TradingJournal, assets: list):
+    def __init__(self, trading_journal: TradingJournal, assets: list[Asset]):
         super().__init__(trading_journal=trading_journal, assets=assets)
 
     def _run(self, ticker_symbol: str, limit: int = 20) -> str:  # pylint: disable=arguments-differ

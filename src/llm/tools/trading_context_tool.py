@@ -1,10 +1,11 @@
-from typing import Any, Type
+from typing import Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.helpers.format_helper import FormatHelper
+from src.trading.session.session_manager import SessionManager
 
 
 class TradingContextInput(BaseModel):
@@ -19,9 +20,9 @@ class TradingContextTool(BaseTool, ApplicationLoggingMixin):
         "Call this tool multiple times if you need to check multiple assets."
     )
     args_schema: Type[BaseModel] = TradingContextInput
-    session_manager: Any
+    session_manager: SessionManager
 
-    def __init__(self, session_manager: Any):
+    def __init__(self, session_manager: SessionManager):
         super().__init__(session_manager=session_manager)
 
     def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ

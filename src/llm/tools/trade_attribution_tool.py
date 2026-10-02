@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any, Optional, Type
+from typing import Optional, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
@@ -15,6 +15,7 @@ from src.trading.analytics.trade_attribution_service import (
     AttributionMetrics,
     TradeAttributionService,
 )
+from src.trading.session.session_manager import SessionManager
 
 
 class TradeAttributionInput(BaseModel):
@@ -41,13 +42,13 @@ class TradeAttributionTool(BaseTool, ApplicationLoggingMixin):
         "across strategies, commits, or symbols for historical or live trades."
     )
     args_schema: Type[BaseModel] = TradeAttributionInput
-    database_manager: Optional[Any] = None
-    session_manager: Optional[Any] = None
+    database_manager: Optional[DatabaseManager] = None
+    session_manager: Optional[SessionManager] = None
 
     def __init__(
             self,
             database_manager: Optional[DatabaseManager] = None,
-            session_manager: Optional[Any] = None,
+            session_manager: Optional[SessionManager] = None,
     ):
         super().__init__(database_manager=database_manager, session_manager=session_manager)
 

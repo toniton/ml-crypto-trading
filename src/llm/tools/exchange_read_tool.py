@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional, Type
+from typing import Optional, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.interfaces.timeframe import Timeframe
+from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.helpers.format_helper import FormatHelper
 
@@ -39,9 +40,9 @@ class ExchangeReadOnlyTool(BaseTool, ApplicationLoggingMixin):
         "historical candles, open orders, and trading fees directly from exchange APIs."
     )
     args_schema: Type[BaseModel] = ExchangeReadOnlyInput
-    rest_manager: Any
+    rest_manager: ExchangeRestManager
 
-    def __init__(self, rest_manager: Any):
+    def __init__(self, rest_manager: ExchangeRestManager):
         super().__init__(rest_manager=rest_manager)
 
     def _run(  # pylint: disable=arguments-differ

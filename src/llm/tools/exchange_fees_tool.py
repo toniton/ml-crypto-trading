@@ -3,6 +3,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.asset import Asset
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.helpers.format_helper import FormatHelper
@@ -18,15 +19,15 @@ class ExchangeFeesTool(BaseTool, ApplicationLoggingMixin):
     description: str = "Returns the exchange fees (maker and taker fee percentages) for a SINGLE given asset."
     args_schema: Type[BaseModel] = ExchangeFeesInput
     fees_manager: FeesManager
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, fees_manager: FeesManager, assets: list):
+    def __init__(self, fees_manager: FeesManager, assets: list[Asset]):
         super().__init__(
             fees_manager=fees_manager,
             assets=assets
         )
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target_symbol = ticker_symbol.strip()
 
         # Find the asset object
