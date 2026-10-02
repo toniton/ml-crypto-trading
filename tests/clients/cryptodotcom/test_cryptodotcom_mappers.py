@@ -1,5 +1,6 @@
 from decimal import Decimal
 from src.exchange.clients.cryptodotcom.mappers.cryptodotcom_mappers import (
+    CryptoDotComAccountBalanceMapper,
     CryptoDotComMarketDataMapper,
     CryptoDotComOrderMapper,
     CryptoDotComOrdersMapper,
@@ -108,3 +109,70 @@ class TestCryptoDotComMarketDataMapper:
     def test_ask_price_none_when_missing(self):
         market_data = CryptoDotComMarketDataMapper().map(self._sample_ticker_payload(k=None))
         assert market_data.ask_price is None
+
+
+class TestCryptoDotComAccountBalanceMapper:
+    def test_user_balance_official_spec_payload_mapping(self):
+        payload = {
+            "id": -1,
+            "method": "subscribe",
+            "code": 0,
+            "result": {
+                "subscription": "user.balance",
+                "channel": "user.balance",
+                "data": [
+                    {
+                        "instrument_name": "USD",
+                        "total_available_balance": "58.90813519",
+                        "total_margin_balance": "58.90813519",
+                        "total_initial_margin": "0.0",
+                        "total_maintenance_margin": "0.0",
+                        "total_position_cost": "0.0",
+                        "total_cash_balance": "58.90813519",
+                        "total_collateral_value": "58.90813519",
+                        "total_session_unrealized_pnl": "0.0",
+                        "total_session_realized_pnl": "0.0",
+                        "is_liquidating": False,
+                        "total_effective_leverage": "0.0",
+                        "position_limit": "1000000.0",
+                        "used_position_limit": "0.0",
+                        "total_isolated_cash_balance": "0.0",
+                        "total_position_im": "0.0",
+                        "total_haircut": "0.0",
+                        "position_balances": [
+                            {
+                                "instrument_name": "USD",
+                                "quantity": "58.90813519",
+                                "market_value": "58.90813519",
+                                "collateral_eligible": True,
+                                "haircut": "0",
+                                "collateral_amount": "58.90813519",
+                                "max_withdrawal_balance": "58.90813519",
+                                "reserved_qty": "0",
+                            },
+                            {
+                                "instrument_name": "BTC",
+                                "quantity": "0.00004",
+                                "market_value": "2.60",
+                                "collateral_eligible": True,
+                                "haircut": "0.1",
+                                "collateral_amount": "2.34",
+                                "max_withdrawal_balance": "0.00004",
+                                "reserved_qty": "0",
+                            },
+                        ],
+                    }
+                ],
+            },
+        }
+
+        mapper = CryptoDotComAccountBalanceMapper()
+        balances = mapper.map(payload)
+
+        assert len(balances) == 2
+        usd = next(b for b in balances if b.currency == "USD")
+        btc = next(b for b in balances if b.currency == "BTC")
+
+        assert usd.available_balance == Decimal("58.90813519")
+        assert btc.available_balance == Decimal("0.00004")
+

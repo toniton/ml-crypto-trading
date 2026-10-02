@@ -10,6 +10,7 @@ from src.core.interfaces.llm_adapter import ChatTurn
 from src.database.dao.conversation_dao import ConversationDao
 from src.database.dao.conversation_message_dao import ConversationMessageDao
 from src.database.repositories.conversation_repository import ConversationRepository
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class PostgresConversationRepository(ConversationRepository):
@@ -85,13 +86,18 @@ class PostgresConversationRepository(ConversationRepository):
 
     def append(self, session_id: str, message: ConversationMessage, max_turns: int) -> None:
         self.get_or_create(session_id)
+        payload_data = (
+            FormatHelper.to_json_compatible(message.payload)
+            if message.payload is not None
+            else None
+        )
         self.database_session.add(
             ConversationMessageDao(
                 conversation_id=session_id,
                 role=message.role,
                 content=message.content,
                 message_id=message.message_id or None,
-                payload=message.payload,
+                payload=payload_data,
             )
         )
         self.database_session.flush()

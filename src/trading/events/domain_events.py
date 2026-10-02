@@ -47,6 +47,7 @@ class MarketDataEvent(TradingEvent):
 class StrategyEvaluatedEvent(TradingEvent):
     symbol: str
     evaluated_at: float
+    strategy_name: Optional[str] = None
 
     def _resolve_asset(self) -> Optional[str]:
         return self.symbol
@@ -57,6 +58,7 @@ class SignalGeneratedEvent(TradingEvent):
     symbol: str
     action: str
     generated_at: float
+    strategy_name: Optional[str] = None
 
     def _resolve_asset(self) -> Optional[str]:
         return self.symbol
@@ -124,9 +126,26 @@ class PositionChangedEvent(TradingEvent):
 
 @dataclass
 class BalanceChangedEvent(TradingEvent):
-    symbol: str
     currency: str
-    balance: Decimal
+    available: Decimal
+    total: Optional[Decimal] = None
+    reserved: Decimal = Decimal("0")
+    exchange: Optional[str] = None
+    account_id: str = "default"
+    previous_total: Optional[Decimal] = None
+    previous_available: Optional[Decimal] = None
+    source: str = "WS"
+    reason: str = ""
+    balance_timestamp: Optional[float] = None
+    version: Optional[int] = None
+    symbol: Optional[str] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.total is None:
+            self.total = self.available
+        if self.symbol is None:
+            self.symbol = self.currency
 
     def _resolve_asset(self) -> Optional[str]:
         return self.symbol
@@ -163,3 +182,41 @@ class TradeClosedEvent(TradingEvent):
 
     def _resolve_asset(self) -> Optional[str]:
         return self.symbol
+
+
+@dataclass
+class ReconciliationDiscrepancyEvent(TradingEvent):
+    EVENT_TYPE = "ReconciliationDiscrepancyEvent"
+    discrepancy_type: str = ""
+    severity: str = "CRITICAL"
+    exchange: str = ""
+    asset_or_currency: str = ""
+    local_value: Any = None
+    exchange_value: Any = None
+    difference: Optional[Decimal] = None
+    action_taken: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
+    symbol: Optional[str] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.symbol is None:
+            self.symbol = self.asset_or_currency
+
+    def _resolve_asset(self) -> Optional[str]:
+        return self.symbol
+
+
+@dataclass
+class ReconciliationCompletedEvent(TradingEvent):
+    EVENT_TYPE = "ReconciliationCompletedEvent"
+    cycle_id: str = ""
+    exchange: str = ""
+    duration_ms: float = 0.0
+    discrepancies_count: int = 0
+    critical_count: int = 0
+    actions_taken: list[str] = field(default_factory=list)
+
+    def _resolve_asset(self) -> Optional[str]:
+        return None
+

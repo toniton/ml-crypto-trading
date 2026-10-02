@@ -1,5 +1,6 @@
 from typing import Optional, Tuple
 
+from src.events.message_event_bus import MessageEventBus
 from src.exchange.factories.client_factory import ClientFactory
 from src.metrics.collectors.exchange_metrics_collector import ExchangeMetricsCollector
 from src.metrics.services.metric_service import MetricService
@@ -11,6 +12,9 @@ from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 from src.trading.protection.protection_manager import ProtectionManager
+from src.trading.reconciliation.exchange_reconciliation_engine import (
+    ExchangeReconciliationEngine,
+)
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
 from src.vcs.application import VCSService
@@ -28,6 +32,7 @@ class ManagerFactory:
             metrics_collector: Optional[ExchangeMetricsCollector] = None,
             config_vcs: Optional[VCSService] = None,
     ) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
+        event_bus = event_bus or MessageEventBus()
         trading_journal = InMemoryTradingJournal()
         collector = metrics_collector or (
             ExchangeMetricsCollector(metric_service) if metric_service else None
@@ -38,24 +43,41 @@ class ManagerFactory:
         rest_manager = ClientFactory.create_rest_manager(
             is_simulated, metrics_collector=collector
         )
-        session_manager = SessionManager(config_vcs=config_vcs)
+        session_manager = SessionManager(event_bus=event_bus, config_vcs=config_vcs)
         order_manager = OrderManager(
             database_manager, trading_journal, rest_manager, websocket_manager,
             synchronous_execution=synchronous_execution, event_bus=event_bus,
             session_manager=session_manager,
         )
         portfolio_risk_manager = PortfolioRiskManager(assets=assets, event_bus=event_bus)
+        protection_manager = ProtectionManager()
+        account_manager = AccountManager(
+            assets, rest_manager, websocket_manager, session_manager, event_bus=event_bus
+        )
+        fees_manager = FeesManager(assets, rest_manager)
+        reconciliation_engine = ExchangeReconciliationEngine.create(
+            account_manager=account_manager,
+            order_manager=order_manager,
+            session_manager=session_manager,
+            fees_manager=fees_manager,
+            rest_manager=rest_manager,
+            assets=assets,
+            event_bus=event_bus,
+            protection_manager=protection_manager,
+        )
 
         container = ManagerContainer(
-            account_manager=AccountManager(assets, rest_manager, websocket_manager, session_manager),
-            fees_manager=FeesManager(assets, rest_manager),
+            account_manager=account_manager,
+            fees_manager=fees_manager,
             order_manager=order_manager,
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
             consensus_manager=ConsensusManager(event_bus=event_bus),
-            protection_manager=ProtectionManager(),
+            protection_manager=protection_manager,
             session_manager=session_manager,
             websocket_manager=websocket_manager,
             rest_manager=rest_manager,
             portfolio_risk_manager=portfolio_risk_manager,
+            reconciliation_engine=reconciliation_engine,
         )
         return container, trading_journal
+

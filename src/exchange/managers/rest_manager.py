@@ -70,13 +70,22 @@ class RestManager(ExchangeRestManager, RestRegistry):
         builder = service.builder().market_data(ticker_symbol)
         return service.execute(builder)
 
-    @cached(cache=TTLCache(maxsize=1024, ttl=600))
     @_instrument_rest("get_account_balance")
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
-    def get_account_balance(self, exchange: str) -> List[AccountBalance]:
+    def _fetch_account_balance(self, exchange: str) -> List[AccountBalance]:
         service = self.get_service(exchange)
         builder = service.builder().account_balance()
         return service.execute(builder)
+
+    @cached(cache=TTLCache(maxsize=1024, ttl=600))
+    def _cached_account_balance(self, exchange: str) -> List[AccountBalance]:
+        return self._fetch_account_balance(exchange)
+
+    def get_account_balance(self, exchange: str, force_refresh: bool = False) -> List[AccountBalance]:
+        if force_refresh:
+            return self._fetch_account_balance(exchange)
+        return self._cached_account_balance(exchange)
+
 
     @cached(cache=TTLCache(maxsize=1024, ttl=6000))
     @_instrument_rest("get_account_fees")

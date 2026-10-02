@@ -12,8 +12,8 @@ from src.events.trading_event import TradingEvent
 class AgentEvent(TradingEvent):
     agent_metadata: AgentEventMetadata = field(default_factory=AgentEventMetadata)
 
-    def __init__(self):
-        super().__init__()
+    def __post_init__(self):
+        super().__post_init__()
         self._causation_id = None
         self._correlation_id = None
 

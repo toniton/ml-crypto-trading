@@ -6,6 +6,7 @@ from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import OrderStatus, TradeAction
+from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.events import PositionChangedEvent
 from src.trading.orders.order_manager import OrderManager
@@ -29,7 +30,7 @@ def _create_test_asset(base: str = "BTC", quote: str = "USD") -> Asset:
 
 
 def test_session_manager_buy_fill_creates_lot_and_position_entry():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session("sess_1").start_session()
     asset = _create_test_asset()
     session_mgr.init_asset_balance(asset, starting_balance=Decimal("1000"))
@@ -60,7 +61,7 @@ def test_session_manager_buy_fill_creates_lot_and_position_entry():
 
 
 def test_session_manager_sell_fill_matches_fifo_and_calculates_net_pnl():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session("sess_1").start_session()
     asset = _create_test_asset()
     session_mgr.init_asset_balance(asset, starting_balance=Decimal("1000"))
@@ -114,7 +115,7 @@ def test_order_manager_fill_triggers_position_changed_event():
     db_mgr.get_unit_of_work.return_value.__enter__.return_value = uow
     event_bus = MagicMock()
     journal = InMemoryTradingJournal()
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=event_bus)
     session_mgr.create_session("sess_1").start_session()
     asset = _create_test_asset()
     session_mgr.init_asset_balance(asset, starting_balance=Decimal("1000"))
@@ -192,7 +193,7 @@ def test_order_manager_has_outstanding_intent():
 
 
 def test_strategy_metadata_propagates_from_order_to_lot_and_trade():
-    session_mgr = SessionManager()
+    session_mgr = SessionManager(event_bus=MessageEventBus())
     session_mgr.create_session("sess_strategy").start_session()
     asset = _create_test_asset()
     session_mgr.init_asset_balance(asset, starting_balance=Decimal("1000"))

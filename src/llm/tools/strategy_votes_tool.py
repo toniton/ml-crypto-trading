@@ -5,6 +5,7 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.asset import Asset
 from api.interfaces.trade_action import TradeAction
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.consensus.consensus_manager import ConsensusManager
@@ -29,14 +30,14 @@ class StrategyVotesTool(BaseTool, ApplicationLoggingMixin):
     consensus_manager: ConsensusManager
     session_manager: SessionManager
     market_data_manager: MarketDataManager
-    assets: list = []
+    assets: list[Asset] = []
 
     def __init__(
             self,
             consensus_manager: ConsensusManager,
             session_manager: SessionManager,
             market_data_manager: MarketDataManager,
-            assets: list,
+            assets: list[Asset],
     ):
         super().__init__(
             consensus_manager=consensus_manager,

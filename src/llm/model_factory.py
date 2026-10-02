@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 from typing import Optional
 
@@ -17,35 +19,45 @@ GROQ_API_KEY_ENV = "LLM_PROVIDER__GROQ__API_KEY"
 
 class ModelFactory:
     @staticmethod
-    def create_model(config: LlmConfig, model_name: Optional[str] = None) -> LlmAdapter:
+    def create_model(
+            config: LlmConfig,
+            model_name: Optional[str] = None,
+            api_key: Optional[str] = None,
+            api_base_url: Optional[str] = None,
+    ) -> LlmAdapter:
         model = config.get_model(model_name) if model_name else config.default_model
+        resolved_base_url = api_base_url or model.api_base_url
+
         if model.provider == LlmProvider.DEEPSEEK:
+            key = api_key or ModelFactory._resolve_api_key(model, DEEPSEEK_API_KEY_ENV, "DeepSeek")
             return LangChainDeepSeekAdapter(
                 model_name=model.model_name,
-                api_key=ModelFactory._resolve_api_key(model, DEEPSEEK_API_KEY_ENV, "DeepSeek"),
-                base_url=model.api_base_url,
+                api_key=key,
+                base_url=resolved_base_url,
                 temperature=model.temperature,
                 timeout=model.timeout,
             )
         if model.provider == LlmProvider.GEMINI:
+            key = api_key or ModelFactory._resolve_api_key(model, GEMINI_API_KEY_ENV, "Gemini")
             return LangChainGeminiAdapter(
                 model_name=model.model_name,
-                api_key=ModelFactory._resolve_api_key(model, GEMINI_API_KEY_ENV, "Gemini"),
-                base_url=model.api_base_url,
+                api_key=key,
+                base_url=resolved_base_url,
                 temperature=model.temperature,
                 timeout=model.timeout,
             )
         if model.provider == LlmProvider.GROQ:
+            key = api_key or ModelFactory._resolve_api_key(model, GROQ_API_KEY_ENV, "Groq")
             return LangChainGroqAdapter(
                 model_name=model.model_name,
-                api_key=ModelFactory._resolve_api_key(model, GROQ_API_KEY_ENV, "Groq"),
-                base_url=model.api_base_url,
+                api_key=key,
+                base_url=resolved_base_url,
                 temperature=model.temperature,
                 timeout=model.timeout,
             )
         return LangChainOllamaAdapter(
             model_name=model.model_name,
-            base_url=model.api_base_url or "http://localhost:11434",
+            base_url=resolved_base_url or "http://localhost:11434",
             temperature=model.temperature,
             timeout=model.timeout,
             keep_alive=model.keep_alive,
@@ -58,9 +70,10 @@ class ModelFactory:
             api_key = os.environ.get(model.api_key_env)
         else:
             api_key = os.environ.get(env_var) or os.environ.get(f"{provider_name.upper()}_API_KEY")
+
         if not api_key:
             raise ValueError(
-                f"No {provider_name} API key configured. Set '{env_var}' in .env "
+                f"No {provider_name} API key configured. Set '{env_var}' in .env, configure in Settings, "
                 f"or set `api_key_env` for model '{model.name}' in src/configuration/llm.yaml."
             )
         return api_key

@@ -11,7 +11,7 @@ from src.agent.oracle.oracle_context import (
     SymbolContext,
     summary_interval_for,
 )
-from src.agent.oracle.oracle_service import OracleService
+from src.agent.oracle.oracle_service import ORACLE_SYSTEM_PROMPT, OracleService
 from src.agent.oracle.oracle_summary import OracleSummary
 from src.agent.oracle.oracle_tool import AnalyzeTradingStateTool, GetTradingSummaryTool
 
@@ -21,6 +21,7 @@ __all__ = [
     "GetTradingSummaryTool",
     "ORACLE_EVENT_TYPES",
     "ORACLE_SUMMARY_EVENT_TYPE",
+    "ORACLE_SYSTEM_PROMPT",
     "OracleContext",
     "OracleEventAdapter",
     "OracleService",

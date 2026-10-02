@@ -5,8 +5,8 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict
 
-from src.llm.tools.trading_context_tool import format_decimal
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 from src.trading.session.session_manager import SessionManager
 
 
@@ -43,9 +43,9 @@ class SessionSummaryTool(BaseTool, ApplicationLoggingMixin):
         for ctx in summary["contexts"].values():
             lines.append(
                 f"  - {ctx['ticker_symbol']} ({ctx['exchange']}): "
-                f"starting={format_decimal(ctx['starting_balance'])}, "
-                f"available={format_decimal(ctx['available_balance'])}, "
-                f"closing={format_decimal(ctx['closing_balance'])}, "
+                f"starting={FormatHelper.format_decimal(ctx['starting_balance'])}, "
+                f"available={FormatHelper.format_decimal(ctx['available_balance'])}, "
+                f"closing={FormatHelper.format_decimal(ctx['closing_balance'])}, "
                 f"buys={ctx['buy_count']}"
             )
         return "\n".join(lines)

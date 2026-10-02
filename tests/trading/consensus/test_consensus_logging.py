@@ -130,8 +130,6 @@ def test_unrestricted_strategy_votes_for_any_ticker():
 
 
 def test_register_strategy_with_empty_ticker_symbols_fails_fast():
-    from src.trading.strategies.expression_strategy import ExpressionStrategy
-
     manager = ConsensusManager()
     strategy = ExpressionStrategy(
         StrategyConfig(

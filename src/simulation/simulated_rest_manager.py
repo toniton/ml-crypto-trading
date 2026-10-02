@@ -16,11 +16,12 @@ class SimulatedRestManager(RestManager):
         super().__init__(metrics_collector=metrics_collector)
         self._account = account
 
-    def get_account_balance(self, exchange: str) -> List[AccountBalance]:
+    def get_account_balance(self, exchange: str, force_refresh: bool = False) -> List[AccountBalance]:
         balances = []
         for currency, amount in self._account.get_balances():
             balances.append(AccountBalance(currency=currency, available_balance=amount))
         return balances
+
 
     def get_account_fees(self, exchange: str) -> Fees:
         return Fees(maker_fee_pct=Decimal("0.0"), taker_fee_pct=Decimal("0.0"))

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import threading
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from src.agent.oracle.events import (
@@ -8,13 +9,19 @@ from src.agent.oracle.events import (
     OracleSummaryEvent,
 )
 from src.agent.oracle.oracle_adapter import OracleEventAdapter
-from src.agent.oracle.oracle_context import OracleContext
+from src.agent.oracle.oracle_context import OracleContext, SymbolContext
 from src.agent.oracle.oracle_summary import OracleSummary
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import LlmAdapter
 from src.events.message_event_bus import CallbackSubscription
 from src.logging.agent_logging_mixin import AgentLoggingMixin
+
+DEFAULT_FAILURE_COOLDOWN = timedelta(seconds=60)
+ORACLE_SYSTEM_PROMPT = (
+    "You are an AI quantitative trading oracle. Analyze and summarize the provided "
+    "accumulated market and trading state for the trading agent based solely on the provided context."
+)
 
 
 class OracleService(AgentLoggingMixin):
@@ -32,6 +39,7 @@ class OracleService(AgentLoggingMixin):
             publish_bus: EventBus | None = None,
             model: str | None = None,
             model_version: str | None = None,
+            failure_cooldown: timedelta | None = None,
     ):
         self._llm = llm
         self._context = context or OracleContext()
@@ -39,8 +47,11 @@ class OracleService(AgentLoggingMixin):
         self._publish_bus = publish_bus
         self._model = model
         self._model_version = model_version
+        self._failure_cooldown = failure_cooldown or DEFAULT_FAILURE_COOLDOWN
         self._latest_summary: OracleSummary | None = None
         self._subscription_ids: list[str] = []
+        self._lock = threading.RLock()
+        self._is_generating = False
 
     @property
     def context(self) -> OracleContext:
@@ -48,47 +59,72 @@ class OracleService(AgentLoggingMixin):
 
     def observe(self, event: Event) -> None:
         """Consume a single domain event, then summarize if the interval is due."""
-        self._adapter.apply(event, self._context)
-        summary = self.summarize_if_due()
-        if summary is not None:
-            self._publish(summary)
+        with self._lock:
+            self._adapter.apply(event, self._context)
+        try:
+            summary = self.summarize_if_due()
+            if summary is not None:
+                self._publish(summary)
+        except Exception as exc:
+            self.agent_logger.warning("Failed to generate Oracle summary on event %s: %s", type(event).__name__, exc)
 
-    def summarize(self, now: datetime | None = None) -> OracleSummary:
+    def summarize(self, now: datetime | None = None) -> OracleSummary | None:
         now = now or datetime.now(timezone.utc)
-        summary = self._analyze(now)
-        self._context.mark_summarized(summary.generated_at)
-        self._latest_summary = summary
-        return summary
+        with self._lock:
+            if self._is_generating:
+                return self._latest_summary
+            self._is_generating = True
+            self._context.mark_summarized(now)
+        try:
+            summary = self._analyze(now)
+            with self._lock:
+                self._latest_summary = summary
+            return summary
+        except Exception:
+            cooldown = min(self._failure_cooldown, self._context.summary_interval)
+            cooldown_at = now - self._context.summary_interval + cooldown
+            with self._lock:
+                self._context.mark_summarized(cooldown_at)
+            raise
+        finally:
+            with self._lock:
+                self._is_generating = False
 
     def summarize_if_due(self, now: datetime | None = None) -> OracleSummary | None:
         now = now or datetime.now(timezone.utc)
-        if not self._context.is_due(now):
-            return None
+        with self._lock:
+            if self._is_generating or not self._context.is_due(now):
+                return None
         return self.summarize(now)
 
     def get_latest_summary(self) -> OracleSummary | None:
-        return self._latest_summary
+        with self._lock:
+            return self._latest_summary
 
     def subscribe(self, event_bus: EventBus) -> list[str]:
         """Register this service as a handler for Oracle-relevant event types."""
-        for event_type in ORACLE_EVENT_TYPES:
-            subscription_id = event_bus.subscribe(event_type, CallbackSubscription(self.observe))
-            self._subscription_ids.append(subscription_id)
-        return self._subscription_ids
+        with self._lock:
+            for event_type in ORACLE_EVENT_TYPES:
+                subscription_id = event_bus.subscribe(event_type, CallbackSubscription(self.observe))
+                self._subscription_ids.append(subscription_id)
+            return list(self._subscription_ids)
 
     def _analyze(self, generated_at: datetime) -> OracleSummary:
-        prompt = self._build_prompt(self._context)
+        with self._lock:
+            prompt = self._build_prompt(self._context)
+            market_state, trading_state, risk_state = self._derive_states(self._context)
+            session_id = self._context.session_id
+            primary_symbol = self._primary_symbol(self._context)
         self.agent_logger.info("Generating Oracle summary from accumulated context...")
-        summary_text = self._llm.generate(prompt)
-        market_state, trading_state, risk_state = self._derive_states(self._context)
+        summary_text = self._llm.generate(prompt, system_prompt=ORACLE_SYSTEM_PROMPT)
         return OracleSummary(
             summary=summary_text,
             market_state=market_state,
             trading_state=trading_state,
             risk_state=risk_state,
             generated_at=generated_at,
-            session_id=self._context.session_id,
-            symbol=self._primary_symbol(self._context),
+            session_id=session_id,
+            symbol=primary_symbol,
             model=self._model,
             model_version=self._model_version,
         )
@@ -101,8 +137,8 @@ class OracleService(AgentLoggingMixin):
             f"Published Oracle summary (correlation={summary.correlation_id})"
         )
 
-    @staticmethod
-    def _build_prompt(context: OracleContext) -> str:
+    @classmethod
+    def _build_prompt(cls, context: OracleContext) -> str:
         lines = [
             "You are a trading oracle. Summarize the accumulated market and trading "
             "state below for the trading agent.",
@@ -116,45 +152,29 @@ class OracleService(AgentLoggingMixin):
         cash_seen = False
 
         for symbol in sorted(context.symbols):
-            symbol_context = context.symbols[symbol]
-            base, quote = symbol.split("_") if "_" in symbol else (symbol, "USD")
-
-            if symbol_context.balance is not None and not cash_seen:
-                total_cash = symbol_context.balance
+            sym_ctx = context.symbols[symbol]
+            if sym_ctx.balance is not None and not cash_seen:
+                total_cash = sym_ctx.balance
                 cash_seen = True
 
-            if symbol_context.position is not None and symbol_context.current_price is not None:
-                total_crypto_val += symbol_context.position * symbol_context.current_price
+            if sym_ctx.position is not None and sym_ctx.current_price is not None:
+                total_crypto_val += sym_ctx.position * sym_ctx.current_price
 
-            price_str = f"${symbol_context.current_price:f} {quote}" if symbol_context.current_price is not None else "None"
-            pos_str = f"{symbol_context.position:f} {base}" if symbol_context.position is not None else f"0 {base}"
-            bal_str = f"${symbol_context.balance:f} {quote}" if symbol_context.balance is not None else "None"
-            pnl_str = f"${symbol_context.pnl:f} {quote}" if symbol_context.pnl is not None else f"$0 {quote}"
-            dd_str = f"{symbol_context.drawdown:f}%" if symbol_context.drawdown is not None else "0%"
-
-            lines.append(f"- {symbol}:")
-            lines.append(f"    price={price_str}")
-            lines.append(f"    position={pos_str}")
-            lines.append(f"    balance={bal_str}")
-            lines.append(f"    pnl={pnl_str}")
-            lines.append(f"    drawdown={dd_str}")
-            lines.append(f"    recent orders={len(symbol_context.recent_orders)}")
-            lines.append(f"    recent executions={len(symbol_context.recent_executions)}")
-            for execution in symbol_context.recent_executions[-5:]:
-                lines.append(
-                    f"      fill: {execution.action} {execution.quantity} @ ${execution.price:f} {quote} "
-                    f"(fee={execution.fee})"
-                )
+            lines.extend(cls._format_symbol_context(symbol, sym_ctx))
 
         if not context.symbols:
             lines.append("- (no market/trading events observed yet)")
         else:
             quote_currency = next(
                 (symbol.split("_")[1] for symbol in sorted(context.symbols) if "_" in symbol),
-                "USD"
+                "USD",
             )
             total_equity = total_cash + total_crypto_val
-            exposure_pct = (total_crypto_val / total_equity * Decimal("100")) if total_equity > Decimal("0") else Decimal("0")
+            exposure_pct = (
+                (total_crypto_val / total_equity * Decimal("100"))
+                if total_equity > Decimal("0")
+                else Decimal("0")
+            )
             lines += [
                 "",
                 "Ground Truth Portfolio State:",
@@ -174,6 +194,32 @@ class OracleService(AgentLoggingMixin):
             "- recommended actions (if any)",
         ]
         return "\n".join(lines)
+
+    @staticmethod
+    def _format_symbol_context(symbol: str, ctx: SymbolContext) -> list[str]:
+        base, quote = symbol.split("_") if "_" in symbol else (symbol, "USD")
+        price_str = f"${ctx.current_price:f} {quote}" if ctx.current_price is not None else "None"
+        pos_str = f"{ctx.position:f} {base}" if ctx.position is not None else f"0 {base}"
+        bal_str = f"${ctx.balance:f} {quote}" if ctx.balance is not None else "None"
+        pnl_str = f"${ctx.pnl:f} {quote}" if ctx.pnl is not None else f"$0 {quote}"
+        dd_str = f"{ctx.drawdown:f}%" if ctx.drawdown is not None else "0%"
+
+        lines = [
+            f"- {symbol}:",
+            f"    price={price_str}",
+            f"    position={pos_str}",
+            f"    balance={bal_str}",
+            f"    pnl={pnl_str}",
+            f"    drawdown={dd_str}",
+            f"    recent orders={len(ctx.recent_orders)}",
+            f"    recent executions={len(ctx.recent_executions)}",
+        ]
+        for execution in ctx.recent_executions[-5:]:
+            lines.append(
+                f"      fill: {execution.action} {execution.quantity} @ ${execution.price:f} {quote} "
+                f"(fee={execution.fee})"
+            )
+        return lines
 
     @staticmethod
     def _derive_states(context: OracleContext) -> tuple[str, str, str]:

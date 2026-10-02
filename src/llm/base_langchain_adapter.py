@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC
-from typing import Any, AsyncIterator, Dict, List, Type, TypeVar
+from typing import Any, AsyncIterator, Dict, List, Optional, Type, TypeVar
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_core.messages.ai import ToolCall
@@ -19,21 +19,14 @@ STRUCTURED_OUTPUT_METHODS = ("function_calling", "json_schema", "json_mode")
 
 SYSTEM_PROMPT = """
             You are an AI quantitative trading analyst responsible for analyzing financial assets.
-            You have access to the following tools:
-            - `get_trading_context`: Returns current balances, positions, entry/exit prices, and realized PnL for a single asset.
-            - `get_exchange_fees`: Returns exchange fee schedules (maker/taker fees) for a single asset.
-            - `get_market_statistics`: Returns the latest market statistics (close, high, low, 24h volume) for a single asset.
-            - `query_metrics`: Query historical time-series metrics (counters, gauges, histograms) or discover registered metric names for performance and system analysis.
-            
+
             Guidelines:
-            - Use these tools whenever additional information is needed to complete the task.
-            - When analyzing multiple assets, call these tools separately for each individual asset. Never pass multiple assets in a single tool call.
-            - Base conclusions only on available data and tool results.
+            - Base conclusions only on available data and provided context.
             - Do not invent facts, prices, indicators, positions, or market conditions.
             - Clearly identify uncertainty, missing information, and conflicting signals.
             - Adapt your output format and level of detail to the user's request.
             - Be concise, objective, and evidence-driven.
-            - Never answer using assumed tool outputs. If a required tool fails or is unavailable, explain that the information could not be retrieved.
+            - Never answer using assumed data. If required information is unavailable, explain that it could not be retrieved.
             - Write every calculation as ONE single-line formula, not split across lines. Wrap each formula in $$ ... $$ and put it on its own paragraph with a blank line before and after so it renders as a block.
               Keep currency amounts (e.g. $64,249.78), units, and short narrative terms like P close in ordinary text; inside math use \\text{...} only for symbols such as \\text{BTC} and never write a bare $ inside a formula (escape it as \\$ if truly needed).
         """
@@ -48,6 +41,10 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
         self._bound_model: Any = None
         self._max_turns = max_turns
         self._system_prompt = system_prompt or SYSTEM_PROMPT
+
+    @property
+    def system_prompt(self) -> str:
+        return self._system_prompt
 
     def bind_tools(self, tools: List[BaseTool]) -> None:
         self._tool_lookup = {
@@ -77,8 +74,14 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
 
             messages.append(ToolMessage(content=str(tool_output), tool_call_id=tool_id))
 
-    def _build_messages(self, prompt: str, history: List[ChatTurn] | None) -> list[BaseMessage]:
-        messages: list[BaseMessage] = [SystemMessage(content=self._system_prompt)]
+    def _build_messages(
+            self,
+            prompt: str,
+            history: List[ChatTurn] | None = None,
+            system_prompt: Optional[str] = None,
+    ) -> list[BaseMessage]:
+        effective_system_prompt = system_prompt or self._system_prompt
+        messages: list[BaseMessage] = [SystemMessage(content=effective_system_prompt)]
         for turn in history or []:
             if turn.role == "assistant":
                 messages.append(AIMessage(content=turn.content))
@@ -87,8 +90,13 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
         messages.append(HumanMessage(content=prompt))
         return messages
 
-    def generate(self, prompt: str, history: List[ChatTurn] | None = None) -> str:
-        messages: list[BaseMessage] = self._build_messages(prompt, history)
+    def generate(
+            self,
+            prompt: str,
+            history: List[ChatTurn] | None = None,
+            system_prompt: Optional[str] = None,
+    ) -> str:
+        messages: list[BaseMessage] = self._build_messages(prompt, history, system_prompt=system_prompt)
 
         for _turn in range(self._max_turns):
             response = self._bound_model.invoke(messages)
@@ -179,8 +187,13 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
             fenced = "\n".join(lines).strip()
         return json.loads(fenced)
 
-    async def stream(self, prompt: str, history: List[ChatTurn] | None = None) -> AsyncIterator[str]:
-        messages: list[BaseMessage] = self._build_messages(prompt, history)
+    async def stream(
+            self,
+            prompt: str,
+            history: List[ChatTurn] | None = None,
+            system_prompt: Optional[str] = None,
+    ) -> AsyncIterator[str]:
+        messages: list[BaseMessage] = self._build_messages(prompt, history, system_prompt=system_prompt)
 
         for _turn in range(self._max_turns):
             accumulated: Any = None

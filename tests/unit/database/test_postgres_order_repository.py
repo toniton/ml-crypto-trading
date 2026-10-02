@@ -80,3 +80,27 @@ class TestUpsert:
         compiled_params = executed_clause.compile().params
         assert compiled_params.get("commit_hash") == "a" * 64
         assert compiled_params.get("uuid") == "test-uuid-123"
+
+    def test_upsert_executes_statement_with_order_commit_hash(self):
+        session = MagicMock()
+        repo = PostgresOrderRepository(database_session=session)
+
+        order = Order(
+            uuid="test-uuid-order-hash",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63000.00"),
+            quantity="0.05",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            commit_hash="c4688f3b",
+            status=OrderStatus.PENDING,
+        )
+
+        repo.upsert(order)
+
+        session.execute.assert_called_once()
+        executed_clause = session.execute.call_args[0][0]
+        compiled_params = executed_clause.compile().params
+        assert compiled_params.get("commit_hash") == "c4688f3b"
+        assert compiled_params.get("uuid") == "test-uuid-order-hash"

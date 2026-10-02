@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import uuid
 
+from src.core.interfaces.conversation_store import ConversationMessage
 from src.events.agent_events import (
     AgentActionCreatedEvent,
     AgentActionUpdatedEvent,
     AgentApprovalRequestedEvent,
+    AgentApprovalResolvedEvent,
     AgentMessageCreatedEvent,
 )
 from src.events.message_event_bus import MessageEventBus
@@ -22,7 +24,7 @@ def _projector(bus):
 
 def test_message_projected_to_conversation_store():
     bus = MessageEventBus()
-    projector, store = _projector(bus)
+    _proj, store = _projector(bus)
     event = AgentMessageCreatedEvent(
         conversation_id="sess-1",
         message_payload={"content": "hello", "blocks": [{"type": "markdown", "content": "hello"}]},
@@ -36,7 +38,7 @@ def test_message_projected_to_conversation_store():
 
 def test_projection_idempotent_for_same_event():
     bus = MessageEventBus()
-    projector, store = _projector(bus)
+    _proj, store = _projector(bus)
     event = AgentMessageCreatedEvent(
         conversation_id="sess-1",
         message_payload={"content": "hello"},
@@ -48,7 +50,7 @@ def test_projection_idempotent_for_same_event():
 
 def test_system_conversation_resolution_when_no_id():
     bus = MessageEventBus()
-    projector, store = _projector(bus)
+    _proj, store = _projector(bus)
     event = AgentMessageCreatedEvent(
         conversation_id=None,
         message_payload={"content": "autonomous alert"},
@@ -61,6 +63,37 @@ def test_system_conversation_resolution_when_no_id():
     assert len(sessions) == 1
     assert sessions[0].id == "system:prod:starvation_watchdog:system"
     assert store.messages(sessions[0].id)[0].content == "autonomous alert"
+
+
+def test_autonomous_approval_does_not_pollute_user_session():
+    bus = MessageEventBus()
+    projector, store = _projector(bus)
+
+    # Active user session exists
+    store.get_or_create("user-session-123")
+
+    # Autonomous proposal created without conversation_id
+    bus.publish(AgentApprovalRequestedEvent(
+        approval_id="ap-starve",
+        approval_payload={
+            "approval_id": "ap-starve",
+            "agent_action_id": "act-pause",
+            "title": "Pause CRO_USD",
+            "description": "Proposal to pause a starved asset.",
+            "base_commit": "945f33e",
+            "asset": "CRO_USD",
+            "proposed_change": {"changes": []},
+        },
+    ))
+
+    # User session must remain completely untouched
+    assert len(store.messages("user-session-123")) == 0
+
+    # Approval is recorded in read model for timeline / REST queries
+    approval = projector.get_approval("ap-starve")
+    assert approval is not None
+    assert approval["title"] == "Pause CRO_USD"
+
 
 
 def test_action_read_model():
@@ -107,9 +140,9 @@ def test_approval_read_model_and_materialised_message():
     assert messages[0].payload["blocks"][0]["approval_id"] == "ap-1"
 
 
-def test_autonomous_approval_routes_to_active_user_session():
+def test_autonomous_approval_routes_to_system_session_and_keeps_user_session_clean():
     bus = MessageEventBus()
-    projector, store = _projector(bus)
+    _proj, store = _projector(bus)
     user_sid = store.get_or_create("c86868eb8a844595883989d2a36d0049")
 
     bus.publish(AgentApprovalRequestedEvent(
@@ -123,18 +156,22 @@ def test_autonomous_approval_routes_to_active_user_session():
         },
     ))
 
+    # Active user session should not have unsolicited autonomous approval messages
     user_messages = store.messages(user_sid)
-    assert len(user_messages) == 1
-    assert user_messages[0].content == "Approval requested: Pause CRO_USD"
-    assert user_messages[0].payload["blocks"][0]["type"] == "agent_approval"
-    assert user_messages[0].payload["blocks"][0]["approval_id"] == "ap-cro-pause"
+    assert len(user_messages) == 0
+
+    # System session receives the background record
+    system_sessions = [s for s in store.list_sessions() if s.id.startswith("system:")]
+    assert len(system_sessions) == 1
+    system_messages = store.messages(system_sessions[0].id)
+    assert len(system_messages) == 1
+    assert system_messages[0].payload["blocks"][0]["approval_id"] == "ap-cro-pause"
 
 
 def test_cold_start_hydration_from_conversation_store():
     bus = MessageEventBus()
     store = FakeConversationStore()
     user_sid = store.get_or_create("c86868eb8a844595883989d2a36d0049")
-    from src.core.interfaces.conversation_store import ConversationMessage
     store.append(
         user_sid,
         ConversationMessage(
@@ -172,10 +209,9 @@ def test_cold_start_hydration_from_conversation_store():
 
 def test_approval_resolved_records_decision_in_store():
     bus = MessageEventBus()
-    projector, store = _projector(bus)
+    _proj, store = _projector(bus)
     user_sid = store.get_or_create("c86868eb8a844595883989d2a36d0049")
 
-    from src.events.agent_events import AgentApprovalResolvedEvent
     bus.publish(AgentApprovalResolvedEvent(
         approval_id="ap-cro-pause",
         decision="approve",

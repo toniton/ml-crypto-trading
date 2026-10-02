@@ -3,9 +3,10 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
+from api.interfaces.asset import Asset
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.fees.fees_manager import FeesManager
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class ExchangeFeesInput(BaseModel):
@@ -18,15 +19,15 @@ class ExchangeFeesTool(BaseTool, ApplicationLoggingMixin):
     description: str = "Returns the exchange fees (maker and taker fee percentages) for a SINGLE given asset."
     args_schema: Type[BaseModel] = ExchangeFeesInput
     fees_manager: FeesManager
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, fees_manager: FeesManager, assets: list):
+    def __init__(self, fees_manager: FeesManager, assets: list[Asset]):
         super().__init__(
             fees_manager=fees_manager,
             assets=assets
         )
 
-    def _run(self, ticker_symbol: str) -> str:
+    def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
         target_symbol = ticker_symbol.strip()
 
         # Find the asset object
@@ -41,8 +42,8 @@ class ExchangeFeesTool(BaseTool, ApplicationLoggingMixin):
 
             fee_info = (
                 f"Exchange Fees for {target_symbol} on {asset.exchange.value}:\n"
-                f"  Maker Fee Pct: {format_decimal(fees.maker_fee_pct)}%\n"
-                f"  Taker Fee Pct: {format_decimal(fees.taker_fee_pct)}%"
+                f"  Maker Fee Pct: {FormatHelper.format_decimal(fees.maker_fee_pct)}%\n"
+                f"  Taker Fee Pct: {FormatHelper.format_decimal(fees.taker_fee_pct)}%"
             )
             self.app_logger.info(f"Exchange fees for {target_symbol} requested by LLM.")
             return fee_info

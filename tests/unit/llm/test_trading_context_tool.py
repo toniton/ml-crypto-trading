@@ -2,28 +2,31 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from api.interfaces.asset import Asset
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.position_entry import PositionEntry
 from api.interfaces.trading_context import TradingContext
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
-from src.llm.tools.trading_context_tool import TradingContextTool, format_decimal
+from src.llm.tools.trading_context_tool import TradingContextTool
 from src.trading.fees.fees_manager import FeesManager
+from src.trading.helpers.format_helper import FormatHelper
 from src.trading.markets.market_data_manager import MarketDataManager
+from src.trading.session.session_manager import SessionManager
 
 
 class TestTradingContextTool(unittest.TestCase):
     def test_format_decimal(self):
-        self.assertEqual(format_decimal(Decimal('7.8E-7')), '0.00000078')
-        self.assertEqual(format_decimal(Decimal('0.000000')), '0')
-        self.assertEqual(format_decimal(Decimal('1.5000')), '1.5')
-        self.assertEqual(format_decimal(Decimal('100.0')), '100')
-        self.assertEqual(format_decimal(Decimal('inf')), 'Infinity')
-        self.assertEqual(format_decimal(None), 'None')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('7.8E-7')), '0.00000078')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('0.000000')), '0')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('1.5000')), '1.5')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('100.0')), '100')
+        self.assertEqual(FormatHelper.format_decimal(Decimal('inf')), 'Infinity')
+        self.assertEqual(FormatHelper.format_decimal(None), 'None')
 
     def test_tool_execution(self):
-        mock_session_manager = MagicMock()
+        mock_session_manager = MagicMock(spec=SessionManager)
         mock_session = MagicMock()
 
         ctx = TradingContext(
@@ -63,7 +66,7 @@ class TestTradingContextTool(unittest.TestCase):
         self.assertNotIn("Close Price: 52500", result)
 
     def test_tool_asset_not_found(self):
-        mock_session_manager = MagicMock()
+        mock_session_manager = MagicMock(spec=SessionManager)
         mock_session = MagicMock()
         mock_session.trading_contexts = {}
         mock_session_manager.current_session = mock_session
@@ -79,7 +82,7 @@ class TestExchangeFeesTool(unittest.TestCase):
         mock_fees = Fees(maker_fee_pct=Decimal("0.1"), taker_fee_pct=Decimal("0.2"))
         mock_fees_manager.get_instrument_fees.return_value = mock_fees
 
-        mock_asset = MagicMock()
+        mock_asset = MagicMock(spec=Asset)
         mock_asset.ticker_symbol = "BTC_USD"
         mock_asset.exchange.value = "CRYPTO_DOT_COM"
 
@@ -109,7 +112,7 @@ class TestMarketStatisticsTool(unittest.TestCase):
         )
         mock_market_data_manager.get_market_data.return_value = mock_market_data
 
-        mock_asset = MagicMock()
+        mock_asset = MagicMock(spec=Asset)
         mock_asset.ticker_symbol = "BTC_USD"
         mock_asset.exchange.value = "CRYPTO_DOT_COM"
 

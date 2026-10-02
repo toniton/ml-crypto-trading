@@ -1,7 +1,14 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+from src.application import Application
 from src.configuration.application_config import ApplicationConfig
+from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.llm_config import LlmConfig
+from src.configuration.trading_config import TradingConfig
+from src.core.interfaces.database_manager import DatabaseManager
+from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
+from src.vcs.application.service import VCSService
 
 
 class TestApplicationHeadless(unittest.TestCase):
@@ -24,20 +31,16 @@ class TestApplicationHeadless(unittest.TestCase):
     @patch("src.application.VCSService")
     @patch("src.application.RefChangeListener")
     @patch("src.trading.managers.manager_factory.ClientFactory")
-    @patch("src.application.ModelFactory")
+    @patch("src.llm.llm_runtime_manager.ModelFactory")
     @patch("src.application.TradingEngine")
     @patch("src.application.ApiServer")
     def test_application_starts_api_server_when_not_headless(
             self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
             mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients
     ):
-        from src.application import Application
-        from src.configuration.environment_config import EnvironmentConfig
-        from src.configuration.llm_config import LlmConfig
-        from src.configuration.trading_config import TradingConfig
-        from src.vcs.application.service import VCSService
-
         mock_vcs.return_value = MagicMock(spec=VCSService)
+        mock_db_manager.return_value = MagicMock(spec=DatabaseManager)
+        mock_client_factory.create_rest_manager.return_value = MagicMock(spec=ExchangeRestManager)
 
         app_config = ApplicationConfig(trading_config_filepath="config.yaml", headless=False)
         env_config = MagicMock(spec=EnvironmentConfig)
@@ -65,20 +68,16 @@ class TestApplicationHeadless(unittest.TestCase):
     @patch("src.application.VCSService")
     @patch("src.application.RefChangeListener")
     @patch("src.trading.managers.manager_factory.ClientFactory")
-    @patch("src.application.ModelFactory")
+    @patch("src.llm.llm_runtime_manager.ModelFactory")
     @patch("src.application.TradingEngine")
     @patch("src.application.ApiServer")
     def test_application_passes_custom_api_host_and_port(
             self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
             mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients
     ):
-        from src.application import Application
-        from src.configuration.environment_config import EnvironmentConfig
-        from src.configuration.llm_config import LlmConfig
-        from src.configuration.trading_config import TradingConfig
-        from src.vcs.application.service import VCSService
-
         mock_vcs.return_value = MagicMock(spec=VCSService)
+        mock_db_manager.return_value = MagicMock(spec=DatabaseManager)
+        mock_client_factory.create_rest_manager.return_value = MagicMock(spec=ExchangeRestManager)
 
         app_config = ApplicationConfig(
             trading_config_filepath="config.yaml",
@@ -112,17 +111,16 @@ class TestApplicationHeadless(unittest.TestCase):
     @patch("src.application.VCSService")
     @patch("src.application.RefChangeListener")
     @patch("src.trading.managers.manager_factory.ClientFactory")
-    @patch("src.application.ModelFactory")
+    @patch("src.llm.llm_runtime_manager.ModelFactory")
     @patch("src.application.TradingEngine")
     @patch("src.application.ApiServer")
     def test_application_skips_api_server_when_headless(
             self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
             mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager, mock_setup_config, _mock_setup_clients
     ):
-        from src.application import Application
-        from src.configuration.environment_config import EnvironmentConfig
-        from src.configuration.llm_config import LlmConfig
-        from src.configuration.trading_config import TradingConfig
+        mock_vcs.return_value = MagicMock(spec=VCSService)
+        mock_db_manager.return_value = MagicMock(spec=DatabaseManager)
+        mock_client_factory.create_rest_manager.return_value = MagicMock(spec=ExchangeRestManager)
 
         app_config = ApplicationConfig(trading_config_filepath="config.yaml", headless=True)
         env_config = MagicMock(spec=EnvironmentConfig)

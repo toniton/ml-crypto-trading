@@ -25,11 +25,11 @@ class MessageEventBus(EventBus):
     def __init__(self) -> None:
         self._lock = threading.RLock()
         self._subscriptions: dict[str, dict[str, EventSubscription]] = {}
+        self._logger = logging.getLogger("application.MessageEventBus")
 
     @property
     def app_logger(self) -> logging.Logger:
-        from src.logging.factory import LoggingFactory  # pylint: disable=import-outside-toplevel
-        return LoggingFactory.get_application_logger(self.__class__.__name__)
+        return self._logger
 
     def subscribe(self, event_type: str, subscription: EventSubscription) -> str:
         subscription_id = uuid.uuid4().hex

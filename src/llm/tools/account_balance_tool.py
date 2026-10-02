@@ -5,9 +5,10 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
+from api.interfaces.asset import Asset
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class AccountBalanceInput(BaseModel):
@@ -24,9 +25,9 @@ class AccountBalanceTool(BaseTool, ApplicationLoggingMixin):
     )
     args_schema: Type[BaseModel] = AccountBalanceInput
     account_manager: AccountManager
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, account_manager: AccountManager, assets: list):
+    def __init__(self, account_manager: AccountManager, assets: list[Asset]):
         super().__init__(account_manager=account_manager, assets=assets)
 
     def _run(self, ticker_symbol: str) -> str:  # pylint: disable=arguments-differ
@@ -46,6 +47,6 @@ class AccountBalanceTool(BaseTool, ApplicationLoggingMixin):
         self.app_logger.info(f"Account balance for {asset.ticker_symbol} requested by LLM.")
         return (
             f"Account Balance for {asset.ticker_symbol} on {provider}:\n"
-            f"  Base ({base.currency}): {format_decimal(base.available_balance)} {base.currency}\n"
-            f"  Quote ({quote.currency}): ${format_decimal(quote.available_balance)} {quote.currency}"
+            f"  Base ({base.currency}): {FormatHelper.format_decimal(base.available_balance)} {base.currency}\n"
+            f"  Quote ({quote.currency}): ${FormatHelper.format_decimal(quote.available_balance)} {quote.currency}"
         )

@@ -11,6 +11,8 @@ from .domain_events import (
     OrderRejectedEvent,
     OrderSubmittedEvent,
     PositionChangedEvent,
+    ReconciliationCompletedEvent,
+    ReconciliationDiscrepancyEvent,
     RiskStateChangedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
@@ -29,9 +31,12 @@ __all__ = [
     "OrderRejectedEvent",
     "OrderSubmittedEvent",
     "PositionChangedEvent",
+    "ReconciliationCompletedEvent",
+    "ReconciliationDiscrepancyEvent",
     "RiskStateChangedEvent",
     "SignalGeneratedEvent",
     "StrategyEvaluatedEvent",
     "TradeClosedEvent",
     "TradingEvent",
 ]
+

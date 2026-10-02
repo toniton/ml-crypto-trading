@@ -99,6 +99,21 @@ class TestMapToDb:
         assert dao.executed_timestamp == EXECUTED_AT
         assert dao.commit_hash == "56339b9"
 
+    def test_preserves_commit_hash_on_mapping(self):
+        order = Order(
+            uuid="92121e15-0000-4000-8000-000000000007",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63208.0"),
+            quantity="0.001",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            commit_hash="c4688f3b",
+            status=OrderStatus.PENDING,
+        )
+        dao = OrderDBVSEntityMapper.map_to_db(order)
+        assert dao.commit_hash == "c4688f3b"
+
 
 class TestRoundTrip:
     @pytest.mark.parametrize("status", list(OrderStatus))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import List, Optional
 
 from src.database.dao.timeline_item_dao import TimelineItemDao
@@ -45,6 +46,7 @@ class PostgresTimelineRepository(TimelineRepository):
     def upsert(self, entity: TimelineItem) -> None:
         self.save(entity)
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def list_items(
             self,
             category: Optional[str] = None,
@@ -53,6 +55,8 @@ class PostgresTimelineRepository(TimelineRepository):
             actor_type: Optional[str] = None,
             entity_type: Optional[str] = None,
             entity_id: Optional[str] = None,
+            since: Optional[datetime] = None,
+            until: Optional[datetime] = None,
             limit: int = 50,
             offset: int = 0,
     ) -> List[TimelineItem]:
@@ -74,6 +78,10 @@ class PostgresTimelineRepository(TimelineRepository):
             query = query.filter(TimelineItemDao.primary_entity_type == entity_type)
         elif entity_id:
             query = query.filter(TimelineItemDao.primary_entity_id == entity_id)
+        if since is not None:
+            query = query.filter(TimelineItemDao.timestamp >= since)
+        if until is not None:
+            query = query.filter(TimelineItemDao.timestamp <= until)
 
         daos = (
             query.order_by(TimelineItemDao.timestamp.desc())

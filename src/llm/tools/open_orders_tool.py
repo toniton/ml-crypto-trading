@@ -3,8 +3,9 @@ from typing import Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.llm.tools.trading_context_tool import format_decimal
+from api.interfaces.asset import Asset
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 from src.trading.orders.order_manager import OrderManager
 
 
@@ -35,9 +36,9 @@ class GetOpenOrdersTool(BaseTool, ApplicationLoggingMixin):
     )
     args_schema: Type[BaseModel] = OpenOrdersInput
     order_manager: OrderManager
-    assets: list = []
+    assets: list[Asset] = []
 
-    def __init__(self, order_manager: OrderManager, assets: list):
+    def __init__(self, order_manager: OrderManager, assets: list[Asset]):
         super().__init__(
             order_manager=order_manager,
             assets=assets
@@ -81,7 +82,7 @@ class GetOpenOrdersTool(BaseTool, ApplicationLoggingMixin):
         for order in open_orders:
             order_str = (
                 f"  Order({order.uuid}): {order.ticker_symbol} {order.trade_action.value} "
-                f"qty={format_decimal(order.quantity)} price={format_decimal(order.price)} "
+                f"qty={FormatHelper.format_decimal(order.quantity)} price={FormatHelper.format_decimal(order.price)} "
                 f"status={order.status.value} exchange={order.provider_name}"
             )
             orders_str_list.append(order_str)

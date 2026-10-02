@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 import tempfile
 import unittest
@@ -128,8 +129,6 @@ class TestApiServerApp(unittest.TestCase):
         self.assertTrue(server._server.should_exit)
 
     def test_configuration_prompt_streams_proposal_through_gateway(self):
-        import json
-
         llm = FakeLlmAdapter([
             AgentRoute(
                 intent=AgentIntent.CONFIGURATION,
@@ -301,6 +300,33 @@ class TestConversationSessions(unittest.TestCase):
         self.assertEqual(messages[1]["role"], "assistant")
         self.assertEqual(messages[1]["payload"]["tokens"], "ok")
 
+    def test_append_session_message_endpoint(self):
+        app = build_app(FakeLlmAdapter(chunks=["ok"]))
+        client = TestClient(app)
+        session_id = "test-session-123"
+
+        post_res = client.post(
+            f"/api/v1/sessions/{session_id}/messages",
+            json={
+                "message_id": "msg-custom-1",
+                "role": "assistant",
+                "content": "Decision forwarded from timeline",
+                "payload": {"blocks": [{"type": "agent_insight", "title": "Starvation Anomaly"}]},
+            },
+        )
+        self.assertEqual(post_res.status_code, 200)
+        data = post_res.json()
+        self.assertEqual(data["message_id"], "msg-custom-1")
+        self.assertEqual(data["role"], "assistant")
+        self.assertEqual(data["content"], "Decision forwarded from timeline")
+
+        get_res = client.get(f"/api/v1/sessions/{session_id}")
+        self.assertEqual(get_res.status_code, 200)
+        messages = get_res.json()["messages"]
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["message_id"], "msg-custom-1")
+        self.assertEqual(messages[0]["payload"]["blocks"][0]["type"], "agent_insight")
+
     def test_metrics_recorded_by_middleware_and_queried_by_tool(self):
         db = make_temp_db_manager()
         vcs = VCSService(db)
@@ -379,8 +405,6 @@ class TestConversationSessions(unittest.TestCase):
 
 
 def _extract_session_id(content):
-    import json
-
     for frame in content.split("\n\n"):
         if "event: session" not in frame:
             continue

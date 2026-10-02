@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import AsyncGenerator, Callable, List, Optional
+from typing import AsyncGenerator, Callable, List, Literal, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,8 +42,12 @@ from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
 from src.server.agent_event_projector import AgentEventProjector
 from src.server.timeline_projector import TimelineProjector
+from src.configuration.llm_config import LlmConfig
+from src.llm.llm_runtime_manager import LlmRuntimeManager
 from src.server.agent_websocket import AgentWebSocketHandler
 from src.server.routes.agent_action_routes import create_agent_action_router
+from src.server.routes.expression_routes import create_expression_router
+from src.server.routes.llm_routes import create_llm_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
 from src.agent.runtime_debug.service import RuntimeDebugService
@@ -95,6 +99,13 @@ class ChatRequest(BaseModel):
         return raw.strip()
 
 
+class AppendMessageRequest(BaseModel):
+    message_id: Optional[str] = Field(default=None, description="Optional message ID.")
+    role: Literal["user", "assistant"] = Field(default="assistant", description="Message role.")
+    content: str = Field(default="", description="Message content.")
+    payload: Optional[dict] = Field(default=None, description="Structured block payload.")
+
+
 class ProposalDecisionRequest(BaseModel):
     action: ProposalDecision = Field(description="Decision to take on the pending proposal.")
 
@@ -115,9 +126,14 @@ class ChatApp:
             market_data_store: MarketDataStore,
             vcs: VCSService,
             compare_backtest: Optional[Callable] = None,
+            llm_manager: Optional[LlmRuntimeManager] = None,
     ) -> FastAPI:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
+        active_llm_manager = llm_manager or LlmRuntimeManager(
+            llm_config=LlmConfig(),
+            db_manager=db_manager,
+        )
 
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
@@ -139,6 +155,7 @@ class ChatApp:
         app.state.vcs = vcs
         app.state.conversation_service = conversation_service
         app.state.configuration_service = configuration_service
+        app.state.llm_manager = active_llm_manager
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
         app.state.runtime_collector = runtime_collector
         app.state.order_lifecycle_collector = order_lifecycle_collector
@@ -176,6 +193,7 @@ class ChatApp:
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
         app.include_router(create_runtime_debug_router(runtime_debug_service))
+        app.include_router(create_llm_router(active_llm_manager))
         app.include_router(
             create_agent_action_router(
                 event_bus=event_bus,
@@ -184,6 +202,7 @@ class ChatApp:
             )
         )
         app.include_router(create_timeline_router(timeline_projector))
+        app.include_router(create_expression_router())
 
         agent_ws_handler = AgentWebSocketHandler(event_bus)
 
@@ -690,6 +709,21 @@ class ChatApp:
                 "session_id": session_id,
                 "messages": [message.model_dump(mode="json") for message in messages],
             }
+
+        @app.post("/api/v1/sessions/{session_id}/messages")
+        async def append_session_message_endpoint(session_id: str, msg_req: AppendMessageRequest, req: Request):
+            store: ConversationStore = req.app.state.conversation_service
+            session_id = await asyncio.to_thread(store.get_or_create, session_id)
+            message_id = msg_req.message_id or uuid.uuid4().hex
+            message = ConversationMessage(
+                message_id=message_id,
+                role=msg_req.role,
+                content=msg_req.content,
+                payload=msg_req.payload,
+                conversation_id=session_id,
+            )
+            await asyncio.to_thread(store.append, session_id, message)
+            return message.model_dump(mode="json")
 
         @app.post("/api/v1/proposals/{message_id}/decision")
         async def decide_proposal_endpoint(message_id: str, decision: ProposalDecisionRequest, req: Request):

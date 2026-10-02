@@ -1,47 +1,127 @@
-# LLM/agent infrastructure configuration.
-#
-# This file describes how the AI subsystem (trading oracle, router, agents)
-# connects to language models. It is infrastructure configuration: it is NOT
-# part of the trading strategy and is never modified by the configuration agent.
-#
-# API keys are never stored here. Cloud providers resolve their key from an
-# environment variable: by default LLM_PROVIDER__<PROVIDER>__API_KEY or
-# <PROVIDER>_API_KEY (see `api_key_env` to pick a custom variable).
-
 schedule: 2  # AssetSchedule.EVERY_HOUR: how often the LLM oracle scheduler runs.
+
 models:
-  # Local inference via Ollama:
-  # - name: "local"
-  #   provider: "ollama"
-  #   model_name: "llama3.2"
-  #   temperature: 0.1
-  #   timeout: 60
-  #   keep_alive: "1h"
-  #   api_base_url: "http://127.0.0.1:11434"
-  #   capabilities: ["tools"]
-  #   default: true
-  #
-  # Cloud inference via DeepSeek:
-  # - name: "deepseek"
-  #   provider: "deepseek"
-  #   model_name: "deepseek-chat"
-  #   temperature: 0.1
-  #   timeout: 120
-  #   capabilities: ["tools", "reasoning"]
-  #
-  # Cloud inference via Gemini:
-  # - name: "gemini"
-  #   provider: "gemini"
-  #   model_name: "gemini-3-flash-preview"
-  #   temperature: 0.1
-  #   timeout: 120
-  #   capabilities: ["tools", "reasoning"]
-  #
-  # Cloud inference via Groq (OpenAI-compatible):
-  - name: "default"
+  - id: "groq-qwen"
+    name: "Groq Qwen 2.5 (Fast)"
     provider: "groq"
-    model_name: "openai/gpt-oss-120b"
+    model_name: "qwen/qwen3.8-27b"
     temperature: 0.1
     timeout: 120
     capabilities: ["tools", "reasoning"]
+    requires_api_key: true
     default: true
+
+  - id: "gemini-3-flash"
+    name: "Google Gemini 3 Flash"
+    provider: "gemini"
+    model_name: "gemini-3-flash-preview"
+    temperature: 0.1
+    timeout: 120
+    capabilities: ["tools", "reasoning"]
+    requires_api_key: true
+    default: false
+
+  - id: "deepseek-chat"
+    name: "DeepSeek V3"
+    provider: "deepseek"
+    model_name: "deepseek-chat"
+    temperature: 0.1
+    timeout: 120
+    capabilities: ["tools", "reasoning"]
+    requires_api_key: true
+    default: false
+
+  - id: "ollama-local"
+    name: "Ollama Llama 3.2 (Local)"
+    provider: "ollama"
+    model_name: "llama3.2"
+    api_base_url: "http://127.0.0.1:11434"
+    temperature: 0.1
+    timeout: 60
+    keep_alive: "1h"
+    capabilities: ["tools"]
+    requires_api_key: false
+    default: false
+
+tools:
+  bot_tools:
+    - name: "trading_context"
+      enabled: true
+      category: "market"
+      description: "Provides current market indicators, prices, and context."
+    - name: "exchange_fees"
+      enabled: true
+      category: "trading"
+      description: "Fetches maker/taker fee tiers and order execution costs."
+    - name: "market_statistics"
+      enabled: true
+      category: "market"
+      description: "Aggregates volatility, momentum, and volume metrics."
+    - name: "open_orders"
+      enabled: true
+      category: "trading"
+      description: "Lists active and pending limit and stop orders."
+    - name: "account_balance"
+      enabled: true
+      category: "portfolio"
+      description: "Retrieves current wallet balances across assets."
+    - name: "position"
+      enabled: true
+      category: "portfolio"
+      description: "Provides open positions, entry prices, and unrealized PnL."
+    - name: "recent_trades"
+      enabled: true
+      category: "trading"
+      description: "Historical trade execution logs from trading journal."
+    - name: "consensus"
+      enabled: true
+      category: "strategy"
+      description: "Inspects multi-strategy voting consensus."
+    - name: "strategy_votes"
+      enabled: true
+      category: "strategy"
+      description: "Individual breakdown of each strategy signal and confidence."
+    - name: "configuration"
+      enabled: true
+      category: "configuration"
+      description: "Queries active bot configuration."
+    - name: "configuration_history"
+      enabled: true
+      category: "configuration"
+      description: "Inspects Git-backed configuration commits and history."
+    - name: "session_summary"
+      enabled: true
+      category: "session"
+      description: "Performance and health snapshot of active trading session."
+    - name: "trading_summary"
+      enabled: true
+      category: "analysis"
+      description: "High-level oracle and timeline summary."
+    - name: "analyze_trading_state"
+      enabled: true
+      category: "analysis"
+      description: "Detailed analysis of current trading engine state."
+    - name: "backtest"
+      enabled: true
+      category: "backtest"
+      description: "Executes on-demand strategy backtests."
+    - name: "backtest_drift"
+      enabled: true
+      category: "backtest"
+      description: "Detects divergence between live execution and backtest expectations."
+    - name: "metrics"
+      enabled: true
+      category: "metrics"
+      description: "Fetches aggregated performance and latency metrics."
+    - name: "trade_attribution"
+      enabled: true
+      category: "analysis"
+      description: "Analyzes trade attribution and profit factors."
+    - name: "exchange_read"
+      enabled: true
+      category: "exchange"
+      description: "Read-only access to exchange account endpoints."
+    - name: "portfolio_summary"
+      enabled: true
+      category: "portfolio"
+      description: "Comprehensive portfolio risk and exposure summary."

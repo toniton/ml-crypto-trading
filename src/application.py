@@ -7,8 +7,9 @@ from threading import Event
 from typing import Optional
 
 import src.configuration.providers
-import src.trading.protection.guards
 import src.exchange.clients
+import src.trading.protection.guards
+from src.exchange.network import enforce_ipv4
 from api.interfaces.backtest_request import (
     BacktestDataSourceRequest,
     BacktestDataSourceType,
@@ -25,25 +26,34 @@ from src.agent.automation import AutomationController, InvestigateActivityAnomal
 from src.agent.backtest.backtest_service import BacktestService
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.monitoring.starvation_watchdog import StarvationWatchdog
-from src.agent.runtime_debug.incident_aggregator import IncidentAggregator
-from src.agent.runtime_debug.service import RuntimeDebugService
 from src.agent.oracle import (
-    AnalyzeTradingStateTool,
-    GetTradingSummaryTool,
     OracleContext,
     OracleService,
     summary_interval_for,
 )
+from src.agent.runtime_debug.incident_aggregator import IncidentAggregator
+from src.agent.runtime_debug.service import RuntimeDebugService
 from src.backtest.analysis.drift_detector import BacktestDriftDetector
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
 from src.backtest.runner.backtest_runner import BacktestRunner
+from src.configuration.application_config import ApplicationConfig
+from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.helpers.application_helper import ApplicationHelper
+from src.configuration.llm_config import LlmConfig
+from src.configuration.strategies_config import StrategiesConfig
+from src.configuration.trading_config import TradingConfig
+from src.core.interfaces.base_config import BaseConfig
 from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event_bus import EventBus
+from src.core.interfaces.exchange_rest_service import ExchangeRestService
+from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
+from src.core.interfaces.guard import Guard
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
-from src.server.server import ApiServer
-from src.server.services.conversation_service import ConversationService
-from src.server.services.dataset_service import DatasetService
+from src.events.message_event_bus import MessageEventBus
+from src.llm import LlmRuntimeManager, ToolFactory
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.manager import LoggingManager
 from src.metrics.collectors.event_metric_collector import EventMetricCollector
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
@@ -51,51 +61,26 @@ from src.metrics.collectors.trading_metrics_collector import TradingMetricsColle
 from src.metrics.services.metric_service import MetricService
 from src.metrics.services.retention_engine import RetentionEngine
 from src.metrics.services.retention_scheduler import RetentionScheduler
-from src.trading.activity import AssetActivityTracker
-from src.vcs.application.events import RefChangedEvent
-from src.vcs.application.listener import RefChangeListener
-from src.vcs.application.service import VCSService
-from src.configuration.application_config import ApplicationConfig
-from src.configuration.environment_config import EnvironmentConfig
-from src.configuration.llm_config import LlmConfig
-from src.configuration.helpers.application_helper import ApplicationHelper
-from src.configuration.strategies_config import StrategiesConfig
-from src.configuration.trading_config import TradingConfig
-from src.core.interfaces.base_config import BaseConfig
-from src.core.interfaces.exchange_rest_service import ExchangeRestService
-from src.core.interfaces.exchange_websocket_service import ExchangeWebSocketService
-from src.core.interfaces.guard import Guard
-from src.events.message_event_bus import MessageEventBus
 from src.recorder.market_data_recorder import MarketDataRecorder
 from src.recorder.market_data_store import MarketDataStore
-from src.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.logging.manager import LoggingManager
+from src.server.server import ApiServer
+from src.server.services.conversation_service import ConversationService
+from src.server.services.dataset_service import DatasetService
+from src.server.timeline_projector import TimelineProjector
+from src.trading.activity import AssetActivityTracker
+from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.managers.manager_factory import ManagerFactory
-from src.llm.model_factory import ModelFactory
-from src.llm.tools.account_balance_tool import AccountBalanceTool
-from src.llm.tools.backtest_drift_tool import BacktestDriftTool
-from src.llm.tools.backtest_tool import BacktestTool
-from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
-from src.llm.tools.configuration_tool import ConfigurationTool
-from src.llm.tools.consensus_tool import ConsensusTool
-from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
-from src.llm.tools.exchange_read_tool import ExchangeReadOnlyTool
-from src.llm.tools.market_statistics_tool import MarketStatisticsTool
-from src.llm.tools.metrics_tool import MetricsTool
-from src.llm.tools.open_orders_tool import GetOpenOrdersTool
-from src.llm.tools.portfolio_summary_tool import PortfolioSummaryTool
-from src.llm.tools.position_tool import PositionTool
-from src.llm.tools.recent_trades_tool import RecentTradesTool
-from src.llm.tools.session_summary_tool import SessionSummaryTool
-from src.llm.tools.strategy_votes_tool import StrategyVotesTool
-from src.llm.tools.trade_attribution_tool import TradeAttributionTool
-from src.llm.tools.trading_context_tool import TradingContextTool
-from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.trading.orders.order_reconciler import OrderReconciler
+from src.trading.reconciliation.exchange_reconciliation_engine import (
+    ExchangeReconciliationEngine,
+)
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
+from src.vcs.application.events import RefChangedEvent
+from src.vcs.application.listener import RefChangeListener
+from src.vcs.application.service import VCSService
 
 
 class Application(ApplicationLoggingMixin):
@@ -112,6 +97,7 @@ class Application(ApplicationLoggingMixin):
         self._event_bus: Optional[MessageEventBus] = None
         self._trading_event_bus = MessageEventBus()
         self._oracle_service: Optional[OracleService] = None
+        self._timeline_projector: Optional[TimelineProjector] = None
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -140,11 +126,13 @@ class Application(ApplicationLoggingMixin):
         self._dynamic_quantity = None
         self._config_listener: Optional[RefChangeListener] = None
         self._trading_journal = None
+        self._reconciliation_engine: Optional[ExchangeReconciliationEngine] = None
         self._order_reconciler: Optional[OrderReconciler] = None
         self._activity_tracker: Optional[AssetActivityTracker] = None
         self._agent_action_executor: Optional[AgentActionExecutor] = None
         self._automation: Optional[AutomationController] = None
         self._conversation_service: Optional[ConversationService] = None
+        self._llm_manager: Optional[LlmRuntimeManager] = None
         self._event_bus: Optional[EventBus] = None
 
         atexit.register(self.shutdown)
@@ -167,11 +155,19 @@ class Application(ApplicationLoggingMixin):
         )
         self._trading_journal = trading_journal
         self._order_lifecycle_collector = OrderLifecycleCollector(self._metric_service, db_manager)
-        self._order_reconciler = OrderReconciler(
-            container.order_manager,
+        self._reconciliation_engine = container.reconciliation_engine or ExchangeReconciliationEngine.create(
+            account_manager=container.account_manager,
+            order_manager=container.order_manager,
+            session_manager=container.session_manager,
+            fees_manager=container.fees_manager,
+            rest_manager=container.rest_manager,
+            assets=self._assets,
+            event_bus=self._trading_event_bus,
+            protection_manager=container.protection_manager,
             order_lifecycle_collector=self._order_lifecycle_collector,
         )
-        container.websocket_manager.set_reconnect_callback(self._order_reconciler.trigger)
+        self._order_reconciler = self._reconciliation_engine
+        container.websocket_manager.set_reconnect_callback(self._reconciliation_engine.trigger)
 
         return container
 
@@ -205,6 +201,8 @@ class Application(ApplicationLoggingMixin):
             for cls in Guard.__subclasses__():
                 if cls.is_enabled(asset) is True:
                     instance = cls(asset.guard_config)
+                    if hasattr(instance, "set_engine") and self._reconciliation_engine:
+                        instance.set_engine(self._reconciliation_engine)
                     self._managers.protection_manager.register_guard(asset.key, instance)
 
     def startup(self):
@@ -265,6 +263,7 @@ class Application(ApplicationLoggingMixin):
             return self._seed_trading_config
 
     def _startup_live(self, db_manager: DatabaseManager) -> None:
+        enforce_ipv4()
         self._config_listener = RefChangeListener(
             db_manager=db_manager,
             on_event_callback=self._on_vcs_ref_change,
@@ -307,32 +306,42 @@ class Application(ApplicationLoggingMixin):
         self._setup_live_engine(trading_scheduler, trading_executor)
 
         self._trading_engine.start_application()
-        self._order_reconciler.start()
+        if self._reconciliation_engine:
+            self._reconciliation_engine.start()
         self.is_ready.set()
 
-    def _setup_live_engine(self, trading_scheduler, trading_executor):  # pylint: disable=too-many-locals
-        context_tool = TradingContextTool(
-            session_manager=self._managers.session_manager
+
+    def _setup_live_engine(self, trading_scheduler, trading_executor):
+        backtest_service = self._build_backtest_service()
+        timeline_projector = TimelineProjector(
+            event_bus=self._trading_event_bus,
+            db_manager=self._db_manager,
         )
-        fees_tool = ExchangeFeesTool(
-            fees_manager=self._managers.fees_manager,
-            assets=self._assets
+        timeline_projector.subscribe()
+        self._timeline_projector = timeline_projector
+
+        tool_map = ToolFactory.build_tool_map(
+            managers=self._managers,
+            assets=self._assets,
+            trading_journal=self._trading_journal,
+            vcs=self._vcs,
+            oracle_service=None,
+            timeline_projector=self._timeline_projector,
+            backtest_service=backtest_service,
+            metric_service=self._metric_service,
+            db_manager=self._db_manager,
         )
-        market_stats_tool = MarketStatisticsTool(
-            market_data_manager=self._managers.market_data_manager,
-            assets=self._assets
-        )
-        open_orders_tool = GetOpenOrdersTool(
-            order_manager=self._managers.order_manager,
-            assets=self._assets
+        self._llm_manager = LlmRuntimeManager(
+            llm_config=self._llm_config,
+            db_manager=self._db_manager,
+            tool_map=tool_map,
         )
 
-        llm = ModelFactory.create_model(self._llm_config)
         oracle_context = OracleContext(
             summary_interval=summary_interval_for(self._llm_config.schedule),
         )
         oracle_service = OracleService(
-            llm,
+            self._llm_manager.proxy_adapter,
             oracle_context,
             publish_bus=self._trading_event_bus,
             model=self._llm_config.default_model.name,
@@ -341,80 +350,25 @@ class Application(ApplicationLoggingMixin):
         oracle_service.subscribe(self._trading_event_bus)
         self._oracle_service = oracle_service
 
+        # Update tools with oracle service
+        full_tool_map = ToolFactory.build_tool_map(
+            managers=self._managers,
+            assets=self._assets,
+            trading_journal=self._trading_journal,
+            vcs=self._vcs,
+            oracle_service=self._oracle_service,
+            timeline_projector=self._timeline_projector,
+            backtest_service=backtest_service,
+            metric_service=self._metric_service,
+            db_manager=self._db_manager,
+        )
+        self._llm_manager.update_tool_map(full_tool_map)
+
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
 
         if not self._application_config.headless:
-            api_llm = ModelFactory.create_model(self._llm_config)
-            configuration_service = ConfigurationService(vcs=self._vcs)
-            account_balance_tool = AccountBalanceTool(
-                account_manager=self._managers.account_manager,
-                assets=self._assets,
-            )
-            position_tool = PositionTool(
-                session_manager=self._managers.session_manager,
-                assets=self._assets,
-            )
-            recent_trades_tool = RecentTradesTool(
-                trading_journal=self._trading_journal,
-                assets=self._assets,
-            )
-            consensus_tool = ConsensusTool(
-                consensus_manager=self._managers.consensus_manager,
-                session_manager=self._managers.session_manager,
-                market_data_manager=self._managers.market_data_manager,
-                assets=self._assets,
-            )
-            strategy_votes_tool = StrategyVotesTool(
-                consensus_manager=self._managers.consensus_manager,
-                session_manager=self._managers.session_manager,
-                market_data_manager=self._managers.market_data_manager,
-                assets=self._assets,
-            )
-            configuration_tool = ConfigurationTool(configuration_service=configuration_service)
-            configuration_history_tool = ConfigurationHistoryTool(vcs=self._vcs)
-            session_summary_tool = SessionSummaryTool(session_manager=self._managers.session_manager)
-            get_trading_summary_tool = GetTradingSummaryTool(oracle_service=self._oracle_service)
-            analyze_trading_state_tool = AnalyzeTradingStateTool(oracle_service=self._oracle_service)
-            backtest_service = self._build_backtest_service()
-            backtest_tool = BacktestTool(backtest_service=backtest_service)
-            backtest_drift_tool = BacktestDriftTool(
-                drift_detector=BacktestDriftDetector(backtest_service, self._trading_journal)
-            )
-            metrics_tool = MetricsTool(metric_service=self._metric_service)
-            trade_attribution_tool = TradeAttributionTool(
-                database_manager=self._db_manager,
-                session_manager=self._managers.session_manager,
-            )
-            exchange_read_tool = ExchangeReadOnlyTool(rest_manager=self._managers.rest_manager)
-            portfolio_summary_tool = PortfolioSummaryTool(
-                portfolio_risk_manager=self._managers.portfolio_risk_manager
-            )
-
-            llm_tools = [
-                context_tool,
-                fees_tool,
-                market_stats_tool,
-                open_orders_tool,
-                account_balance_tool,
-                position_tool,
-                recent_trades_tool,
-                consensus_tool,
-                strategy_votes_tool,
-                configuration_tool,
-                configuration_history_tool,
-                session_summary_tool,
-                get_trading_summary_tool,
-                analyze_trading_state_tool,
-                backtest_tool,
-                backtest_drift_tool,
-                metrics_tool,
-                trade_attribution_tool,
-                exchange_read_tool,
-                portfolio_summary_tool,
-            ]
-            api_llm.bind_tools(llm_tools)
             gateway = AgentGateway(
-                api_llm,
+                self._llm_manager.proxy_adapter,
                 vcs=self._vcs,
             )
             self._api_server = ApiServer(
@@ -429,6 +383,7 @@ class Application(ApplicationLoggingMixin):
                     self._agent_action_executor.compare_backtest_drift
                     if self._agent_action_executor else None
                 ),
+                llm_manager=self._llm_manager,
             )
             self._api_server.start()
 
@@ -592,6 +547,9 @@ class Application(ApplicationLoggingMixin):
         if self._trading_event_bus:
             self._trading_event_bus.close()
             self._trading_event_bus = None
+        if self._timeline_projector:
+            self._timeline_projector.close()
+            self._timeline_projector = None
         self._oracle_service = None
         if self._config_listener:
             self._config_listener.stop()
@@ -601,10 +559,11 @@ class Application(ApplicationLoggingMixin):
             self._retention_scheduler = None
         if self._runtime_metrics_collector:
             self._runtime_metrics_collector.stop_monitoring()
-        if self._order_reconciler:
-            self._order_reconciler.stop()
+        if self._reconciliation_engine:
+            self._reconciliation_engine.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()
+
         self.is_running.clear()
         self.is_ready.clear()
         self.app_logger.info("Stopping Application...")

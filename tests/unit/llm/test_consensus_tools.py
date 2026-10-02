@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock
 
+from api.interfaces.asset import Asset
 from api.interfaces.trade_action import TradeAction
 from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
@@ -11,7 +12,7 @@ from src.trading.session.session_manager import SessionManager
 
 
 def _asset():
-    asset = MagicMock()
+    asset = MagicMock(spec=Asset)
     asset.ticker_symbol = "BTC_USD"
     asset.key = 123
     return asset

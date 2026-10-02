@@ -225,9 +225,15 @@ class AgentApprovalService(AgentLoggingMixin):
         return None
 
     @staticmethod
-    def _parse_approval_from_message(message: ConversationMessage, approval_id: str) -> Optional[AgentApprovalRequest]:
+    def _parse_approval_from_message(
+            message: ConversationMessage, approval_id: str
+    ) -> Optional[AgentApprovalRequest]:
         for block in message.payload.get("blocks", []):
-            if isinstance(block, dict) and block.get("type") == "agent_approval" and block.get("approval_id") == approval_id:
+            if (
+                    isinstance(block, dict)
+                    and block.get("type") == "agent_approval"
+                    and block.get("approval_id") == approval_id
+            ):
                 status_val = block.get("status", "pending").upper()
                 try:
                     status = ApprovalStatus(status_val)
@@ -262,6 +268,7 @@ class AgentApprovalService(AgentLoggingMixin):
             action: str,  # "approve" or "reject"
             author: str = "user",
             decision_notes: Optional[str] = None,
+            conversation_id: Optional[str] = None,
     ) -> Tuple[AgentApprovalRequest, Optional[str], List[str]]:
         """Resolves an approval. If approved, checks base_commit against current VCS HEAD."""
         approval = self.get_approval(approval_id)
@@ -278,7 +285,7 @@ class AgentApprovalService(AgentLoggingMixin):
         if action == "reject":
             approval.status = ApprovalStatus.REJECTED
             self._action_service.update_status(approval.agent_action_id, ActionStatus.REJECTED)
-            self._publish_resolved(approval, "reject")
+            self._publish_resolved(approval, "reject", conversation_id=conversation_id)
             return approval, None, []
 
         # Validate VCS state consistency: base_commit must be equal to current HEAD
@@ -327,7 +334,9 @@ class AgentApprovalService(AgentLoggingMixin):
             ActionStatus.COMPLETED,
             completed_at=now,
         )
-        self._publish_resolved(approval, "approve", commit_hash=commit.hash)
+        self._publish_resolved(
+            approval, "approve", commit_hash=commit.hash, conversation_id=conversation_id
+        )
 
         return approval, commit.hash, warnings
 
@@ -336,11 +345,14 @@ class AgentApprovalService(AgentLoggingMixin):
             approval: AgentApprovalRequest,
             decision: str,
             commit_hash: Optional[str] = None,
+            conversation_id: Optional[str] = None,
     ) -> None:
         if self._event_bus:
             payload = approval.model_dump(mode="json")
             if commit_hash:
                 payload["commit_hash"] = commit_hash
+            if conversation_id:
+                payload["conversation_id"] = conversation_id
             event = AgentApprovalResolvedEvent(
                 approval_id=approval.id,
                 decision=decision,

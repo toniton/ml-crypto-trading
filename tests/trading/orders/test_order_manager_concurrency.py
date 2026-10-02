@@ -65,6 +65,17 @@ class TestOrderManagerConcurrency(unittest.TestCase):
         # Assuming defaults in Order are PENDING, so record_fill should NOT be called.
         self.mock_journal.record_fill.assert_not_called()
 
+    def test_save_orders_populates_missing_commit_hash_from_session_manager(self):
+        self.mock_session_manager.get_current_commit_hash.return_value = "c4688f3b"
+        order = _make_order(uuid="3", commit_hash=None)
+        mock_order_repo = MagicMock()
+        self.mock_uow.__enter__.return_value.get_repository.return_value = mock_order_repo
+
+        self.order_manager._save_orders_to_database([order])
+
+        self.assertEqual(order.commit_hash, "c4688f3b")
+        mock_order_repo.upsert.assert_called_once_with(order)
+
     def test_save_orders_updates_journal_for_completed_order(self):
         order = _make_order(uuid="2", price="101", quantity="1", provider_name="p1",
                             status=OrderStatus.COMPLETED)

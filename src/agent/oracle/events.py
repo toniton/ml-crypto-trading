@@ -42,7 +42,7 @@ BACKTEST_EVENT_CLASSES = (
 
 LIVE_EVENT_TYPES = tuple(cls.__name__ for cls in LIVE_EVENT_CLASSES)
 BACKTEST_EVENT_TYPES = tuple(cls.__name__ for cls in BACKTEST_EVENT_CLASSES)
-ORACLE_EVENT_TYPES = LIVE_EVENT_TYPES + BACKTEST_EVENT_TYPES
+ORACLE_EVENT_TYPES = tuple(dict.fromkeys(LIVE_EVENT_TYPES + BACKTEST_EVENT_TYPES))
 
 
 class OracleSummaryEvent(Event):
@@ -80,6 +80,50 @@ class OracleSummaryEvent(Event):
     @property
     def timestamp(self) -> str:
         return self._timestamp
+
+    @property
+    def summary(self) -> str:
+        return self._summary.summary
+
+    @property
+    def market_state(self) -> str:
+        return self._summary.market_state
+
+    @property
+    def trading_state(self) -> str:
+        return self._summary.trading_state
+
+    @property
+    def risk_state(self) -> str:
+        return self._summary.risk_state
+
+    @property
+    def symbol(self) -> Optional[str]:
+        return self._summary.symbol
+
+    @property
+    def session_id(self) -> Optional[str]:
+        return self._summary.session_id
+
+    @property
+    def correlation_id(self) -> str:
+        return self._summary.correlation_id
+
+    @property
+    def observations(self) -> tuple[str, ...]:
+        return self._summary.observations
+
+    @property
+    def recommendations(self) -> tuple[str, ...]:
+        return self._summary.recommendations
+
+    @property
+    def model(self) -> Optional[str]:
+        return self._summary.model
+
+    @property
+    def model_version(self) -> Optional[str]:
+        return self._summary.model_version
 
     def to_dict(self) -> dict:
         return {

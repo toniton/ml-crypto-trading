@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Any, Optional, Type
+from typing import Optional, Type
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.interfaces.timeframe import Timeframe
-from src.llm.tools.trading_context_tool import format_decimal
+from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.helpers.format_helper import FormatHelper
 
 
 class ExchangeReadOnlyInput(BaseModel):
@@ -39,9 +40,9 @@ class ExchangeReadOnlyTool(BaseTool, ApplicationLoggingMixin):
         "historical candles, open orders, and trading fees directly from exchange APIs."
     )
     args_schema: Type[BaseModel] = ExchangeReadOnlyInput
-    rest_manager: Any
+    rest_manager: ExchangeRestManager
 
-    def __init__(self, rest_manager: Any):
+    def __init__(self, rest_manager: ExchangeRestManager):
         super().__init__(rest_manager=rest_manager)
 
     def _run(  # pylint: disable=arguments-differ
@@ -88,7 +89,7 @@ class ExchangeReadOnlyTool(BaseTool, ApplicationLoggingMixin):
         lines = [f"Live Account Balances for {exchange}:"]
         for b in sorted(balances, key=lambda x: x.currency):
             if b.available_balance > Decimal("0"):
-                lines.append(f"  - {b.currency}: {format_decimal(b.available_balance)}")
+                lines.append(f"  - {b.currency}: {FormatHelper.format_decimal(b.available_balance)}")
         return "\n".join(lines) if len(lines) > 1 else f"All balances on {exchange} are zero."
 
     def _fetch_ticker(self, exchange: str, ticker_symbol: str) -> str:
@@ -97,25 +98,26 @@ class ExchangeReadOnlyTool(BaseTool, ApplicationLoggingMixin):
             return f"No market data available for {ticker_symbol} on {exchange}."
         return (
             f"Market Data for {ticker_symbol} on {exchange}:\n"
-            f"  Mark Price: ${format_decimal(market_data.close_price)}\n"
-            f"  24h High:   ${format_decimal(market_data.high_price)}\n"
-            f"  24h Low:    ${format_decimal(market_data.low_price)}\n"
-            f"  24h Volume: {format_decimal(market_data.volume)}\n"
+            f"  Mark Price: ${FormatHelper.format_decimal(market_data.close_price)}\n"
+            f"  24h High:   ${FormatHelper.format_decimal(market_data.high_price)}\n"
+            f"  24h Low:    ${FormatHelper.format_decimal(market_data.low_price)}\n"
+            f"  24h Volume: {FormatHelper.format_decimal(market_data.volume)}\n"
             f"  Timestamp:  {market_data.timestamp}"
         )
 
     def _fetch_candles(self, exchange: str, ticker_symbol: str, timeframe_str: str) -> str:
-        tf = getattr(Timeframe, timeframe_str.upper(), Timeframe.MIN1)
+        tf_name = timeframe_str.upper()
+        tf = Timeframe[tf_name] if tf_name in Timeframe.__members__ else Timeframe.MIN1
         candles = self.rest_manager.get_candles(exchange, ticker_symbol, tf)
         if not candles:
             return f"No candles available for {ticker_symbol} ({tf.value}) on {exchange}."
         recent = candles[-5:] if len(candles) > 5 else candles
         lines = [f"Recent Candles for {ticker_symbol} ({tf.value}) on {exchange} ({len(candles)} total, showing last {len(recent)}):"]
         for c in recent:
-            ts = getattr(c, 'start_time', getattr(c, 'timestamp', 0))
+            ts = c.start_time
             lines.append(
-                f"  - Time: {ts} | O: {format_decimal(c.open)} | H: {format_decimal(c.high)} | "
-                f"L: {format_decimal(c.low)} | C: {format_decimal(c.close)}"
+                f"  - Time: {ts} | O: {FormatHelper.format_decimal(c.open)} | H: {FormatHelper.format_decimal(c.high)} | "
+                f"L: {FormatHelper.format_decimal(c.low)} | C: {FormatHelper.format_decimal(c.close)}"
             )
         return "\n".join(lines)
 
@@ -140,6 +142,6 @@ class ExchangeReadOnlyTool(BaseTool, ApplicationLoggingMixin):
         taker_pct = fees.taker_fee_pct * Decimal("100")
         return (
             f"Trading Fees for {ticker_symbol} on {exchange}:\n"
-            f"  Maker Fee: {format_decimal(maker_pct)}%\n"
-            f"  Taker Fee: {format_decimal(taker_pct)}%"
+            f"  Maker Fee: {FormatHelper.format_decimal(maker_pct)}%\n"
+            f"  Taker Fee: {FormatHelper.format_decimal(taker_pct)}%"
         )

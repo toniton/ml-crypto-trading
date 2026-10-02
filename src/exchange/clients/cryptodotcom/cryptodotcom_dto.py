@@ -109,42 +109,47 @@ class CryptoDotComCandleResponseDto(CryptoDotComResponseBaseModel):
 class PositionBalanceDto(BaseModel):
     instrument_name: str
     quantity: str
-    market_value: str
-    collateral_eligible: bool
-    haircut: str
-    collateral_amount: str
-    max_withdrawal_balance: str
-    reserved_qty: str
+    market_value: Optional[str] = None
+    collateral_eligible: Optional[bool] = None
+    haircut: Optional[str] = None
+    collateral_amount: Optional[str] = None
+    max_withdrawal_balance: Optional[str] = None
+    reserved_qty: Optional[str] = None
+    hourly_interest_rate: Optional[str] = None
 
 
 class UserBalanceDataDto(BaseModel):
-    total_available_balance: str
-    total_margin_balance: str
-    total_initial_margin: str
-    total_position_im: str
-    total_haircut: str
-    total_maintenance_margin: str
-    total_position_cost: str
-    total_cash_balance: str
+    instrument_name: Optional[str] = None
+    total_available_balance: Optional[str] = None
+    total_margin_balance: Optional[str] = None
+    total_initial_margin: Optional[str] = None
+    total_position_im: Optional[str] = None
+    total_haircut: Optional[str] = None
+    total_maintenance_margin: Optional[str] = None
+    total_position_cost: Optional[str] = None
+    total_cash_balance: Optional[str] = None
     total_collateral_value: Optional[str] = None
-    instrument_name: str
-    total_session_realized_pnl: str
-    total_session_unrealized_pnl: str
-    is_liquidating: bool
-    total_effective_leverage: str
-    position_limit: str
-    used_position_limit: str
+    total_session_realized_pnl: Optional[str] = None
+    total_session_unrealized_pnl: Optional[str] = None
+    is_liquidating: Optional[bool] = None
+    total_effective_leverage: Optional[str] = None
+    position_limit: Optional[str] = None
+    used_position_limit: Optional[str] = None
     has_risk: Optional[bool] = None
     margin_score: Optional[str] = None
     credit_limits: Optional[list] = None
     terminatable: Optional[bool] = None
     total_borrow: Optional[str] = None
     total_risk_exposure: Optional[str] = None
-    position_balances: list[PositionBalanceDto]
+    position_balances: list[PositionBalanceDto] = []
+    isolated_positions: Optional[list] = None
+    account: Optional[str] = None
 
 
 class UserBalanceResult(BaseModel):
-    data: list[UserBalanceDataDto]
+    subscription: Optional[str] = None
+    channel: Optional[str] = None
+    data: list[UserBalanceDataDto] = []
 
 
 class CryptoDotComUserBalanceResponseDto(CryptoDotComResponseBaseModel):

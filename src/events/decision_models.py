@@ -54,6 +54,7 @@ class DecisionRecord:
     evidence_ids: list[str] = field(default_factory=list)
     entities: list[EntityRef] = field(default_factory=list)
     proposed_action_id: Optional[str] = None
+    parameters: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         actor_type_val = self.actor_type.value if isinstance(self.actor_type, ActorType) else self.actor_type
@@ -71,6 +72,7 @@ class DecisionRecord:
             "evidence_ids": list(self.evidence_ids),
             "entities": [e.to_dict() for e in self.entities],
             "proposed_action_id": self.proposed_action_id,
+            "parameters": dict(self.parameters),
         }
 
 

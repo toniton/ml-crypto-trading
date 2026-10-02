@@ -20,7 +20,6 @@ from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.events import (
-    BalanceChangedEvent,
     DecisionRejectedEvent,
     DecisionRejectedReason,
     MarketDataEvent,
@@ -188,11 +187,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self._publish_event(MarketDataEvent(
             ticker_symbol=asset.ticker_symbol,
             market_data=market_data,
-        ))
-        self._publish_event(BalanceChangedEvent(
-            symbol=asset.ticker_symbol,
-            currency=asset.quote_ticker_symbol,
-            balance=quote_balance.available_balance,
         ))
 
         return quote_balance, market_data, candles, fees

@@ -1,3 +1,5 @@
+import json
+
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent import (
     ApprovalBlock,
@@ -87,8 +89,6 @@ class TestTypedResults:
 
 class TestPresentationJsonRoundTrip:
     def test_block_json_round_trip(self):
-        import json
-
         presentation = ConfigurationPresentation(blocks=[
             MarkdownBlock.from_text("hello"),
             ApprovalBlock.build(),

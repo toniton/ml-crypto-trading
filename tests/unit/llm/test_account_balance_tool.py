@@ -3,13 +3,14 @@ from decimal import Decimal
 from unittest.mock import MagicMock
 
 from api.interfaces.account_balance import AccountBalance
+from api.interfaces.asset import Asset
 from src.llm.tools.account_balance_tool import AccountBalanceTool
 from src.trading.accounts.account_manager import AccountManager
 
 
 class TestAccountBalanceTool(unittest.TestCase):
     def _asset(self):
-        asset = MagicMock()
+        asset = MagicMock(spec=Asset)
         asset.ticker_symbol = "BTC_USD"
         asset.exchange.value = "CRYPTO_DOT_COM"
         return asset

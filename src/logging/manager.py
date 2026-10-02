@@ -192,3 +192,4 @@ class LoggingManager:
             logger_name = f'{logger_name}.{name}'
 
         return logging.getLogger(logger_name)
+

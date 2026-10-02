@@ -1,6 +1,12 @@
 import ast
-from typing import Any
+from typing import Any, List, Optional, Set
 
+from src.core.expressions.schema import (
+    DiagnosticSeverity,
+    ExpressionDiagnostic,
+    ExpressionValidationResponse,
+    ExpressionValueType,
+)
 from src.core.interfaces.expression_context import ExpressionContext
 
 
@@ -34,7 +40,241 @@ class ExpressionParser:
         cls._validate_node(tree.body)
 
     @classmethod
-    def _validate_node(cls, node: ast.AST) -> None:  # pylint: disable=too-many-return-statements,too-many-branches
+    def inspect_semantics(
+            cls,
+            expression: str,
+            allowed_variables: Optional[Set[str]] = None,
+            allowed_functions: Optional[Set[str]] = None
+    ) -> ExpressionValidationResponse:
+        if not expression or not expression.strip():
+            return ExpressionValidationResponse(
+                is_valid=True,
+                inferred_type=None,
+                diagnostics=[],
+                referenced_variables=[],
+                referenced_functions=[],
+            )
+
+        diagnostics: List[ExpressionDiagnostic] = []
+        clean_expr = expression.strip()
+
+        if len(clean_expr) > cls._MAX_FORMULA_LENGTH:
+            diagnostics.append(
+                ExpressionDiagnostic(
+                    message=f"Formula exceeds maximum length of {cls._MAX_FORMULA_LENGTH} characters (got {len(clean_expr)}).",
+                    severity=DiagnosticSeverity.ERROR,
+                    start_offset=0,
+                    end_offset=len(clean_expr),
+                    start_line=1,
+                    start_column=1,
+                    end_line=1,
+                    end_column=len(clean_expr) + 1,
+                )
+            )
+            return ExpressionValidationResponse(
+                is_valid=False,
+                inferred_type=None,
+                diagnostics=diagnostics,
+                referenced_variables=[],
+                referenced_functions=[],
+            )
+
+        try:
+            tree = ast.parse(clean_expr, mode="eval")
+        except SyntaxError as exc:
+            col = exc.offset or 1
+            line = exc.lineno or 1
+            diagnostics.append(
+                ExpressionDiagnostic(
+                    message=f"Syntax Error: {exc.msg}",
+                    severity=DiagnosticSeverity.ERROR,
+                    start_offset=max(0, col - 1),
+                    end_offset=col,
+                    start_line=line,
+                    start_column=col,
+                    end_line=line,
+                    end_column=col + 1,
+                )
+            )
+            return ExpressionValidationResponse(
+                is_valid=False,
+                inferred_type=None,
+                diagnostics=diagnostics,
+                referenced_variables=[],
+                referenced_functions=[],
+            )
+
+        referenced_variables: Set[str] = set()
+        referenced_functions: Set[str] = set()
+
+        cls._collect_and_validate_nodes(
+            tree.body,
+            allowed_variables=allowed_variables,
+            allowed_functions=allowed_functions,
+            diagnostics=diagnostics,
+            referenced_variables=referenced_variables,
+            referenced_functions=referenced_functions,
+        )
+
+        inferred_type = cls._infer_node_type(tree.body)
+        is_valid = not any(d.severity == DiagnosticSeverity.ERROR for d in diagnostics)
+
+        return ExpressionValidationResponse(
+            is_valid=is_valid,
+            inferred_type=inferred_type,
+            diagnostics=diagnostics,
+            referenced_variables=sorted(referenced_variables),
+            referenced_functions=sorted(referenced_functions),
+        )
+
+    @classmethod
+    def _collect_and_validate_nodes(  # pylint: disable=too-many-branches,too-many-statements
+            cls,
+            node: ast.AST,
+            allowed_variables: Optional[Set[str]],
+            allowed_functions: Optional[Set[str]],
+            diagnostics: List[ExpressionDiagnostic],
+            referenced_variables: Set[str],
+            referenced_functions: Set[str],
+    ) -> None:
+        if isinstance(node, ast.Constant):
+            return
+
+        if isinstance(node, ast.Name):
+            referenced_variables.add(node.id)
+            if allowed_variables is not None and node.id not in allowed_variables:
+                col_start = getattr(node, "col_offset", 0) + 1
+                col_end = getattr(node, "end_col_offset", col_start + len(node.id)) + 1
+                line = getattr(node, "lineno", 1)
+                diagnostics.append(
+                    ExpressionDiagnostic(
+                        message=f"Unknown variable '{node.id}' in this context.",
+                        severity=DiagnosticSeverity.ERROR,
+                        start_offset=getattr(node, "col_offset", 0),
+                        end_offset=getattr(node, "end_col_offset", getattr(node, "col_offset", 0) + len(node.id)),
+                        start_line=line,
+                        start_column=col_start,
+                        end_line=getattr(node, "end_lineno", line),
+                        end_column=col_end,
+                    )
+                )
+            return
+
+        if isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                cls._add_node_error(node, "Only simple function calls (e.g. 'rsi(14)') are supported.", diagnostics)
+                return
+            if node.keywords:
+                cls._add_node_error(node, "Keyword arguments are not supported in formula expressions.", diagnostics)
+
+            func_name = node.func.id
+            referenced_functions.add(func_name)
+
+            if allowed_functions is not None and func_name not in allowed_functions:
+                col_start = getattr(node.func, "col_offset", 0) + 1
+                col_end = getattr(node.func, "end_col_offset", col_start + len(func_name)) + 1
+                line = getattr(node.func, "lineno", 1)
+                diagnostics.append(
+                    ExpressionDiagnostic(
+                        message=f"Unknown function '{func_name}'.",
+                        severity=DiagnosticSeverity.ERROR,
+                        start_offset=getattr(node.func, "col_offset", 0),
+                        end_offset=getattr(node.func, "end_col_offset", getattr(node.func, "col_offset", 0) + len(func_name)),
+                        start_line=line,
+                        start_column=col_start,
+                        end_line=getattr(node.func, "end_lineno", line),
+                        end_column=col_end,
+                    )
+                )
+
+            for arg in node.args:
+                cls._collect_and_validate_nodes(
+                    arg,
+                    allowed_variables,
+                    allowed_functions,
+                    diagnostics,
+                    referenced_variables,
+                    referenced_functions,
+                )
+            return
+
+        if isinstance(node, ast.BinOp):
+            if not isinstance(node.op, (ast.Add, ast.Mult, ast.Sub, ast.Div)):
+                cls._add_node_error(node, f"Unsupported binary operator: {type(node.op).__name__}", diagnostics)
+            cls._collect_and_validate_nodes(node.left, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.right, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            return
+
+        if isinstance(node, ast.Compare):
+            cls._collect_and_validate_nodes(node.left, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            for op, comparator in zip(node.ops, node.comparators):
+                if not isinstance(op, (ast.Gt, ast.Lt, ast.GtE, ast.LtE, ast.Eq, ast.NotEq)):
+                    cls._add_node_error(node, f"Unsupported comparison operator: {type(op).__name__}", diagnostics)
+                cls._collect_and_validate_nodes(comparator, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            return
+
+        if isinstance(node, ast.IfExp):
+            cls._collect_and_validate_nodes(node.test, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.body, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.orelse, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            return
+
+        if isinstance(node, ast.BoolOp):
+            if not isinstance(node.op, (ast.And, ast.Or)):
+                cls._add_node_error(node, f"Unsupported boolean operator: {type(node.op).__name__}", diagnostics)
+            for v in node.values:
+                cls._collect_and_validate_nodes(v, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            return
+
+        if isinstance(node, ast.UnaryOp):
+            if not isinstance(node.op, (ast.USub, ast.Not)):
+                cls._add_node_error(node, f"Unsupported unary operator: {type(node.op).__name__}", diagnostics)
+            cls._collect_and_validate_nodes(node.operand, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            return
+
+        cls._add_node_error(node, f"Unsupported expression node: {type(node).__name__}", diagnostics)
+
+    @classmethod
+    def _add_node_error(cls, node: ast.AST, message: str, diagnostics: List[ExpressionDiagnostic]) -> None:
+        col_start = getattr(node, "col_offset", 0) + 1
+        col_end = getattr(node, "end_col_offset", col_start + 1) + 1
+        line = getattr(node, "lineno", 1)
+        diagnostics.append(
+            ExpressionDiagnostic(
+                message=message,
+                severity=DiagnosticSeverity.ERROR,
+                start_offset=getattr(node, "col_offset", 0),
+                end_offset=getattr(node, "end_col_offset", getattr(node, "col_offset", 0) + 1),
+                start_line=line,
+                start_column=col_start,
+                end_line=getattr(node, "end_lineno", line),
+                end_column=col_end,
+            )
+        )
+
+    @classmethod
+    def _infer_node_type(cls, node: ast.AST) -> ExpressionValueType:
+        if isinstance(node, (ast.Compare, ast.BoolOp)):
+            return ExpressionValueType.BOOLEAN
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return ExpressionValueType.BOOLEAN
+        if isinstance(node, (ast.BinOp,)):
+            return ExpressionValueType.NUMBER
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+            return ExpressionValueType.NUMBER
+        if isinstance(node, ast.Constant):
+            if isinstance(node.value, bool):
+                return ExpressionValueType.BOOLEAN
+            if isinstance(node.value, (int, float)):
+                return ExpressionValueType.NUMBER
+            if isinstance(node.value, str):
+                return ExpressionValueType.STRING
+        if isinstance(node, ast.IfExp):
+            return cls._infer_node_type(node.body)
+        return ExpressionValueType.NUMBER
+
+    @classmethod
+    def _validate_node(cls, node: ast.AST) -> None:
         if isinstance(node, ast.Constant):
             return
         if isinstance(node, ast.Name):
@@ -84,7 +324,7 @@ class ExpressionParser:
             return None
         return self._evaluate(self._tree.body, context)
 
-    def _evaluate(self, node: ast.AST, context: ExpressionContext) -> Any:  # pylint: disable=too-many-return-statements
+    def _evaluate(self, node: ast.AST, context: ExpressionContext) -> Any:
         if isinstance(node, ast.Constant):
             return node.value
         if isinstance(node, ast.Name):

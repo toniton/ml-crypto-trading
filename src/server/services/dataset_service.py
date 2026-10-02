@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import json
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -38,7 +39,6 @@ class DatasetService:
         results: List[DatasetMetadata] = []
         for meta_file in sorted(self._storage_dir.glob("*.meta.json"), reverse=True):
             try:
-                import json
                 with open(meta_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     results.append(DatasetMetadata(**data))
@@ -50,7 +50,6 @@ class DatasetService:
         meta_file = self._storage_dir / f"{dataset_id}.meta.json"
         if not meta_file.exists():
             return None
-        import json
         with open(meta_file, "r", encoding="utf-8") as f:
             data = json.load(f)
             return DatasetMetadata(**data)
@@ -170,7 +169,6 @@ class DatasetService:
         )
 
         meta_path = self._storage_dir / f"{dataset_id}.meta.json"
-        import json
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(metadata.to_dict(), f, indent=2)
 

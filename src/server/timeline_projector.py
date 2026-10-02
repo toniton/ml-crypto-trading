@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from src.agent.oracle.events import OracleSummaryEvent
@@ -31,6 +31,7 @@ from src.events.runtime_events import (
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
 from src.trading.events import ConsensusEvaluatedEvent
+from src.trading.helpers.format_helper import FormatHelper
 from src.vcs.application.events import RefChangedEvent
 
 
@@ -178,7 +179,10 @@ class TimelineProjector(ApplicationLoggingMixin):
         if self._flush_thread and self._flush_thread.is_alive():
             self._flush_thread.join(timeout=2.0)
         for sub_id in self._subscriptions:
-            self._event_bus.unsubscribe(sub_id)
+            try:
+                self._event_bus.unsubscribe(sub_id)
+            except Exception:
+                pass
         self._subscriptions.clear()
         self.flush()
 
@@ -280,6 +284,9 @@ class TimelineProjector(ApplicationLoggingMixin):
         entities = decision.entities if decision else []
         actor_type = decision.actor_type.value if decision else "AGENT"
         primary_entity = entities[0] if entities else None
+        metadata = decision.to_dict() if decision else {}
+        if decision and decision.parameters:
+            metadata.update(decision.parameters)
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.DECISION,
@@ -291,7 +298,7 @@ class TimelineProjector(ApplicationLoggingMixin):
             actor_type=actor_type,
             primary_entity=primary_entity,
             entities=list(entities),
-            metadata=decision.to_dict() if decision else {},
+            metadata=metadata,
         )
 
     def _project_approval_requested(self, event: AgentApprovalRequestedEvent) -> TimelineItem:
@@ -397,20 +404,22 @@ class TimelineProjector(ApplicationLoggingMixin):
         )
 
     def _project_oracle_summary(self, event: OracleSummaryEvent) -> TimelineItem:
-        summary = event.summary
-        category = event.category
+        summary_text = event.summary
+        symbol = event.symbol
+        entities = [EntityRef(type="ASSET", id=symbol)] if symbol else []
+        metadata = event.payload.to_dict() if hasattr(event.payload, "to_dict") else {"summary": summary_text}
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,
             severity="INFO",
-            title=f"Oracle Summary: {category}" if category else "Oracle Summary",
-            summary=summary[:120] if summary else "Trading state summarized by LLM Oracle",
+            title=f"Oracle Summary: {symbol}" if symbol else "Oracle Summary",
+            summary=summary_text[:120] if summary_text else "Trading state summarized by LLM Oracle",
             correlation_id=event.correlation_id,
-            causation_id=event.causation_id,
+            causation_id=None,
             actor_type="AGENT",
-            primary_entity=None,
-            entities=[],
-            metadata={"summary": summary, "category": category},
+            primary_entity=EntityRef(type="ASSET", id=symbol) if symbol else None,
+            entities=entities,
+            metadata=metadata,
         )
 
     def _project_vcs(self, event: RefChangedEvent) -> TimelineItem:
@@ -467,15 +476,22 @@ class TimelineProjector(ApplicationLoggingMixin):
             metadata={"incident_id": incident_id, "summary": summary},
         )
 
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def list_items(
             self,
             category: Optional[str] = None,
             severity: Optional[str] = None,
             entity_type: Optional[str] = None,
             entity_id: Optional[str] = None,
+            since: Optional[datetime] = None,
+            until: Optional[datetime] = None,
+            days: Optional[int] = None,
             limit: int = 50,
             offset: int = 0,
     ) -> list[dict]:
+        if days is not None and days > 0 and since is None:
+            since = datetime.now(timezone.utc) - timedelta(days=days)
+
         if self._db_manager:
             self.flush()
             try:
@@ -486,6 +502,8 @@ class TimelineProjector(ApplicationLoggingMixin):
                         severity=severity,
                         entity_type=entity_type,
                         entity_id=entity_id,
+                        since=since,
+                        until=until,
                         limit=limit,
                         offset=offset,
                     )
@@ -512,6 +530,11 @@ class TimelineProjector(ApplicationLoggingMixin):
         if entity_id:
             items = [i for i in items if any(e.id == entity_id for e in i.entities)]
 
+        if since is not None:
+            items = [i for i in items if FormatHelper.parse_iso_datetime(i.timestamp) >= since]
+
+        if until is not None:
+            items = [i for i in items if FormatHelper.parse_iso_datetime(i.timestamp) <= until]
+
         items.reverse()  # Newest first
         return [i.to_dict() for i in items[offset:offset + limit]]
-
