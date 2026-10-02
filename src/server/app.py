@@ -42,9 +42,12 @@ from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
 from src.server.agent_event_projector import AgentEventProjector
 from src.server.timeline_projector import TimelineProjector
+from src.configuration.llm_config import LlmConfig
+from src.llm.llm_runtime_manager import LlmRuntimeManager
 from src.server.agent_websocket import AgentWebSocketHandler
 from src.server.routes.agent_action_routes import create_agent_action_router
 from src.server.routes.expression_routes import create_expression_router
+from src.server.routes.llm_routes import create_llm_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
 from src.agent.runtime_debug.service import RuntimeDebugService
@@ -123,9 +126,14 @@ class ChatApp:
             market_data_store: MarketDataStore,
             vcs: VCSService,
             compare_backtest: Optional[Callable] = None,
+            llm_manager: Optional[LlmRuntimeManager] = None,
     ) -> FastAPI:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
+        active_llm_manager = llm_manager or LlmRuntimeManager(
+            llm_config=LlmConfig(),
+            db_manager=db_manager,
+        )
 
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
@@ -147,6 +155,7 @@ class ChatApp:
         app.state.vcs = vcs
         app.state.conversation_service = conversation_service
         app.state.configuration_service = configuration_service
+        app.state.llm_manager = active_llm_manager
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
         app.state.runtime_collector = runtime_collector
         app.state.order_lifecycle_collector = order_lifecycle_collector
@@ -184,6 +193,7 @@ class ChatApp:
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
         app.include_router(create_runtime_debug_router(runtime_debug_service))
+        app.include_router(create_llm_router(active_llm_manager))
         app.include_router(
             create_agent_action_router(
                 event_bus=event_bus,

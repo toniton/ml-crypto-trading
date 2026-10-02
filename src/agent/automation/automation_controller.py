@@ -76,6 +76,9 @@ class AutomationController(ApplicationLoggingMixin):
 
     def _subscribe(self) -> None:
         for event_type in (
+                AgentActionPlanRequestedEvent.EVENT_TYPE,
+                AgentApprovalDecisionRequestedEvent.EVENT_TYPE,
+                TradingActivityAnomalyDetectedEvent.EVENT_TYPE,
                 "AgentActionPlanRequestedEvent",
                 "AgentApprovalDecisionRequestedEvent",
                 "TradingActivityAnomalyDetectedEvent",

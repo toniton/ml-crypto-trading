@@ -14,9 +14,11 @@ from src.agent.actions.models import (
     BacktestComparisonResult,
 )
 from src.core.interfaces.event_bus import EventBus
+from src.events.agent_event_metadata import AgentEventMetadata
 from src.events.agent_events import (
     AgentActionPlanRequestedEvent,
     AgentApprovalDecisionRequestedEvent,
+    with_metadata,
 )
 from src.server.agent_event_projector import AgentEventProjector
 
@@ -49,15 +51,18 @@ def create_agent_action_router(
     @router.post("/actions", status_code=status.HTTP_202_ACCEPTED)
     async def create_action_endpoint(req: PlanActionRequest):
         request_id = uuid.uuid4()
-        event = AgentActionPlanRequestedEvent(
-            action_type=req.type.value,
-            title=req.title,
-            description=req.description,
-            conversation_id=req.conversation_id,
-            payload=req.payload,
-            reason=req.reason.model_dump() if req.reason else None,
-            severity=req.severity.value,
-            requires_approval=req.requires_approval,
+        event = with_metadata(
+            AgentActionPlanRequestedEvent(
+                action_type=req.type.value,
+                title=req.title,
+                description=req.description,
+                conversation_id=req.conversation_id,
+                payload=req.payload,
+                reason=req.reason.model_dump() if req.reason else None,
+                severity=req.severity.value,
+                requires_approval=req.requires_approval,
+            ),
+            AgentEventMetadata(request_id=request_id),
         )
         event_bus.publish(event)
         return {"request_id": str(request_id), "status": "accepted"}

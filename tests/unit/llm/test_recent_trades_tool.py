@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.core.interfaces.trading_journal import TradingJournal
@@ -10,7 +11,7 @@ from src.llm.tools.recent_trades_tool import RecentTradesTool
 
 class TestRecentTradesTool(unittest.TestCase):
     def _asset(self):
-        asset = MagicMock()
+        asset = MagicMock(spec=Asset)
         asset.ticker_symbol = "BTC_USD"
         return asset
 

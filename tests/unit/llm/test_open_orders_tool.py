@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
@@ -23,7 +24,7 @@ class TestGetOpenOrdersTool(unittest.TestCase):
         )
 
     def _build_asset(self, ticker_symbol="BTC_USD", exchange="CRYPTO_DOT_COM"):
-        mock_asset = MagicMock()
+        mock_asset = MagicMock(spec=Asset)
         mock_asset.ticker_symbol = ticker_symbol
         mock_asset.exchange.value = exchange
         return mock_asset

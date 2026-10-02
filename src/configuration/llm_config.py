@@ -17,8 +17,24 @@ class LlmProvider(str, Enum):
     GROQ = "groq"
 
 
+class ToolConfig(BaseModel):
+    name: str = Field(description="Unique tool identifier.")
+    enabled: bool = Field(default=True, description="Whether this tool is active.")
+    category: str = Field(default="general", description="Tool category (e.g. market, trading, analysis).")
+    description: str = Field(default="", description="Human-readable description of tool capabilities.")
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+
+class ToolRegistryConfig(BaseModel):
+    bot_tools: list[ToolConfig] = Field(default_factory=list, description="Tools accessible by the bot.")
+
+    model_config = SettingsConfigDict(extra="ignore")
+
+
 class LlmModelConfig(BaseModel):
-    name: str = Field(description="Logical name used to select the model.")
+    id: Optional[str] = Field(default=None, description="Unique model identifier slug.")
+    name: str = Field(description="Logical or display name used to select the model.")
     provider: LlmProvider = LlmProvider.OLLAMA
     model_name: str = Field(description="Provider-specific model identifier.")
     api_base_url: Optional[str] = Field(
@@ -33,6 +49,7 @@ class LlmModelConfig(BaseModel):
     )
     capabilities: list[str] = Field(default_factory=list, description="tools, reasoning, vision.")
     roles: list[str] = Field(default_factory=list, description="Reserved; not supported yet.")
+    requires_api_key: bool = Field(default=True, description="Whether this model requires an API key secret.")
     api_key_env: Optional[str] = Field(
         default=None,
         description="Environment variable holding the API key. Falls back to the provider-specific env var.",
@@ -40,6 +57,10 @@ class LlmModelConfig(BaseModel):
     default: bool = Field(default=False, description="Selects this model when no name is given.")
 
     model_config = SettingsConfigDict(extra="ignore")
+
+    @property
+    def model_id(self) -> str:
+        return self.id or self.name
 
 
 class LlmConfig(BaseSettings):
@@ -50,6 +71,7 @@ class LlmConfig(BaseSettings):
 
     schedule: AssetSchedule = AssetSchedule.EVERY_HOUR
     models: list[LlmModelConfig] = Field(default_factory=list)
+    tools: ToolRegistryConfig = Field(default_factory=ToolRegistryConfig)
 
     _yaml_file: str = "src/configuration/llm.yaml"
     model_config = SettingsConfigDict(
@@ -80,10 +102,18 @@ class LlmConfig(BaseSettings):
         for model in self.models:
             if model.default:
                 return model
-        return self.models[0]
+        return self.models[0] if self.models else LlmModelConfig(
+            id="default", name="default", provider=LlmProvider.OLLAMA, model_name="llama3.2"
+        )
 
-    def get_model(self, name: str) -> LlmModelConfig:
+    def get_model(self, identifier: str) -> LlmModelConfig:
         for model in self.models:
-            if model.name == name:
+            if identifier in (model.id, model.name):
                 return model
-        raise ValueError(f"Model '{name}' not registered in the LLM configuration.")
+        raise ValueError(f"Model '{identifier}' not registered in the LLM configuration.")
+
+    def is_tool_enabled(self, tool_name: str) -> bool:
+        for tool in self.tools.bot_tools:  # pylint: disable=no-member
+            if tool.name == tool_name:
+                return tool.enabled
+        return True
