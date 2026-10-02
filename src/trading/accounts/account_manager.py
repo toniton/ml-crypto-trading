@@ -7,7 +7,6 @@ from decimal import Decimal
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
-from api.interfaces.asset_schedule import AssetSchedule
 from src.core.interfaces.event_bus import EventBus
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
@@ -154,11 +153,11 @@ class AccountManager(ApplicationLoggingMixin):
 
     def get_base_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
         currency_symbol = str(asset.base_ticker_symbol)
-        return self._get_balance(currency_symbol, asset.schedule, provider_name)
+        return self._get_balance(currency_symbol, provider_name)
 
     def get_quote_balance(self, asset: Asset, provider_name: str) -> AccountBalance:
         currency_symbol = str(asset.quote_ticker_symbol)
-        return self._get_balance(currency_symbol, asset.schedule, provider_name)
+        return self._get_balance(currency_symbol, provider_name)
 
     def reconcile_account_balances(self, provider_name: str) -> list[AccountBalance]:
         try:
@@ -172,7 +171,7 @@ class AccountManager(ApplicationLoggingMixin):
                 self.account_states[ex_key].last_reconciliation_time = time.time()
         return data
 
-    def _get_balance(self, currency_symbol: str, schedule: AssetSchedule, provider_name: str) -> AccountBalance:
+    def _get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
         curr_key = currency_symbol.upper()
         ex_key = provider_name.upper()
 
