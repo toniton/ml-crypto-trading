@@ -14,9 +14,12 @@ from src.core.interfaces.conversation_store import ConversationMessage
 from src.events.message_event_bus import MessageEventBus
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
-from src.recorder.market_data_store import MarketDataStore
 from tests.unit.agent.fakes import FakeConversationStore, FakeLlmAdapter
-from tests.unit.api_server.helpers import make_db_manager
+from tests.unit.api_server.helpers import (
+    make_db_manager,
+    make_test_llm_manager,
+    make_test_trading_proxy,
+)
 
 SAMPLE_CONFIG = """
 assets:
@@ -77,12 +80,14 @@ def _build_app(config_file, db_manager):
     vcs = VCSService(db_manager)
     gateway = AgentGateway(_configuration_llm(), vcs=vcs)
     return ChatApp.create(
+        trading_proxy=make_test_trading_proxy(),
         agent=gateway,
         event_bus=MessageEventBus(),
         db_manager=db_manager,
-        market_data_store=MarketDataStore(),
         vcs=vcs,
+        llm_manager=make_test_llm_manager(db_manager),
     )
+
 
 
 def _stream_and_extract_message_id(client):

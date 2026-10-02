@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 import uuid
 from datetime import date, datetime, timedelta, timezone
-from typing import AsyncGenerator, Callable, List, Literal, Optional
+from typing import AsyncGenerator, List, Literal, Optional
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,10 +42,11 @@ from src.server.services.order_latency_service import OrderLatencyService
 from src.server.services.order_week_service import OrderWeekService
 from src.server.agent_event_projector import AgentEventProjector
 from src.server.timeline_projector import TimelineProjector
-from src.configuration.llm_config import LlmConfig
 from src.llm.llm_runtime_manager import LlmRuntimeManager
 from src.server.agent_websocket import AgentWebSocketHandler
+from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
 from src.server.routes.agent_action_routes import create_agent_action_router
+from src.server.routes.engine_routes import create_engine_router
 from src.server.routes.expression_routes import create_expression_router
 from src.server.routes.llm_routes import create_llm_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
@@ -53,7 +54,6 @@ from src.server.routes.timeline_routes import create_timeline_router
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
-from src.recorder.market_data_store import MarketDataStore
 
 
 class CreateBranchRequest(BaseModel):
@@ -120,20 +120,15 @@ class ConfigCommitRequest(BaseModel):
 class ChatApp:
     @staticmethod
     def create(
+            trading_proxy: TradingEngineProxy,
             agent: AgentGateway,
             event_bus: EventBus,
             db_manager: DatabaseManager,
-            market_data_store: MarketDataStore,
             vcs: VCSService,
-            compare_backtest: Optional[Callable] = None,
-            llm_manager: Optional[LlmRuntimeManager] = None,
+            llm_manager: LlmRuntimeManager,
     ) -> FastAPI:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
-        active_llm_manager = llm_manager or LlmRuntimeManager(
-            llm_config=LlmConfig(),
-            db_manager=db_manager,
-        )
 
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
@@ -153,13 +148,13 @@ class ChatApp:
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0", lifespan=lifespan)
         app.state.agent = agent
         app.state.vcs = vcs
+        app.state.trading_proxy = trading_proxy
         app.state.conversation_service = conversation_service
         app.state.configuration_service = configuration_service
-        app.state.llm_manager = active_llm_manager
+        app.state.llm_manager = llm_manager
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
         app.state.runtime_collector = runtime_collector
         app.state.order_lifecycle_collector = order_lifecycle_collector
-        app.state.market_data_store = market_data_store
 
         app.add_middleware(
             CORSMiddleware,
@@ -193,16 +188,17 @@ class ChatApp:
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
         app.include_router(create_runtime_debug_router(runtime_debug_service))
-        app.include_router(create_llm_router(active_llm_manager))
+        app.include_router(create_llm_router(llm_manager))
         app.include_router(
             create_agent_action_router(
                 event_bus=event_bus,
                 projector=agent_event_projector,
-                compare_backtest=compare_backtest,
+                compare_backtest=trading_proxy.compare_backtest_drift,
             )
         )
         app.include_router(create_timeline_router(timeline_projector))
         app.include_router(create_expression_router())
+        app.include_router(create_engine_router(trading_proxy))
 
         agent_ws_handler = AgentWebSocketHandler(event_bus)
 
@@ -351,7 +347,7 @@ class ChatApp:
         backtest_service = BacktestApplicationService(
             db_manager=db_manager,
             vcs_service=vcs,
-            market_data_store=market_data_store,
+            market_data_store=trading_proxy.get_market_data_store(),
             dataset_service=dataset_service,
         )
         app.state.backtest_service = backtest_service
@@ -573,22 +569,8 @@ class ChatApp:
 
         @app.get("/api/v1/backtests/recorded-data")
         async def list_recorded_data_endpoint(req: Request):
-            md_store: Optional[MarketDataStore] = req.app.state.market_data_store
-            if not md_store:
-                return []
-            results = []
-            for ticker in md_store.tickers():
-                obs = md_store.observations(ticker)
-                if obs:
-                    start_ts = datetime.fromtimestamp(int(obs[0].timestamp)).isoformat()
-                    end_ts = datetime.fromtimestamp(int(obs[-1].timestamp)).isoformat()
-                    results.append({
-                        "ticker_symbol": ticker,
-                        "observation_count": len(obs),
-                        "start_time": start_ts,
-                        "end_time": end_ts,
-                    })
-            return results
+            proxy: TradingEngineProxy = req.app.state.trading_proxy
+            return [item.model_dump() for item in proxy.get_recorded_market_data()]
 
         @app.get("/api/v1/backtests/{session_id}")
         async def get_backtest_endpoint(session_id: str):

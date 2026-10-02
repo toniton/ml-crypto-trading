@@ -18,7 +18,7 @@ from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
-from tests.unit.api_server.helpers import make_db_manager
+from tests.unit.api_server.helpers import make_db_manager, make_test_trading_proxy
 
 SAMPLE_CONFIG = """
 assets:
@@ -89,14 +89,15 @@ def client(db_manager, event_bus, llm_config, monkeypatch):
     market_store = MarketDataStore(db_manager)
     llm_manager = LlmRuntimeManager(llm_config=llm_config, db_manager=db_manager)
     app = ChatApp.create(
+        trading_proxy=make_test_trading_proxy(market_data_store=market_store),
         agent=agent,
         event_bus=event_bus,
         db_manager=db_manager,
-        market_data_store=market_store,
         vcs=vcs,
         llm_manager=llm_manager,
     )
     return TestClient(app)
+
 
 
 def test_list_models_and_tools_endpoints(client):

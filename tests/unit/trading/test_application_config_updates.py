@@ -71,6 +71,7 @@ def _make_app(vcs):
         {"assets": [], "dynamic_quantity": "min_qty"}
     )
     app._trading_engine = _FakeEngine()
+    app._trading_engine_proxy = None
     app._managers = None
     app._event_bus = None
     return app

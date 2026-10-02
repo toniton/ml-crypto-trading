@@ -17,21 +17,23 @@ from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
-from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
+from tests.unit.api_server.helpers import make_test_llm_manager, make_test_trading_proxy
 
 
 def build_app(db_manager):
     vcs = MagicMock(spec=VCSService)
     return ChatApp.create(
+        trading_proxy=make_test_trading_proxy(),
         agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=vcs),
         event_bus=MessageEventBus(),
         db_manager=db_manager,
-        market_data_store=MarketDataStore(),
         vcs=vcs,
+        llm_manager=make_test_llm_manager(db_manager),
     )
+
 
 
 class TestBacktestEndpoints(unittest.TestCase):

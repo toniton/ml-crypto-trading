@@ -1,42 +1,41 @@
 import threading
-from typing import Callable, Optional
+from typing import Optional
 
 import uvicorn
 
 from src.agent import AgentGateway
-from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.database_manager import DatabaseManager
+from src.core.interfaces.event_bus import EventBus
+from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
 from src.llm import LlmRuntimeManager
-from src.recorder.market_data_store import MarketDataStore
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
-from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class ApiServer(ApplicationLoggingMixin):
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
+            trading_proxy: TradingEngineProxy,
             agent: AgentGateway,
             event_bus: EventBus,
             db_manager: DatabaseManager,
-            market_data_store: MarketDataStore,
             vcs: VCSService,
+            llm_manager: LlmRuntimeManager,
             host: str = "0.0.0.0",
             port: int = 8000,
-            compare_backtest: Optional[Callable] = None,
-            llm_manager: Optional[LlmRuntimeManager] = None,
     ):
         self.host = host
         self.port = port
         self.agent = agent
         self.vcs = vcs
+        self.trading_proxy = trading_proxy
         self.app = ChatApp.create(
+            trading_proxy=trading_proxy,
             agent=agent,
             event_bus=event_bus,
             db_manager=db_manager,
-            market_data_store=market_data_store,
             vcs=vcs,
-            compare_backtest=compare_backtest,
             llm_manager=llm_manager,
         )
         self._server: Optional[uvicorn.Server] = None

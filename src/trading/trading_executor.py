@@ -67,6 +67,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self._strategies: list[TradingStrategy] = []
         self._register_asset_strategies(self.assets)
 
+    @property
+    def strategies(self) -> list[TradingStrategy]:
+        return list(self._strategies)
+
     def _register_asset_strategies(self, assets: list[Asset]) -> None:
         for asset in assets:
             for strategy in StrategyResolver.resolve_asset(asset, self._strategies_registry):

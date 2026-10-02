@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from typing import List
+from typing import List, Optional
 
 from api.interfaces.asset import Asset
 from api.interfaces.candle import Candle
@@ -37,6 +37,16 @@ class MarketDataManager(ApplicationLoggingMixin):
 
     def get_rest_candles(self, exchange: str, ticker_symbol: str, timeframe: Timeframe) -> List[Candle]:
         return self._rest_manager.get_candles(exchange, ticker_symbol, timeframe)
+
+    def get_last_price(self, ticker_symbol: str) -> Optional[float]:
+        with self._lock:
+            for asset_key, sym in self._ticker_symbols.items():
+                if sym == ticker_symbol:
+                    market_data = self._market_data.get(asset_key)
+                    if market_data is not None and market_data.close_price is not None:
+                        return float(market_data.close_price)
+        return None
+
 
     def initialize(self, assets: list[Asset]):
         self._assets = assets

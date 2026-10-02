@@ -7,21 +7,19 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from src.agent import AgentGateway
-from src.agent import (
-    ConfigChange,
-    ConfigurationProposal,
-)
+from src.agent import AgentGateway, ConfigChange, ConfigurationProposal
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
-from src.server.app import ChatApp
-from src.server.server import ApiServer
 from src.events.message_event_bus import MessageEventBus
 from src.llm.tools.metrics_tool import MetricsTool
 from src.metrics.services.metric_service import MetricService
-from src.recorder.market_data_store import MarketDataStore
+from src.server.app import ChatApp
+from src.server.server import ApiServer
 from tests.unit.agent.fakes import FakeLlmAdapter
-from tests.unit.api_server.helpers import make_temp_db_manager
-
+from tests.unit.api_server.helpers import (
+    make_temp_db_manager,
+    make_test_llm_manager,
+    make_test_trading_proxy,
+)
 
 SAMPLE_CONFIG = """
 assets:
@@ -64,12 +62,14 @@ def build_app(llm):
     vcs.seed_if_empty(TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)), author="test", message="seed")
     gateway = AgentGateway(llm, vcs=vcs)
     return ChatApp.create(
+        trading_proxy=make_test_trading_proxy(),
         agent=gateway,
         event_bus=MessageEventBus(),
         db_manager=db_mgr,
-        market_data_store=MarketDataStore(),
         vcs=vcs,
+        llm_manager=make_test_llm_manager(db_mgr),
     )
+
 
 
 class TestApiServerApp(unittest.TestCase):
@@ -114,11 +114,12 @@ class TestApiServerApp(unittest.TestCase):
         vcs.seed_if_empty(TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)), author="test", message="seed")
         gateway = AgentGateway(self.llm, vcs=vcs)
         server = ApiServer(
+            trading_proxy=make_test_trading_proxy(),
             agent=gateway,
             event_bus=MessageEventBus(),
             db_manager=db_mgr,
-            market_data_store=MarketDataStore(),
             vcs=vcs,
+            llm_manager=make_test_llm_manager(db_mgr),
             host="127.0.0.1",
             port=9999,
         )
@@ -127,6 +128,7 @@ class TestApiServerApp(unittest.TestCase):
         server.stop()
         self.assertIsNotNone(server._server)
         self.assertTrue(server._server.should_exit)
+
 
     def test_configuration_prompt_streams_proposal_through_gateway(self):
         llm = FakeLlmAdapter([
@@ -333,11 +335,12 @@ class TestConversationSessions(unittest.TestCase):
         vcs.seed_if_empty(TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)), author="test", message="seed")
         gateway = AgentGateway(FakeLlmAdapter(), vcs=vcs)
         app = ChatApp.create(
+            trading_proxy=make_test_trading_proxy(),
             agent=gateway,
             event_bus=MessageEventBus(),
             db_manager=db,
-            market_data_store=MarketDataStore(),
             vcs=vcs,
+            llm_manager=make_test_llm_manager(db),
         )
         client = TestClient(app)
         client.get("/api/v1/sessions")
@@ -355,11 +358,12 @@ class TestConversationSessions(unittest.TestCase):
         vcs.seed_if_empty(TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)), author="test", message="seed")
         gateway = AgentGateway(FakeLlmAdapter(), vcs=vcs)
         app = ChatApp.create(
+            trading_proxy=make_test_trading_proxy(),
             agent=gateway,
             event_bus=MessageEventBus(),
             db_manager=db,
-            market_data_store=MarketDataStore(),
             vcs=vcs,
+            llm_manager=make_test_llm_manager(db),
         )
         client = TestClient(app)
         res = client.get("/api/v1/runtime")
@@ -382,11 +386,12 @@ class TestConversationSessions(unittest.TestCase):
         vcs.seed_if_empty(TradingConfig.model_validate(yaml.safe_load(SAMPLE_CONFIG)), author="test", message="seed")
         gateway = AgentGateway(FakeLlmAdapter(), vcs=vcs)
         app = ChatApp.create(
+            trading_proxy=make_test_trading_proxy(),
             agent=gateway,
             event_bus=MessageEventBus(),
             db_manager=db,
-            market_data_store=MarketDataStore(),
             vcs=vcs,
+            llm_manager=make_test_llm_manager(db),
         )
         client = TestClient(app)
         res = client.get("/api/v1/orders/lifecycle")
@@ -399,6 +404,7 @@ class TestConversationSessions(unittest.TestCase):
         self.assertIn("healthy", data["consistency"])
         self.assertIn("stuck_5m", data["consistency"])
         self.assertIn("pending_gt_30s", data["consistency"])
+
 
 
 

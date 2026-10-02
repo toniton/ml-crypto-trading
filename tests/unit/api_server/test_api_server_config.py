@@ -4,9 +4,8 @@ import unittest
 from unittest.mock import MagicMock
 
 from src.configuration.application_config import ApplicationConfig
-from src.server.server import ApiServer
 from src.events.message_event_bus import MessageEventBus
-from src.recorder.market_data_store import MarketDataStore
+from src.server.server import ApiServer
 
 
 class TestApiServerConfig(unittest.TestCase):
@@ -54,21 +53,24 @@ class TestApiServerConfig(unittest.TestCase):
         self.assertEqual(config.api_host, "127.0.0.1")
 
     def test_api_server_default_host_and_port(self):
+        trading_proxy = MagicMock()
         agent = MagicMock()
         event_bus = MessageEventBus()
         db_manager = MagicMock()
-        market_data_store = MarketDataStore()
         vcs = MagicMock()
+        llm_manager = MagicMock()
 
         server = ApiServer(
+            trading_proxy=trading_proxy,
             agent=agent,
             event_bus=event_bus,
             db_manager=db_manager,
-            market_data_store=market_data_store,
             vcs=vcs,
+            llm_manager=llm_manager,
         )
         self.assertEqual(server.host, "0.0.0.0")
         self.assertEqual(server.port, 8000)
+
 
 
 if __name__ == "__main__":

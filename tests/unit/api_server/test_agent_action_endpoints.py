@@ -22,7 +22,11 @@ from src.server.app import ChatApp
 from src.trading.activity.asset_activity_tracker import AssetActivityTracker
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
-from tests.unit.api_server.helpers import make_db_manager
+from tests.unit.api_server.helpers import (
+    make_db_manager,
+    make_test_llm_manager,
+    make_test_trading_proxy,
+)
 
 SAMPLE_CONFIG = """
 assets:
@@ -99,14 +103,20 @@ def automation(vcs, event_bus):
 def app(db_manager, vcs, event_bus, automation):
     gateway = AgentGateway(FakeLlmAdapter([]), vcs=vcs)
     _, executor = automation
+    trading_proxy = make_test_trading_proxy(
+        market_data_store=MarketDataStore(),
+        compare_backtest=executor.compare_backtest_drift,
+    )
+    llm_manager = make_test_llm_manager(db_manager)
     return ChatApp.create(
+        trading_proxy=trading_proxy,
         agent=gateway,
         event_bus=event_bus,
         db_manager=db_manager,
-        market_data_store=MarketDataStore(),
         vcs=vcs,
-        compare_backtest=executor.compare_backtest_drift,
+        llm_manager=llm_manager,
     )
+
 
 
 @pytest.fixture

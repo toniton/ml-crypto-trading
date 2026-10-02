@@ -10,10 +10,10 @@ from src.agent import AgentGateway
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
 from src.logging.log_event import LogEvent, LogEventPayload
-from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
+from tests.unit.api_server.helpers import make_test_llm_manager, make_test_trading_proxy
 
 SAMPLE_CONFIG = """
 assets:
@@ -54,14 +54,15 @@ def make_event(domain="trading", levelno=logging.INFO, asset=None, message="hell
 def build_client(bus):
     db_mgr = MagicMock(spec=SqlAlchemyDatabaseManager)
     vcs = MagicMock(spec=VCSService)
-    app = ChatApp.create(
+    return TestClient(ChatApp.create(
+        trading_proxy=make_test_trading_proxy(),
         agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=vcs),
         event_bus=bus,
         db_manager=db_mgr,
-        market_data_store=MarketDataStore(),
         vcs=vcs,
-    )
-    return TestClient(app)
+        llm_manager=make_test_llm_manager(db_mgr),
+    ))
+
 
 
 class TestLogWebSocket(unittest.TestCase):

@@ -6,6 +6,7 @@ from threading import Event
 from api.interfaces.asset import Asset
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.trading_scheduler import TradingScheduler
+from src.core.interfaces.trading_strategy import TradingStrategy
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -19,6 +20,26 @@ class TradingEngine:
         self._trading_executor = trading_executor
         self.thread_pool_executor = ThreadPoolExecutor(max_workers=30)
         self._is_running = Event()
+
+    @property
+    def is_running(self) -> bool:
+        return self._is_running.is_set()
+
+    @property
+    def trading_executor(self) -> TradingExecutor:
+        return self._trading_executor
+
+    @property
+    def monitored_assets(self) -> list[Asset]:
+        if self._trading_executor is not None:
+            return self._trading_executor.assets
+        return []
+
+    @property
+    def strategies(self) -> list[TradingStrategy]:
+        if self._trading_executor is not None:
+            return self._trading_executor.strategies
+        return []
 
     def start_application(self):
         self._is_running.set()
@@ -43,6 +64,3 @@ class TradingEngine:
             self._trading_executor.update_config(trading_config)
         if self._trading_scheduler is not None:
             self._trading_scheduler.update_schedules(trading_config.assets, self._run_trading_cycle)
-
-
-

@@ -13,23 +13,25 @@ from src.events.agent_events import (
     TradingActivityAnomalyDetectedEvent,
 )
 from src.events.message_event_bus import MessageEventBus
-from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
+from tests.unit.api_server.helpers import make_test_llm_manager, make_test_trading_proxy
 
 
 def build_client(bus: MessageEventBus) -> TestClient:
     db_mgr = MagicMock(spec=SqlAlchemyDatabaseManager)
     vcs = MagicMock(spec=VCSService)
     app = ChatApp.create(
+        trading_proxy=make_test_trading_proxy(),
         agent=AgentGateway(FakeLlmAdapter(chunks=["ok"]), vcs=vcs),
         event_bus=bus,
         db_manager=db_mgr,
-        market_data_store=MarketDataStore(),
         vcs=vcs,
+        llm_manager=make_test_llm_manager(db_mgr),
     )
     return TestClient(app)
+
 
 
 class TestAgentWebSocket(unittest.TestCase):

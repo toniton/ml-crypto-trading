@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
 import unittest
+from datetime import datetime, timezone
 from uuid import uuid4
-from fastapi.testclient import TestClient
+
 import yaml
+from fastapi.testclient import TestClient
 
 from src.agent import AgentGateway
 from src.agent.runtime_debug.models import (
@@ -17,11 +18,14 @@ from src.database.repositories.providers.postgres_runtime_incident_repository im
     PostgresRuntimeIncidentRepository,
 )
 from src.events.message_event_bus import MessageEventBus
-from src.recorder.market_data_store import MarketDataStore
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 from tests.unit.agent.fakes import FakeLlmAdapter
-from tests.unit.api_server.helpers import make_temp_db_manager
+from tests.unit.api_server.helpers import (
+    make_temp_db_manager,
+    make_test_llm_manager,
+    make_test_trading_proxy,
+)
 
 SAMPLE_CONFIG = """
 assets:
@@ -52,13 +56,15 @@ class TestRuntimeDebugEndpoints(unittest.TestCase):
         self.llm = FakeLlmAdapter(chunks=["ok"])
         self.gateway = AgentGateway(self.llm, vcs=self.vcs)
         self.app = ChatApp.create(
+            trading_proxy=make_test_trading_proxy(),
             agent=self.gateway,
             event_bus=MessageEventBus(),
             db_manager=self.db_manager,
-            market_data_store=MarketDataStore(),
             vcs=self.vcs,
+            llm_manager=make_test_llm_manager(self.db_manager),
         )
         self.client = TestClient(self.app)
+
 
         # Seed an incident with an error event
         self.incident_id = uuid4()

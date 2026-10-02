@@ -6,16 +6,16 @@ from queue import Queue
 from threading import Event
 from typing import Optional
 
-import src.configuration.providers
-import src.exchange.clients
-import src.trading.protection.guards
-from src.exchange.network import enforce_ipv4
 from api.interfaces.backtest_request import (
     BacktestDataSourceRequest,
     BacktestDataSourceType,
     BacktestRequest,
     ExecutionConfiguration,
 )
+import src.configuration.providers
+import src.exchange.clients
+import src.trading.protection.guards
+from src.exchange.network import enforce_ipv4
 from src.agent import AgentGateway
 from src.agent.actions import (
     AgentActionExecutor,
@@ -75,6 +75,8 @@ from src.trading.orders.order_reconciler import OrderReconciler
 from src.trading.reconciliation.exchange_reconciliation_engine import (
     ExchangeReconciliationEngine,
 )
+from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
+from src.trading.local_trading_engine_proxy import LocalTradingEngineProxy
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
@@ -93,6 +95,7 @@ class Application(ApplicationLoggingMixin):
         self.is_running = Event()
         self.is_ready = Event()
         self._trading_engine = None
+        self._trading_engine_proxy: Optional[TradingEngineProxy] = None
         self._api_server: Optional[ApiServer] = None
         self._event_bus: Optional[MessageEventBus] = None
         self._trading_event_bus = MessageEventBus()
@@ -365,6 +368,15 @@ class Application(ApplicationLoggingMixin):
         self._llm_manager.update_tool_map(full_tool_map)
 
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
+        self._trading_engine_proxy = LocalTradingEngineProxy(
+            trading_engine=self._trading_engine,
+            managers=self._managers,
+            market_data_store=self._market_data_store,
+            compare_backtest=(
+                self._agent_action_executor.compare_backtest_drift
+                if self._agent_action_executor else (lambda action: None)
+            ),
+        )
 
         if not self._application_config.headless:
             gateway = AgentGateway(
@@ -372,18 +384,14 @@ class Application(ApplicationLoggingMixin):
                 vcs=self._vcs,
             )
             self._api_server = ApiServer(
+                trading_proxy=self._trading_engine_proxy,
                 agent=gateway,
                 event_bus=self._event_bus,
                 db_manager=self._db_manager,
-                market_data_store=self._market_data_store,
                 vcs=self._vcs,
+                llm_manager=self._llm_manager,
                 host=self._application_config.api_host,
                 port=self._application_config.api_port,
-                compare_backtest=(
-                    self._agent_action_executor.compare_backtest_drift
-                    if self._agent_action_executor else None
-                ),
-                llm_manager=self._llm_manager,
             )
             self._api_server.start()
 
@@ -523,7 +531,9 @@ class Application(ApplicationLoggingMixin):
             self.app_logger.error("Config update from VCS failed: %s", exc)
             return
 
-        if self._trading_engine:
+        if self._trading_engine_proxy is not None:
+            self._trading_engine_proxy.update_config(updated)
+        elif self._trading_engine is not None:
             self._trading_engine.update_config(updated)
         try:
             if self._managers and self._managers.session_manager:
