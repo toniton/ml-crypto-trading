@@ -161,7 +161,10 @@ class AccountManager(ApplicationLoggingMixin):
         return self._get_balance(currency_symbol, asset.schedule, provider_name)
 
     def reconcile_account_balances(self, provider_name: str) -> list[AccountBalance]:
-        data = self._rest_manager.get_account_balance(provider_name)
+        try:
+            data = self._rest_manager.get_account_balance(provider_name, force_refresh=True)
+        except TypeError:
+            data = self._rest_manager.get_account_balance(provider_name)
         self._cache_balances(provider_name, data, source="REST_RECONCILIATION", reason="SNAPSHOT")
         with self._lock:
             ex_key = provider_name.upper()

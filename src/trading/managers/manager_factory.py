@@ -12,6 +12,9 @@ from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 from src.trading.protection.protection_manager import ProtectionManager
+from src.trading.reconciliation.exchange_reconciliation_engine import (
+    ExchangeReconciliationEngine,
+)
 from src.trading.session.in_memory_trading_journal import InMemoryTradingJournal
 from src.trading.session.session_manager import SessionManager
 from src.vcs.application import VCSService
@@ -47,19 +50,34 @@ class ManagerFactory:
             session_manager=session_manager,
         )
         portfolio_risk_manager = PortfolioRiskManager(assets=assets, event_bus=event_bus)
+        protection_manager = ProtectionManager()
+        account_manager = AccountManager(
+            assets, rest_manager, websocket_manager, session_manager, event_bus=event_bus
+        )
+        fees_manager = FeesManager(assets, rest_manager)
+        reconciliation_engine = ExchangeReconciliationEngine.create(
+            account_manager=account_manager,
+            order_manager=order_manager,
+            session_manager=session_manager,
+            fees_manager=fees_manager,
+            rest_manager=rest_manager,
+            assets=assets,
+            event_bus=event_bus,
+            protection_manager=protection_manager,
+        )
 
         container = ManagerContainer(
-            account_manager=AccountManager(
-                assets, rest_manager, websocket_manager, session_manager, event_bus=event_bus
-            ),
-            fees_manager=FeesManager(assets, rest_manager),
+            account_manager=account_manager,
+            fees_manager=fees_manager,
             order_manager=order_manager,
             market_data_manager=MarketDataManager(rest_manager, websocket_manager, event_bus),
             consensus_manager=ConsensusManager(event_bus=event_bus),
-            protection_manager=ProtectionManager(),
+            protection_manager=protection_manager,
             session_manager=session_manager,
             websocket_manager=websocket_manager,
             rest_manager=rest_manager,
             portfolio_risk_manager=portfolio_risk_manager,
+            reconciliation_engine=reconciliation_engine,
         )
         return container, trading_journal
+

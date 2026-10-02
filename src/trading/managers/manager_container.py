@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from typing import Optional
+
 
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
@@ -10,6 +12,9 @@ from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 from src.trading.protection.protection_manager import ProtectionManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.exchange.managers.rest_manager import RestManager
+from src.trading.reconciliation.exchange_reconciliation_engine import (
+    ExchangeReconciliationEngine,
+)
 
 
 @dataclass(frozen=True)
@@ -24,3 +29,5 @@ class ManagerContainer:
     websocket_manager: WebSocketManager
     rest_manager: RestManager
     portfolio_risk_manager: PortfolioRiskManager
+    reconciliation_engine: Optional[ExchangeReconciliationEngine] = None
+

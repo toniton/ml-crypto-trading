@@ -182,3 +182,41 @@ class TradeClosedEvent(TradingEvent):
 
     def _resolve_asset(self) -> Optional[str]:
         return self.symbol
+
+
+@dataclass
+class ReconciliationDiscrepancyEvent(TradingEvent):
+    EVENT_TYPE = "ReconciliationDiscrepancyEvent"
+    discrepancy_type: str = ""
+    severity: str = "CRITICAL"
+    exchange: str = ""
+    asset_or_currency: str = ""
+    local_value: Any = None
+    exchange_value: Any = None
+    difference: Optional[Decimal] = None
+    action_taken: str = ""
+    details: dict[str, Any] = field(default_factory=dict)
+    symbol: Optional[str] = None
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.symbol is None:
+            self.symbol = self.asset_or_currency
+
+    def _resolve_asset(self) -> Optional[str]:
+        return self.symbol
+
+
+@dataclass
+class ReconciliationCompletedEvent(TradingEvent):
+    EVENT_TYPE = "ReconciliationCompletedEvent"
+    cycle_id: str = ""
+    exchange: str = ""
+    duration_ms: float = 0.0
+    discrepancies_count: int = 0
+    critical_count: int = 0
+    actions_taken: list[str] = field(default_factory=list)
+
+    def _resolve_asset(self) -> Optional[str]:
+        return None
+

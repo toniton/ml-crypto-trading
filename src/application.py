@@ -9,6 +9,7 @@ from typing import Optional
 import src.configuration.providers
 import src.exchange.clients
 import src.trading.protection.guards
+from src.exchange.network import enforce_ipv4
 from api.interfaces.backtest_request import (
     BacktestDataSourceRequest,
     BacktestDataSourceType,
@@ -71,6 +72,9 @@ from src.trading.live_trading_scheduler import LiveTradingScheduler
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.orders.order_reconciler import OrderReconciler
+from src.trading.reconciliation.exchange_reconciliation_engine import (
+    ExchangeReconciliationEngine,
+)
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
@@ -122,6 +126,7 @@ class Application(ApplicationLoggingMixin):
         self._dynamic_quantity = None
         self._config_listener: Optional[RefChangeListener] = None
         self._trading_journal = None
+        self._reconciliation_engine: Optional[ExchangeReconciliationEngine] = None
         self._order_reconciler: Optional[OrderReconciler] = None
         self._activity_tracker: Optional[AssetActivityTracker] = None
         self._agent_action_executor: Optional[AgentActionExecutor] = None
@@ -150,11 +155,19 @@ class Application(ApplicationLoggingMixin):
         )
         self._trading_journal = trading_journal
         self._order_lifecycle_collector = OrderLifecycleCollector(self._metric_service, db_manager)
-        self._order_reconciler = OrderReconciler(
-            container.order_manager,
+        self._reconciliation_engine = container.reconciliation_engine or ExchangeReconciliationEngine.create(
+            account_manager=container.account_manager,
+            order_manager=container.order_manager,
+            session_manager=container.session_manager,
+            fees_manager=container.fees_manager,
+            rest_manager=container.rest_manager,
+            assets=self._assets,
+            event_bus=self._trading_event_bus,
+            protection_manager=container.protection_manager,
             order_lifecycle_collector=self._order_lifecycle_collector,
         )
-        container.websocket_manager.set_reconnect_callback(self._order_reconciler.trigger)
+        self._order_reconciler = self._reconciliation_engine
+        container.websocket_manager.set_reconnect_callback(self._reconciliation_engine.trigger)
 
         return container
 
@@ -188,6 +201,8 @@ class Application(ApplicationLoggingMixin):
             for cls in Guard.__subclasses__():
                 if cls.is_enabled(asset) is True:
                     instance = cls(asset.guard_config)
+                    if hasattr(instance, "set_engine") and self._reconciliation_engine:
+                        instance.set_engine(self._reconciliation_engine)
                     self._managers.protection_manager.register_guard(asset.key, instance)
 
     def startup(self):
@@ -248,6 +263,7 @@ class Application(ApplicationLoggingMixin):
             return self._seed_trading_config
 
     def _startup_live(self, db_manager: DatabaseManager) -> None:
+        enforce_ipv4()
         self._config_listener = RefChangeListener(
             db_manager=db_manager,
             on_event_callback=self._on_vcs_ref_change,
@@ -290,8 +306,10 @@ class Application(ApplicationLoggingMixin):
         self._setup_live_engine(trading_scheduler, trading_executor)
 
         self._trading_engine.start_application()
-        self._order_reconciler.start()
+        if self._reconciliation_engine:
+            self._reconciliation_engine.start()
         self.is_ready.set()
+
 
     def _setup_live_engine(self, trading_scheduler, trading_executor):
         backtest_service = self._build_backtest_service()
@@ -541,10 +559,11 @@ class Application(ApplicationLoggingMixin):
             self._retention_scheduler = None
         if self._runtime_metrics_collector:
             self._runtime_metrics_collector.stop_monitoring()
-        if self._order_reconciler:
-            self._order_reconciler.stop()
+        if self._reconciliation_engine:
+            self._reconciliation_engine.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()
+
         self.is_running.clear()
         self.is_ready.clear()
         self.app_logger.info("Stopping Application...")

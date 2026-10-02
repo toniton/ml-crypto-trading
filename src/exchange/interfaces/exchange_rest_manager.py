@@ -30,8 +30,9 @@ class ExchangeRestManager(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def get_account_balance(self, exchange: str) -> list[AccountBalance]:
+    def get_account_balance(self, exchange: str, force_refresh: bool = False) -> list[AccountBalance]:
         raise NotImplementedError()
+
 
     @abc.abstractmethod
     def get_account_fees(self, exchange: str) -> Fees:

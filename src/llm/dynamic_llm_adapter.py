@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from typing import AsyncIterator, List, Optional, Type, TypeVar
+from typing import Any, AsyncIterator, List, Optional, Type, TypeVar
 
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel
 
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
-from src.llm.llm_runtime_manager import LlmRuntimeManager
 
 Structured = TypeVar("Structured", bound=BaseModel)
 
@@ -14,8 +13,9 @@ Structured = TypeVar("Structured", bound=BaseModel)
 class DynamicLlmAdapter(LlmAdapter):
     """Proxy adapter that routes calls to the dynamically active LLM instance."""
 
-    def __init__(self, manager: LlmRuntimeManager):
+    def __init__(self, manager: Any):
         self._manager = manager
+
 
     def generate(
             self,
