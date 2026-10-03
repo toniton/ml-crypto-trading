@@ -52,6 +52,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.event_bus = event_bus
         self._dynamic_quantity = dynamic_quantity
         self._dynamic_quantity_parser = ExpressionParser(dynamic_quantity) if dynamic_quantity else None
+        self._asset_dynamic_quantity_parsers: dict[int, ExpressionParser] = {}
+        self._rebuild_asset_dynamic_quantity_parsers(self.assets)
         self.account_manager = manager_container.account_manager
         self.fees_manager = manager_container.fees_manager
         self.order_manager = manager_container.order_manager
@@ -66,6 +68,21 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self._strategies_registry = strategies_registry or StrategyRegistry()
         self._strategies: list[TradingStrategy] = []
         self._register_asset_strategies(self.assets)
+
+    def _rebuild_asset_dynamic_quantity_parsers(self, assets: list[Asset]) -> None:
+        self._asset_dynamic_quantity_parsers = {
+            asset.key: ExpressionParser(asset.dynamic_quantity)
+            for asset in assets
+            if asset.dynamic_quantity and asset.dynamic_quantity.strip()
+        }
+
+    def _get_dynamic_quantity_parser(self, asset: Asset) -> Optional[ExpressionParser]:
+        if asset.dynamic_quantity and asset.dynamic_quantity.strip():
+            return self._asset_dynamic_quantity_parsers.get(
+                asset.key,
+                ExpressionParser(asset.dynamic_quantity)
+            )
+        return self._dynamic_quantity_parser
 
     @property
     def strategies(self) -> list[TradingStrategy]:
@@ -95,6 +112,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if self._assets_changed(trading_config.assets, self.assets):
             self._unregister_asset_strategies()
             self.assets = trading_config.assets
+            self._rebuild_asset_dynamic_quantity_parsers(self.assets)
             self._register_asset_strategies(self.assets)
             self.app_logger.info(
                 "Config updated: strategies re-registered for %s",
@@ -111,6 +129,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             if config_asset.enabled != current_asset.enabled:
                 return True
             if (config_asset.strategies or []) != (current_asset.strategies or []):
+                return True
+            if config_asset.dynamic_quantity != current_asset.dynamic_quantity:
                 return True
         return False
 
@@ -509,12 +529,13 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             market_data: MarketData, decision: ConsensusDecision
     ) -> Decimal:
         minimum_order_quantity = Decimal(str(asset.min_quantity))
+        parser = self._get_dynamic_quantity_parser(asset)
 
-        if self._dynamic_quantity_parser is None:
+        if parser is None:
             return minimum_order_quantity
 
         try:
-            quantity = self._evaluate_dynamic_quantity(asset, market_data, decision)
+            quantity = self._evaluate_dynamic_quantity(asset, market_data, decision, parser)
 
             if quantity is None:
                 return minimum_order_quantity
@@ -543,6 +564,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             asset: Asset,
             market_data: MarketData,
             decision: ConsensusDecision,
+            parser: ExpressionParser,
     ) -> Decimal | None:
         trading_context = self.session_manager.get_trading_context(asset.key)
         if trading_context is None:
@@ -559,6 +581,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             candles=candles
         )
 
-        result = self._dynamic_quantity_parser.parse(context)
+        result = parser.parse(context)
 
         return None if result is None else Decimal(str(result))

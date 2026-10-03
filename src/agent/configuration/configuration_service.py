@@ -85,7 +85,7 @@ class ConfigurationService(AgentLoggingMixin):
             return "identity"
         if path.endswith(".candles_timeframe") or path.endswith(".schedule"):
             return "market_feed"
-        if path.endswith(".min_quantity"):
+        if path.endswith(".min_quantity") or path.endswith(".dynamic_quantity"):
             return "trade_sizing"
         return "other"
 

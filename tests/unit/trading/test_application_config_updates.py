@@ -292,3 +292,42 @@ class TestTradingExecutorUpdateConfig:
         executor.create_buy_order([enabled_asset])
         assert len(called) == 1
         assert called[0].ticker_symbol == "BTC_USD"
+
+    def test_asset_dynamic_quantity_overrides_global(self):
+        executor = _make_executor(dynamic_quantity="eq * 0.1")
+        asset_with_override = _asset({"buy": 2.0, "sell": 0.8})
+        asset_with_override["dynamic_quantity"] = "min(100, volume / 10)"
+        config = TradingConfig.model_validate(
+            {"assets": [asset_with_override], "dynamic_quantity": "eq * 0.1"}
+        )
+        executor.update_config(config)
+
+        target_asset = executor.assets[0]
+        parser = executor._get_dynamic_quantity_parser(target_asset)
+        assert parser.expression == "min(100, volume / 10)"
+
+    def test_asset_without_dynamic_quantity_uses_global_fallback(self):
+        executor = _make_executor(dynamic_quantity="eq * 0.1")
+        asset_without_override = _asset({"buy": 2.0, "sell": 0.8})
+        asset_without_override["dynamic_quantity"] = None
+        config = TradingConfig.model_validate(
+            {"assets": [asset_without_override], "dynamic_quantity": "eq * 0.1"}
+        )
+        executor.update_config(config)
+
+        target_asset = executor.assets[0]
+        parser = executor._get_dynamic_quantity_parser(target_asset)
+        assert parser.expression == "eq * 0.1"
+
+    def test_asset_without_dynamic_quantity_and_no_global_returns_none(self):
+        executor = _make_executor(dynamic_quantity=None)
+        asset_without_override = _asset({"buy": 2.0, "sell": 0.8})
+        asset_without_override["dynamic_quantity"] = None
+        config = TradingConfig.model_validate(
+            {"assets": [asset_without_override], "dynamic_quantity": None}
+        )
+        executor.update_config(config)
+
+        target_asset = executor.assets[0]
+        parser = executor._get_dynamic_quantity_parser(target_asset)
+        assert parser is None

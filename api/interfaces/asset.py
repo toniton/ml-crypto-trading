@@ -77,6 +77,11 @@ class Asset:
         description="Consensus thresholds for this asset.",
         json_schema_extra={"mutable": True},
     )
+    dynamic_quantity: Optional[str] = Field(
+        default=None,
+        description="Asset-specific dynamic quantity expression (overrides global if set).",
+        json_schema_extra={"mutable": True},
+    )
     enabled: bool = Field(
         default=True,
         description="Whether this asset is active in live trading.",
