@@ -20,6 +20,7 @@ class ResolveCommitNode:
         commit_message: Optional[str] = None
         commit_author: Optional[str] = None
         base_config: Optional[dict[str, Any]] = None
+        commit_diff_changes: list[Any] = []
 
         if self._vcs and commit_ref:
             try:
@@ -37,6 +38,10 @@ class ResolveCommitNode:
                     if isinstance(auth, str):
                         commit_author = auth
 
+                    parent_h = getattr(commit_obj, "parent_hash", None)
+                    if parent_h:
+                        commit_diff_changes = self._vcs.diff(parent_h, target_hash)
+
                 base = self._vcs.checkout(target_hash)
                 if isinstance(base, dict):
                     base_config = base
@@ -48,4 +53,5 @@ class ResolveCommitNode:
             "commit_message": commit_message,
             "commit_author": commit_author,
             "base_config": base_config,
+            "commit_diff_changes": commit_diff_changes,
         }

@@ -61,3 +61,16 @@ class TradingEngineProxy(ABC):
     @abstractmethod
     def compare_backtest_drift(self, action: Any) -> Any:
         """Executes backtest comparison if supported."""
+
+    def get_reconciliation_status(self) -> dict[str, Any]:
+        """Returns reconciliation engine status and active discrepancies."""
+        return {"active": False, "has_critical": False, "discrepancies": []}
+
+    def trigger_reconciliation(self) -> bool:
+        """Manually triggers an exchange reconciliation cycle."""
+        return False
+
+    def clear_reconciliation_discrepancies(self) -> bool:
+        """Clears active reconciliation discrepancies."""
+        return False
+

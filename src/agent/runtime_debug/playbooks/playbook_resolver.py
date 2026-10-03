@@ -6,6 +6,7 @@ from src.agent.runtime_debug.models import RuntimeErrorEvent
 from src.agent.runtime_debug.playbooks.base_playbook import DebugPlaybook
 from src.agent.runtime_debug.playbooks.order_validation_playbook import OrderValidationPlaybook
 from src.agent.runtime_debug.playbooks.rate_limit_playbook import RateLimitPlaybook
+from src.agent.runtime_debug.playbooks.reconciliation_playbook import ReconciliationPlaybook
 
 
 class PlaybookResolver:
@@ -13,6 +14,7 @@ class PlaybookResolver:
         self._playbooks: List[DebugPlaybook] = playbooks or [
             OrderValidationPlaybook(),
             RateLimitPlaybook(),
+            ReconciliationPlaybook(),
         ]
 
     def resolve(self, event: RuntimeErrorEvent) -> Optional[DebugPlaybook]:

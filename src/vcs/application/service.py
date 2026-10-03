@@ -5,8 +5,8 @@ from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
-from src.core.interfaces.database_manager import DatabaseManager
 from src.configuration.trading_config import TradingConfig
+from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_blob_repository import PostgresBlobRepository
 from src.database.repositories.providers.postgres_commit_repository import PostgresCommitRepository
 from src.database.repositories.providers.postgres_ref_repository import PostgresRefRepository
@@ -19,6 +19,7 @@ from src.vcs.domain import (
     BlobNotFoundError,
     Commit,
     CommitNotFoundError,
+    ConfigChange,
     InvalidReferenceError,
     MergePreview,
     MergeResult,
@@ -98,6 +99,144 @@ class VCSService(ApplicationLoggingMixin):
     def checkout(self, commit_hash_or_ref: str) -> Dict[str, Any]:
         blob = self.get_blob(commit_hash_or_ref)
         return blob.content
+
+    def diff(self, ref_a: str, ref_b: str) -> List[ConfigChange]:
+        config_a = self.checkout(ref_a) if ref_a else {}
+        config_b = self.checkout(ref_b) if ref_b else {}
+        return self.compute_config_diff(config_a, config_b)
+
+    @classmethod
+    def compute_config_diff(
+        cls, config_a: Dict[str, Any], config_b: Dict[str, Any]
+    ) -> List[ConfigChange]:
+        changes: List[ConfigChange] = []
+
+        all_top = set(config_a.keys()) | set(config_b.keys())
+        all_top.discard("assets")
+        for key in sorted(all_top):
+            va = config_a.get(key)
+            vb = config_b.get(key)
+            if va != vb:
+                changes.append(
+                    ConfigChange(
+                        path=key,
+                        old_value=va,
+                        new_value=vb,
+                        reason="",
+                    )
+                )
+
+        assets_a = config_a.get("assets", []) or []
+        assets_b = config_b.get("assets", []) or []
+
+        def asset_key(a: Dict[str, Any]) -> str:
+            base = str(a.get("base_ticker_symbol", "")).upper()
+            quote = str(a.get("quote_ticker_symbol", "")).upper()
+            name = str(a.get("name", ""))
+            return f"{base}_{quote}" if (base and quote) else name
+
+        map_a = {asset_key(a): a for a in assets_a if isinstance(a, dict)}
+        map_b = {asset_key(b): b for b in assets_b if isinstance(b, dict)}
+        all_assets = list(dict.fromkeys(list(map_a.keys()) + list(map_b.keys())))
+
+        for sym in all_assets:
+            if sym in map_a and sym not in map_b:
+                changes.append(
+                    ConfigChange(
+                        path=f"assets.{sym}",
+                        old_value=map_a[sym],
+                        new_value=None,
+                        reason="Asset removed",
+                    )
+                )
+            elif sym not in map_a and sym in map_b:
+                changes.append(
+                    ConfigChange(
+                        path=f"assets.{sym}",
+                        old_value=None,
+                        new_value=map_b[sym],
+                        reason="Asset added",
+                    )
+                )
+            else:
+                aa = map_a[sym]
+                ab = map_b[sym]
+                all_fields = set(aa.keys()) | set(ab.keys())
+                for field in sorted(all_fields):
+                    fa = aa.get(field)
+                    fb = ab.get(field)
+                    if fa == fb:
+                        continue
+                    if field == "strategies":
+                        strats_a = {
+                            s.get("name", str(i)): s
+                            for i, s in enumerate(fa or [])
+                            if isinstance(s, dict)
+                        }
+                        strats_b = {
+                            s.get("name", str(i)): s
+                            for i, s in enumerate(fb or [])
+                            if isinstance(s, dict)
+                        }
+                        all_strats = list(
+                            dict.fromkeys(list(strats_a.keys()) + list(strats_b.keys()))
+                        )
+                        for sname in all_strats:
+                            if sname in strats_a and sname not in strats_b:
+                                changes.append(
+                                    ConfigChange(
+                                        path=f"assets.{sym}.strategies.{sname}",
+                                        old_value=strats_a[sname],
+                                        new_value=None,
+                                        reason="Strategy removed",
+                                    )
+                                )
+                            elif sname not in strats_a and sname in strats_b:
+                                changes.append(
+                                    ConfigChange(
+                                        path=f"assets.{sym}.strategies.{sname}",
+                                        old_value=None,
+                                        new_value=strats_b[sname],
+                                        reason="Strategy added",
+                                    )
+                                )
+                            else:
+                                sa = strats_a[sname]
+                                sb = strats_b[sname]
+                                for skey in sorted(set(sa.keys()) | set(sb.keys())):
+                                    if sa.get(skey) != sb.get(skey):
+                                        changes.append(
+                                            ConfigChange(
+                                                path=f"assets.{sym}.strategies.{sname}.{skey}",
+                                                old_value=sa.get(skey),
+                                                new_value=sb.get(skey),
+                                                reason="",
+                                            )
+                                        )
+                    elif isinstance(fa, dict) or isinstance(fb, dict):
+                        da = fa or {}
+                        db = fb or {}
+                        for subk in sorted(set(da.keys()) | set(db.keys())):
+                            if da.get(subk) != db.get(subk):
+                                changes.append(
+                                    ConfigChange(
+                                        path=f"assets.{sym}.{field}.{subk}",
+                                        old_value=da.get(subk),
+                                        new_value=db.get(subk),
+                                        reason="",
+                                    )
+                                )
+                    else:
+                        changes.append(
+                            ConfigChange(
+                                path=f"assets.{sym}.{field}",
+                                old_value=fa,
+                                new_value=fb,
+                                reason="",
+                            )
+                        )
+
+        return changes
 
     def commit(
             self,

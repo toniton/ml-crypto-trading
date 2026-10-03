@@ -61,9 +61,20 @@ class BuildEvidenceNode:
             expected_effect = approval.proposed_change.get("expected_effect")
             proposal_rationale = approval.description
         else:
-            evidence_limitations.append(
-                f"No persistent approval proposal record found matching asset '{asset}' and commit '{base_commit}'."
-            )
+            diff_changes = state.get("commit_diff_changes") or []
+            if diff_changes:
+                if asset:
+                    matched = [c for c in diff_changes if f"assets.{asset}" in c.path or c.path == asset]
+                    changes = matched if matched else list(diff_changes)
+                else:
+                    changes = list(diff_changes)
+                evidence_limitations.append(
+                    "Reconstructed parameter changes directly from VCS commit diff."
+                )
+            else:
+                evidence_limitations.append(
+                    f"No persistent approval proposal record found matching asset '{asset}' and commit '{base_commit}'."
+                )
 
         # Filter relevant triggering events from timeline
         triggering_events: list[dict[str, Any]] = []

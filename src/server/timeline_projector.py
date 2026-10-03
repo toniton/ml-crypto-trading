@@ -31,6 +31,7 @@ from src.events.runtime_events import (
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
 from src.trading.events import ConsensusEvaluatedEvent
+from src.trading.events.domain_events import ReconciliationDiscrepancyEvent
 from src.trading.helpers.format_helper import FormatHelper
 from src.vcs.application.events import RefChangedEvent
 
@@ -51,6 +52,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         RefChangedEvent,
         RuntimeErrorCapturedEvent,
         RuntimeIncidentCreatedEvent,
+        ReconciliationDiscrepancyEvent,
     )
 
     @classmethod
@@ -230,7 +232,44 @@ class TimelineProjector(ApplicationLoggingMixin):
             return self._project_runtime_error(event)
         if isinstance(event, RuntimeIncidentCreatedEvent):
             return self._project_runtime_incident(event)
+        if isinstance(event, ReconciliationDiscrepancyEvent):
+            return self._project_reconciliation_discrepancy(event)
         return None
+
+    def _project_reconciliation_discrepancy(self, event: ReconciliationDiscrepancyEvent) -> TimelineItem:
+        entities = []
+        if event.asset_or_currency:
+            entities.append(EntityRef(type="ASSET", id=event.asset_or_currency))
+        if event.exchange:
+            entities.append(EntityRef(type="EXCHANGE", id=event.exchange))
+
+        diff_str = f" Diff: {event.difference:+}" if event.difference is not None else ""
+        summary = (
+            f"{event.discrepancy_type} on {event.exchange} for {event.asset_or_currency}. "
+            f"Local: {event.local_value}, Exchange: {event.exchange_value}.{diff_str} Action: {event.action_taken}"
+        )
+        return TimelineItem(
+            timestamp=event.timestamp,
+            category=TimelineCategory.RUNTIME,
+            severity=event.severity.upper() if event.severity else "CRITICAL",
+            title=f"Reconciliation: {event.discrepancy_type} ({event.asset_or_currency})",
+            summary=summary,
+            correlation_id=str(event.correlation_id) if event.correlation_id else None,
+            causation_id=str(event.causation_id) if event.causation_id else None,
+            actor_type="SYSTEM",
+            primary_entity=EntityRef(type="ASSET", id=event.asset_or_currency) if event.asset_or_currency else None,
+            entities=entities,
+            metadata={
+                "discrepancy_type": event.discrepancy_type,
+                "exchange": event.exchange,
+                "asset_or_currency": event.asset_or_currency,
+                "local_value": str(event.local_value),
+                "exchange_value": str(event.exchange_value),
+                "difference": str(event.difference) if event.difference is not None else None,
+                "action_taken": event.action_taken,
+                "details": event.details,
+            },
+        )
 
     def _project_consensus(self, event: ConsensusEvaluatedEvent) -> TimelineItem:
         symbol = event.symbol

@@ -10,6 +10,7 @@ from src.agent.decision_investigation.models import (
 )
 from src.agent.router.models import AgentReferences, AgentRoute
 from src.core.interfaces.llm_adapter import ChatTurn
+from src.vcs.domain.diff import ConfigChange
 
 
 class DecisionInvestigationState(TypedDict, total=False):
@@ -22,6 +23,7 @@ class DecisionInvestigationState(TypedDict, total=False):
     commit_message: Optional[str]
     commit_author: Optional[str]
     base_config: Optional[dict[str, Any]]
+    commit_diff_changes: list[ConfigChange]
     timeline_items: list[dict[str, Any]]
     evidence: Optional[DecisionEvidence]
     explanation: Optional[DecisionExplanation]

@@ -107,3 +107,42 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
 
     def compare_backtest_drift(self, action: Any) -> Any:
         return self._compare_backtest(action)
+
+    def get_reconciliation_status(self) -> dict[str, Any]:
+        engine = getattr(self._trading_engine, "_reconciliation_engine", None)
+        if not engine:
+            return {"active": False, "has_critical": False, "discrepancies": []}
+        active_discrepancies = engine.get_active_discrepancies()
+        return {
+            "active": True,
+            "has_critical": engine.has_critical_discrepancy(),
+            "discrepancies": [
+                {
+                    "type": d.discrepancy_type.value if hasattr(d.discrepancy_type, "value") else str(d.discrepancy_type),
+                    "severity": d.severity.value if hasattr(d.severity, "value") else str(d.severity),
+                    "exchange": d.exchange,
+                    "asset_or_currency": d.asset_or_currency,
+                    "local_value": str(d.local_value),
+                    "exchange_value": str(d.exchange_value),
+                    "difference": str(d.difference) if d.difference is not None else None,
+                    "action_taken": d.action_taken,
+                    "timestamp": d.timestamp,
+                }
+                for d in active_discrepancies
+            ],
+        }
+
+    def trigger_reconciliation(self) -> bool:
+        engine = getattr(self._trading_engine, "_reconciliation_engine", None)
+        if engine:
+            engine.trigger()
+            return True
+        return False
+
+    def clear_reconciliation_discrepancies(self) -> bool:
+        engine = getattr(self._trading_engine, "_reconciliation_engine", None)
+        if engine:
+            engine.clear_discrepancies()
+            return True
+        return False
+

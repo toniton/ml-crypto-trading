@@ -32,7 +32,7 @@ class PresentExplanationNode:
         if header_parts:
             lines.append(" | ".join(header_parts) + "\n")
 
-        if evidence and evidence.commit_message and not evidence.configuration_changes:
+        if evidence and evidence.commit_message:
             lines.append(f"**Commit Message:** {evidence.commit_message}")
             if evidence.commit_author:
                 lines.append(f"**Author:** {evidence.commit_author}\n")

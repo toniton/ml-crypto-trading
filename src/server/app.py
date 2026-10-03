@@ -49,6 +49,7 @@ from src.server.routes.agent_action_routes import create_agent_action_router
 from src.server.routes.engine_routes import create_engine_router
 from src.server.routes.expression_routes import create_expression_router
 from src.server.routes.llm_routes import create_llm_router
+from src.server.routes.reconciliation_routes import create_reconciliation_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
 from src.agent.runtime_debug.service import RuntimeDebugService
@@ -199,6 +200,7 @@ class ChatApp:
         app.include_router(create_timeline_router(timeline_projector))
         app.include_router(create_expression_router())
         app.include_router(create_engine_router(trading_proxy))
+        app.include_router(create_reconciliation_router(trading_proxy))
 
         agent_ws_handler = AgentWebSocketHandler(event_bus)
 

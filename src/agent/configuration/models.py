@@ -6,6 +6,7 @@ from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 from src.agent.router.models import AgentGoal, AgentIntent
+from src.vcs.domain.diff import ConfigChange
 
 # Backwards-compatible alias: goal extraction now lives in the router.
 ConfigurationGoal = AgentGoal
@@ -18,13 +19,6 @@ class ProposalDecision(str, Enum):
     @property
     def label(self) -> str:
         return "Approved" if self is ProposalDecision.APPROVE else "Rejected"
-
-
-class ConfigChange(BaseModel):
-    path: str = Field(description="Dot-separated config path, e.g. 'assets.BTC_USD.schedule'.")
-    old_value: Any = Field(description="The current value of the field.")
-    new_value: Any = Field(description="The proposed replacement value.")
-    reason: str = Field(description="Why this change is required to reach the user's goal.")
 
 
 class ConfigurationProposal(BaseModel):
