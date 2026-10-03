@@ -114,6 +114,13 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
                     return released
             return Decimal("0")
 
+    def reconcile_open_orders(self, active_order_uuids: set[str]) -> Decimal:
+        with self._lock:
+            released = Decimal("0")
+            for portfolio in self.portfolios.values():
+                released += portfolio.reconcile_orders(active_order_uuids)
+            return released
+
     def can_trade(
             self,
             asset: Asset,
@@ -206,14 +213,14 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
                 if event.exchange and exchange.upper() != event.exchange.upper():
                     continue
                 if quote_currency.upper() == event.currency.upper():
-                    target_total = event.total if event.total is not None else event.available
-                    target_total_dec = Decimal(str(target_total))
-                    if portfolio.total_cash != target_total_dec:
-                        portfolio.update_cash(target_total_dec)
+                    target_cash = event.available if event.available is not None else event.total
+                    target_cash_dec = Decimal(str(target_cash))
+                    if portfolio.total_cash != target_cash_dec:
+                        portfolio.update_cash(target_cash_dec)
                         self.app_logger.info(
                             "Updated quote portfolio [%s / %s] cash balance to %s (source: %s)",
                             exchange,
                             quote_currency,
-                            target_total,
+                            target_cash,
                             event.source,
                         )

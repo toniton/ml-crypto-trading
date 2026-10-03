@@ -11,6 +11,7 @@ from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.events import (
+    BalanceChangedEvent,
     OrderFilledEvent,
     OrderSubmittedEvent,
 )
@@ -171,3 +172,58 @@ def test_portfolio_risk_manager_event_bus_cash_reservation_lifecycle():
     event_bus.publish(OrderFilledEvent(symbol="BTC_USD", order=order))
     assert port.reserved_cash == Decimal("0.00")
     assert port.available_cash == Decimal("100.00")
+
+
+def test_portfolio_risk_manager_uses_exchange_available_over_total():
+    event_bus = MessageEventBus()
+    btc = _make_asset("BTC", "USD")
+    risk_manager = PortfolioRiskManager(assets=[btc], event_bus=event_bus)
+
+    event_bus.publish(BalanceChangedEvent(
+        exchange=btc.exchange.value,
+        currency="USD",
+        available=Decimal("70.00"),
+        total=Decimal("100.00"),
+    ))
+
+    port = risk_manager.get_portfolio(btc.exchange.value, "USD")
+    assert port.total_cash == Decimal("70.00")
+    assert port.available_cash == Decimal("70.00")
+
+
+def test_portfolio_risk_manager_local_reservation_with_exchange_balance_update():
+    event_bus = MessageEventBus()
+    btc = _make_asset("BTC", "USD")
+    risk_manager = PortfolioRiskManager(assets=[btc], event_bus=event_bus)
+
+    port = risk_manager.get_portfolio(btc.exchange.value, "USD")
+    port.update_cash(Decimal("100.00"))
+    port.reserve_cash("order-local-1", Decimal("20.00"))
+
+    event_bus.publish(BalanceChangedEvent(
+        exchange=btc.exchange.value,
+        currency="USD",
+        available=Decimal("70.00"),
+        total=Decimal("100.00"),
+    ))
+
+    assert port.total_cash == Decimal("70.00")
+    assert port.reserved_cash == Decimal("20.00")
+    assert port.available_cash == Decimal("50.00")
+
+
+def test_portfolio_reconciliation_cleans_orphaned_reservations():
+    btc = _make_asset("BTC", "USD")
+    risk_manager = PortfolioRiskManager(assets=[btc])
+    port = risk_manager.get_portfolio(btc.exchange.value, "USD")
+
+    port.update_cash(Decimal("100.00"))
+    port.reserve_cash("order-active", Decimal("30.00"))
+    port.reserve_cash("order-orphaned", Decimal("20.00"))
+
+    released = risk_manager.reconcile_open_orders(active_order_uuids={"order-active"})
+
+    assert released == Decimal("20.00")
+    assert port.reserved_cash == Decimal("30.00")
+    assert port.available_cash == Decimal("70.00")
+

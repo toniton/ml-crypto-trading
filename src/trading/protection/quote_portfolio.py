@@ -49,6 +49,13 @@ class QuotePortfolio:
         self.reserved_cash = max(Decimal("0"), self.reserved_cash - amount)
         return amount
 
+    def reconcile_orders(self, active_order_uuids: set[str]) -> Decimal:
+        orphaned_uuids = [uuid for uuid in self.open_orders if uuid not in active_order_uuids]
+        released_total = Decimal("0")
+        for uuid in orphaned_uuids:
+            released_total += self.release_cash(uuid)
+        return released_total
+
     def get_asset_notional(self, ticker_symbol: str) -> Decimal:
         qty = self.asset_positions.get(ticker_symbol, Decimal("0"))
         price = self.asset_mark_prices.get(ticker_symbol, Decimal("0"))
