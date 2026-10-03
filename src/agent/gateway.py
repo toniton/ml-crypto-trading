@@ -4,10 +4,12 @@ import uuid
 from typing import Any, AsyncIterator, List, Optional, Union
 
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
+from src.agent.actions.service import AgentApprovalService
 from src.agent.backtest.graph import BacktestGraph
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.graph import ConfigurationGraph
 from src.agent.configuration.models import ClarificationResult, ConfigurationResult, GeneralResult
+from src.agent.decision_investigation.graph import DecisionInvestigationGraph
 from src.agent.portfolio_insights.graph import PortfolioInsightsGraph
 from src.agent.performance_analysis.graph import PerformanceAnalysisGraph
 from src.agent.router.graph import RouterGraph
@@ -16,11 +18,13 @@ from src.agent.runtime.agent import AgentDefinition
 from src.agent.runtime.registry import AgentRegistry
 from src.agent.runtime_debug.graph import RuntimeDebugGraph
 from src.agent.runtime_debug.tools import RuntimeDebugToolbox
+from src.agent.decision_investigation.models import DecisionInvestigationResult
 from src.agent.events import AIEvent
 from src.llm.math_normalizer import DelimiterStream
+from src.server.timeline_projector import TimelineProjector
 from src.vcs.application.service import VCSService
 
-AgentResult = Union[ConfigurationResult, ClarificationResult, GeneralResult]
+AgentResult = Union[ConfigurationResult, DecisionInvestigationResult, ClarificationResult, GeneralResult]
 
 
 class AgentGateway:
@@ -29,10 +33,17 @@ class AgentGateway:
             llm: LlmAdapter,
             vcs: VCSService,
             registry: Optional[AgentRegistry] = None,
+            approval_service: Optional[AgentApprovalService] = None,
+            timeline_projector: Optional[TimelineProjector] = None,
     ):
         self._llm = llm
         self._vcs = vcs
-        self._registry = registry or self.build_default_registry(llm, vcs=vcs)
+        self._registry = registry or self.build_default_registry(
+            llm,
+            vcs=vcs,
+            approval_service=approval_service,
+            timeline_projector=timeline_projector,
+        )
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
@@ -48,6 +59,14 @@ class AgentGateway:
             return GeneralResult()
 
         state = definition.graph.invoke({"user_prompt": prompt, "request": route, "history": history or []})
+        if route.intent == AgentIntent.DECISION_INVESTIGATION:
+            return DecisionInvestigationResult(
+                goal=route.goal,
+                evidence=state.get("evidence"),
+                explanation=state.get("explanation"),
+                presentation=state["presentation"],
+            )
+
         return ConfigurationResult(
             goal=route.goal,
             proposal=state.get("proposal"),
@@ -153,9 +172,25 @@ class AgentGateway:
     def build_default_registry(
             llm: LlmAdapter,
             vcs: VCSService,
+            approval_service: Optional[AgentApprovalService] = None,
+            timeline_projector: Optional[TimelineProjector] = None,
     ) -> AgentRegistry:
         configuration_service = ConfigurationService(vcs=vcs)
         definitions = [
+            AgentDefinition(
+                name="decision_investigation",
+                description="Investigates and explains why automated decisions, proposals, or commits were made",
+                graph=DecisionInvestigationGraph(
+                    llm=llm,
+                    approval_service=approval_service,
+                    vcs=vcs,
+                    timeline_projector=timeline_projector,
+                ).build(),
+                presentation_node="present_explanation",
+                capabilities=frozenset({
+                    "decisions.read", "vcs.read", "approvals.read", "timeline.read", "trading_config.read"
+                }),
+            ),
             AgentDefinition(
                 name="configuration",
                 description="Creates and validates trading configuration changes",
@@ -230,6 +265,7 @@ class AgentGateway:
 
         registry = AgentRegistry(definitions)
         for intent, name in (
+                (AgentIntent.DECISION_INVESTIGATION, "decision_investigation"),
                 (AgentIntent.CONFIGURATION, "configuration"),
                 (AgentIntent.PERFORMANCE_ANALYSIS, "performance_analysis"),
                 (AgentIntent.PORTFOLIO_REVIEW, "portfolio_review"),

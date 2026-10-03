@@ -47,12 +47,12 @@ class Discrepancy:
     def format_alert(self) -> str:
         diff_str = f"{self.difference:+}" if self.difference is not None else "N/A"
         return (
-            f"\n{self.discrepancy_type.value}\n\n"
-            f"Exchange:\n{self.exchange}\n\n"
-            f"Asset/Currency:\n{self.asset_or_currency}\n\n"
-            f"Local:\n{self.local_value}\n\n"
-            f"Exchange:\n{self.exchange_value}\n\n"
-            f"Difference:\n{diff_str}\n\n"
-            f"Severity:\n{self.severity.value}\n\n"
-            f"Action:\n{self.action_taken}\n"
+            f"type={self.discrepancy_type.value}, "
+            f"exchange={self.exchange}, "
+            f"asset={self.asset_or_currency}, "
+            f"local={self.local_value}, "
+            f"exchange_val={self.exchange_value}, "
+            f"diff={diff_str}, "
+            f"severity={self.severity.value}, "
+            f"action={self.action_taken}"
         )

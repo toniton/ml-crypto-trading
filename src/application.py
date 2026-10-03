@@ -101,6 +101,7 @@ class Application(ApplicationLoggingMixin):
         self._trading_event_bus = MessageEventBus()
         self._oracle_service: Optional[OracleService] = None
         self._timeline_projector: Optional[TimelineProjector] = None
+        self._approval_service: Optional[AgentApprovalService] = None
         self._is_backtest_mode = is_backtest_mode
         self._environment_config = environment_config
         self._application_config = application_config
@@ -382,6 +383,8 @@ class Application(ApplicationLoggingMixin):
             gateway = AgentGateway(
                 self._llm_manager.proxy_adapter,
                 vcs=self._vcs,
+                approval_service=self._approval_service,
+                timeline_projector=self._timeline_projector,
             )
             self._api_server = ApiServer(
                 trading_proxy=self._trading_engine_proxy,
@@ -409,6 +412,7 @@ class Application(ApplicationLoggingMixin):
             event_bus=self._event_bus,
             conversation_store=self._conversation_service,
         )
+        self._approval_service = approval_service
         try:
             backtest_service = self._build_backtest_service()
         except Exception as exc:  # pylint: disable=broad-except

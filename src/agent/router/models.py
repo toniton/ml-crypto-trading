@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 class AgentIntent(str, Enum):
     CONFIGURATION = "configuration"
+    DECISION_INVESTIGATION = "decision_investigation"
     PERFORMANCE_ANALYSIS = "performance_analysis"
     PORTFOLIO_REVIEW = "portfolio_review"
     RISK_ANALYSIS = "risk_analysis"
@@ -22,6 +23,33 @@ class AgentIntent(str, Enum):
 class ConfigurationAction(str, Enum):
     VIEW = "view"
     MODIFY = "modify"
+
+
+class AgentReferences(BaseModel):
+    asset: Optional[str] = Field(
+        default=None,
+        description="Asset symbol (e.g. CRO_USD, BTC_USD) referenced in the request.",
+    )
+    commit_hash: Optional[str] = Field(
+        default=None,
+        description="Commit hash or short hash (e.g. 235f666) referenced in the request.",
+    )
+    proposal_id: Optional[str] = Field(
+        default=None,
+        description="Proposal identifier referenced in the request.",
+    )
+    approval_id: Optional[str] = Field(
+        default=None,
+        description="Approval identifier referenced in the request.",
+    )
+    timeline_event_id: Optional[str] = Field(
+        default=None,
+        description="Timeline event identifier referenced in the request.",
+    )
+
+    @property
+    def has_decision_reference(self) -> bool:
+        return bool(self.commit_hash or self.proposal_id or self.approval_id or self.timeline_event_id)
 
 
 class AgentGoal(BaseModel):
@@ -59,6 +87,10 @@ class AgentRoute(BaseModel):
     goal: Optional[AgentGoal] = Field(
         default=None,
         description="The structured goal, populated when the intent needs one.",
+    )
+    references: AgentReferences = Field(
+        default_factory=AgentReferences,
+        description="Structured entities extracted from the query (e.g. asset, commit_hash, proposal_id).",
     )
     requires_clarification: bool = Field(
         default=False,

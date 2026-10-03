@@ -80,3 +80,29 @@ class TestRouterGraph:
         route = state["route"]
         assert route.requires_clarification is True
         assert "profitability" in route.clarification_question
+
+    def test_decision_investigation_routing_with_commit_hash(self, sample_config):
+        llm = FakeLlmAdapter([
+            # Even if LLM returns CONFIGURATION, deterministic enrichment should promote to DECISION_INVESTIGATION
+            AgentRoute(
+                intent=AgentIntent.CONFIGURATION,
+                goal=AgentGoal(objective="Ask about proposal"),
+            ),
+        ])
+        graph = RouterGraph(llm).build()
+        state = graph.invoke({"user_prompt": "Why are you proposing these changes for CRO_USD (Base: 235f666)?"})
+        route = state["route"]
+        assert route.intent == AgentIntent.DECISION_INVESTIGATION
+        assert route.references is not None
+        assert route.references.asset == "CRO_USD"
+        assert route.references.commit_hash == "235f666"
+
+    def test_explain_commit_query_routes_to_decision_investigation(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(intent=AgentIntent.GENERAL),
+        ])
+        node = UnderstandGoalNode(llm)
+        result = node({"user_prompt": "Explain commit 235f666"})
+        route = result["route"]
+        assert route.intent == AgentIntent.DECISION_INVESTIGATION
+        assert route.references.commit_hash == "235f666"

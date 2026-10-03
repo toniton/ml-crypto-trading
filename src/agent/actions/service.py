@@ -226,31 +226,91 @@ class AgentApprovalService(AgentLoggingMixin):
 
     @staticmethod
     def _parse_approval_from_message(
-            message: ConversationMessage, approval_id: str
+            message: ConversationMessage, approval_id: Optional[str] = None
     ) -> Optional[AgentApprovalRequest]:
-        for block in message.payload.get("blocks", []):
-            if (
-                    isinstance(block, dict)
-                    and block.get("type") == "agent_approval"
-                    and block.get("approval_id") == approval_id
-            ):
-                status_val = block.get("status", "pending").upper()
+        blocks = message.payload.get("blocks", []) if (message.payload and isinstance(message.payload, dict)) else []
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype in ("agent_approval", "approval", "configuration_diff"):
+                b_app_id = block.get("approval_id") or block.get("proposal_id") or message.message_id
+                if approval_id and b_app_id != approval_id and message.message_id != approval_id:
+                    continue
+
+                status_val = str(block.get("status", "pending")).upper()
                 try:
                     status = ApprovalStatus(status_val)
                 except ValueError:
                     status = ApprovalStatus.PENDING
+
+                proposed_change = block.get("proposed_change") or (
+                    {"changes": block["changes"]} if "changes" in block and isinstance(block["changes"], list) else {}
+                )
+
                 return AgentApprovalRequest(
-                    id=approval_id,
-                    agent_action_id=block.get("action_id") or block.get("agent_action_id") or approval_id,
+                    id=str(b_app_id),
+                    agent_action_id=str(block.get("action_id") or block.get("agent_action_id") or b_app_id),
                     action_type=block.get("action_type") or "CREATE_PROPOSAL",
                     title=block.get("title") or "Approval Request",
-                    description=block.get("description") or "",
-                    proposed_change=block.get("proposed_change") or {},
+                    description=block.get("description") or block.get("summary") or "",
+                    proposed_change=proposed_change if isinstance(proposed_change, dict) else {},
                     base_commit=block.get("base_commit") or "",
                     asset=block.get("asset"),
                     status=status,
                     conversation_id=message.conversation_id,
                 )
+        return None
+
+    def find_approval(
+            self,
+            approval_id: Optional[str] = None,
+            commit_hash: Optional[str] = None,
+            asset: Optional[str] = None,
+            proposal_id: Optional[str] = None,
+    ) -> Optional[AgentApprovalRequest]:
+        """Resolves an approval across memory and persisted conversation stores."""
+        if approval_id:
+            found = self.get_approval(approval_id)
+            if found:
+                return found
+
+        for app in self._approvals.values():
+            if proposal_id and (app.proposal_id == proposal_id or app.id == proposal_id):
+                return app
+            if commit_hash and app.base_commit and (
+                    app.base_commit.lower().startswith(commit_hash.lower())
+                    or commit_hash.lower().startswith(app.base_commit.lower())
+            ):
+                if not asset or (app.asset and app.asset.upper() == asset.upper()):
+                    return app
+            if asset and app.asset and app.asset.upper() == asset.upper():
+                if not commit_hash:
+                    return app
+
+        if self._conversation_store:
+            try:
+                for session in self._conversation_store.list_sessions():
+                    for msg in self._conversation_store.messages(session.id):
+                        if msg.payload and isinstance(msg.payload, dict) and "blocks" in msg.payload:
+                            for block in msg.payload.get("blocks", []):
+                                if isinstance(block, dict) and block.get("type") in ("agent_approval", "approval", "configuration_diff"):
+                                    app_id = block.get("approval_id") or block.get("proposal_id") or msg.message_id
+                                    parsed = self._parse_approval_from_message(msg, app_id)
+                                    if parsed:
+                                        self._approvals[parsed.id] = parsed
+                                        if commit_hash and parsed.base_commit and (
+                                                parsed.base_commit.lower().startswith(commit_hash.lower())
+                                                or commit_hash.lower().startswith(parsed.base_commit.lower())
+                                        ):
+                                            if not asset or (parsed.asset and parsed.asset.upper() == asset.upper()):
+                                                return parsed
+                                        if asset and parsed.asset and parsed.asset.upper() == asset.upper():
+                                            if not commit_hash:
+                                                return parsed
+            except Exception:
+                pass
+
         return None
 
     def list_approvals(

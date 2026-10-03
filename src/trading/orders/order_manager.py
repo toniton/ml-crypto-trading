@@ -10,7 +10,6 @@ from uuid import uuid4
 from api.interfaces.asset import Asset
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
-from src.agent.runtime_debug.error_extractor import ErrorExtractor
 from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.trading_journal import TradingJournal
@@ -98,6 +97,8 @@ class OrderManager(ApplicationLoggingMixin):
                             order=order,
                             reason=str(exc),
                         ))
+                        from src.agent.runtime_debug.error_extractor import ErrorExtractor
+
                         runtime_err = ErrorExtractor.extract_runtime_error_from_order_exception(exc, order=order)
                         self._event_bus.publish(RuntimeErrorCapturedEvent(
                             event_payload=runtime_err.to_dict(),
