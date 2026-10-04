@@ -7,6 +7,11 @@ from typing import Optional
 from api.interfaces.asset import Asset
 from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
+from src.configuration.portfolio_config import (
+    PortfolioConfig,
+    PortfolioExposureConfig,
+    QuotePortfolioGuardConfig,
+)
 from src.core.interfaces.event_bus import EventBus
 from src.events.message_event_bus import CallbackSubscription
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -18,28 +23,36 @@ from src.trading.events import (
     OrderRejectedEvent,
     OrderSubmittedEvent,
 )
+from src.trading.protection.portfolio_policy_resolver import (
+    EffectivePortfolioConfig,
+    PortfolioPolicyResolver,
+)
 from src.trading.protection.quote_portfolio import QuotePortfolio
+from src.trading.protection.quote_portfolio_guard import (
+    PortfolioRiskMetrics,
+    QuotePortfolioGuard,
+)
+from src.trading.regimes.market_regime import MarketRegime
 
 
 class PortfolioRiskManager(ApplicationLoggingMixin):
-    """Manages multi-asset portfolio risk, shared quote currency cash reservations,
-
-    mark-to-market total equity, portfolio drawdown, and concentration limits.
-    """
+    """Manages multi-asset quote portfolios, tracks risk metrics, and gates trade execution."""
 
     def __init__(
             self,
             assets: Optional[list[Asset]] = None,
             event_bus: Optional[EventBus] = None,
+            portfolio_config: Optional[PortfolioConfig] = None,
             max_portfolio_drawdown: Optional[Decimal] = None,
             max_asset_concentration: Optional[Decimal] = None,
     ):
         self._lock = threading.RLock()
         self.portfolios: dict[tuple[str, str], QuotePortfolio] = {}
-        self.max_portfolio_drawdown = (
+        self.portfolio_config = portfolio_config or PortfolioConfig()
+        self._explicit_drawdown = (
             Decimal(str(max_portfolio_drawdown)) if max_portfolio_drawdown is not None else None
         )
-        self.max_asset_concentration = (
+        self._explicit_concentration = (
             Decimal(str(max_asset_concentration)) if max_asset_concentration is not None else None
         )
         self._event_bus = event_bus
@@ -51,6 +64,19 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
 
         if event_bus is not None:
             self.subscribe(event_bus)
+
+    @property
+    def max_portfolio_drawdown(self) -> Optional[Decimal]:
+        return self._explicit_drawdown or self.portfolio_config.guard.max_drawdown
+
+    @property
+    def max_asset_concentration(self) -> Optional[Decimal]:
+        return self._explicit_concentration or self.portfolio_config.exposure.max_per_asset
+
+    def update_config(self, portfolio_config: PortfolioConfig) -> None:
+        with self._lock:
+            self.portfolio_config = portfolio_config
+            self.app_logger.info("PortfolioRiskManager configuration updated.")
 
     def register_asset(self, asset: Asset) -> None:
         key = (asset.exchange.value, asset.quote_ticker_symbol)
@@ -121,12 +147,47 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
                 released += portfolio.reconcile_orders(active_order_uuids)
             return released
 
+    def get_risk_metrics(self, asset: Asset) -> PortfolioRiskMetrics:
+        with self._lock:
+            portfolio = self.get_portfolio(asset.exchange.value, asset.quote_ticker_symbol)
+            total_cash = portfolio.total_cash
+            reserved_cash = portfolio.reserved_cash
+            available_cash = portfolio.available_cash
+            invested_notional = portfolio.get_total_holdings_notional()
+            total_equity = portfolio.get_total_equity()
+            total_exposure_pct = (
+                invested_notional / total_equity if total_equity > Decimal("0") else Decimal("0")
+            )
+            asset_notional = portfolio.get_asset_notional(asset.ticker_symbol)
+            asset_concentration_pct = (
+                asset_notional / total_equity if total_equity > Decimal("0") else Decimal("0")
+            )
+            peak_equity = portfolio.peak_equity
+            drawdown_pct = portfolio.get_drawdown()
+            open_position_count = sum(1 for qty in portfolio.asset_positions.values() if qty > Decimal("0"))
+
+            return PortfolioRiskMetrics(
+                total_equity=total_equity,
+                total_cash=total_cash,
+                reserved_cash=reserved_cash,
+                available_cash=available_cash,
+                invested_notional=invested_notional,
+                total_exposure_pct=total_exposure_pct,
+                asset_notional=asset_notional,
+                asset_concentration_pct=asset_concentration_pct,
+                peak_equity=peak_equity,
+                drawdown_pct=drawdown_pct,
+                daily_loss_pct=Decimal("0"),
+                open_position_count=open_position_count,
+            )
+
     def can_trade(
             self,
             asset: Asset,
             trade_action: TradeAction,
             proposed_order_cost: Decimal,
             market_data: Optional[MarketData] = None,
+            regime: Optional[MarketRegime] = None,
     ) -> tuple[bool, Optional[str]]:
         if trade_action == TradeAction.SELL:
             return True, None
@@ -136,40 +197,49 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
             if market_data is not None:
                 portfolio.update_asset_mark_price(asset.ticker_symbol, Decimal(str(market_data.close_price)))
 
-            cost_dec = Decimal(str(proposed_order_cost))
-            if cost_dec > portfolio.available_cash:
-                reason = (
-                    f"Insufficient unreserved cash in {portfolio.quote_currency} portfolio: "
-                    f"required {cost_dec}, available {portfolio.available_cash} "
-                    f"(total cash {portfolio.total_cash}, reserved {portfolio.reserved_cash})"
+            risk_metrics = self.get_risk_metrics(asset)
+            effective_config = PortfolioPolicyResolver.resolve(self.portfolio_config, asset)
+
+            if self._explicit_drawdown is not None or self._explicit_concentration is not None:
+                effective_config = EffectivePortfolioConfig(
+                    exposure=PortfolioExposureConfig(
+                        max_total=effective_config.exposure.max_total,
+                        max_per_asset=(
+                            self._explicit_concentration
+                            if self._explicit_concentration is not None
+                            else effective_config.exposure.max_per_asset
+                        ),
+                        max_per_quote=effective_config.exposure.max_per_quote,
+                    ),
+                    regime=effective_config.regime,
+                    guard=QuotePortfolioGuardConfig(
+                        enabled=effective_config.guard.enabled,
+                        max_drawdown=(
+                            self._explicit_drawdown
+                            if self._explicit_drawdown is not None
+                            else effective_config.guard.max_drawdown
+                        ),
+                        max_daily_loss=effective_config.guard.max_daily_loss,
+                        max_position_count=effective_config.guard.max_position_count,
+                        min_quote_reserve=effective_config.guard.min_quote_reserve,
+                        max_quote_exposure=effective_config.guard.max_quote_exposure,
+                    ),
                 )
-                self.app_logger.warning(reason)
-                return False, reason
 
-            if self.max_portfolio_drawdown is not None:
-                current_dd = portfolio.get_drawdown()
-                max_dd = -abs(self.max_portfolio_drawdown)
-                if current_dd < max_dd:
-                    reason = (
-                        f"Portfolio drawdown limit exceeded for {portfolio.quote_currency}: "
-                        f"current {current_dd:.2%}, limit {max_dd:.2%}"
-                    )
-                    self.app_logger.warning(reason)
-                    return False, reason
+            current_regime = regime or MarketRegime.UNKNOWN
+            decision = QuotePortfolioGuard.evaluate(
+                asset_symbol=asset.ticker_symbol,
+                order_cost=Decimal(str(proposed_order_cost)),
+                risk=risk_metrics,
+                regime=current_regime,
+                config=effective_config,
+            )
 
-            if self.max_asset_concentration is not None:
-                current_notional = portfolio.get_asset_notional(asset.ticker_symbol)
-                projected_notional = current_notional + cost_dec
-                total_equity = portfolio.get_total_equity()
-                if total_equity > Decimal("0"):
-                    projected_conc = projected_notional / total_equity
-                    if projected_conc > self.max_asset_concentration:
-                        reason = (
-                            f"Asset concentration limit exceeded for {asset.ticker_symbol}: "
-                            f"projected {projected_conc:.2%}, limit {self.max_asset_concentration:.2%}"
-                        )
-                        self.app_logger.warning(reason)
-                        return False, reason
+            if not decision.allowed:
+                self.app_logger.warning(
+                    "Trade disallowed for %s: %s", asset.ticker_symbol, decision.reason
+                )
+                return False, decision.reason
 
             return True, None
 

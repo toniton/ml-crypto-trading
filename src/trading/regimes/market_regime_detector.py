@@ -1,7 +1,8 @@
-from typing import List
+from typing import List, Optional
 
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
+from src.configuration.portfolio_config import MarketRegimeConfig
 from src.trading.regimes.market_regime import MarketRegime, RegimeMetrics
 
 
@@ -15,29 +16,54 @@ class MarketRegimeDetector:
 
     def __init__(
             self,
+            config: Optional[MarketRegimeConfig] = None,
             high_volatility_threshold: float = HIGH_VOLATILITY_THRESHOLD,
             low_volatility_threshold: float = LOW_VOLATILITY_THRESHOLD,
             trend_threshold: float = TREND_THRESHOLD,
             illiquid_spread_threshold: float = ILLIQUID_SPREAD_THRESHOLD,
+            period: int = DEFAULT_PERIOD,
+            min_data_points: int = MIN_DATA_POINTS,
     ):
-        self._high_volatility_threshold = high_volatility_threshold
-        self._low_volatility_threshold = low_volatility_threshold
-        self._trend_threshold = trend_threshold
-        self._illiquid_spread_threshold = illiquid_spread_threshold
+        if config is not None:
+            self._high_volatility_threshold = float(config.high_volatility_threshold)
+            self._low_volatility_threshold = float(config.low_volatility_threshold)
+            self._trend_threshold = float(config.trend_threshold)
+            self._illiquid_spread_threshold = float(config.illiquid_spread_threshold)
+            self._period = config.period
+            self._min_data_points = config.min_data_points
+            self._enabled = config.enabled
+        else:
+            self._high_volatility_threshold = high_volatility_threshold
+            self._low_volatility_threshold = low_volatility_threshold
+            self._trend_threshold = trend_threshold
+            self._illiquid_spread_threshold = illiquid_spread_threshold
+            self._period = period
+            self._min_data_points = min_data_points
+            self._enabled = True
+
+    def update_config(self, config: MarketRegimeConfig) -> None:
+        self._high_volatility_threshold = float(config.high_volatility_threshold)
+        self._low_volatility_threshold = float(config.low_volatility_threshold)
+        self._trend_threshold = float(config.trend_threshold)
+        self._illiquid_spread_threshold = float(config.illiquid_spread_threshold)
+        self._period = config.period
+        self._min_data_points = config.min_data_points
+        self._enabled = config.enabled
 
     def detect(
             self,
             candles: List[Candle],
             market_data: MarketData,
-            period: int = DEFAULT_PERIOD,
+            period: Optional[int] = None,
     ) -> RegimeMetrics:
+        active_period = period if period is not None else self._period
         close = float(market_data.close_price) if market_data else 0.0
-        volatility = self.calculate_volatility(candles, close, period)
-        trend_strength = self.calculate_trend_strength(candles, period)
-        liquidity = self.calculate_liquidity(candles, market_data, period)
+        volatility = self.calculate_volatility(candles, close, active_period)
+        trend_strength = self.calculate_trend_strength(candles, active_period)
+        liquidity = self.calculate_liquidity(candles, market_data, active_period)
         spread = self.calculate_spread(market_data, close)
 
-        has_sufficient_data = len(candles) >= self.MIN_DATA_POINTS
+        has_sufficient_data = len(candles) >= self._min_data_points
         regime = self.classify(
             trend_strength=trend_strength,
             volatility=volatility,

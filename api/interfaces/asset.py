@@ -8,6 +8,7 @@ from pydantic.dataclasses import dataclass
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
 from src.configuration.guard_config import GuardConfig
+from src.configuration.portfolio_config import AssetPortfolioOverride
 from src.configuration.strategy_config import StrategyConfig
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.consensus.consensus_factor import ConsensusFactor
@@ -80,6 +81,11 @@ class Asset:
     dynamic_quantity: Optional[str] = Field(
         default=None,
         description="Asset-specific dynamic quantity expression (overrides global if set).",
+        json_schema_extra={"mutable": True},
+    )
+    portfolio: Optional[AssetPortfolioOverride] = Field(
+        default=None,
+        description="Asset-specific portfolio overrides (exposure, regime, guard).",
         json_schema_extra={"mutable": True},
     )
     enabled: bool = Field(

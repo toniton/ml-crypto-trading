@@ -33,6 +33,7 @@ from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
 from src.logging.trading_logging_mixin import TradingLoggingMixin
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.regimes.market_regime_detector import MarketRegimeDetector
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.strategies.strategy_resolver import StrategyResolver
 
@@ -64,6 +65,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.protection_manager = manager_container.protection_manager
         self.portfolio_risk_manager = manager_container.portfolio_risk_manager
         self.websocket_manager = manager_container.websocket_manager
+        self._regime_detector = MarketRegimeDetector()
         self.activity_queue = activity_queue
         self._strategies_registry = strategies_registry or StrategyRegistry()
         self._strategies: list[TradingStrategy] = []
@@ -101,6 +103,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def update_config(self, trading_config: TradingConfig) -> None:
         self.consensus_manager.set_factors(trading_config.assets)
+
+        if self.portfolio_risk_manager and trading_config.portfolio:
+            self.portfolio_risk_manager.update_config(trading_config.portfolio)
 
         if trading_config.dynamic_quantity != self._dynamic_quantity:
             self._dynamic_quantity = trading_config.dynamic_quantity
@@ -288,8 +293,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             return
 
         if self.portfolio_risk_manager:
+            regime = self._regime_detector.detect(candles, market_data).regime
             can_trade, reject_reason = self.portfolio_risk_manager.can_trade(
-                asset, TradeAction.BUY, order_cost, market_data
+                asset, TradeAction.BUY, order_cost, market_data, regime=regime
             )
             if not can_trade:
                 self._publish_event(DecisionRejectedEvent(
