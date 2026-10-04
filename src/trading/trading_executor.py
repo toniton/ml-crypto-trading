@@ -52,7 +52,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.assets = assets
         self.event_bus = event_bus
         self._dynamic_quantity = dynamic_quantity
-        self._dynamic_quantity_parser = ExpressionParser(dynamic_quantity) if dynamic_quantity else None
+        self._dynamic_quantity_parser = (
+            ExpressionParser(dynamic_quantity.strip())
+            if isinstance(dynamic_quantity, str) and dynamic_quantity.strip()
+            else None
+        )
         self._asset_dynamic_quantity_parsers: dict[int, ExpressionParser] = {}
         self._rebuild_asset_dynamic_quantity_parsers(self.assets)
         self.account_manager = manager_container.account_manager
@@ -72,17 +76,18 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self._register_asset_strategies(self.assets)
 
     def _rebuild_asset_dynamic_quantity_parsers(self, assets: list[Asset]) -> None:
-        self._asset_dynamic_quantity_parsers = {
-            asset.key: ExpressionParser(asset.dynamic_quantity)
-            for asset in assets
-            if asset.dynamic_quantity and asset.dynamic_quantity.strip()
-        }
+        self._asset_dynamic_quantity_parsers = {}
+        for asset in assets:
+            dq = getattr(asset, "dynamic_quantity", None)
+            if isinstance(dq, str) and dq.strip():
+                self._asset_dynamic_quantity_parsers[asset.key] = ExpressionParser(dq.strip())
 
     def _get_dynamic_quantity_parser(self, asset: Asset) -> Optional[ExpressionParser]:
-        if asset.dynamic_quantity and asset.dynamic_quantity.strip():
+        dq = getattr(asset, "dynamic_quantity", None)
+        if isinstance(dq, str) and dq.strip():
             return self._asset_dynamic_quantity_parsers.get(
                 asset.key,
-                ExpressionParser(asset.dynamic_quantity)
+                ExpressionParser(dq.strip())
             )
         return self._dynamic_quantity_parser
 
@@ -110,7 +115,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if trading_config.dynamic_quantity != self._dynamic_quantity:
             self._dynamic_quantity = trading_config.dynamic_quantity
             self._dynamic_quantity_parser = (
-                ExpressionParser(trading_config.dynamic_quantity) if trading_config.dynamic_quantity else None
+                ExpressionParser(trading_config.dynamic_quantity.strip())
+                if isinstance(trading_config.dynamic_quantity, str) and trading_config.dynamic_quantity.strip()
+                else None
             )
             self.app_logger.info("Config updated: dynamic_quantity to %r", trading_config.dynamic_quantity)
 
