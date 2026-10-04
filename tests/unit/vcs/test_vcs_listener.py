@@ -173,3 +173,40 @@ class TestListenLoopResiliency:
         listener._listen_loop()
 
         assert any(e.ref == "staging" and e.commit_hash == "h" * 64 for e in events), events
+
+    def test_forwards_notify_event_psycopg3(self, monkeypatch):
+        events = []
+        listener = RefChangeListener(db_manager=MagicMock(), on_event_callback=events.append)
+
+        class FakePsycopg3Connection:
+            def __init__(self, payload):
+                self.payload = payload
+                self.autocommit = False
+                self.closed = False
+                self._cursor = FakeCursor()
+                self._yielded = False
+
+            def cursor(self):
+                return self._cursor
+
+            def notifies(self, timeout=None):
+                if not self._yielded:
+                    self._yielded = True
+                    yield SimpleNamespace(payload=self.payload)
+                listener._stop_event.set()
+
+            def close(self):
+                self.closed = True
+
+        fake_conn = FakePsycopg3Connection(payload='{"ref": "production", "commit": "' + "i" * 64 + '"}')
+        fake_engine = MagicMock()
+        fake_engine.raw_connection = MagicMock(return_value=fake_conn)
+        listener.db_manager.get_engine = MagicMock(return_value=fake_engine)
+        monkeypatch.setattr("src.vcs.application.listener.time.sleep", lambda _: None)
+
+        listener._listen_loop()
+
+        assert fake_conn.autocommit is True
+        assert fake_conn.closed is True
+        assert any(e.ref == "production" and e.commit_hash == "i" * 64 for e in events), events
+

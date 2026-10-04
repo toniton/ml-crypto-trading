@@ -45,28 +45,17 @@ class RefChangeListener(ApplicationLoggingMixin):
             try:
                 engine = self.db_manager.get_engine()
                 raw_conn = engine.raw_connection()
-                # Set autocommit mode for psycopg2/psycopg3 raw connection
-                try:
-                    raw_conn.set_isolation_level(0)  # AUTOCOMMIT
-                except AttributeError:
-                    try:
-                        raw_conn.autocommit = True
-                    except AttributeError:
-                        self.app_logger.debug("Raw connection does not support explicit isolation level.")
+                self._set_autocommit(raw_conn)
 
                 cursor = raw_conn.cursor()
                 cursor.execute(f"LISTEN {self.channel_name};")
                 self.app_logger.info(f"Subscribed to PostgreSQL LISTEN channel '{self.channel_name}'.")
                 self._reconcile()
 
-                while not self._stop_event.is_set():
-                    if select.select([raw_conn], [], [], 1.0) == ([], [], []):
-                        continue
-
-                    raw_conn.poll()
-                    while raw_conn.notifies:
-                        notify = raw_conn.notifies.pop(0)
-                        self._handle_notify_payload(notify.payload)
+                if callable(getattr(raw_conn, "notifies", None)):
+                    self._consume_notifications_psycopg3(raw_conn)
+                else:
+                    self._consume_notifications_psycopg2(raw_conn)
 
                 cursor.close()
                 raw_conn.close()
@@ -75,6 +64,34 @@ class RefChangeListener(ApplicationLoggingMixin):
                 if not self._stop_event.is_set():
                     self.app_logger.error(f"Error in LISTEN loop (reconnecting in 2s): {e}", exc_info=True)
                     time.sleep(2.0)
+
+    def _set_autocommit(self, raw_conn) -> None:
+        try:
+            raw_conn.autocommit = True
+        except (AttributeError, TypeError):
+            try:
+                raw_conn.set_isolation_level(0)
+            except Exception:
+                self.app_logger.debug("Raw connection does not support explicit isolation level.")
+
+    def _consume_notifications_psycopg3(self, raw_conn) -> None:
+        while not self._stop_event.is_set():
+            for notify in raw_conn.notifies(timeout=1.0):
+                if notify is not None and hasattr(notify, "payload"):
+                    self._handle_notify_payload(notify.payload)
+                if self._stop_event.is_set():
+                    break
+
+    def _consume_notifications_psycopg2(self, raw_conn) -> None:
+        while not self._stop_event.is_set():
+            if select.select([raw_conn], [], [], 1.0) == ([], [], []):
+                continue
+
+            if hasattr(raw_conn, "poll"):
+                raw_conn.poll()
+            while getattr(raw_conn, "notifies", None):
+                notify = raw_conn.notifies.pop(0)
+                self._handle_notify_payload(notify.payload)
 
     def _reconcile(self) -> None:
         if self.config_vcs is None:
