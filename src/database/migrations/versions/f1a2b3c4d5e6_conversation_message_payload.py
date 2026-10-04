@@ -19,7 +19,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('conversation_messages', sa.Column('message_id', sa.String(length=32), nullable=True))
+    op.add_column('conversation_messages', sa.Column('message_id', sa.String(length=128), nullable=True))
     op.add_column(
         'conversation_messages',
         sa.Column('payload', postgresql.JSONB(astext_type=sa.Text()), nullable=True),

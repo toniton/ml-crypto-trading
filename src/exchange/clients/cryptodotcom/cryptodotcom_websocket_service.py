@@ -28,7 +28,10 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         self._provider = provider or ExchangeProvidersEnum.CRYPTO_DOT_COM.name.lower()
         self._websocket_url = config.crypto_dot_com.websocket_endpoint
         self._lock = threading.Lock()
+        self._stop_event = threading.Event()
         self._connections: dict[str, dict[SubscriptionVisibility, WebSocketApp | None]] = {}
+        self._connection_threads: dict[str, dict[SubscriptionVisibility, threading.Thread]] = {}
+        self._active_subscriptions: dict[str, dict[str, ExchangeWebSocketBuilder]] = {}
         self._authenticated_connections: set[str] = set()
         self._last_heartbeat: dict[str, float] = {}
         self._callback: Optional[Callable] = None
@@ -73,32 +76,28 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
     ):
         exchange = service.get_provider_name()
         with self._lock:
-            if visibility in self._connections[exchange]:
+            if exchange in self._connection_threads and visibility in self._connection_threads[exchange]:
                 return
+            if exchange in self._connections and visibility in self._connections[exchange]:
+                return
+            if exchange not in self._connection_threads:
+                self._connection_threads[exchange] = {}
 
-        url = service.get_websocket_url(visibility)
         conn_id = f"{exchange}-{visibility.value}"
-        self._connection_events[conn_id] = threading.Event()
-        if visibility == SubscriptionVisibility.PRIVATE:
+        if conn_id not in self._connection_events:
+            self._connection_events[conn_id] = threading.Event()
+        if visibility == SubscriptionVisibility.PRIVATE and conn_id not in self._auth_events:
             self._auth_events[conn_id] = threading.Event()
 
-        handler = WebSocketApp(
-            url=url,
-            on_open=lambda ws: self._handle_open(exchange, visibility),
-            on_message=lambda ws, data: self._handle_message(exchange, visibility, data),
-            on_error=lambda ws, e: self._handle_error(exchange, conn_id, e),
-            on_close=lambda ws, code, msg: self._handle_close(exchange, visibility, code, msg)
-        )
-
-        with self._lock:
-            if visibility not in self._connections[exchange]:
-                self._connections[exchange][visibility] = handler
-
         thread = threading.Thread(
-            target=handler.run_forever,
+            target=self._run_connection_loop,
+            args=(service, visibility),
             daemon=True,
             name=f"WS-{conn_id}"
         )
+        with self._lock:
+            self._connection_threads[exchange][visibility] = thread
+
         thread.start()
         self.app_logger.info(f"Started WebSocket connection for {conn_id}")
 
@@ -106,6 +105,44 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         if not self._connection_events[conn_id].wait(timeout=10):
             self.app_logger.warning(f"Timeout waiting for WebSocket connection {conn_id}")
             self._notify_error(exchange, conn_id, "ConnectionTimeout")
+
+    def _run_connection_loop(self, service: ExchangeWebSocketService, visibility: SubscriptionVisibility):
+        exchange = service.get_provider_name()
+        conn_id = f"{exchange}-{visibility.value}"
+        url = service.get_websocket_url(visibility)
+
+        while not self._stop_event.is_set():
+            if conn_id in self._connection_events:
+                self._connection_events[conn_id].clear()
+            if visibility == SubscriptionVisibility.PRIVATE and conn_id in self._auth_events:
+                self._auth_events[conn_id].clear()
+
+            handler = WebSocketApp(
+                url=url,
+                on_open=lambda ws: self._handle_open(exchange, visibility),
+                on_message=lambda ws, data: self._handle_message(exchange, visibility, data),
+                on_error=lambda ws, e: self._handle_error(exchange, conn_id, e),
+                on_close=lambda ws, code, msg: self._handle_close(exchange, visibility, code, msg)
+            )
+
+            with self._lock:
+                if exchange not in self._connections:
+                    self._connections[exchange] = {}
+                self._connections[exchange][visibility] = handler
+
+            try:
+                handler.run_forever(ping_interval=30, ping_timeout=10)
+            except Exception as e:
+                self.app_logger.error(f"Error in WebSocket run_forever for {conn_id}: {e}")
+
+            with self._lock:
+                if exchange in self._connections:
+                    self._connections[exchange].pop(visibility, None)
+
+            if self._stop_event.is_set():
+                break
+
+            time.sleep(2)
 
     def _handle_error(self, exchange: str, conn_id: str, error: Exception | str):
         self.app_logger.error(f"WebSocket error for {conn_id}: {error}")
@@ -128,13 +165,29 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         self._connection_events[conn_id].set()
 
         if visibility == SubscriptionVisibility.PRIVATE:
-            handler = self._connections[exchange][visibility]
+            handler = self._connections.get(exchange, {}).get(visibility)
             auth_request = self.get_auth_request()
-            if auth_request:
+            if auth_request and handler:
                 handler.send(json.dumps(auth_request))
                 self.app_logger.info(f"Sent auth request for {conn_id}")
+        else:
+            self._resubscribe_active(exchange, visibility)
 
         self._notify_reconnect()
+
+    def _resubscribe_active(self, exchange: str, visibility: SubscriptionVisibility):
+        with self._lock:
+            subs = list(self._active_subscriptions.get(exchange, {}).values())
+            handler = self._connections.get(exchange, {}).get(visibility)
+
+        for builder in subs:
+            sub_data = builder.get_subscription_data()
+            if sub_data.visibility == visibility and handler:
+                try:
+                    handler.send(json.dumps(sub_data.payload))
+                    self.app_logger.info(f"Re-subscribed to {builder.key} on {exchange}")
+                except Exception as e:
+                    self.app_logger.error(f"Failed to re-subscribe to {builder.key} on {exchange}: {e}")
 
     def _notify_reconnect(self):
         if self._on_reconnect:
@@ -147,6 +200,11 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         sub_data = builder.get_subscription_data()
         key = builder.key
         exchange = self.get_provider_name()
+        with self._lock:
+            if exchange not in self._active_subscriptions:
+                self._active_subscriptions[exchange] = {}
+            self._active_subscriptions[exchange][key] = builder
+
         self._ensure_connection(self, sub_data.visibility)
 
         conn_id = f"{exchange}-{sub_data.visibility.value}"
@@ -191,6 +249,7 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
                 self._authenticated_connections.add(conn_id)
                 if conn_id in self._auth_events:
                     self._auth_events[conn_id].set()
+                self._resubscribe_active(exchange, visibility)
             return
 
         # Heartbeat handling
@@ -228,7 +287,6 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
             if exchange in self._connections:
                 self._connections[exchange].pop(visibility, None)
 
-        # Immediate reconnect logic could go here, or handled by a supervisor.
         if code != 1000:
             self.app_logger.warning(f"Abnormal closure for {conn_id}, attempting to reconnect...")
             self._notify_error(exchange, conn_id, f"AbnormalClosure_{code or 'None'}")
@@ -238,7 +296,10 @@ class CryptoDotComWebSocketService(ExchangeWebSocketService, ApplicationLoggingM
         sub_data = builder.get_subscription_data()
         key = builder.key
         with self._lock:
-            handler = self._connections[exchange].get(sub_data.visibility)
+            if exchange in self._active_subscriptions:
+                self._active_subscriptions[exchange].pop(key, None)
+
+            handler = self._connections.get(exchange, {}).get(sub_data.visibility)
             if handler is None:
                 self.app_logger.warning(
                     f"Cannot unsubscribe from {key}: no active connection for {exchange}-{sub_data.visibility.value}"

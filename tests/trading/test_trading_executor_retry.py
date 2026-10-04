@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
+from api.interfaces.position_entry import PositionEntry
 from api.interfaces.trading_context import TradingContext
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.trading_executor import TradingExecutor
@@ -21,6 +22,8 @@ class TestTradingExecutorRetry(unittest.TestCase):
         self.asset.exchange.value = "BINANCE"
         self.asset.min_quantity = 0.001
         self.asset.quantity_decimals = 4
+        self.asset.quote_decimals = 2
+        self.asset.dynamic_quantity = None
 
         self.account_manager = MagicMock()
         self.market_data_manager = MagicMock()
@@ -109,3 +112,43 @@ class TestTradingExecutorRetry(unittest.TestCase):
 
         self.account_manager.init_asset_balance.assert_called_once_with(self.asset)
         self.market_data_manager.get_market_data.assert_not_called()
+
+    def test_create_sell_order_succeeds_when_quote_cash_balance_is_zero(self):
+        context = TradingContext(
+            starting_balance=Decimal("1000.0"),
+            ticker_symbol=self.asset.ticker_symbol,
+            exchange=self.asset.exchange.value,
+            position_qty=Decimal("1.0"),
+            open_positions=[PositionEntry(price=Decimal("50000"), quantity=Decimal("1.0"), timestamp=1700000000.0)],
+        )
+        self.session_manager.get_trading_context.return_value = context
+        self.session_manager.get_current_commit_hash.return_value = "abc1234"
+        self.order_manager.has_outstanding_intent.return_value = False
+
+        # Zero available quote cash (e.g. 0 USD because fully invested)
+        self.account_manager.get_quote_balance.return_value = AccountBalance(
+            currency="USD", available_balance=Decimal("0.0")
+        )
+        self.account_manager.get_base_balance.return_value = AccountBalance(
+            currency="BTC", available_balance=Decimal("1.0")
+        )
+        market_data = MarketData(
+            volume=Decimal("10"),
+            high_price=Decimal("51000"),
+            low_price=Decimal("49000"),
+            close_price=Decimal("50000"),
+            timestamp=1700000000,
+        )
+        self.market_data_manager.get_market_data.return_value = market_data
+        self.market_data_manager.get_candles.return_value = []
+        self.fees_manager.get_instrument_fees.return_value = Fees(Decimal("0.001"), Decimal("0.001"))
+        self.consensus_manager.evaluate.return_value = MagicMock(quorum=True, winner="trend", true_count=3, total=3)
+        self.order_manager.open_order.return_value = MagicMock(
+            uuid="order-123",
+            model_dump_json=lambda: '{"uuid": "order-123"}'
+        )
+
+        self.executor.create_sell_order([self.asset])
+
+        # Verify sell order was opened despite 0 USD quote cash
+        self.order_manager.open_order.assert_called_once()

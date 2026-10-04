@@ -49,9 +49,13 @@ class PositionReconciler(ApplicationLoggingMixin, BaseReconciler):
 
             diff = exchange_qty - local_qty
             if abs(diff) > self._dust_threshold:
+                crit_thresh = self._critical_threshold
+                if hasattr(asset, "min_quantity") and asset.min_quantity:
+                    crit_thresh = max(crit_thresh, Decimal(str(asset.min_quantity)))
+
                 severity = (
                     DiscrepancySeverity.CRITICAL
-                    if abs(diff) >= self._critical_threshold
+                    if abs(diff) >= crit_thresh
                     else DiscrepancySeverity.WARNING
                 )
                 action = (

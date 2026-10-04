@@ -101,3 +101,34 @@ class TestBalanceReconciler(unittest.TestCase):
         discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
 
         self.assertEqual(len(discrepancies), 0)
+
+    def test_reconcile_ignores_unmanaged_currencies(self):
+        self.mock_account_manager.balances = {
+            "CRYPTO_DOT_COM": {
+                "USD": AccountBalance("USD", Decimal("100.00")),
+            }
+        }
+        # Exchange returns unmanaged CRO and DOGE balances
+        self.mock_rest_manager.get_account_balance.return_value = [
+            AccountBalance("USD", Decimal("100.00")),
+            AccountBalance("CRO", Decimal("500.00")),
+            AccountBalance("DOGE", Decimal("1000.00")),
+        ]
+
+        discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
+
+        # No discrepancy should be generated for unmanaged CRO/DOGE
+        self.assertEqual(len(discrepancies), 0)
+
+    def test_reconcile_ignores_uninitialized_local_currencies(self):
+        self.mock_account_manager.balances = {
+            "CRYPTO_DOT_COM": {}
+        }
+        self.mock_rest_manager.get_account_balance.return_value = [
+            AccountBalance("USD", Decimal("100.00")),
+        ]
+
+        discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
+
+        # When local balance is not yet initialized, it is discovered/synced without critical discrepancy
+        self.assertEqual(len(discrepancies), 0)

@@ -13,6 +13,6 @@ class ConversationMessageDao(SqlAlchemyDatabaseManager.BaseTableModel):
     conversation_id = Column(String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False, index=True)
     role = Column(String(16), nullable=False)
     content = Column(Text, nullable=False)
-    message_id = Column(String(32), nullable=True)
+    message_id = Column(String(128), nullable=True)
     payload = Column(JSON_TYPE, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)  # pylint: disable=not-callable

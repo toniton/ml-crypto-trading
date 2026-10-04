@@ -130,3 +130,22 @@ class TestConversationService:
         manager = ConversationService(mock_db_manager)
 
         assert manager.get_message("missing") is None
+
+    def test_append_message_with_long_message_id(self, mock_db_manager):
+        manager = ConversationService(mock_db_manager)
+        sid = manager.get_or_create(None)
+        long_message_id = "tl_0389e04eca67402ca04f1ee131426f9b_mutk9kpa"
+        manager.append(
+            sid,
+            ConversationMessage(
+                role="assistant",
+                content="Reconciliation alert",
+                message_id=long_message_id,
+                payload={"blocks": [{"type": "markdown", "content": "Reconciliation alert"}]},
+            ),
+        )
+
+        msg = manager.get_message(long_message_id)
+        assert msg is not None
+        assert msg.message_id == long_message_id
+        assert msg.content == "Reconciliation alert"

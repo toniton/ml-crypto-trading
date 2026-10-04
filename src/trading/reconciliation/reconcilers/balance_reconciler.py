@@ -65,9 +65,22 @@ class BalanceReconciler(ApplicationLoggingMixin, BaseReconciler):
                 for curr, bal in self._account_manager.balances[ex_key].items():
                     local_map[curr.upper()] = Decimal(str(bal.available_balance))
 
-        all_currencies = set(exchange_map.keys()).union(local_map.keys())
+        managed_currencies = {
+                                 str(asset.quote_ticker_symbol).upper()
+                                 for asset in assets
+                                 if asset.exchange.value.upper() == ex_key
+                             } | {
+                                 str(asset.base_ticker_symbol).upper()
+                                 for asset in assets
+                                 if asset.exchange.value.upper() == ex_key
+                             }
 
-        for currency in all_currencies:
+        currencies_to_check = (set(exchange_map.keys()) & managed_currencies) | set(local_map.keys())
+
+        for currency in currencies_to_check:
+            if currency not in local_map:
+                continue
+
             ex_val = exchange_map.get(currency, Decimal("0"))
             loc_val = local_map.get(currency, Decimal("0"))
             diff = ex_val - loc_val

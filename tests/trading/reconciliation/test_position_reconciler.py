@@ -80,3 +80,25 @@ class TestPositionReconciler(unittest.TestCase):
         discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
 
         self.assertEqual(len(discrepancies), 0)
+
+    def test_reconcile_position_dust_below_min_quantity_is_warning_not_critical(self):
+        # min_quantity of test_asset is 0.01
+        trading_ctx = TradingContext(
+            ticker_symbol="BTC_USD",
+            exchange="CRYPTO_DOT_COM",
+            starting_balance=Decimal("1000"),
+            position_qty=Decimal("1.000"),
+        )
+        self.mock_session_manager.get_trading_context.return_value = trading_ctx
+        # Exchange has 1.005 (difference 0.005, which is > 0.001 critical_threshold but < 0.01 min_quantity)
+        self.mock_account_manager.get_base_balance.return_value = AccountBalance(
+            "BTC", Decimal("1.005")
+        )
+
+        discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
+
+        self.assertEqual(len(discrepancies), 1)
+        disc = discrepancies[0]
+        self.assertEqual(disc.severity, DiscrepancySeverity.WARNING)
+        self.assertEqual(disc.action_taken, "LOCAL_STATE_SYNCED")
+        self.assertEqual(trading_ctx.position_qty, Decimal("1.005"))

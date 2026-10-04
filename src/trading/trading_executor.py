@@ -200,9 +200,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         quote_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
         if self.session_manager:
             self.session_manager.update_available_balance(asset.key, quote_balance.available_balance)
-        if quote_balance.available_balance <= 0:
-            self.app_logger.debug(f"Balance too low for {asset}: {quote_balance}")
-            raise ValueError(f"Insufficient balance for {asset.quote_ticker_symbol}")
 
         market_data = self.market_data_manager.get_market_data(asset)
         self.app_logger.debug(f"Fetched market data for {asset}: {market_data}")
@@ -244,6 +241,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 return
 
         account_balance, market_data, candles, fees = self._prepare_trade_context(asset)
+        if account_balance.available_balance <= 0:
+            self.app_logger.info("Skipping BUY for %s: zero or negative available balance", asset.ticker_symbol)
+            return
+
         trading_context = (
             self.session_manager.get_trading_context(asset.key)
             if self.session_manager else None
