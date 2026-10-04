@@ -35,6 +35,7 @@ from src.llm.tools.session_summary_tool import SessionSummaryTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
 from src.llm.tools.trade_attribution_tool import TradeAttributionTool
 from src.llm.tools.trading_context_tool import TradingContextTool
+from src.llm.tools.trading_health_tool import TradingHealthTool
 
 
 class ToolFactory:
@@ -160,6 +161,11 @@ class ToolFactory:
         if managers.portfolio_risk_manager is not None:
             tools["portfolio_summary"] = PortfolioSummaryTool(
                 portfolio_risk_manager=managers.portfolio_risk_manager
+            )
+
+        if getattr(managers, "health_monitor", None) is not None:
+            tools["trading_health"] = TradingHealthTool(
+                health_monitor=managers.health_monitor
             )
 
         return tools

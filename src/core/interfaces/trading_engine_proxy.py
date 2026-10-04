@@ -74,3 +74,15 @@ class TradingEngineProxy(ABC):
         """Clears active reconciliation discrepancies."""
         return False
 
+    def get_health_snapshot(self) -> Optional[dict[str, Any]]:
+        """Returns the current trading health snapshot."""
+        return None
+
+    def pause_trading(self) -> Optional[dict[str, Any]]:
+        """Manually transitions the trading health state machine to PAUSED."""
+        return None
+
+    def resume_trading(self) -> Optional[dict[str, Any]]:
+        """Manually initiates recovery or resumes trading."""
+        return None
+

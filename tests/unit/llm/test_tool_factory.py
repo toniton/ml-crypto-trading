@@ -67,6 +67,7 @@ class TestToolFactory(unittest.TestCase):
         self.assertIn("trade_attribution", tool_map)
         self.assertIn("exchange_read", tool_map)
         self.assertIn("portfolio_summary", tool_map)
+        self.assertIn("trading_health", tool_map)
 
         # Test filtering disabled tools
         config = LlmConfig.model_construct(

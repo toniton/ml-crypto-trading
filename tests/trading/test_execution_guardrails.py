@@ -60,6 +60,8 @@ class ExecutionGuardrailsTest(TestCase):
             portfolio_risk_manager=self.mock_portfolio_risk_mgr,
             websocket_manager=MagicMock(),
             rest_manager=MagicMock(),
+            reconciliation_engine=MagicMock(),
+            health_monitor=MagicMock(),
         )
         self.activity_queue = Queue()
         self.executor = TradingExecutor(

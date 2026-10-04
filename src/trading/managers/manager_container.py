@@ -1,20 +1,21 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
-from typing import Optional
 
-
+from src.exchange.managers.rest_manager import RestManager
+from src.exchange.managers.websocket_manager import WebSocketManager
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
-from src.trading.session.session_manager import SessionManager
 from src.trading.fees.fees_manager import FeesManager
+from src.trading.health.health_monitor import HealthMonitor
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
 from src.trading.protection.portfolio_risk_manager import PortfolioRiskManager
 from src.trading.protection.protection_manager import ProtectionManager
-from src.exchange.managers.websocket_manager import WebSocketManager
-from src.exchange.managers.rest_manager import RestManager
 from src.trading.reconciliation.exchange_reconciliation_engine import (
     ExchangeReconciliationEngine,
 )
+from src.trading.session.session_manager import SessionManager
 
 
 @dataclass(frozen=True)
@@ -29,5 +30,5 @@ class ManagerContainer:
     websocket_manager: WebSocketManager
     rest_manager: RestManager
     portfolio_risk_manager: PortfolioRiskManager
-    reconciliation_engine: Optional[ExchangeReconciliationEngine] = None
-
+    reconciliation_engine: ExchangeReconciliationEngine
+    health_monitor: HealthMonitor

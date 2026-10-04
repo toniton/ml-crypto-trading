@@ -20,6 +20,7 @@ class DecisionRejectedReason(str, Enum):
     NEGATIVE_EDGE = "NEGATIVE_EDGE"
     OUTSTANDING_INTENT = "OUTSTANDING_INTENT"
     QUANTITY_CALCULATION_FAILED = "QUANTITY_CALCULATION_FAILED"
+    HEALTH_HALT = "HEALTH_HALT"
 
 
 @dataclass
@@ -216,6 +217,64 @@ class ReconciliationCompletedEvent(TradingEvent):
     discrepancies_count: int = 0
     critical_count: int = 0
     actions_taken: list[str] = field(default_factory=list)
+
+    def _resolve_asset(self) -> Optional[str]:
+        return None
+
+
+@dataclass
+class TradingHealthStateChangedEvent(TradingEvent):
+    EVENT_TYPE = "TradingHealthStateChangedEvent"
+    previous_state: str = ""
+    current_state: str = ""
+    version: int = 1
+    active_conditions_count: int = 0
+    timestamp: float = 0.0
+
+    def _resolve_asset(self) -> Optional[str]:
+        return None
+
+
+@dataclass
+class TradingHealthConditionDetectedEvent(TradingEvent):
+    EVENT_TYPE = "TradingHealthConditionDetectedEvent"
+    condition: str = ""
+    scope_type: str = ""
+    scope_identifier: str = ""
+    severity: str = "critical"
+    measured_value: Any = None
+    threshold: Any = None
+    action_taken: str = ""
+    timestamp: float = 0.0
+
+    def _resolve_asset(self) -> Optional[str]:
+        if self.scope_type == "asset":
+            return self.scope_identifier
+        return None
+
+
+@dataclass
+class TradingHealthConditionResolvedEvent(TradingEvent):
+    EVENT_TYPE = "TradingHealthConditionResolvedEvent"
+    condition: str = ""
+    scope_type: str = ""
+    scope_identifier: str = ""
+    consecutive_healthy_checks: int = 0
+    timestamp: float = 0.0
+
+    def _resolve_asset(self) -> Optional[str]:
+        if self.scope_type == "asset":
+            return self.scope_identifier
+        return None
+
+
+@dataclass
+class TradingPermissionsChangedEvent(TradingEvent):
+    EVENT_TYPE = "TradingPermissionsChangedEvent"
+    state: str = ""
+    permissions: list[str] = field(default_factory=list)
+    version: int = 1
+    timestamp: float = 0.0
 
     def _resolve_asset(self) -> Optional[str]:
         return None

@@ -46,6 +46,8 @@ class TestTradingExecutorRetry(unittest.TestCase):
         container.protection_manager = self.protection_manager
         container.portfolio_risk_manager = self.portfolio_risk_manager
         container.websocket_manager = self.websocket_manager
+        container.reconciliation_engine = MagicMock()
+        container.health_monitor = None
 
         self.activity_queue = Queue()
         self.executor = TradingExecutor(

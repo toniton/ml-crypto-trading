@@ -7,6 +7,7 @@ from api.interfaces.asset import Asset
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.core.interfaces.trading_strategy import TradingStrategy
+from src.trading.health.enums import TradingHealthState
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -43,7 +44,14 @@ class TradingEngine:
 
     def start_application(self):
         self._is_running.set()
+        if self._trading_executor is not None:
+            self._trading_executor.health_monitor.set_state(TradingHealthState.SYNCING)
+
         self._trading_executor.init_application()
+
+        if self._trading_executor is not None:
+            self._trading_executor.health_monitor.set_state(TradingHealthState.READY)
+            self._trading_executor.health_monitor.set_state(TradingHealthState.TRADING)
 
         self._trading_scheduler.start(self._run_trading_cycle)
 
@@ -53,10 +61,19 @@ class TradingEngine:
 
     def stop_application(self):
         if self._is_running.is_set():
+            if (
+                    self._trading_executor is not None
+                    and self._trading_executor.health_monitor is not None
+            ):
+                self._trading_executor.health_monitor.set_state(TradingHealthState.STOPPING)
+
             if self._trading_scheduler is not None:
                 self._trading_scheduler.stop()
             if self._trading_executor is not None:
                 self._trading_executor.stop()
+
+            if self._trading_executor is not None:
+                self._trading_executor.health_monitor.set_state(TradingHealthState.STOPPED)
         self._is_running.clear()
 
     def update_config(self, trading_config: TradingConfig) -> None:

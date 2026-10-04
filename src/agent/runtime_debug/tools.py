@@ -13,6 +13,7 @@ from src.database.repositories.providers.postgres_runtime_incident_repository im
     PostgresRuntimeIncidentRepository,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.trading.health.health_monitor import HealthMonitor
 from src.vcs.application.service import VCSService
 
 
@@ -21,9 +22,36 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
             self,
             database_manager: Optional[DatabaseManager] = None,
             vcs: Optional[VCSService] = None,
+            health_monitor: Optional[HealthMonitor] = None,
     ):
         self._database_manager = database_manager
         self._vcs = vcs
+        self._health_monitor = health_monitor
+
+    def get_trading_health_snapshot(self) -> Optional[dict[str, Any]]:
+        if not self._health_monitor:
+            return None
+        snapshot = self._health_monitor.snapshot
+        return {
+            "state": snapshot.state.value,
+            "version": snapshot.version,
+            "effective_permissions": [p.value for p in snapshot.effective_permissions],
+            "active_conditions": [
+                {
+                    "condition": c.condition.value,
+                    "scope_type": c.scope.scope_type.value,
+                    "scope_identifier": c.scope.identifier,
+                    "severity": c.severity.value,
+                    "measured_value": str(c.measured_value) if c.measured_value is not None else None,
+                    "threshold": str(c.threshold) if c.threshold is not None else None,
+                    "consecutive_healthy_checks": c.consecutive_healthy_checks,
+                    "first_detected_at": c.first_detected_at.isoformat(),
+                    "last_observed_at": c.last_observed_at.isoformat(),
+                }
+                for c in snapshot.active_conditions
+            ],
+            "updated_at": snapshot.updated_at.isoformat(),
+        }
 
     def get_incident(self, incident_id: str) -> Optional[RuntimeIncident]:
         if not self._database_manager:

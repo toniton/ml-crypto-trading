@@ -6,6 +6,7 @@ from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from api.interfaces.asset import Asset
+from src.configuration.health_config import HealthConfig
 from src.configuration.helpers.yaml_config_settings_source import CustomYamlConfigSettingsSource, \
     YamlConfigSettingsSource
 from src.configuration.portfolio_config import PortfolioConfig
@@ -25,6 +26,11 @@ class TradingConfig(BaseSettings):
     portfolio: PortfolioConfig = Field(
         default_factory=PortfolioConfig,
         description="Global portfolio risk, exposure, and regime configuration.",
+        json_schema_extra={"mutable": True},
+    )
+    health: HealthConfig = Field(
+        default_factory=HealthConfig,
+        description="Health monitoring and trading permission configuration.",
         json_schema_extra={"mutable": True},
     )
 

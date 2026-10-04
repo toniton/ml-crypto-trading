@@ -12,6 +12,7 @@ from src.core.interfaces.trading_engine_proxy import (
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.recorder.market_data_store import MarketDataStore
+from src.trading.health.enums import TradingHealthState
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.trading_engine import TradingEngine
 
@@ -108,8 +109,13 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
     def compare_backtest_drift(self, action: Any) -> Any:
         return self._compare_backtest(action)
 
+    def _get_reconciliation_engine(self):
+        if self._managers is not None:
+            return self._managers.reconciliation_engine
+        return None
+
     def get_reconciliation_status(self) -> dict[str, Any]:
-        engine = getattr(self._trading_engine, "_reconciliation_engine", None)
+        engine = self._get_reconciliation_engine()
         if not engine:
             return {"active": False, "has_critical": False, "discrepancies": []}
         active_discrepancies = engine.get_active_discrepancies()
@@ -118,8 +124,8 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
             "has_critical": engine.has_critical_discrepancy(),
             "discrepancies": [
                 {
-                    "type": d.discrepancy_type.value if hasattr(d.discrepancy_type, "value") else str(d.discrepancy_type),
-                    "severity": d.severity.value if hasattr(d.severity, "value") else str(d.severity),
+                    "type": str(d.discrepancy_type.value),
+                    "severity": str(d.severity.value),
                     "exchange": d.exchange,
                     "asset_or_currency": d.asset_or_currency,
                     "local_value": str(d.local_value),
@@ -133,16 +139,65 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
         }
 
     def trigger_reconciliation(self) -> bool:
-        engine = getattr(self._trading_engine, "_reconciliation_engine", None)
+        engine = self._get_reconciliation_engine()
         if engine:
             engine.trigger()
             return True
         return False
 
     def clear_reconciliation_discrepancies(self) -> bool:
-        engine = getattr(self._trading_engine, "_reconciliation_engine", None)
+        engine = self._get_reconciliation_engine()
         if engine:
             engine.clear_discrepancies()
             return True
         return False
 
+    def _get_health_monitor(self):
+        if self._managers is not None and self._managers.health_monitor is not None:
+            return self._managers.health_monitor
+        if (
+            self._trading_engine is not None
+            and self._trading_engine.trading_executor is not None
+        ):
+            return self._trading_engine.trading_executor.health_monitor
+        return None
+
+    def get_health_snapshot(self) -> Optional[dict[str, Any]]:
+        monitor = self._get_health_monitor()
+        if not monitor:
+            return None
+        snapshot = monitor.snapshot
+        return {
+            "state": snapshot.state.value,
+            "version": snapshot.version,
+            "effective_permissions": [p.value for p in snapshot.effective_permissions],
+            "active_conditions": [
+                {
+                    "condition": c.condition.value,
+                    "scope_type": c.scope.scope_type.value,
+                    "scope_identifier": c.scope.identifier,
+                    "severity": c.severity.value,
+                    "first_detected_at": c.first_detected_at.isoformat(),
+                    "last_observed_at": c.last_observed_at.isoformat(),
+                    "measured_value": str(c.measured_value) if c.measured_value is not None else None,
+                    "threshold": str(c.threshold) if c.threshold is not None else None,
+                    "consecutive_healthy_checks": c.consecutive_healthy_checks,
+                }
+                for c in snapshot.active_conditions
+            ],
+            "updated_at": snapshot.updated_at.isoformat(),
+        }
+
+    def pause_trading(self) -> Optional[dict[str, Any]]:
+        monitor = self._get_health_monitor()
+        if not monitor:
+            return None
+        monitor.set_state(TradingHealthState.PAUSED)
+        return self.get_health_snapshot()
+
+    def resume_trading(self) -> Optional[dict[str, Any]]:
+        monitor = self._get_health_monitor()
+        if not monitor:
+            return None
+        monitor.set_state(TradingHealthState.RECOVERING)
+        return self.get_health_snapshot()

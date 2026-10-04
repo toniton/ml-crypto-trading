@@ -45,6 +45,8 @@ class TestDynamicQuantity(unittest.TestCase):
         manager_container.protection_manager = self.protection_manager
         manager_container.portfolio_risk_manager = self.portfolio_risk_manager
         manager_container.websocket_manager = self.websocket_manager
+        manager_container.reconciliation_engine = MagicMock()
+        manager_container.health_monitor = None
 
         executor = TradingExecutor(assets, manager_container, activity_queue, dynamic_quantity=dynamic_quantity)
 

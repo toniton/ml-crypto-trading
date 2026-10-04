@@ -190,6 +190,8 @@ def _make_executor(dynamic_quantity="min_qty"):
         protection_manager=None,
         portfolio_risk_manager=None,
         websocket_manager=None,
+        reconciliation_engine=None,
+        health_monitor=None,
     )
     executor = TradingExecutor(assets=[], manager_container=container, activity_queue=Queue(), dynamic_quantity=dynamic_quantity)
     return executor

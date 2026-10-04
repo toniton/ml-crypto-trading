@@ -26,8 +26,8 @@ Known intents:
 - "backtest": the user asks to run, replay, or analyze a historical backtest
   (e.g. "run a backtest for BTC over the last 5 minutes", "backtest this
   strategy", "replay yesterday's market").
-- "runtime_debug": the user asks to diagnose or investigate live runtime errors,
-  order rejections, or exchange connection failures.
+- "runtime_debug": the user asks to diagnose or investigate live trading health states (e.g. recovering, degraded, paused),
+  runtime errors, order rejections, or exchange connection failures.
 - "system_help": the user asks what the bot can do or how to use it.
 - "general": anything else that does not clearly belong to a specialized agent.
 

@@ -79,6 +79,8 @@ def _make_executor(predefined=None, assets=None):
         protection_manager=None,
         portfolio_risk_manager=None,
         websocket_manager=None,
+        reconciliation_engine=None,
+        health_monitor=None,
     )
     return TradingExecutor(
         assets=assets or [],

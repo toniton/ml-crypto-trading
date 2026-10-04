@@ -35,6 +35,10 @@ class LoadContextNode:
             if last_commit:
                 context["last_successful_commit"] = last_commit
 
+        health_snapshot = self._toolbox.get_trading_health_snapshot()
+        if health_snapshot:
+            context["trading_health"] = health_snapshot
+
         return {
             "incident": incident,
             "error_event": error_event,

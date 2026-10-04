@@ -41,6 +41,8 @@ def _manager_container() -> MagicMock:
     manager_container.portfolio_risk_manager = MagicMock()
     manager_container.portfolio_risk_manager.can_trade.return_value = (True, None)
     manager_container.websocket_manager = MagicMock()
+    manager_container.reconciliation_engine = MagicMock()
+    manager_container.health_monitor = None
     return manager_container
 
 

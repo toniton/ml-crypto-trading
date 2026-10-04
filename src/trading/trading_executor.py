@@ -32,6 +32,9 @@ from src.trading.factories.trading_expression_factory import TradingExpressionFa
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
 from src.logging.trading_logging_mixin import TradingLoggingMixin
+from src.trading.health.enums import TradingPermission
+from src.trading.health.health_monitor import HealthMonitor
+from src.trading.health.models import HealthScope
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.regimes.market_regime_detector import MarketRegimeDetector
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -39,6 +42,7 @@ from src.trading.strategies.strategy_resolver import StrategyResolver
 
 
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
+    health_monitor: Optional[HealthMonitor] = None
 
     def __init__(
             self,
@@ -69,6 +73,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.protection_manager = manager_container.protection_manager
         self.portfolio_risk_manager = manager_container.portfolio_risk_manager
         self.websocket_manager = manager_container.websocket_manager
+        self.health_monitor = (
+            manager_container.health_monitor
+            if manager_container is not None
+            else None
+        )
         self._regime_detector = MarketRegimeDetector()
         self.activity_queue = activity_queue
         self._strategies_registry = strategies_registry or StrategyRegistry()
@@ -78,17 +87,16 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     def _rebuild_asset_dynamic_quantity_parsers(self, assets: list[Asset]) -> None:
         self._asset_dynamic_quantity_parsers = {}
         for asset in assets:
-            dq = getattr(asset, "dynamic_quantity", None)
+            dq = asset.dynamic_quantity
             if isinstance(dq, str) and dq.strip():
                 self._asset_dynamic_quantity_parsers[asset.key] = ExpressionParser(dq.strip())
 
     def _get_dynamic_quantity_parser(self, asset: Asset) -> Optional[ExpressionParser]:
-        dq = getattr(asset, "dynamic_quantity", None)
+        dq = asset.dynamic_quantity
         if isinstance(dq, str) and dq.strip():
-            return self._asset_dynamic_quantity_parsers.get(
-                asset.key,
-                ExpressionParser(dq.strip())
-            )
+            if asset.key in self._asset_dynamic_quantity_parsers:
+                return self._asset_dynamic_quantity_parsers[asset.key]
+            return ExpressionParser(dq.strip())
         return self._dynamic_quantity_parser
 
     @property
@@ -314,6 +322,32 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 ))
                 return
 
+        if self.health_monitor is not None:
+            asset_scope = HealthScope.asset_scope(asset.ticker_symbol)
+            quote_portfolio_key = asset.quote_ticker_symbol
+            if not self.health_monitor.has_permission(
+                    asset_scope,
+                    TradingPermission.NEW_ORDERS,
+                    exchange_name=asset.exchange.value,
+                    quote_portfolio_key=quote_portfolio_key,
+            ):
+                self.app_logger.warning(
+                    "Trading health blocked NEW_ORDERS for %s", asset.ticker_symbol
+                )
+                snapshot = self.health_monitor.snapshot
+                self._publish_event(DecisionRejectedEvent(
+                    symbol=asset.ticker_symbol,
+                    action=TradeAction.BUY.value,
+                    reason=DecisionRejectedReason.HEALTH_HALT.value,
+                    details={
+                        "state": snapshot.state.value,
+                        "active_conditions": [
+                            c.condition.value for c in snapshot.active_conditions
+                        ],
+                    },
+                ))
+                return
+
         quantity = format(quantity_val, "f")
         self._submit_buy_order(asset, price, quantity, market_data, decision)
 
@@ -407,6 +441,46 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if quantity_val is None:
             return
         quantity = format(quantity_val, "f")
+
+        if self.health_monitor is not None:
+            asset_scope = HealthScope.asset_scope(asset.ticker_symbol)
+            quote_portfolio_key = asset.quote_ticker_symbol
+            can_reduce = self.health_monitor.has_permission(
+                asset_scope,
+                TradingPermission.REDUCE_POSITIONS,
+                exchange_name=asset.exchange.value,
+                quote_portfolio_key=quote_portfolio_key,
+            )
+            can_close = self.health_monitor.has_permission(
+                asset_scope,
+                TradingPermission.CLOSE_POSITIONS,
+                exchange_name=asset.exchange.value,
+                quote_portfolio_key=quote_portfolio_key,
+            )
+            can_new = self.health_monitor.has_permission(
+                asset_scope,
+                TradingPermission.NEW_ORDERS,
+                exchange_name=asset.exchange.value,
+                quote_portfolio_key=quote_portfolio_key,
+            )
+            if not (can_reduce or can_close or can_new):
+                self.app_logger.warning(
+                    "Trading health blocked SELL for %s", asset.ticker_symbol
+                )
+                snapshot = self.health_monitor.snapshot
+                self._publish_event(DecisionRejectedEvent(
+                    symbol=asset.ticker_symbol,
+                    action=TradeAction.SELL.value,
+                    reason=DecisionRejectedReason.HEALTH_HALT.value,
+                    details={
+                        "state": snapshot.state.value,
+                        "active_conditions": [
+                            c.condition.value for c in snapshot.active_conditions
+                        ],
+                    },
+                ))
+                return
+
         if base_balance.available_balance >= quantity_val:
             self._submit_sell_order(asset, price, quantity, market_data, decision)
 
@@ -523,7 +597,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if not decision or not decision.votes:
             return None
         positive_votes = [
-            (name, decision.weights.get(name, 1.0))
+            (
+                name,
+                decision.weights[name] if name in decision.weights else 1.0,
+            )
             for name, vote in decision.votes.items()
             if vote
         ]

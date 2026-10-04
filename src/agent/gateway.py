@@ -24,17 +24,20 @@ from src.llm.math_normalizer import DelimiterStream
 from src.server.timeline_projector import TimelineProjector
 from src.vcs.application.service import VCSService
 
+from src.trading.health.health_monitor import HealthMonitor
+
 AgentResult = Union[ConfigurationResult, DecisionInvestigationResult, ClarificationResult, GeneralResult]
 
 
 class AgentGateway:
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             llm: LlmAdapter,
             vcs: VCSService,
             registry: Optional[AgentRegistry] = None,
             approval_service: Optional[AgentApprovalService] = None,
             timeline_projector: Optional[TimelineProjector] = None,
+            health_monitor: Optional[HealthMonitor] = None,
     ):
         self._llm = llm
         self._vcs = vcs
@@ -43,6 +46,7 @@ class AgentGateway:
             vcs=vcs,
             approval_service=approval_service,
             timeline_projector=timeline_projector,
+            health_monitor=health_monitor,
         )
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
 
@@ -174,6 +178,7 @@ class AgentGateway:
             vcs: VCSService,
             approval_service: Optional[AgentApprovalService] = None,
             timeline_projector: Optional[TimelineProjector] = None,
+            health_monitor: Optional[HealthMonitor] = None,
     ) -> AgentRegistry:
         configuration_service = ConfigurationService(vcs=vcs)
         definitions = [
@@ -253,6 +258,7 @@ class AgentGateway:
                     toolbox=RuntimeDebugToolbox(
                         database_manager=vcs.db_manager,
                         vcs=vcs,
+                        health_monitor=health_monitor,
                     ),
                     llm=llm,
                 ).build(),
