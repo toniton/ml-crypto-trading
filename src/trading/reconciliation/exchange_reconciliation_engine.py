@@ -139,6 +139,9 @@ class ExchangeReconciliationEngine(ApplicationLoggingMixin):
     def clear_discrepancies(self) -> None:
         with self._lock:
             self._active_discrepancies.clear()
+        if self._protection_manager and self._protection_manager.is_paused:
+            self._protection_manager.resume_trading()
+            self.app_logger.info("Cleared reconciliation discrepancies; resumed trading.")
 
     def update_assets(self, assets: List[Asset]) -> None:
         self._assets = assets
@@ -187,6 +190,12 @@ class ExchangeReconciliationEngine(ApplicationLoggingMixin):
                 if self._auto_pause_on_critical and self._protection_manager:
                     self._protection_manager.pause_trading(
                         f"Critical reconciliation discrepancy detected on {exchange}"
+                    )
+            elif not self.has_critical_discrepancy():
+                if self._auto_pause_on_critical and self._protection_manager and self._protection_manager.is_paused:
+                    self._protection_manager.resume_trading()
+                    self.app_logger.info(
+                        "Reconciliation cycle clean across exchanges; auto-resumed trading."
                     )
 
             # Publish events

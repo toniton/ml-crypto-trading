@@ -110,3 +110,37 @@ class TestExchangeReconciliationEngine(unittest.TestCase):
             time.sleep(0.01)
 
         self.assertGreaterEqual(self.mock_reconciler1.reconcile.call_count, 1)
+
+    def test_reconcile_all_auto_resumes_when_clean(self):
+        critical_disc = Discrepancy(
+            discrepancy_type=DiscrepancyType.BALANCE_MISMATCH,
+            severity=DiscrepancySeverity.CRITICAL,
+            exchange="CRYPTO_DOT_COM",
+            asset_or_currency="USD",
+            local_value="USD 7610.00",
+            exchange_value="USD 23.14",
+            difference=Decimal("-7586.86"),
+            action_taken="TRADING_PAUSED_AND_LOCAL_SYNCED",
+        )
+        self.mock_reconciler1.reconcile.return_value = [critical_disc]
+        self.mock_reconciler2.reconcile.return_value = []
+
+        # First cycle pauses trading
+        self.engine.reconcile_all()
+        self.assertTrue(self.protection_manager.is_paused)
+
+        # Second cycle is clean (synced state)
+        self.mock_reconciler1.reconcile.return_value = []
+        reports = self.engine.reconcile_all()
+
+        self.assertFalse(reports[0].has_critical)
+        self.assertFalse(self.engine.has_critical_discrepancy())
+        self.assertFalse(self.protection_manager.is_paused)
+
+    def test_clear_discrepancies_resumes_trading(self):
+        self.protection_manager.pause_trading("manual pause")
+        self.assertTrue(self.protection_manager.is_paused)
+
+        self.engine.clear_discrepancies()
+        self.assertFalse(self.protection_manager.is_paused)
+
