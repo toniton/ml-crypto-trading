@@ -197,6 +197,9 @@ class AgentApprovalService(AgentLoggingMixin):
         approval = self._approvals.get(approval_id)
         if approval is not None:
             return approval
+        for app in self._approvals.values():
+            if approval_id in (app.id, app.agent_action_id, app.proposal_id, str(app.request_id) if app.request_id else None):
+                return app
         return self._find_persisted_approval(approval_id)
 
     def _find_persisted_approval(self, approval_id: str) -> Optional[AgentApprovalRequest]:
@@ -208,7 +211,7 @@ class AgentApprovalService(AgentLoggingMixin):
         if message and message.payload:
             parsed = self._parse_approval_from_message(message, approval_id)
             if parsed:
-                self._approvals[approval_id] = parsed
+                self._approvals[parsed.id] = parsed
                 return parsed
 
         # Fallback: scan user sessions for approval block
@@ -218,7 +221,7 @@ class AgentApprovalService(AgentLoggingMixin):
                     if msg.payload and "blocks" in msg.payload:
                         parsed = self._parse_approval_from_message(msg, approval_id)
                         if parsed:
-                            self._approvals[approval_id] = parsed
+                            self._approvals[parsed.id] = parsed
                             return parsed
         except Exception:
             pass
@@ -235,8 +238,17 @@ class AgentApprovalService(AgentLoggingMixin):
             btype = block.get("type")
             if btype in ("agent_approval", "approval", "configuration_diff"):
                 b_app_id = block.get("approval_id") or block.get("proposal_id") or message.message_id
-                if approval_id and b_app_id != approval_id and message.message_id != approval_id:
-                    continue
+                action_id = block.get("action_id") or block.get("agent_action_id")
+                if approval_id:
+                    matched = (
+                            b_app_id == approval_id
+                            or message.message_id == approval_id
+                            or action_id == approval_id
+                            or str(block.get("id")) == approval_id
+                            or (approval_id.startswith("tl_") and (b_app_id == approval_id or message.message_id == approval_id))
+                    )
+                    if not matched:
+                        continue
 
                 status_val = str(block.get("status", "pending")).upper()
                 try:
@@ -250,7 +262,7 @@ class AgentApprovalService(AgentLoggingMixin):
 
                 return AgentApprovalRequest(
                     id=str(b_app_id),
-                    agent_action_id=str(block.get("action_id") or block.get("agent_action_id") or b_app_id),
+                    agent_action_id=str(action_id or b_app_id),
                     action_type=block.get("action_type") or "CREATE_PROPOSAL",
                     title=block.get("title") or "Approval Request",
                     description=block.get("description") or block.get("summary") or "",
@@ -276,7 +288,7 @@ class AgentApprovalService(AgentLoggingMixin):
                 return found
 
         for app in self._approvals.values():
-            if proposal_id and (app.proposal_id == proposal_id or app.id == proposal_id):
+            if proposal_id and (app.proposal_id == proposal_id or app.id == proposal_id or app.agent_action_id == proposal_id):
                 return app
             if commit_hash and app.base_commit and (
                     app.base_commit.lower().startswith(commit_hash.lower())
@@ -348,9 +360,13 @@ class AgentApprovalService(AgentLoggingMixin):
             self._publish_resolved(approval, "reject", conversation_id=conversation_id)
             return approval, None, []
 
-        # Validate VCS state consistency: base_commit must be equal to current HEAD
+        # Validate VCS state consistency: base_commit must match current HEAD
         current_head = self._vcs.head("HEAD").hash
-        if approval.base_commit != current_head:
+        if approval.base_commit and not (
+                current_head == approval.base_commit
+                or current_head.startswith(approval.base_commit)
+                or approval.base_commit.startswith(current_head)
+        ):
             approval.status = ApprovalStatus.EXPIRED
             self._action_service.update_status(
                 approval.agent_action_id,
@@ -361,6 +377,8 @@ class AgentApprovalService(AgentLoggingMixin):
                 f"Cannot approve: Base commit '{approval.base_commit[:8]}' is out of date. "
                 f"Current HEAD is '{current_head[:8]}'. The proposal must be regenerated."
             )
+        if not approval.base_commit:
+            approval.base_commit = current_head
 
         # Convert proposed_change into ConfigurationProposal if present
         proposal_dict = approval.proposed_change

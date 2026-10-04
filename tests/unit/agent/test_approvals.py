@@ -163,3 +163,105 @@ def test_approve_conflict_when_base_commit_diverged(approval_service, action_ser
 
     assert approval_service.get_approval(created_req.id).status == ApprovalStatus.EXPIRED
     assert action_service.get_action(action.id).status == ActionStatus.FAILED
+
+
+def test_approve_with_short_base_commit(approval_service, action_service, vcs):
+    head_commit = vcs.head("HEAD").hash
+    short_head = head_commit[:7]
+    action = action_service.create_action(
+        AgentAction(type=AgentActionType.APPLY_CONFIGURATION, title="Update Consensus Short", description="")
+    )
+
+    req = AgentApprovalRequest(
+        agent_action_id=action.id,
+        action_type=AgentActionType.APPLY_CONFIGURATION,
+        title="Update Consensus",
+        description="Change buy consensus to 1.15",
+        base_commit=short_head,
+        proposed_change={
+            "changes": [
+                {
+                    "path": "assets.BTC_USD.consensus.buy",
+                    "old_value": 1.3,
+                    "new_value": 1.15,
+                    "reason": "Test short hash match",
+                }
+            ]
+        },
+    )
+    created_req = approval_service.request_approval(req)
+
+    # Resolution by agent_action_id should also work
+    resolved, commit_hash, _ = approval_service.decide_approval(action.id, "approve")
+    assert resolved.status == ApprovalStatus.APPROVED
+    assert commit_hash is not None
+    assert vcs.head("HEAD").hash == commit_hash
+
+
+def test_resolve_approval_from_conversation_store(db_manager, vcs, config_service, action_service):
+    from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
+    from src.server.services.conversation_service import ConversationService
+    from src.core.interfaces.conversation_store import ConversationMessage
+
+    SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(db_manager.engine)
+    conv_store = ConversationService(db_manager)
+    service = AgentApprovalService(
+        vcs=vcs,
+        configuration_service=config_service,
+        action_service=action_service,
+        event_bus=MessageEventBus(),
+        conversation_store=conv_store,
+    )
+    head_commit = vcs.head("HEAD").hash
+
+    # Save an approval block directly in the conversation store
+    session_id = "test_session_123"
+    msg_id = "app_msg_456"
+    conv_store.append(
+        session_id,
+        ConversationMessage(
+            role="assistant",
+            content="Proposal to update BTC_USD",
+            message_id=msg_id,
+            payload={
+                "blocks": [
+                    {
+                        "type": "agent_approval",
+                        "approval_id": "app_req_789",
+                        "action_id": "act_999",
+                        "title": "Pause BTC_USD",
+                        "description": "Proposal from chat",
+                        "base_commit": head_commit,
+                        "proposed_change": {
+                            "changes": [
+                                {
+                                    "path": "assets.BTC_USD.consensus.buy",
+                                    "old_value": 1.3,
+                                    "new_value": 1.05,
+                                    "reason": "From chat",
+                                }
+                            ]
+                        },
+                        "status": "pending",
+                    }
+                ]
+            },
+            conversation_id=session_id,
+        ),
+    )
+
+    # Lookup by approval_id
+    found = service.get_approval("app_req_789")
+    assert found is not None
+    assert found.title == "Pause BTC_USD"
+
+    # Lookup by action_id
+    found_by_action = service.get_approval("act_999")
+    assert found_by_action is not None
+    assert found_by_action.id == "app_req_789"
+
+    # Decide approval
+    resolved, commit_hash, _ = service.decide_approval("app_req_789", "approve")
+    assert resolved.status == ApprovalStatus.APPROVED
+    assert commit_hash is not None
+

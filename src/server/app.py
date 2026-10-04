@@ -880,6 +880,8 @@ class ChatApp:
 
         decision_data: dict = {
             "action": action.value,
+            "proposal_id": message_id,
+            "approval_id": message_id,
             "proposal_message_id": message_id,
             "summary": proposal.summary,
             "decided_at": datetime.now(timezone.utc).isoformat(),

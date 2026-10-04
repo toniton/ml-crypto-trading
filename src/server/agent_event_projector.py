@@ -274,18 +274,41 @@ class AgentEventProjector(ApplicationLoggingMixin):
         self._ensure_hydrated()
         with self._lock:
             approval = self._approvals.get(approval_id)
-        if approval is not None:
-            return approval
-        # Check in conversation store
+            if approval is not None:
+                return approval
+            for app in self._approvals.values():
+                if approval_id in (
+                        app.get("id"),
+                        app.get("approval_id"),
+                        app.get("agent_action_id"),
+                        app.get("action_id"),
+                        app.get("proposal_id"),
+                ):
+                    return app
+        # Check in conversation store directly
         message = self._conversation_store.get_message(approval_id)
         if message and message.payload:
             for block in message.payload.get("blocks", []):
-                if (
-                        isinstance(block, dict)
-                        and block.get("type") == "agent_approval"
-                        and block.get("approval_id") == approval_id
-                ):
-                    with self._lock:
-                        self._approvals[approval_id] = block
-                    return block
+                if isinstance(block, dict) and block.get("type") in ("agent_approval", "approval", "configuration_diff"):
+                    b_app_id = block.get("approval_id") or block.get("proposal_id") or message.message_id
+                    action_id = block.get("action_id") or block.get("agent_action_id")
+                    if approval_id in (b_app_id, action_id, message.message_id):
+                        with self._lock:
+                            self._approvals[approval_id] = block
+                        return block
+        # Fallback: scan sessions
+        try:
+            for session in self._conversation_store.list_sessions():
+                for msg in self._conversation_store.messages(session.id):
+                    if msg.payload and "blocks" in msg.payload:
+                        for block in msg.payload.get("blocks", []):
+                            if isinstance(block, dict) and block.get("type") in ("agent_approval", "approval", "configuration_diff"):
+                                b_app_id = block.get("approval_id") or block.get("proposal_id") or msg.message_id
+                                action_id = block.get("action_id") or block.get("agent_action_id")
+                                if approval_id in (b_app_id, action_id, msg.message_id):
+                                    with self._lock:
+                                        self._approvals[approval_id] = block
+                                    return block
+        except Exception:
+            pass
         return None
