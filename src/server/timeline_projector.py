@@ -446,7 +446,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         summary_text = event.summary
         symbol = event.symbol
         entities = [EntityRef(type="ASSET", id=symbol)] if symbol else []
-        metadata = event.payload.to_dict() if hasattr(event.payload, "to_dict") else {"summary": summary_text}
+        metadata = event.payload.to_dict()
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,

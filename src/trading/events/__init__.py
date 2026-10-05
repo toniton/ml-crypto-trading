@@ -17,6 +17,7 @@ from .domain_events import (
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
     TradeClosedEvent,
+    TradingDecisionCreatedEvent,
 )
 
 __all__ = [
@@ -37,6 +38,7 @@ __all__ = [
     "SignalGeneratedEvent",
     "StrategyEvaluatedEvent",
     "TradeClosedEvent",
+    "TradingDecisionCreatedEvent",
     "TradingEvent",
 ]
 

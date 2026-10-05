@@ -260,6 +260,7 @@ class OrderManager(ApplicationLoggingMixin):
             timestamp: float, commit_hash: Optional[str] = None, uuid: str = None,
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
+            decision_id: Optional[str] = None,
     ):
         resolved_commit_hash = (
                 commit_hash
@@ -276,6 +277,7 @@ class OrderManager(ApplicationLoggingMixin):
             commit_hash=resolved_commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            decision_id=decision_id,
         )
         with self._intent_lock:
             self._in_flight_orders[order.uuid] = (order.ticker_symbol, order.trade_action)

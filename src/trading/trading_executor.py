@@ -20,7 +20,21 @@ from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.core.interfaces.trading_strategy import TradingStrategy
 
+from src.database.repositories.trading_decision_repository import (
+    TradingDecisionRepository,
+)
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.decision.trading_decision import (
+    ConsensusSnapshot,
+    DecisionStatus,
+    HealthEvaluation,
+    MarketSnapshot,
+    PortfolioSnapshot,
+    RegimeSnapshot,
+    RiskEvaluation,
+    SizingSnapshot,
+    TradingDecision,
+)
 from src.trading.events import (
     DecisionRejectedEvent,
     DecisionRejectedReason,
@@ -29,6 +43,7 @@ from src.trading.events import (
     OrderSubmittedEvent,
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
+    TradingDecisionCreatedEvent,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
@@ -38,7 +53,7 @@ from src.trading.health.health_monitor import HealthMonitor
 from src.trading.health.models import HealthScope
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.protection.portfolio_policy_resolver import PortfolioPolicyResolver
-from src.trading.regimes.market_regime import MarketRegime
+from src.trading.regimes.market_regime import MarketRegime, RegimeMetrics
 from src.trading.regimes.market_regime_detector import MarketRegimeDetector
 from src.trading.sizing.position_sizer import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -57,6 +72,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             position_sizer: PositionSizer,
             strategies_registry: StrategyRegistry,
             event_bus: Optional[EventBus],
+            decision_repository: Optional[TradingDecisionRepository] = None,
     ):
         self.assets = assets
         self.event_bus = event_bus
@@ -74,6 +90,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.websocket_manager = manager_container.websocket_manager
         self.health_monitor = manager_container.health_monitor
         self._regime_detector = MarketRegimeDetector()
+        self._decision_repository = decision_repository
         self.activity_queue = activity_queue
         self._strategies_registry = strategies_registry
         self._strategies: list[TradingStrategy] = []
@@ -219,6 +236,81 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
         return quote_balance, market_data, candles, fees
 
+    def _build_market_snapshot(self, market_data: MarketData, candles: list[Candle]) -> MarketSnapshot:
+        spread_pct = None
+        if market_data.bid_price is not None and market_data.ask_price is not None and market_data.ask_price > 0:
+            spread_pct = (market_data.ask_price - market_data.bid_price) / market_data.ask_price
+        return MarketSnapshot(
+            close_price=market_data.close_price,
+            bid_price=market_data.bid_price,
+            ask_price=market_data.ask_price,
+            spread_pct=spread_pct,
+            candles_count=len(candles) if candles else 0,
+        )
+
+    def _build_regime_snapshot(self, regime_metrics: RegimeMetrics) -> RegimeSnapshot:
+        return RegimeSnapshot(
+            regime=regime_metrics.regime.value,
+            volatility=regime_metrics.volatility,
+            trend_strength=regime_metrics.trend_strength,
+            spread=regime_metrics.spread,
+            exposure_multiplier=float(MarketRegime.get_exposure_multiplier(regime_metrics.regime)),
+        )
+
+    def _build_consensus_snapshot(self, action: TradeAction, decision: Optional[ConsensusDecision]) -> ConsensusSnapshot:
+        if decision is None:
+            return ConsensusSnapshot(
+                action=action,
+                votes={},
+                weights={},
+                factor=1.0,
+                quorum=False,
+                quorum_margin=0.0,
+                vote_ratio=0.0,
+                winning_strategy=None,
+            )
+        return ConsensusSnapshot(
+            action=decision.trade_action,
+            votes=dict(decision.votes),
+            weights=dict(decision.weights),
+            factor=decision.factor,
+            quorum=decision.quorum,
+            quorum_margin=decision.quorum_margin,
+            vote_ratio=decision.vote_ratio,
+            winning_strategy=self._resolve_winning_strategy(decision),
+        )
+
+    def _build_portfolio_snapshot(self, asset: Asset, trading_context: Optional[TradingContext]) -> PortfolioSnapshot:
+        if self.portfolio_risk_manager:
+            risk_metrics = self.portfolio_risk_manager.get_risk_metrics(asset)
+            return PortfolioSnapshot(
+                available_cash=risk_metrics.available_cash,
+                total_equity=risk_metrics.total_equity,
+                current_exposure_pct=float(risk_metrics.total_exposure_pct),
+                asset_exposure_pct=float(risk_metrics.asset_concentration_pct),
+                drawdown_pct=float(risk_metrics.drawdown_pct),
+            )
+        return PortfolioSnapshot(
+            available_cash=trading_context.available_balance if trading_context else Decimal("0"),
+            total_equity=trading_context.closing_balance if trading_context else Decimal("0"),
+            current_exposure_pct=0.0,
+            asset_exposure_pct=0.0,
+            drawdown_pct=0.0,
+        )
+
+    def _record_decision(self, decision: TradingDecision) -> None:
+        if self._decision_repository:
+            try:
+                self._decision_repository.save(decision)
+            except Exception as exc:  # pylint: disable=broad-except
+                self.app_logger.warning("Failed to persist TradingDecision %s: %s", decision.decision_id, exc)
+        self._publish_event(TradingDecisionCreatedEvent(
+            decision=decision,
+            symbol=decision.ticker_symbol,
+            action=decision.trade_action.value,
+            status=decision.status.value,
+        ))
+
     def create_buy_order(self, assets: list[Asset]):
         for asset in assets:
             if not asset.enabled:
@@ -265,13 +357,36 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if self.portfolio_risk_manager and trading_context:
             self.portfolio_risk_manager.update_position(asset, trading_context.position_qty)
 
+        market_snapshot = self._build_market_snapshot(market_data, candles)
+        regime_snapshot = self._build_regime_snapshot(regime_metrics)
+        portfolio_snapshot = self._build_portfolio_snapshot(asset, trading_context)
+        commit_hash = self.session_manager.get_current_commit_hash() if self.session_manager else None
+
         decision = self._evaluate_decision(asset, TradeAction.BUY, trading_context, market_data, candles)
+        consensus_snapshot = self._build_consensus_snapshot(TradeAction.BUY, decision)
+
         if decision is None or not decision.quorum:
             self.app_logger.debug("No consensus to buy %s", asset.ticker_symbol)
+            trading_decision = TradingDecision(
+                ticker_symbol=asset.ticker_symbol,
+                exchange=asset.exchange.value,
+                trade_action=TradeAction.BUY,
+                status=DecisionStatus.REJECTED,
+                rejection_reason="NO_QUORUM",
+                commit_hash=commit_hash,
+                market_snapshot=market_snapshot,
+                regime_snapshot=regime_snapshot,
+                consensus_snapshot=consensus_snapshot,
+                sizing_snapshot=SizingSnapshot(min_quantity=Decimal(str(asset.min_quantity))),
+                portfolio_snapshot=portfolio_snapshot,
+                risk_evaluation=RiskEvaluation(passed=False, rejection_reason="No consensus quorum"),
+            )
+            self._record_decision(trading_decision)
             return
 
         self.app_logger.info("Consensus reached to buy %s", asset.ticker_symbol)
         price = self._calculate_price(asset, market_data, fees)
+        winning_strategy = self._resolve_winning_strategy(decision)
 
         if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.BUY):
             self.app_logger.debug(
@@ -283,9 +398,41 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 action=TradeAction.BUY.value,
                 reason=DecisionRejectedReason.OUTSTANDING_INTENT.value,
             ))
+            trading_decision = TradingDecision(
+                ticker_symbol=asset.ticker_symbol,
+                exchange=asset.exchange.value,
+                trade_action=TradeAction.BUY,
+                status=DecisionStatus.SKIPPED,
+                rejection_reason=DecisionRejectedReason.OUTSTANDING_INTENT.value,
+                commit_hash=commit_hash,
+                winning_strategy=winning_strategy,
+                market_snapshot=market_snapshot,
+                regime_snapshot=regime_snapshot,
+                consensus_snapshot=consensus_snapshot,
+                sizing_snapshot=SizingSnapshot(min_quantity=Decimal(str(asset.min_quantity))),
+                portfolio_snapshot=portfolio_snapshot,
+                risk_evaluation=RiskEvaluation(passed=True),
+            )
+            self._record_decision(trading_decision)
             return
 
         if not self._validate_execution_edge(asset, TradeAction.BUY, market_data, fees):
+            trading_decision = TradingDecision(
+                ticker_symbol=asset.ticker_symbol,
+                exchange=asset.exchange.value,
+                trade_action=TradeAction.BUY,
+                status=DecisionStatus.REJECTED,
+                rejection_reason=DecisionRejectedReason.NEGATIVE_EDGE.value,
+                commit_hash=commit_hash,
+                winning_strategy=winning_strategy,
+                market_snapshot=market_snapshot,
+                regime_snapshot=regime_snapshot,
+                consensus_snapshot=consensus_snapshot,
+                sizing_snapshot=SizingSnapshot(min_quantity=Decimal(str(asset.min_quantity))),
+                portfolio_snapshot=portfolio_snapshot,
+                risk_evaluation=RiskEvaluation(passed=False, rejection_reason="Negative execution edge after fees"),
+            )
+            self._record_decision(trading_decision)
             return
 
         quantity_val = self._calculate_quantity(
@@ -296,6 +443,15 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             return
 
         order_cost = price * quantity_val
+        parser = self._get_dynamic_quantity_parser(asset)
+        sizing_snapshot = SizingSnapshot(
+            formula=parser.formula if parser else None,
+            calculated_quantity=quantity_val,
+            min_quantity=Decimal(str(asset.min_quantity)),
+            final_quantity=quantity_val,
+            variables={"order_cost": str(order_cost), "price": str(price)},
+        )
+
         if order_cost > account_balance.available_balance:
             self.app_logger.warning(
                 "Rejected BUY for %s: required cost %s exceeds available balance %s",
@@ -310,6 +466,22 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     "available_balance": str(account_balance.available_balance),
                 },
             ))
+            trading_decision = TradingDecision(
+                ticker_symbol=asset.ticker_symbol,
+                exchange=asset.exchange.value,
+                trade_action=TradeAction.BUY,
+                status=DecisionStatus.REJECTED,
+                rejection_reason=DecisionRejectedReason.INSUFFICIENT_BALANCE.value,
+                commit_hash=commit_hash,
+                winning_strategy=winning_strategy,
+                market_snapshot=market_snapshot,
+                regime_snapshot=regime_snapshot,
+                consensus_snapshot=consensus_snapshot,
+                sizing_snapshot=sizing_snapshot,
+                portfolio_snapshot=portfolio_snapshot,
+                risk_evaluation=RiskEvaluation(passed=False, rejection_reason="Order cost exceeds available balance"),
+            )
+            self._record_decision(trading_decision)
             return
 
         if self.portfolio_risk_manager:
@@ -323,21 +495,44 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     reason=DecisionRejectedReason.RISK_REJECTED.value,
                     details={"reason": reject_reason},
                 ))
+                trading_decision = TradingDecision(
+                    ticker_symbol=asset.ticker_symbol,
+                    exchange=asset.exchange.value,
+                    trade_action=TradeAction.BUY,
+                    status=DecisionStatus.REJECTED,
+                    rejection_reason=DecisionRejectedReason.RISK_REJECTED.value,
+                    commit_hash=commit_hash,
+                    winning_strategy=winning_strategy,
+                    market_snapshot=market_snapshot,
+                    regime_snapshot=regime_snapshot,
+                    consensus_snapshot=consensus_snapshot,
+                    sizing_snapshot=sizing_snapshot,
+                    portfolio_snapshot=portfolio_snapshot,
+                    risk_evaluation=RiskEvaluation(passed=False, rejection_reason=reject_reason),
+                )
+                self._record_decision(trading_decision)
                 return
 
+        health_eval = None
         if self.health_monitor is not None:
             asset_scope = HealthScope.asset_scope(asset.ticker_symbol)
             quote_portfolio_key = asset.quote_ticker_symbol
-            if not self.health_monitor.has_permission(
-                    asset_scope,
-                    TradingPermission.NEW_ORDERS,
-                    exchange_name=asset.exchange.value,
-                    quote_portfolio_key=quote_portfolio_key,
-            ):
+            allowed = self.health_monitor.has_permission(
+                asset_scope,
+                TradingPermission.NEW_ORDERS,
+                exchange_name=asset.exchange.value,
+                quote_portfolio_key=quote_portfolio_key,
+            )
+            snapshot = self.health_monitor.snapshot
+            health_eval = HealthEvaluation(
+                state=snapshot.state.value,
+                allowed=allowed,
+                active_conditions=[c.condition.value for c in snapshot.active_conditions],
+            )
+            if not allowed:
                 self.app_logger.warning(
                     "Trading health blocked NEW_ORDERS for %s", asset.ticker_symbol
                 )
-                snapshot = self.health_monitor.snapshot
                 self._publish_event(DecisionRejectedEvent(
                     symbol=asset.ticker_symbol,
                     action=TradeAction.BUY.value,
@@ -349,10 +544,42 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         ],
                     },
                 ))
+                trading_decision = TradingDecision(
+                    ticker_symbol=asset.ticker_symbol,
+                    exchange=asset.exchange.value,
+                    trade_action=TradeAction.BUY,
+                    status=DecisionStatus.REJECTED,
+                    rejection_reason=DecisionRejectedReason.HEALTH_HALT.value,
+                    commit_hash=commit_hash,
+                    winning_strategy=winning_strategy,
+                    market_snapshot=market_snapshot,
+                    regime_snapshot=regime_snapshot,
+                    consensus_snapshot=consensus_snapshot,
+                    sizing_snapshot=sizing_snapshot,
+                    portfolio_snapshot=portfolio_snapshot,
+                    risk_evaluation=RiskEvaluation(passed=True),
+                    health_evaluation=health_eval,
+                )
+                self._record_decision(trading_decision)
                 return
 
         quantity = format(quantity_val, "f")
-        self._submit_buy_order(asset, price, quantity, market_data, decision)
+        trading_decision = TradingDecision(
+            ticker_symbol=asset.ticker_symbol,
+            exchange=asset.exchange.value,
+            trade_action=TradeAction.BUY,
+            status=DecisionStatus.EXECUTED,
+            commit_hash=commit_hash,
+            winning_strategy=winning_strategy,
+            market_snapshot=market_snapshot,
+            regime_snapshot=regime_snapshot,
+            consensus_snapshot=consensus_snapshot,
+            sizing_snapshot=sizing_snapshot,
+            portfolio_snapshot=portfolio_snapshot,
+            risk_evaluation=RiskEvaluation(passed=True),
+            health_evaluation=health_eval,
+        )
+        self._submit_buy_order(asset, price, quantity, market_data, decision, trading_decision)
 
     def _submit_buy_order(
             self,
@@ -361,10 +588,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             quantity: str,
             market_data: MarketData,
             decision: ConsensusDecision,
+            trading_decision: Optional[TradingDecision] = None,
     ) -> None:
         commit_hash = self.session_manager.get_current_commit_hash()
         winning_strategy = self._resolve_winning_strategy(decision)
         strategy_votes = self._format_strategy_votes(decision)
+        decision_id = trading_decision.decision_id if trading_decision else None
         buy_order = self.order_manager.open_order(
             ticker_symbol=asset.ticker_symbol,
             quantity=quantity,
@@ -375,7 +604,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             commit_hash=commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            decision_id=decision_id,
         )
+        if trading_decision:
+            trading_decision.resulting_order_id = buy_order.uuid
+            self._record_decision(trading_decision)
+
         if self.portfolio_risk_manager:
             self.portfolio_risk_manager.reserve_order_cash(
                 asset, buy_order.uuid, price * Decimal(quantity)
@@ -393,7 +627,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             asset=asset.ticker_symbol,
             action=TradeAction.BUY.value,
             market_data=market_data,
-            context=f'order_id={buy_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
+            context=f'order_id={buy_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash},decision_id={decision_id}'
         )
 
     def create_sell_order(self, assets: list[Asset]):
@@ -431,20 +665,56 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
         _, market_data, candles, fees = self._prepare_trade_context(asset)
         base_balance = self.account_manager.get_base_balance(asset, asset.exchange.value)
-
         price = self._calculate_price(asset, market_data, fees)
+
+        regime_metrics = self._regime_detector.detect(candles, market_data)
+        market_snapshot = self._build_market_snapshot(market_data, candles)
+        regime_snapshot = self._build_regime_snapshot(regime_metrics)
+        portfolio_snapshot = self._build_portfolio_snapshot(asset, trading_context)
+        commit_hash = self.session_manager.get_current_commit_hash() if self.session_manager else None
+
         decision = self._evaluate_decision(asset, TradeAction.SELL, trading_context, market_data, candles)
+        consensus_snapshot = self._build_consensus_snapshot(TradeAction.SELL, decision)
+
         if decision is None or not decision.quorum:
             return
 
+        winning_strategy = self._resolve_winning_strategy(decision)
+
         if not self._validate_execution_edge(asset, TradeAction.SELL, market_data, fees):
+            trading_decision = TradingDecision(
+                ticker_symbol=asset.ticker_symbol,
+                exchange=asset.exchange.value,
+                trade_action=TradeAction.SELL,
+                status=DecisionStatus.REJECTED,
+                rejection_reason=DecisionRejectedReason.NEGATIVE_EDGE.value,
+                commit_hash=commit_hash,
+                winning_strategy=winning_strategy,
+                market_snapshot=market_snapshot,
+                regime_snapshot=regime_snapshot,
+                consensus_snapshot=consensus_snapshot,
+                sizing_snapshot=SizingSnapshot(min_quantity=Decimal(str(asset.min_quantity))),
+                portfolio_snapshot=portfolio_snapshot,
+                risk_evaluation=RiskEvaluation(passed=False, rejection_reason="Negative execution edge after fees"),
+            )
+            self._record_decision(trading_decision)
             return
 
-        quantity_val = self._calculate_quantity(asset, TradeAction.SELL, market_data, decision)
+        quantity_val = self._calculate_quantity(
+            asset, TradeAction.SELL, market_data, decision,
+            candles=candles, regime=regime_metrics.regime
+        )
         if quantity_val is None:
             return
         quantity = format(quantity_val, "f")
+        sizing_snapshot = SizingSnapshot(
+            calculated_quantity=quantity_val,
+            min_quantity=Decimal(str(asset.min_quantity)),
+            final_quantity=quantity_val,
+            variables={"price": str(price)},
+        )
 
+        health_eval = None
         if self.health_monitor is not None:
             asset_scope = HealthScope.asset_scope(asset.ticker_symbol)
             quote_portfolio_key = asset.quote_ticker_symbol
@@ -466,11 +736,17 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 exchange_name=asset.exchange.value,
                 quote_portfolio_key=quote_portfolio_key,
             )
-            if not (can_reduce or can_close or can_new):
+            allowed = can_reduce or can_close or can_new
+            snapshot = self.health_monitor.snapshot
+            health_eval = HealthEvaluation(
+                state=snapshot.state.value,
+                allowed=allowed,
+                active_conditions=[c.condition.value for c in snapshot.active_conditions],
+            )
+            if not allowed:
                 self.app_logger.warning(
                     "Trading health blocked SELL for %s", asset.ticker_symbol
                 )
-                snapshot = self.health_monitor.snapshot
                 self._publish_event(DecisionRejectedEvent(
                     symbol=asset.ticker_symbol,
                     action=TradeAction.SELL.value,
@@ -482,10 +758,42 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                         ],
                     },
                 ))
+                trading_decision = TradingDecision(
+                    ticker_symbol=asset.ticker_symbol,
+                    exchange=asset.exchange.value,
+                    trade_action=TradeAction.SELL,
+                    status=DecisionStatus.REJECTED,
+                    rejection_reason=DecisionRejectedReason.HEALTH_HALT.value,
+                    commit_hash=commit_hash,
+                    winning_strategy=winning_strategy,
+                    market_snapshot=market_snapshot,
+                    regime_snapshot=regime_snapshot,
+                    consensus_snapshot=consensus_snapshot,
+                    sizing_snapshot=sizing_snapshot,
+                    portfolio_snapshot=portfolio_snapshot,
+                    risk_evaluation=RiskEvaluation(passed=True),
+                    health_evaluation=health_eval,
+                )
+                self._record_decision(trading_decision)
                 return
 
         if base_balance.available_balance >= quantity_val:
-            self._submit_sell_order(asset, price, quantity, market_data, decision)
+            trading_decision = TradingDecision(
+                ticker_symbol=asset.ticker_symbol,
+                exchange=asset.exchange.value,
+                trade_action=TradeAction.SELL,
+                status=DecisionStatus.EXECUTED,
+                commit_hash=commit_hash,
+                winning_strategy=winning_strategy,
+                market_snapshot=market_snapshot,
+                regime_snapshot=regime_snapshot,
+                consensus_snapshot=consensus_snapshot,
+                sizing_snapshot=sizing_snapshot,
+                portfolio_snapshot=portfolio_snapshot,
+                risk_evaluation=RiskEvaluation(passed=True),
+                health_evaluation=health_eval,
+            )
+            self._submit_sell_order(asset, price, quantity, market_data, decision, trading_decision)
 
     def _submit_sell_order(
             self,
@@ -494,10 +802,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             quantity: str,
             market_data: MarketData,
             decision: ConsensusDecision,
+            trading_decision: Optional[TradingDecision] = None,
     ) -> None:
         commit_hash = self.session_manager.get_current_commit_hash()
         winning_strategy = self._resolve_winning_strategy(decision)
         strategy_votes = self._format_strategy_votes(decision)
+        decision_id = trading_decision.decision_id if trading_decision else None
         sell_order = self.order_manager.open_order(
             price=price, trade_action=TradeAction.SELL,
             quantity=quantity, provider_name=asset.exchange.value,
@@ -505,7 +815,12 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             commit_hash=commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            decision_id=decision_id,
         )
+        if trading_decision:
+            trading_decision.resulting_order_id = sell_order.uuid
+            self._record_decision(trading_decision)
+
         self.activity_queue.put_nowait(sell_order.model_dump_json())
 
         self._publish_event(OrderSubmittedEvent(
@@ -519,7 +834,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             asset=asset.ticker_symbol,
             action=TradeAction.SELL.value,
             market_data=market_data,
-            context=f'order_id={sell_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash}'
+            context=f'order_id={sell_order.uuid},price={price},quantity={quantity},commit_hash={commit_hash},decision_id={decision_id}'
         )
 
     def _publish_event(self, event: Event) -> None:
@@ -619,24 +934,30 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         return {name: "TRUE" if vote else "FALSE" for name, vote in decision.votes.items()}
 
     def _calculate_quantity(
-            self, asset: Asset, _action: TradeAction,
-            market_data: MarketData, decision: ConsensusDecision,
+            self,
+            asset: Asset,
+            _action: TradeAction,
+            market_data: MarketData,
+            decision: ConsensusDecision,
             candles: Optional[list[Candle]] = None,
             regime: Optional[MarketRegime] = None,
     ) -> Decimal:
-        trading_context = self.session_manager.get_trading_context(asset.key) if self.session_manager else None
+        trading_context = self.session_manager.get_trading_context(asset.key)
         account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
         active_candles = candles if candles is not None else self.market_data_manager.get_candles(asset)
+        active_regime = regime or self._regime_detector.detect(active_candles, market_data).regime
         risk_metrics = (
             self.portfolio_risk_manager.get_risk_metrics(asset)
             if self.portfolio_risk_manager
             else None
         )
         effective_config = None
-        if self.portfolio_risk_manager and hasattr(self.portfolio_risk_manager, "portfolio_config"):
-            p_cfg = self.portfolio_risk_manager.portfolio_config
-            if isinstance(p_cfg, PortfolioConfig):
-                effective_config = PortfolioPolicyResolver.resolve(p_cfg, asset, regime=regime)
+        if self.portfolio_risk_manager and isinstance(self.portfolio_risk_manager.portfolio_config, PortfolioConfig):
+            effective_config = PortfolioPolicyResolver.resolve(
+                self.portfolio_risk_manager.portfolio_config,
+                asset,
+                regime=active_regime,
+            )
 
         return self.position_sizer.calculate_quantity(
             asset=asset,

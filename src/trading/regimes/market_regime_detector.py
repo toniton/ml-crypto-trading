@@ -129,17 +129,6 @@ class MarketRegimeDetector:
     ) -> float:
         if market_data and market_data.volume is not None:
             return float(market_data.volume)
-
-        if candles:
-            volumes = [
-                float(getattr(c, "volume"))
-                for c in candles
-                if hasattr(c, "volume") and getattr(c, "volume") is not None
-            ]
-            if volumes:
-                n = min(period, len(volumes))
-                return sum(volumes[-n:]) / n
-
         return 0.0
 
     def calculate_spread(self, market_data: MarketData, close: float) -> float:

@@ -110,7 +110,7 @@ class BuildEvidenceNode:
             proposal_rationale=proposal_rationale or commit_message,
             risks=risks,
             expected_effect=expected_effect,
-            approval_status=approval.status.value if approval and hasattr(approval.status, "value") else (str(approval.status) if approval else None),
+            approval_status=approval.status.value if approval and approval.status else None,
             consistency_warnings=consistency_warnings,
             evidence_limitations=evidence_limitations,
         )

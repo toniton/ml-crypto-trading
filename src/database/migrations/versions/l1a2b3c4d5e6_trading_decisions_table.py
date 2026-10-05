@@ -50,8 +50,16 @@ def upgrade() -> None:
     op.create_index(op.f("ix_trading_decisions_commit_hash"), "trading_decisions", ["commit_hash"], unique=False)
     op.create_index(op.f("ix_trading_decisions_resulting_order_id"), "trading_decisions", ["resulting_order_id"], unique=False)
 
+    with op.batch_alter_table("orders") as batch_op:
+        batch_op.add_column(sa.Column("decision_id", sa.String(length=64), nullable=True))
+        batch_op.create_index("ix_orders_decision_id", ["decision_id"], unique=False)
+
 
 def downgrade() -> None:
+    with op.batch_alter_table("orders") as batch_op:
+        batch_op.drop_index("ix_orders_decision_id")
+        batch_op.drop_column("decision_id")
+
     op.drop_index(op.f("ix_trading_decisions_resulting_order_id"), table_name="trading_decisions")
     op.drop_index(op.f("ix_trading_decisions_commit_hash"), table_name="trading_decisions")
     op.drop_index(op.f("ix_trading_decisions_status"), table_name="trading_decisions")

@@ -36,6 +36,22 @@ class DecisionRejectedEvent(TradingEvent):
 
 
 @dataclass
+class TradingDecisionCreatedEvent(TradingEvent):
+    EVENT_TYPE = "TradingDecisionCreatedEvent"
+    decision: Any = None
+    symbol: str = ""
+    action: str = ""
+    status: str = ""
+
+    def _resolve_asset(self) -> Optional[str]:
+        if self.symbol:
+            return self.symbol
+        if self.decision is not None:
+            return self.decision.ticker_symbol
+        return None
+
+
+@dataclass
 class MarketDataEvent(TradingEvent):
     ticker_symbol: str
     market_data: MarketData
