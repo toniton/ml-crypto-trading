@@ -10,6 +10,7 @@ from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -48,7 +49,14 @@ class TestDynamicQuantity(unittest.TestCase):
         manager_container.reconciliation_engine = MagicMock()
         manager_container.health_monitor = None
 
-        executor = TradingExecutor(assets, manager_container, activity_queue, dynamic_quantity=dynamic_quantity)
+        executor = TradingExecutor(
+            assets=assets,
+            manager_container=manager_container,
+            activity_queue=activity_queue,
+            dynamic_quantity=dynamic_quantity,
+            strategies_registry=StrategyRegistry(),
+            event_bus=None,
+        )
 
         return executor, manager_container
 

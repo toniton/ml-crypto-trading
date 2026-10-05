@@ -86,7 +86,9 @@ def _make_executor(predefined=None, assets=None):
         assets=assets or [],
         manager_container=container,
         activity_queue=Queue(),
+        dynamic_quantity=None,
         strategies_registry=StrategyRegistry(predefined),
+        event_bus=None,
     )
 
 

@@ -14,10 +14,12 @@ from src.trading.health import (
     HealthMonitor,
     HealthObservation,
     HealthScope,
+    RecoveryConfig,
     TradingHealthCondition,
     TradingHealthState,
 )
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -35,7 +37,11 @@ def test_trading_executor_blocks_order_when_paused():
         enabled=True,
     )
     event_bus = MagicMock(spec=EventBus)
-    health_monitor = HealthMonitor(event_bus=event_bus, initial_state=TradingHealthState.TRADING)
+    health_monitor = HealthMonitor.create(
+        event_bus=event_bus,
+        recovery_config=RecoveryConfig(),
+        initial_state=TradingHealthState.TRADING,
+    )
 
     # Put health monitor into PAUSED
     health_monitor.report_observation(
@@ -97,6 +103,8 @@ def test_trading_executor_blocks_order_when_paused():
         assets=[asset],
         manager_container=container,
         activity_queue=Queue(),
+        dynamic_quantity=None,
+        strategies_registry=StrategyRegistry(),
         event_bus=event_bus,
     )
 

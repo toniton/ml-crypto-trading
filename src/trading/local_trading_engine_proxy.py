@@ -23,14 +23,18 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
     def __init__(
             self,
             trading_engine: TradingEngine,
-            managers: ManagerContainer,
             market_data_store: MarketDataStore,
             compare_backtest: Callable[[Any], Any],
     ) -> None:
         self._trading_engine = trading_engine
-        self._managers = managers
         self._market_data_store = market_data_store
         self._compare_backtest = compare_backtest
+
+    @property
+    def _managers(self) -> Optional[ManagerContainer]:
+        if self._trading_engine is not None:
+            return self._trading_engine.managers
+        return None
 
     def get_status(self) -> EngineStatus:
         is_running = self._trading_engine.is_running
@@ -153,13 +157,8 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
         return False
 
     def _get_health_monitor(self):
-        if self._managers is not None and self._managers.health_monitor is not None:
+        if self._managers is not None:
             return self._managers.health_monitor
-        if (
-            self._trading_engine is not None
-            and self._trading_engine.trading_executor is not None
-        ):
-            return self._trading_engine.trading_executor.health_monitor
         return None
 
     def get_health_snapshot(self) -> Optional[dict[str, Any]]:

@@ -16,6 +16,7 @@ from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.events import DecisionRejectedEvent, DecisionRejectedReason
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -68,6 +69,8 @@ class ExecutionGuardrailsTest(TestCase):
             assets=[self.asset],
             manager_container=self.container,
             activity_queue=self.activity_queue,
+            dynamic_quantity=None,
+            strategies_registry=StrategyRegistry(),
             event_bus=self.event_bus,
         )
 

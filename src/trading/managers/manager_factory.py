@@ -7,7 +7,7 @@ from src.metrics.services.metric_service import MetricService
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.fees.fees_manager import FeesManager
-from src.trading.health.health_monitor import HealthMonitor
+from src.trading.health import HealthMonitor, RecoveryConfig, TradingHealthState
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.markets.market_data_manager import MarketDataManager
 from src.trading.orders.order_manager import OrderManager
@@ -33,9 +33,13 @@ class ManagerFactory:
             metrics_collector: Optional[ExchangeMetricsCollector] = None,
             config_vcs: Optional[VCSService] = None,
     ) -> Tuple[ManagerContainer, InMemoryTradingJournal]:
-        event_bus = event_bus or MessageEventBus()
+        event_bus = event_bus if event_bus is not None else MessageEventBus()
         trading_journal = InMemoryTradingJournal()
-        health_monitor = HealthMonitor(event_bus=event_bus)
+        health_monitor = HealthMonitor.create(
+            event_bus=event_bus,
+            recovery_config=RecoveryConfig(),
+            initial_state=TradingHealthState.STARTING,
+        )
         collector = metrics_collector or (
             ExchangeMetricsCollector(metric_service) if metric_service else None
         )
@@ -83,4 +87,3 @@ class ManagerFactory:
             health_monitor=health_monitor,
         )
         return container, trading_journal
-

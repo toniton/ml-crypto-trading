@@ -15,8 +15,12 @@ class RecoveryConfig:
 
 
 class RecoveryPolicy:
-    def __init__(self, config: RecoveryConfig | None = None) -> None:
-        self._config = config or RecoveryConfig()
+    def __init__(self, config: RecoveryConfig) -> None:
+        self._config = config
+
+    @classmethod
+    def default(cls) -> RecoveryPolicy:
+        return cls(RecoveryConfig())
 
     @property
     def config(self) -> RecoveryConfig:

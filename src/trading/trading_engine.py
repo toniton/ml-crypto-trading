@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
+from typing import Optional
 
 from api.interfaces.asset import Asset
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.trading_scheduler import TradingScheduler
 from src.core.interfaces.trading_strategy import TradingStrategy
 from src.trading.health.enums import TradingHealthState
+from src.trading.managers.manager_container import ManagerContainer
 from src.trading.trading_executor import TradingExecutor
 
 
@@ -29,6 +31,12 @@ class TradingEngine:
     @property
     def trading_executor(self) -> TradingExecutor:
         return self._trading_executor
+
+    @property
+    def managers(self) -> Optional[ManagerContainer]:
+        if self._trading_executor is not None:
+            return self._trading_executor.manager_container
+        return None
 
     @property
     def monitored_assets(self) -> list[Asset]:

@@ -1,5 +1,7 @@
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
+from src.core.interfaces.event_bus import EventBus
 from src.trading.health import (
     ActiveCondition,
     ConditionRegistry,
@@ -8,6 +10,7 @@ from src.trading.health import (
     HealthObservation,
     HealthScope,
     RecoveryConfig,
+    RecoveryPolicy,
     TradingHealthCondition,
     TradingHealthState,
     TradingPermission,
@@ -122,7 +125,8 @@ def test_permission_policy_scoped_isolation():
 
 def test_condition_registry_hysteresis_recovery():
     recovery_config = RecoveryConfig(automatic=True, required_successful_checks=3)
-    registry = ConditionRegistry(recovery_policy=None)
+    recovery_policy = RecoveryPolicy(config=recovery_config)
+    registry = ConditionRegistry(recovery_policy=recovery_policy)
     # Using default config (3 checks)
     now = datetime.now(timezone.utc)
     scope = HealthScope.asset_scope("BTC_USD")
@@ -167,7 +171,11 @@ def test_condition_registry_hysteresis_recovery():
 
 
 def test_health_monitor_coordination():
-    monitor = HealthMonitor(initial_state=TradingHealthState.STARTING)
+    monitor = HealthMonitor.create(
+        event_bus=MagicMock(spec=EventBus),
+        recovery_config=RecoveryConfig(),
+        initial_state=TradingHealthState.STARTING,
+    )
     assert monitor.current_state == TradingHealthState.STARTING
 
     # Transition lifecycle STARTING -> SYNCING -> READY -> TRADING

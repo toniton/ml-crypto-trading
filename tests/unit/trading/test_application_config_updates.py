@@ -12,6 +12,7 @@ from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.application import Application
 from src.configuration.trading_config import TradingConfig
 from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
 from src.vcs.application.events import RefChangedEvent
@@ -193,7 +194,14 @@ def _make_executor(dynamic_quantity="min_qty"):
         reconciliation_engine=None,
         health_monitor=None,
     )
-    executor = TradingExecutor(assets=[], manager_container=container, activity_queue=Queue(), dynamic_quantity=dynamic_quantity)
+    executor = TradingExecutor(
+        assets=[],
+        manager_container=container,
+        activity_queue=Queue(),
+        dynamic_quantity=dynamic_quantity,
+        strategies_registry=StrategyRegistry(),
+        event_bus=None,
+    )
     return executor
 
 

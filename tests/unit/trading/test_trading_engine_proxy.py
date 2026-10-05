@@ -20,11 +20,13 @@ class TestLocalTradingEngineProxy(unittest.TestCase):
             market_data_store=None,
             compare_backtest=None,
     ) -> LocalTradingEngineProxy:
+        engine = trading_engine if trading_engine is not None else MagicMock()
+        if managers is not None:
+            engine.managers = managers
         return LocalTradingEngineProxy(
-            trading_engine=trading_engine or MagicMock(),
-            managers=managers or MagicMock(),
-            market_data_store=market_data_store or MarketDataStore(),
-            compare_backtest=compare_backtest or (lambda action: None),
+            trading_engine=engine,
+            market_data_store=market_data_store if market_data_store is not None else MarketDataStore(),
+            compare_backtest=compare_backtest if compare_backtest is not None else (lambda action: None),
         )
 
     def test_status_when_stopped(self):

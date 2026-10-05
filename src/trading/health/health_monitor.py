@@ -31,14 +31,29 @@ logger = logging.getLogger(__name__)
 class HealthMonitor:
     def __init__(
             self,
-            event_bus: Optional[EventBus] = None,
-            recovery_config: Optional[RecoveryConfig] = None,
-            initial_state: TradingHealthState = TradingHealthState.STARTING,
+            condition_registry: ConditionRegistry,
+            state_machine: TradingHealthStateMachine,
+            event_bus: EventBus,
     ) -> None:
+        self._condition_registry = condition_registry
+        self._state_machine = state_machine
         self._event_bus = event_bus
-        self._recovery_policy = RecoveryPolicy(recovery_config)
-        self._condition_registry = ConditionRegistry(self._recovery_policy)
-        self._state_machine = TradingHealthStateMachine(initial_state)
+
+    @classmethod
+    def create(
+            cls,
+            event_bus: EventBus,
+            recovery_config: RecoveryConfig,
+            initial_state: TradingHealthState,
+    ) -> HealthMonitor:
+        recovery_policy = RecoveryPolicy(recovery_config)
+        condition_registry = ConditionRegistry(recovery_policy)
+        state_machine = TradingHealthStateMachine(initial_state)
+        return cls(
+            condition_registry=condition_registry,
+            state_machine=state_machine,
+            event_bus=event_bus,
+        )
 
     @property
     def current_state(self) -> TradingHealthState:
@@ -56,7 +71,7 @@ class HealthMonitor:
         prev_snapshot = self._state_machine.snapshot
         now_ts = observation.observed_at.timestamp()
 
-        if detected is not None and self._event_bus is not None:
+        if detected is not None:
             self._event_bus.publish(
                 TradingHealthConditionDetectedEvent(
                     condition=detected.condition.value,
@@ -70,7 +85,7 @@ class HealthMonitor:
                 )
             )
 
-        if resolved is not None and self._event_bus is not None:
+        if resolved is not None:
             self._event_bus.publish(
                 TradingHealthConditionResolvedEvent(
                     condition=resolved.condition.value,
@@ -114,7 +129,7 @@ class HealthMonitor:
         resolved = self._condition_registry.resolve_manually(condition, scope)
         now_ts = now.timestamp()
 
-        if resolved is not None and self._event_bus is not None:
+        if resolved is not None:
             self._event_bus.publish(
                 TradingHealthConditionResolvedEvent(
                     condition=resolved.condition.value,
@@ -154,9 +169,6 @@ class HealthMonitor:
         new_snapshot: TradingHealthSnapshot,
         timestamp: float,
     ) -> None:
-        if self._event_bus is None:
-            return
-
         if prev_snapshot.state != new_snapshot.state:
             logger.info(
                 "Trading health state transitioned: %s -> %s (v%d)",

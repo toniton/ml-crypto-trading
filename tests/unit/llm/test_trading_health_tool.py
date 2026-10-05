@@ -1,11 +1,15 @@
 import unittest
 from datetime import datetime, timezone
 
+from unittest.mock import MagicMock
+
+from src.core.interfaces.event_bus import EventBus
 from src.llm.tools.trading_health_tool import TradingHealthTool
 from src.trading.health import (
     HealthMonitor,
     HealthObservation,
     HealthScope,
+    RecoveryConfig,
     TradingHealthCondition,
     TradingHealthState,
 )
@@ -13,7 +17,11 @@ from src.trading.health import (
 
 class TestTradingHealthTool(unittest.TestCase):
     def setUp(self):
-        self.health_monitor = HealthMonitor(initial_state=TradingHealthState.TRADING)
+        self.health_monitor = HealthMonitor.create(
+            event_bus=MagicMock(spec=EventBus),
+            recovery_config=RecoveryConfig(),
+            initial_state=TradingHealthState.TRADING,
+        )
         self.tool = TradingHealthTool(health_monitor=self.health_monitor)
 
     def test_run_healthy_state(self):

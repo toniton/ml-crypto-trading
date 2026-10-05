@@ -113,8 +113,12 @@ class BacktestRunner:
 
         scheduler = BacktestTradingScheduler(clock)
         executor = TradingExecutor(
-            assets, managers, self._activity_queue, self._dynamic_quantity,
+            assets=assets,
+            manager_container=managers,
+            activity_queue=self._activity_queue,
+            dynamic_quantity=self._dynamic_quantity,
             strategies_registry=self._strategy_registry,
+            event_bus=None,
         )
         infrastructure = BacktestInfrastructure(
             clock=clock, datasets=datasets, bus=bus, execution_engine=execution_engine

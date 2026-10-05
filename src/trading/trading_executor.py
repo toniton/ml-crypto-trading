@@ -49,9 +49,9 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             assets: list[Asset],
             manager_container: ManagerContainer,
             activity_queue: Queue,
-            dynamic_quantity: Optional[str] = None,
-            strategies_registry: Optional[StrategyRegistry] = None,
-            event_bus: Optional[EventBus] = None
+            dynamic_quantity: Optional[str],
+            strategies_registry: StrategyRegistry,
+            event_bus: Optional[EventBus],
     ):
         self.assets = assets
         self.event_bus = event_bus
@@ -63,6 +63,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         )
         self._asset_dynamic_quantity_parsers: dict[int, ExpressionParser] = {}
         self._rebuild_asset_dynamic_quantity_parsers(self.assets)
+        self.manager_container = manager_container
         self.account_manager = manager_container.account_manager
         self.fees_manager = manager_container.fees_manager
         self.order_manager = manager_container.order_manager
@@ -73,14 +74,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.protection_manager = manager_container.protection_manager
         self.portfolio_risk_manager = manager_container.portfolio_risk_manager
         self.websocket_manager = manager_container.websocket_manager
-        self.health_monitor = (
-            manager_container.health_monitor
-            if manager_container is not None
-            else None
-        )
+        self.health_monitor = manager_container.health_monitor
         self._regime_detector = MarketRegimeDetector()
         self.activity_queue = activity_queue
-        self._strategies_registry = strategies_registry or StrategyRegistry()
+        self._strategies_registry = strategies_registry
         self._strategies: list[TradingStrategy] = []
         self._register_asset_strategies(self.assets)
 

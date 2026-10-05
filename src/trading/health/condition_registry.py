@@ -9,8 +9,8 @@ from src.trading.health.recovery_policy import RecoveryPolicy
 
 
 class ConditionRegistry:
-    def __init__(self, recovery_policy: Optional[RecoveryPolicy] = None) -> None:
-        self._recovery_policy = recovery_policy or RecoveryPolicy()
+    def __init__(self, recovery_policy: RecoveryPolicy) -> None:
+        self._recovery_policy = recovery_policy
         self._lock = threading.Lock()
         self._active_conditions: dict[tuple[TradingHealthCondition, str, str], ActiveCondition] = {}
 

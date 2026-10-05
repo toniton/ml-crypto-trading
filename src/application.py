@@ -303,7 +303,10 @@ class Application(ApplicationLoggingMixin):
         self._trading_metrics_collector.subscribe(self._trading_event_bus)
         self._retention_scheduler.start()
         trading_executor = TradingExecutor(
-            self._assets, self._managers, self._activity_queue, self._dynamic_quantity,
+            assets=self._assets,
+            manager_container=self._managers,
+            activity_queue=self._activity_queue,
+            dynamic_quantity=self._dynamic_quantity,
             strategies_registry=self._strategies_registry,
             event_bus=self._trading_event_bus,
         )
@@ -371,7 +374,6 @@ class Application(ApplicationLoggingMixin):
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
         self._trading_engine_proxy = LocalTradingEngineProxy(
             trading_engine=self._trading_engine,
-            managers=self._managers,
             market_data_store=self._market_data_store,
             compare_backtest=(
                 self._agent_action_executor.compare_backtest_drift
