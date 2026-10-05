@@ -12,6 +12,7 @@ from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.application import Application
 from src.configuration.trading_config import TradingConfig
 from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
@@ -198,7 +199,7 @@ def _make_executor(dynamic_quantity="min_qty"):
         assets=[],
         manager_container=container,
         activity_queue=Queue(),
-        dynamic_quantity=dynamic_quantity,
+        position_sizer=PositionSizer(global_formula=dynamic_quantity),
         strategies_registry=StrategyRegistry(),
         event_bus=None,
     )

@@ -138,3 +138,93 @@ class TestConfigEndpoints(unittest.TestCase):
         }
         res = self.client.post("/api/v1/config", json=invalid_payload)
         self.assertEqual(res.status_code, 422)
+
+    def test_post_and_get_portfolio_config(self):
+        payload = {
+            "assets": [
+                {
+                    "name": "Bitcoin",
+                    "base_ticker_symbol": "BTC",
+                    "quote_ticker_symbol": "USD",
+                    "exchange": "CRYPTO_DOT_COM",
+                    "min_quantity": 0.00005,
+                    "quote_decimals": 2,
+                    "quantity_decimals": 5,
+                    "candles_timeframe": "MIN1",
+                    "schedule": 1,
+                    "portfolio": {
+                        "exposure": {
+                            "max_per_asset": 0.35,
+                        },
+                    },
+                }
+            ],
+            "portfolio": {
+                "exposure": {
+                    "max_total": 0.70,
+                    "max_per_asset": 0.20,
+                    "max_per_quote": 0.40,
+                },
+                "guard": {
+                    "min_quote_reserve": 0.15,
+                },
+            },
+            "message": "Update global portfolio and asset override",
+            "author": "tester",
+        }
+        post_res = self.client.post("/api/v1/config", json=payload)
+        self.assertEqual(post_res.status_code, 200)
+
+        get_res = self.client.get("/api/v1/config")
+        self.assertEqual(get_res.status_code, 200)
+        data = get_res.json()
+        self.assertIn("portfolio", data)
+        self.assertEqual(float(data["portfolio"]["exposure"]["max_total"]), 0.70)
+        self.assertEqual(float(data["portfolio"]["guard"]["min_quote_reserve"]), 0.15)
+        self.assertEqual(float(data["assets"][0]["portfolio"]["exposure"]["max_per_asset"]), 0.35)
+
+    def test_post_portfolio_camel_case(self):
+        payload = {
+            "assets": [
+                {
+                    "name": "Bitcoin",
+                    "base_ticker_symbol": "BTC",
+                    "quote_ticker_symbol": "USD",
+                    "exchange": "CRYPTO_DOT_COM",
+                    "min_quantity": 0.00005,
+                    "quote_decimals": 2,
+                    "quantity_decimals": 5,
+                    "candles_timeframe": "MIN1",
+                    "schedule": 1,
+                    "portfolio": {
+                        "exposure": {
+                            "maxPerAsset": 0.40,
+                        },
+                    },
+                }
+            ],
+            "portfolio": {
+                "exposure": {
+                    "maxTotal": 0.85,
+                    "maxPerAsset": 0.30,
+                    "maxPerQuote": 0.60,
+                },
+                "guard": {
+                    "minQuoteReserve": 0.20,
+                },
+            },
+            "message": "Update global portfolio with camelCase",
+            "author": "tester",
+        }
+        post_res = self.client.post("/api/v1/config", json=payload)
+        self.assertEqual(post_res.status_code, 200)
+
+        get_res = self.client.get("/api/v1/config")
+        self.assertEqual(get_res.status_code, 200)
+        data = get_res.json()
+        self.assertEqual(float(data["portfolio"]["exposure"]["max_total"]), 0.85)
+        self.assertEqual(float(data["portfolio"]["guard"]["min_quote_reserve"]), 0.20)
+        self.assertEqual(float(data["assets"][0]["portfolio"]["exposure"]["max_per_asset"]), 0.40)
+
+
+

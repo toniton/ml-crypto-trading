@@ -10,6 +10,7 @@ from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
@@ -53,7 +54,7 @@ class TestDynamicQuantity(unittest.TestCase):
             assets=assets,
             manager_container=manager_container,
             activity_queue=activity_queue,
-            dynamic_quantity=dynamic_quantity,
+            position_sizer=PositionSizer(global_formula=dynamic_quantity),
             strategies_registry=StrategyRegistry(),
             event_bus=None,
         )

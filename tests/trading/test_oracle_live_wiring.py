@@ -14,6 +14,7 @@ from src.agent.oracle.oracle_service import OracleService
 from src.events.message_event_bus import CallbackSubscription, MessageEventBus
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
@@ -84,7 +85,7 @@ def test_executor_events_flow_to_oracle_and_publish_summary():
         assets=[],
         manager_container=manager_container,
         activity_queue=Queue(),
-        dynamic_quantity=None,
+        position_sizer=PositionSizer(),
         strategies_registry=StrategyRegistry(),
         event_bus=event_bus,
     )

@@ -111,20 +111,47 @@ class VCSService(ApplicationLoggingMixin):
     ) -> List[ConfigChange]:
         changes: List[ConfigChange] = []
 
+        def diff_nested(prefix: str, obj_a: Any, obj_b: Any):
+            if isinstance(obj_a, dict) and isinstance(obj_b, dict):
+                all_subkeys = sorted(set(obj_a.keys()) | set(obj_b.keys()))
+                for subk in all_subkeys:
+                    child_prefix = f"{prefix}.{subk}" if prefix else subk
+                    diff_nested(child_prefix, obj_a.get(subk), obj_b.get(subk))
+            elif isinstance(obj_a, dict) and obj_b is None:
+                for subk in sorted(obj_a.keys()):
+                    child_prefix = f"{prefix}.{subk}" if prefix else subk
+                    diff_nested(child_prefix, obj_a.get(subk), None)
+            elif obj_a is None and isinstance(obj_b, dict):
+                for subk in sorted(obj_b.keys()):
+                    child_prefix = f"{prefix}.{subk}" if prefix else subk
+                    diff_nested(child_prefix, None, obj_b.get(subk))
+            elif obj_a != obj_b:
+                changes.append(
+                    ConfigChange(
+                        path=prefix,
+                        old_value=obj_a,
+                        new_value=obj_b,
+                        reason="",
+                    )
+                )
+
         all_top = set(config_a.keys()) | set(config_b.keys())
         all_top.discard("assets")
         for key in sorted(all_top):
             va = config_a.get(key)
             vb = config_b.get(key)
             if va != vb:
-                changes.append(
-                    ConfigChange(
-                        path=key,
-                        old_value=va,
-                        new_value=vb,
-                        reason="",
+                if isinstance(va, dict) or isinstance(vb, dict):
+                    diff_nested(key, va, vb)
+                else:
+                    changes.append(
+                        ConfigChange(
+                            path=key,
+                            old_value=va,
+                            new_value=vb,
+                            reason="",
+                        )
                     )
-                )
 
         assets_a = config_a.get("assets", []) or []
         assets_b = config_b.get("assets", []) or []
@@ -214,18 +241,7 @@ class VCSService(ApplicationLoggingMixin):
                                             )
                                         )
                     elif isinstance(fa, dict) or isinstance(fb, dict):
-                        da = fa or {}
-                        db = fb or {}
-                        for subk in sorted(set(da.keys()) | set(db.keys())):
-                            if da.get(subk) != db.get(subk):
-                                changes.append(
-                                    ConfigChange(
-                                        path=f"assets.{sym}.{field}.{subk}",
-                                        old_value=da.get(subk),
-                                        new_value=db.get(subk),
-                                        reason="",
-                                    )
-                                )
+                        diff_nested(f"assets.{sym}.{field}", fa, fb)
                     else:
                         changes.append(
                             ConfigChange(

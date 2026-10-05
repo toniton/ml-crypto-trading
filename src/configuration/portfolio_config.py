@@ -3,10 +3,13 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
+from pydantic.alias_generators import to_camel
 
 
 class PortfolioExposureConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel, extra="ignore")
+
     max_total: Optional[Decimal] = Field(
         default=Decimal("0.80"),
         ge=0,
@@ -31,6 +34,8 @@ class PortfolioExposureConfig(BaseModel):
 
 
 class MarketRegimeConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel, extra="ignore")
+
     enabled: bool = Field(
         default=True,
         description="Whether market regime detection is enabled.",
@@ -76,6 +81,8 @@ class MarketRegimeConfig(BaseModel):
 
 
 class QuotePortfolioGuardConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel, extra="ignore")
+
     enabled: bool = Field(
         default=True,
         description="Whether quote portfolio guard enforcement is active.",
@@ -118,6 +125,8 @@ class QuotePortfolioGuardConfig(BaseModel):
 
 
 class PortfolioConfig(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel, extra="ignore")
+
     exposure: PortfolioExposureConfig = Field(
         default_factory=PortfolioExposureConfig,
         description="Portfolio exposure limits.",
@@ -136,6 +145,8 @@ class PortfolioConfig(BaseModel):
 
 
 class AssetPortfolioOverride(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel, extra="ignore")
+
     exposure: Optional[PortfolioExposureConfig] = Field(
         default=None,
         description="Asset-level exposure overrides.",
@@ -151,3 +162,4 @@ class AssetPortfolioOverride(BaseModel):
         description="Asset-level guard overrides.",
         json_schema_extra={"mutable": True},
     )
+

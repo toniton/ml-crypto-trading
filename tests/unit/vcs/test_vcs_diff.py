@@ -95,3 +95,67 @@ def test_vcs_diff_between_commits(mock_db_manager):
     assert "assets.BTC_USD" in paths
     assert paths["assets.BTC_USD"].old_value is None
     assert paths["assets.BTC_USD"].new_value["base_ticker_symbol"] == "BTC"
+
+
+def test_vcs_diff_portfolio_and_overrides(mock_db_manager):
+    vcs = VCSService(mock_db_manager)
+
+    config_v1 = {
+        "portfolio": {
+            "exposure": {
+                "max_total_exposure_pct": 0.8,
+                "max_asset_exposure_pct": 0.25,
+            },
+            "guards": {
+                "min_quote_reserve_pct": 0.1,
+            },
+        },
+        "assets": [
+            {
+                "base_ticker_symbol": "BTC",
+                "quote_ticker_symbol": "USD",
+                "portfolio": {
+                    "max_asset_exposure_pct": 0.3,
+                },
+            }
+        ],
+    }
+
+    config_v2 = {
+        "portfolio": {
+            "exposure": {
+                "max_total_exposure_pct": 0.75,
+                "max_asset_exposure_pct": 0.25,
+            },
+            "guards": {
+                "min_quote_reserve_pct": 0.15,
+            },
+        },
+        "assets": [
+            {
+                "base_ticker_symbol": "BTC",
+                "quote_ticker_symbol": "USD",
+                "portfolio": {
+                    "max_asset_exposure_pct": 0.35,
+                },
+            }
+        ],
+    }
+
+    c1 = vcs.commit(config_v1, author="test", message="Base commit", ref="HEAD")
+    c2 = vcs.commit(config_v2, author="test", message="Update portfolio", ref="HEAD")
+
+    diff = vcs.diff(c1.hash, c2.hash)
+    paths = {ch.path: ch for ch in diff}
+
+    assert "portfolio.exposure.max_total_exposure_pct" in paths
+    assert paths["portfolio.exposure.max_total_exposure_pct"].old_value == 0.8
+    assert paths["portfolio.exposure.max_total_exposure_pct"].new_value == 0.75
+
+    assert "portfolio.guards.min_quote_reserve_pct" in paths
+    assert paths["portfolio.guards.min_quote_reserve_pct"].old_value == 0.1
+    assert paths["portfolio.guards.min_quote_reserve_pct"].new_value == 0.15
+
+    assert "assets.BTC_USD.portfolio.max_asset_exposure_pct" in paths
+    assert paths["assets.BTC_USD.portfolio.max_asset_exposure_pct"].old_value == 0.3
+    assert paths["assets.BTC_USD.portfolio.max_asset_exposure_pct"].new_value == 0.35

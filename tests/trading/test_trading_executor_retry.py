@@ -9,6 +9,7 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.position_entry import PositionEntry
 from api.interfaces.trading_context import TradingContext
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
@@ -55,7 +56,7 @@ class TestTradingExecutorRetry(unittest.TestCase):
             assets=[self.asset],
             manager_container=container,
             activity_queue=self.activity_queue,
-            dynamic_quantity=None,
+            position_sizer=PositionSizer(),
             strategies_registry=StrategyRegistry(),
             event_bus=None,
         )

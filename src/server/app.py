@@ -7,7 +7,7 @@ from typing import AsyncGenerator, List, Literal, Optional
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from api.interfaces.backtest_run_spec import BacktestRunSpec
 from src.agent import AgentGateway, ProposalDecision
@@ -113,8 +113,11 @@ class ProposalDecisionRequest(BaseModel):
 
 
 class ConfigCommitRequest(BaseModel):
-    assets: list[dict] = Field(description="List of asset configurations.")
+    model_config = ConfigDict(extra="allow")
+    assets: list[dict] = Field(default_factory=list, description="List of asset configurations.")
     dynamic_quantity: Optional[str] = Field(default=None, description="Dynamic quantity expression.")
+    portfolio: Optional[dict] = Field(default=None, description="Global portfolio configuration.")
+    health: Optional[dict] = Field(default=None, description="Health configuration.")
     message: Optional[str] = Field(default="Update bot configuration", description="Commit message.")
     author: Optional[str] = Field(default="user", description="Author of the commit.")
 
@@ -793,16 +796,16 @@ class ChatApp:
         @app.post("/api/v1/configuration")
         async def commit_config_endpoint(payload: ConfigCommitRequest, req: Request):
             _configuration_service: ConfigurationService = req.app.state.configuration_service
-            config_data = {
-                "assets": payload.assets,
-                "dynamic_quantity": payload.dynamic_quantity,
-            }
+            payload_dict = payload.model_dump(exclude_unset=False)
+            message = payload_dict.pop("message", None) or "Update bot configuration"
+            author = payload_dict.pop("author", None) or "user"
+            config_data = {k: v for k, v in payload_dict.items() if v is not None}
             try:
                 commit = await asyncio.to_thread(
                     _configuration_service.commit_config,
                     config_data=config_data,
-                    author=payload.author or "user",
-                    message=payload.message or "Update bot configuration",
+                    author=author,
+                    message=message,
                 )
                 return {
                     "commit_hash": commit.hash,

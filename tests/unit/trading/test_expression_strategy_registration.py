@@ -16,6 +16,7 @@ from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.consensus.consensus_factor import ConsensusFactor
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.consensus.strategies.hammer_accumulation_strategy import HammerAccumulationStrategy
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.expression_strategy import ExpressionStrategy
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.strategies.strategy_resolver import StrategyResolver
@@ -86,7 +87,7 @@ def _make_executor(predefined=None, assets=None):
         assets=assets or [],
         manager_container=container,
         activity_queue=Queue(),
-        dynamic_quantity=None,
+        position_sizer=PositionSizer(),
         strategies_registry=StrategyRegistry(predefined),
         event_bus=None,
     )

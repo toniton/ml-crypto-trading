@@ -77,6 +77,7 @@ from src.trading.reconciliation.exchange_reconciliation_engine import (
 )
 from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
 from src.trading.local_trading_engine_proxy import LocalTradingEngineProxy
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_engine import TradingEngine
 from src.trading.trading_executor import TradingExecutor
@@ -306,7 +307,10 @@ class Application(ApplicationLoggingMixin):
             assets=self._assets,
             manager_container=self._managers,
             activity_queue=self._activity_queue,
-            dynamic_quantity=self._dynamic_quantity,
+            position_sizer=PositionSizer(
+                global_formula=self._dynamic_quantity,
+                assets=self._assets,
+            ),
             strategies_registry=self._strategies_registry,
             event_bus=self._trading_event_bus,
         )

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from decimal import Decimal, ROUND_DOWN, ROUND_UP
+from decimal import Decimal, ROUND_UP
 from queue import Queue
 from typing import Optional
 
@@ -28,7 +28,6 @@ from src.trading.events import (
     SignalGeneratedEvent,
     StrategyEvaluatedEvent,
 )
-from src.trading.factories.trading_expression_factory import TradingExpressionFactory
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.logging.audit_logging_mixin import AuditLoggingMixin
 from src.logging.trading_logging_mixin import TradingLoggingMixin
@@ -37,6 +36,7 @@ from src.trading.health.health_monitor import HealthMonitor
 from src.trading.health.models import HealthScope
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.regimes.market_regime_detector import MarketRegimeDetector
+from src.trading.sizing.position_sizer import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.strategies.strategy_resolver import StrategyResolver
 
@@ -49,20 +49,13 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             assets: list[Asset],
             manager_container: ManagerContainer,
             activity_queue: Queue,
-            dynamic_quantity: Optional[str],
+            position_sizer: PositionSizer,
             strategies_registry: StrategyRegistry,
             event_bus: Optional[EventBus],
     ):
         self.assets = assets
         self.event_bus = event_bus
-        self._dynamic_quantity = dynamic_quantity
-        self._dynamic_quantity_parser = (
-            ExpressionParser(dynamic_quantity.strip())
-            if isinstance(dynamic_quantity, str) and dynamic_quantity.strip()
-            else None
-        )
-        self._asset_dynamic_quantity_parsers: dict[int, ExpressionParser] = {}
-        self._rebuild_asset_dynamic_quantity_parsers(self.assets)
+        self.position_sizer = position_sizer
         self.manager_container = manager_container
         self.account_manager = manager_container.account_manager
         self.fees_manager = manager_container.fees_manager
@@ -81,20 +74,20 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self._strategies: list[TradingStrategy] = []
         self._register_asset_strategies(self.assets)
 
-    def _rebuild_asset_dynamic_quantity_parsers(self, assets: list[Asset]) -> None:
-        self._asset_dynamic_quantity_parsers = {}
-        for asset in assets:
-            dq = asset.dynamic_quantity
-            if isinstance(dq, str) and dq.strip():
-                self._asset_dynamic_quantity_parsers[asset.key] = ExpressionParser(dq.strip())
+    @property
+    def _dynamic_quantity(self) -> Optional[str]:
+        return self.position_sizer.global_formula
+
+    @property
+    def _dynamic_quantity_parser(self) -> Optional[ExpressionParser]:
+        return self.position_sizer.global_parser
+
+    @_dynamic_quantity_parser.setter
+    def _dynamic_quantity_parser(self, parser: Optional[ExpressionParser]) -> None:
+        self.position_sizer.global_parser = parser
 
     def _get_dynamic_quantity_parser(self, asset: Asset) -> Optional[ExpressionParser]:
-        dq = asset.dynamic_quantity
-        if isinstance(dq, str) and dq.strip():
-            if asset.key in self._asset_dynamic_quantity_parsers:
-                return self._asset_dynamic_quantity_parsers[asset.key]
-            return ExpressionParser(dq.strip())
-        return self._dynamic_quantity_parser
+        return self.position_sizer.get_parser(asset)
 
     @property
     def strategies(self) -> list[TradingStrategy]:
@@ -117,19 +110,11 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if self.portfolio_risk_manager and trading_config.portfolio:
             self.portfolio_risk_manager.update_config(trading_config.portfolio)
 
-        if trading_config.dynamic_quantity != self._dynamic_quantity:
-            self._dynamic_quantity = trading_config.dynamic_quantity
-            self._dynamic_quantity_parser = (
-                ExpressionParser(trading_config.dynamic_quantity.strip())
-                if isinstance(trading_config.dynamic_quantity, str) and trading_config.dynamic_quantity.strip()
-                else None
-            )
-            self.app_logger.info("Config updated: dynamic_quantity to %r", trading_config.dynamic_quantity)
+        self.position_sizer.update_config(trading_config)
 
         if self._assets_changed(trading_config.assets, self.assets):
             self._unregister_asset_strategies()
             self.assets = trading_config.assets
-            self._rebuild_asset_dynamic_quantity_parsers(self.assets)
             self._register_asset_strategies(self.assets)
             self.app_logger.info(
                 "Config updated: strategies re-registered for %s",
@@ -616,59 +601,14 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             self, asset: Asset, _action: TradeAction,
             market_data: MarketData, decision: ConsensusDecision
     ) -> Decimal:
-        minimum_order_quantity = Decimal(str(asset.min_quantity))
-        parser = self._get_dynamic_quantity_parser(asset)
-
-        if parser is None:
-            return minimum_order_quantity
-
-        try:
-            quantity = self._evaluate_dynamic_quantity(asset, market_data, decision, parser)
-
-            if quantity is None:
-                return minimum_order_quantity
-
-            quantum = Decimal("1").scaleb(-asset.quantity_decimals)
-            quantity = quantity.quantize(quantum, rounding=ROUND_DOWN)
-
-            if quantity < minimum_order_quantity:
-                self.app_logger.info(
-                    "Calculated quantity %s for %s is below min_quantity %s; fallback to min_quantity",
-                    quantity, asset.ticker_symbol, minimum_order_quantity,
-                )
-                return minimum_order_quantity
-
-            return max(quantity, minimum_order_quantity)
-
-        except Exception:
-            self.app_logger.exception(
-                "Failed to calculate dynamic quantity; fallback to min_quantity.",
-                extra={"asset": asset.ticker_symbol},
-            )
-            return minimum_order_quantity
-
-    def _evaluate_dynamic_quantity(
-            self,
-            asset: Asset,
-            market_data: MarketData,
-            decision: ConsensusDecision,
-            parser: ExpressionParser,
-    ) -> Decimal | None:
         trading_context = self.session_manager.get_trading_context(asset.key)
-        if trading_context is None:
-            return None
         account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
         candles = self.market_data_manager.get_candles(asset)
-
-        context = TradingExpressionFactory.create_context(
+        return self.position_sizer.calculate_quantity(
             asset=asset,
             market_data=market_data,
+            decision=decision,
             account_balance=account_balance,
             trading_context=trading_context,
-            decision=decision,
-            candles=candles
+            candles=candles,
         )
-
-        result = parser.parse(context)
-
-        return None if result is None else Decimal(str(result))

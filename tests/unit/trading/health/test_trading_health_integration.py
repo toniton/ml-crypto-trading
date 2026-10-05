@@ -19,6 +19,7 @@ from src.trading.health import (
     TradingHealthState,
 )
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
@@ -103,7 +104,7 @@ def test_trading_executor_blocks_order_when_paused():
         assets=[asset],
         manager_container=container,
         activity_queue=Queue(),
-        dynamic_quantity=None,
+        position_sizer=PositionSizer(),
         strategies_registry=StrategyRegistry(),
         event_bus=event_bus,
     )

@@ -27,11 +27,11 @@ class ConfigurationService:
             commit_hash = head_commit.hash
         except (CommitNotFoundError, InvalidReferenceError):
             pass
-        return {
-            "assets": raw.get("assets", []),
-            "dynamic_quantity": raw.get("dynamic_quantity"),
-            "commit_hash": commit_hash,
-        }
+        result = dict(raw) if raw else {}
+        result["commit_hash"] = commit_hash
+        if "assets" not in result:
+            result["assets"] = []
+        return result
 
     @classmethod
     def get_options(cls) -> dict:
@@ -58,7 +58,11 @@ class ConfigurationService:
             message: str = "Update bot configuration",
             ref: str = "HEAD",
     ) -> Any:
-        validated_config = TradingConfig.model_validate(config_data)
+        raw = self._delegate.load_raw_config()
+        full_data = dict(raw) if raw else {}
+        full_data.update(config_data)
+
+        validated_config = TradingConfig.model_validate(full_data)
         return self._vcs.commit(
             validated_config,
             author=author,

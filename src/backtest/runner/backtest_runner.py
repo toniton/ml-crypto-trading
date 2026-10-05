@@ -33,6 +33,7 @@ from src.server.services.dataset_service import DatasetService
 from src.trading.events.domain_events import TradeClosedEvent
 from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.session.session_manager import SessionManager
+from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
@@ -116,7 +117,10 @@ class BacktestRunner:
             assets=assets,
             manager_container=managers,
             activity_queue=self._activity_queue,
-            dynamic_quantity=self._dynamic_quantity,
+            position_sizer=PositionSizer(
+                global_formula=self._dynamic_quantity,
+                assets=assets,
+            ),
             strategies_registry=self._strategy_registry,
             event_bus=None,
         )
