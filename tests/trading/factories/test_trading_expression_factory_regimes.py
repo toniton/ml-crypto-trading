@@ -133,3 +133,55 @@ def test_functions_evaluate_regime_metrics():
 
     spread_val = context.call_function("spread", [])
     assert isinstance(spread_val, float)
+
+
+def test_create_context_includes_portfolio_variables():
+    from src.trading.protection.portfolio_policy_resolver import EffectivePortfolioConfig
+    from src.trading.protection.quote_portfolio_guard import PortfolioRiskMetrics
+    from src.configuration.portfolio_config import PortfolioExposureConfig, MarketRegimeConfig, QuotePortfolioGuardConfig
+    from src.core.expressions.expression_parser import ExpressionParser
+
+    risk_metrics = PortfolioRiskMetrics(
+        total_equity=Decimal("20000"),
+        total_cash=Decimal("15000"),
+        reserved_cash=Decimal("1000"),
+        available_cash=Decimal("14000"),
+        invested_notional=Decimal("5000"),
+        total_exposure_pct=Decimal("0.25"),
+        asset_notional=Decimal("2000"),
+        asset_concentration_pct=Decimal("0.10"),
+        peak_equity=Decimal("20000"),
+        drawdown_pct=Decimal("0.0"),
+        daily_loss_pct=Decimal("0.0"),
+        open_position_count=2,
+    )
+    effective_config = EffectivePortfolioConfig(
+        exposure=PortfolioExposureConfig(max_total=Decimal("0.80"), max_per_asset=Decimal("0.25")),
+        regime=MarketRegimeConfig(enabled=True),
+        guard=QuotePortfolioGuardConfig(enabled=True, min_quote_reserve=Decimal("0.10")),
+        regime_multiplier=Decimal("0.50"),
+    )
+
+    context = TradingExpressionFactory.create_context(
+        asset=_sample_asset(),
+        market_data=_sample_market_data(),
+        account_balance=_sample_account(),
+        trading_context=_sample_trading_context(),
+        decision=None,
+        candles=_sample_candles(),
+        risk_metrics=risk_metrics,
+        effective_config=effective_config,
+    )
+
+    assert context.resolve_variable("portfolio_equity") == 20000.0
+    assert context.resolve_variable("portfolio_exposure") == 0.25
+    assert context.resolve_variable("portfolio_open_positions") == 2
+    assert context.resolve_variable("max_exposure") == 0.40  # 0.80 * 0.50 regime_multiplier
+    assert context.resolve_variable("max_asset_exposure") == 0.125  # 0.25 * 0.50
+
+    # Test formula evaluating regime and max_exposure
+    parser = ExpressionParser("equity * (0.10 if regime == 'HIGH_VOLATILITY' else 0.20) / close")
+    res = parser.parse(context)
+    assert res is not None
+    assert res > 0
+

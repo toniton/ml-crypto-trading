@@ -9,6 +9,8 @@ from api.interfaces.trading_context import TradingContext
 from src.core.expressions.default_context import DefaultContext
 from src.core.interfaces.expression_context import ExpressionContext
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.protection.portfolio_policy_resolver import EffectivePortfolioConfig
+from src.trading.protection.quote_portfolio_guard import PortfolioRiskMetrics
 from src.trading.regimes.market_regime import MarketRegime
 from src.trading.regimes.market_regime_detector import MarketRegimeDetector
 
@@ -23,7 +25,9 @@ class TradingExpressionFactory:
             account_balance: AccountBalance,
             trading_context: TradingContext,
             decision: Optional[ConsensusDecision],
-            candles: List[Candle] = None
+            candles: List[Candle] = None,
+            risk_metrics: Optional[PortfolioRiskMetrics] = None,
+            effective_config: Optional[EffectivePortfolioConfig] = None,
     ) -> ExpressionContext:
         candles = candles or []
 
@@ -34,6 +38,7 @@ class TradingExpressionFactory:
         variables = {
             **TradingExpressionFactory._build_market_variables(market_data),
             **TradingExpressionFactory._build_regime_variables(candles, market_data),
+            **TradingExpressionFactory._build_portfolio_variables(risk_metrics, effective_config),
 
             # Account
             "balance": available_balance,
@@ -108,12 +113,16 @@ class TradingExpressionFactory:
     @staticmethod
     def _build_regime_variables(candles: List[Candle], market_data: MarketData) -> dict:
         metrics = TradingExpressionFactory._detector.detect(candles, market_data)
+        multiplier = MarketRegime.get_exposure_multiplier(metrics.regime)
         return {
             "regime": metrics.regime.value,
+            "regime_multiplier": multiplier,
             "volatility": metrics.volatility,
             "trend_strength": metrics.trend_strength,
             "liquidity": metrics.liquidity,
             "spread": metrics.spread,
+            "NORMAL": MarketRegime.NORMAL.value,
+            "EXTREME": MarketRegime.EXTREME.value,
             "TRENDING_UP": MarketRegime.TRENDING_UP.value,
             "TRENDING_DOWN": MarketRegime.TRENDING_DOWN.value,
             "RANGING": MarketRegime.RANGING.value,
@@ -121,6 +130,56 @@ class TradingExpressionFactory:
             "LOW_VOLATILITY": MarketRegime.LOW_VOLATILITY.value,
             "ILLIQUID": MarketRegime.ILLIQUID.value,
             "UNKNOWN": MarketRegime.UNKNOWN.value,
+        }
+
+    @staticmethod
+    def _build_portfolio_variables(
+            risk_metrics: Optional[PortfolioRiskMetrics] = None,
+            effective_config: Optional[EffectivePortfolioConfig] = None,
+    ) -> dict:
+        total_equity = float(risk_metrics.total_equity) if risk_metrics else 0.0
+        total_cash = float(risk_metrics.total_cash) if risk_metrics else 0.0
+        available_cash = float(risk_metrics.available_cash) if risk_metrics else 0.0
+        reserved_cash = float(risk_metrics.reserved_cash) if risk_metrics else 0.0
+        invested_notional = float(risk_metrics.invested_notional) if risk_metrics else 0.0
+        total_exposure = float(risk_metrics.total_exposure_pct) if risk_metrics else 0.0
+        drawdown = float(risk_metrics.drawdown_pct) if risk_metrics else 0.0
+        open_positions = risk_metrics.open_position_count if risk_metrics else 0
+
+        max_total = (
+            float(effective_config.effective_max_total)
+            if effective_config and effective_config.effective_max_total is not None
+            else 0.80
+        )
+        max_asset = (
+            float(effective_config.effective_max_per_asset)
+            if effective_config and effective_config.effective_max_per_asset is not None
+            else 0.25
+        )
+        max_quote = (
+            float(effective_config.exposure.max_per_quote)
+            if effective_config and effective_config.exposure.max_per_quote is not None
+            else 0.50
+        )
+        min_reserve = (
+            float(effective_config.guard.min_quote_reserve)
+            if effective_config
+            else 0.10
+        )
+
+        return {
+            "portfolio_equity": total_equity,
+            "portfolio_cash": total_cash,
+            "portfolio_available_cash": available_cash,
+            "portfolio_reserved_cash": reserved_cash,
+            "portfolio_invested_notional": invested_notional,
+            "portfolio_exposure": total_exposure,
+            "portfolio_drawdown": drawdown,
+            "portfolio_open_positions": open_positions,
+            "max_exposure": max_total,
+            "max_asset_exposure": max_asset,
+            "max_quote_exposure": max_quote,
+            "min_quote_reserve": min_reserve,
         }
 
     @staticmethod

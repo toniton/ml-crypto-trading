@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from decimal import Decimal, ROUND_DOWN
 import logging
+from decimal import Decimal, ROUND_DOWN
 from typing import Optional
 
 from api.interfaces.account_balance import AccountBalance
@@ -13,6 +13,8 @@ from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.factories.trading_expression_factory import TradingExpressionFactory
+from src.trading.protection.portfolio_policy_resolver import EffectivePortfolioConfig
+from src.trading.protection.quote_portfolio_guard import PortfolioRiskMetrics
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,8 @@ class PositionSizer:
             account_balance: Optional[AccountBalance],
             trading_context: Optional[TradingContext],
             candles: list[Candle],
+            risk_metrics: Optional[PortfolioRiskMetrics] = None,
+            effective_config: Optional[EffectivePortfolioConfig] = None,
     ) -> Decimal:
         minimum_order_quantity = Decimal(str(asset.min_quantity))
         parser = self.get_parser(asset)
@@ -99,7 +103,10 @@ class PositionSizer:
                 trading_context=trading_context,
                 decision=decision,
                 candles=candles,
+                risk_metrics=risk_metrics,
+                effective_config=effective_config,
             )
+
             raw_result = parser.parse(context)
             if raw_result is None:
                 return minimum_order_quantity

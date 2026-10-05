@@ -197,8 +197,11 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
             if market_data is not None:
                 portfolio.update_asset_mark_price(asset.ticker_symbol, Decimal(str(market_data.close_price)))
 
+            current_regime = regime or MarketRegime.UNKNOWN
             risk_metrics = self.get_risk_metrics(asset)
-            effective_config = PortfolioPolicyResolver.resolve(self.portfolio_config, asset)
+            effective_config = PortfolioPolicyResolver.resolve(
+                self.portfolio_config, asset, regime=current_regime
+            )
 
             if self._explicit_drawdown is not None or self._explicit_concentration is not None:
                 effective_config = EffectivePortfolioConfig(
@@ -224,9 +227,9 @@ class PortfolioRiskManager(ApplicationLoggingMixin):
                         min_quote_reserve=effective_config.guard.min_quote_reserve,
                         max_quote_exposure=effective_config.guard.max_quote_exposure,
                     ),
+                    regime_multiplier=effective_config.regime_multiplier,
                 )
 
-            current_regime = regime or MarketRegime.UNKNOWN
             decision = QuotePortfolioGuard.evaluate(
                 asset_symbol=asset.ticker_symbol,
                 order_cost=Decimal(str(proposed_order_cost)),

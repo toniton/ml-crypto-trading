@@ -74,22 +74,32 @@ class QuotePortfolioGuard:
                 )
 
         # 4. Maximum Per-Asset Concentration Check
+        effective_max_asset = (
+            config.effective_max_per_asset
+            if config.regime.enabled
+            else config.exposure.max_per_asset
+        )
         projected_asset_notional = risk.asset_notional + cost_dec
-        if risk.total_equity > Decimal("0") and config.exposure.max_per_asset is not None:
+        if risk.total_equity > Decimal("0") and effective_max_asset is not None:
             projected_concentration = projected_asset_notional / risk.total_equity
-            if projected_concentration > config.exposure.max_per_asset:
+            if projected_concentration > effective_max_asset:
                 violations.append(
                     f"Asset concentration limit exceeded for {asset_symbol}: "
-                    f"projected {projected_concentration:.2%} > limit {config.exposure.max_per_asset:.2%}"
+                    f"projected {projected_concentration:.2%} > limit {effective_max_asset:.2%}"
                 )
 
         # 5. Maximum Total Portfolio Exposure Check
-        if risk.total_equity > Decimal("0") and config.exposure.max_total is not None:
+        effective_max_total = (
+            config.effective_max_total
+            if config.regime.enabled
+            else config.exposure.max_total
+        )
+        if risk.total_equity > Decimal("0") and effective_max_total is not None:
             projected_total_exposure = projected_invested / risk.total_equity
-            if projected_total_exposure > config.exposure.max_total:
+            if projected_total_exposure > effective_max_total:
                 violations.append(
                     f"Max total portfolio exposure exceeded: projected {projected_total_exposure:.2%} "
-                    f"> limit {config.exposure.max_total:.2%}"
+                    f"> limit {effective_max_total:.2%}"
                 )
 
         # 6. Maximum Drawdown Check

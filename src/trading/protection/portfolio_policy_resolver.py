@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Optional
 
 from api.interfaces.asset import Asset
@@ -10,6 +11,8 @@ from src.configuration.portfolio_config import (
     PortfolioExposureConfig,
     QuotePortfolioGuardConfig,
 )
+from src.trading.regimes.market_regime import MarketRegime
+
 
 
 @dataclass(frozen=True)
@@ -17,18 +20,47 @@ class EffectivePortfolioConfig:
     exposure: PortfolioExposureConfig
     regime: MarketRegimeConfig
     guard: QuotePortfolioGuardConfig
+    regime_multiplier: Decimal = Decimal("1.0")
+
+    @property
+    def effective_max_total(self) -> Optional[Decimal]:
+        if self.exposure.max_total is None:
+            return None
+        return self.exposure.max_total * self.regime_multiplier
+
+    @property
+    def effective_max_per_asset(self) -> Optional[Decimal]:
+        if self.exposure.max_per_asset is None:
+            return None
+        return self.exposure.max_per_asset * self.regime_multiplier
 
 
 class PortfolioPolicyResolver:
     @classmethod
-    def resolve(cls, global_config: PortfolioConfig, asset: Asset) -> EffectivePortfolioConfig:
+    def resolve(
+            cls,
+            global_config: PortfolioConfig,
+            asset: Asset,
+            regime: Optional[MarketRegime] = None,
+    ) -> EffectivePortfolioConfig:
         override = asset.portfolio
 
         exposure = cls._resolve_exposure(global_config.exposure, override.exposure if override else None)
-        regime = cls._resolve_regime(global_config.regime, override.regime if override else None)
+        regime_config = cls._resolve_regime(global_config.regime, override.regime if override else None)
         guard = cls._resolve_guard(global_config.guard, override.guard if override else None)
 
-        return EffectivePortfolioConfig(exposure=exposure, regime=regime, guard=guard)
+        multiplier = (
+            Decimal(str(MarketRegime.get_exposure_multiplier(regime)))
+            if regime is not None and regime_config.enabled
+            else Decimal("1.0")
+        )
+
+        return EffectivePortfolioConfig(
+            exposure=exposure,
+            regime=regime_config,
+            guard=guard,
+            regime_multiplier=multiplier,
+        )
 
     @staticmethod
     def _resolve_exposure(

@@ -31,6 +31,15 @@ class TradingContext:
     realized_pnl: Decimal = Decimal(0)
     last_market_activity_time: Optional[float] = None
     commit_hash: Optional[str] = None
+    regime: Optional[str] = None
+    regime_volatility: Optional[float] = None
+    regime_trend_strength: Optional[float] = None
+    regime_liquidity: Optional[float] = None
+    regime_spread: Optional[float] = None
+    portfolio_total_exposure: Optional[float] = None
+    portfolio_drawdown: Optional[float] = None
+    portfolio_cash: Optional[float] = None
+    portfolio_equity: Optional[float] = None
 
     def __post_init__(self):
         self.available_balance = self.starting_balance
@@ -42,3 +51,4 @@ class TradingContext:
     @property
     def total_positions(self) -> int:
         return len(self.open_positions) + len(self.close_positions)
+

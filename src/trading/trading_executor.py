@@ -15,9 +15,11 @@ from api.interfaces.trading_session import TradingSession
 from api.interfaces.trading_context import TradingContext
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
-from src.core.interfaces.trading_strategy import TradingStrategy
+from src.configuration.portfolio_config import PortfolioConfig
 from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
+from src.core.interfaces.trading_strategy import TradingStrategy
+
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.events import (
     DecisionRejectedEvent,
@@ -35,10 +37,13 @@ from src.trading.health.enums import TradingPermission
 from src.trading.health.health_monitor import HealthMonitor
 from src.trading.health.models import HealthScope
 from src.trading.managers.manager_container import ManagerContainer
+from src.trading.protection.portfolio_policy_resolver import PortfolioPolicyResolver
+from src.trading.regimes.market_regime import MarketRegime
 from src.trading.regimes.market_regime_detector import MarketRegimeDetector
 from src.trading.sizing.position_sizer import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.strategies.strategy_resolver import StrategyResolver
+
 
 
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
@@ -243,6 +248,20 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             self.app_logger.debug("Skipping BUY for uninitialized context %s", asset.ticker_symbol)
             return
 
+        regime_metrics = self._regime_detector.detect(candles, market_data)
+        if trading_context:
+            trading_context.regime = regime_metrics.regime.value
+            trading_context.regime_volatility = regime_metrics.volatility
+            trading_context.regime_trend_strength = regime_metrics.trend_strength
+            trading_context.regime_liquidity = regime_metrics.liquidity
+            trading_context.regime_spread = regime_metrics.spread
+            if self.portfolio_risk_manager:
+                risk_metrics = self.portfolio_risk_manager.get_risk_metrics(asset)
+                trading_context.portfolio_total_exposure = float(risk_metrics.total_exposure_pct)
+                trading_context.portfolio_drawdown = float(risk_metrics.drawdown_pct)
+                trading_context.portfolio_cash = float(risk_metrics.available_cash)
+                trading_context.portfolio_equity = float(risk_metrics.total_equity)
+
         if self.portfolio_risk_manager and trading_context:
             self.portfolio_risk_manager.update_position(asset, trading_context.position_qty)
 
@@ -269,7 +288,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         if not self._validate_execution_edge(asset, TradeAction.BUY, market_data, fees):
             return
 
-        quantity_val = self._calculate_quantity(asset, TradeAction.BUY, market_data, decision)
+        quantity_val = self._calculate_quantity(
+            asset, TradeAction.BUY, market_data, decision,
+            candles=candles, regime=regime_metrics.regime
+        )
         if quantity_val is None:
             return
 
@@ -291,9 +313,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             return
 
         if self.portfolio_risk_manager:
-            regime = self._regime_detector.detect(candles, market_data).regime
             can_trade, reject_reason = self.portfolio_risk_manager.can_trade(
-                asset, TradeAction.BUY, order_cost, market_data, regime=regime
+                asset, TradeAction.BUY, order_cost, market_data, regime=regime_metrics.regime
             )
             if not can_trade:
                 self._publish_event(DecisionRejectedEvent(
@@ -599,16 +620,32 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
 
     def _calculate_quantity(
             self, asset: Asset, _action: TradeAction,
-            market_data: MarketData, decision: ConsensusDecision
+            market_data: MarketData, decision: ConsensusDecision,
+            candles: Optional[list[Candle]] = None,
+            regime: Optional[MarketRegime] = None,
     ) -> Decimal:
-        trading_context = self.session_manager.get_trading_context(asset.key)
+        trading_context = self.session_manager.get_trading_context(asset.key) if self.session_manager else None
         account_balance = self.account_manager.get_quote_balance(asset, asset.exchange.value)
-        candles = self.market_data_manager.get_candles(asset)
+        active_candles = candles if candles is not None else self.market_data_manager.get_candles(asset)
+        risk_metrics = (
+            self.portfolio_risk_manager.get_risk_metrics(asset)
+            if self.portfolio_risk_manager
+            else None
+        )
+        effective_config = None
+        if self.portfolio_risk_manager and hasattr(self.portfolio_risk_manager, "portfolio_config"):
+            p_cfg = self.portfolio_risk_manager.portfolio_config
+            if isinstance(p_cfg, PortfolioConfig):
+                effective_config = PortfolioPolicyResolver.resolve(p_cfg, asset, regime=regime)
+
         return self.position_sizer.calculate_quantity(
             asset=asset,
             market_data=market_data,
             decision=decision,
             account_balance=account_balance,
             trading_context=trading_context,
-            candles=candles,
+            candles=active_candles,
+            risk_metrics=risk_metrics,
+            effective_config=effective_config,
         )
+
