@@ -8,6 +8,7 @@ from api.interfaces.fees import Fees
 from api.interfaces.market_data import MarketData
 from api.interfaces.position_entry import PositionEntry
 from api.interfaces.trading_context import TradingContext
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -50,6 +51,7 @@ class TestTradingExecutorRetry(unittest.TestCase):
         container.websocket_manager = self.websocket_manager
         container.reconciliation_engine = MagicMock()
         container.health_monitor = None
+        container.decision_manager = DecisionManager()
 
         self.activity_queue = Queue()
         self.executor = TradingExecutor(

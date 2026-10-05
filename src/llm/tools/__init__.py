@@ -4,6 +4,7 @@ from src.llm.tools.backtest_tool import BacktestTool
 from src.llm.tools.configuration_history_tool import ConfigurationHistoryTool
 from src.llm.tools.configuration_tool import ConfigurationTool
 from src.llm.tools.consensus_tool import ConsensusTool
+from src.llm.tools.decision_inspector_tool import DecisionInspectorTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.exchange_read_tool import ExchangeReadOnlyTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
@@ -24,6 +25,7 @@ __all__ = [
     "ConfigurationHistoryTool",
     "ConfigurationTool",
     "ConsensusTool",
+    "DecisionInspectorTool",
     "ExchangeFeesTool",
     "ExchangeReadOnlyTool",
     "GetOpenOrdersTool",

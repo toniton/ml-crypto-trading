@@ -23,6 +23,8 @@ class OrderDetail(BaseModel):
     latency_ms: Optional[float] = None
     fees: Optional[float] = None
     slippage: Optional[float] = None
+    decision_id: Optional[str] = None
+    commit_hash: Optional[str] = None
 
 
 class OrderByDayResponse(BaseModel):
@@ -70,4 +72,6 @@ class OrderByDayService:
             latency_ms=latency_ms,
             fees=float(order.fees) if order.fees is not None else None,
             slippage=slippage,
+            decision_id=order.decision_id,
+            commit_hash=order.commit_hash,
         )

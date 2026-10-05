@@ -46,6 +46,7 @@ from src.llm.llm_runtime_manager import LlmRuntimeManager
 from src.server.agent_websocket import AgentWebSocketHandler
 from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
 from src.server.routes.agent_action_routes import create_agent_action_router
+from src.server.routes.decision_routes import create_decision_router
 from src.server.routes.engine_routes import create_engine_router
 from src.server.routes.expression_routes import create_expression_router
 from src.server.routes.health_routes import create_health_router
@@ -206,6 +207,7 @@ class ChatApp:
         app.include_router(create_engine_router(trading_proxy))
         app.include_router(create_reconciliation_router(trading_proxy))
         app.include_router(create_health_router(trading_proxy))
+        app.include_router(create_decision_router(db_manager))
 
         agent_ws_handler = AgentWebSocketHandler(event_bus)
 

@@ -13,6 +13,7 @@ from src.agent.oracle.events import ORACLE_SUMMARY_EVENT_TYPE, OracleSummaryEven
 from src.agent.oracle.oracle_service import OracleService
 from src.events.message_event_bus import CallbackSubscription, MessageEventBus
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -45,6 +46,7 @@ def _manager_container() -> MagicMock:
     manager_container.websocket_manager = MagicMock()
     manager_container.reconciliation_engine = MagicMock()
     manager_container.health_monitor = None
+    manager_container.decision_manager = DecisionManager()
     return manager_container
 
 

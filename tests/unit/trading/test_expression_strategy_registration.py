@@ -1,6 +1,5 @@
 from decimal import Decimal
 from queue import Queue
-from types import SimpleNamespace
 
 import pytest
 
@@ -16,6 +15,8 @@ from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.consensus.consensus_factor import ConsensusFactor
 from src.trading.consensus.consensus_manager import ConsensusManager
 from src.trading.consensus.strategies.hammer_accumulation_strategy import HammerAccumulationStrategy
+from src.trading.decision.decision_manager import DecisionManager
+from src.trading.managers.manager_container import ManagerContainer
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.expression_strategy import ExpressionStrategy
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -70,18 +71,20 @@ def _asset(symbol, strategies=None):
 
 def _make_executor(predefined=None, assets=None):
     consensus_manager = ConsensusManager()
-    container = SimpleNamespace(
-        account_manager=None,
-        fees_manager=None,
-        order_manager=None,
-        market_data_manager=None,
+    container = ManagerContainer(
+        account_manager=None,  # type: ignore[arg-type]
+        fees_manager=None,  # type: ignore[arg-type]
+        order_manager=None,  # type: ignore[arg-type]
+        market_data_manager=None,  # type: ignore[arg-type]
         consensus_manager=consensus_manager,
-        session_manager=None,
-        protection_manager=None,
-        portfolio_risk_manager=None,
-        websocket_manager=None,
-        reconciliation_engine=None,
-        health_monitor=None,
+        session_manager=None,  # type: ignore[arg-type]
+        protection_manager=None,  # type: ignore[arg-type]
+        portfolio_risk_manager=None,  # type: ignore[arg-type]
+        websocket_manager=None,  # type: ignore[arg-type]
+        rest_manager=None,  # type: ignore[arg-type]
+        reconciliation_engine=None,  # type: ignore[arg-type]
+        health_monitor=None,  # type: ignore[arg-type]
+        decision_manager=DecisionManager(),
     )
     return TradingExecutor(
         assets=assets or [],

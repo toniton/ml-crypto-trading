@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+
 from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.health.health_monitor import HealthMonitor
 from src.trading.markets.market_data_manager import MarketDataManager
@@ -32,3 +34,4 @@ class ManagerContainer:
     portfolio_risk_manager: PortfolioRiskManager
     reconciliation_engine: ExchangeReconciliationEngine
     health_monitor: HealthMonitor
+    decision_manager: DecisionManager

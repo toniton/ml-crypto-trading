@@ -336,8 +336,6 @@ class Application(ApplicationLoggingMixin):
             assets=self._assets,
             trading_journal=self._trading_journal,
             vcs=self._vcs,
-            oracle_service=None,
-            timeline_projector=self._timeline_projector,
             backtest_service=backtest_service,
             metric_service=self._metric_service,
             db_manager=self._db_manager,
@@ -361,19 +359,11 @@ class Application(ApplicationLoggingMixin):
         oracle_service.subscribe(self._trading_event_bus)
         self._oracle_service = oracle_service
 
-        # Update tools with oracle service
-        full_tool_map = ToolFactory.build_tool_map(
-            managers=self._managers,
-            assets=self._assets,
-            trading_journal=self._trading_journal,
-            vcs=self._vcs,
+        oracle_tools = ToolFactory.build_oracle_tools(
             oracle_service=self._oracle_service,
             timeline_projector=self._timeline_projector,
-            backtest_service=backtest_service,
-            metric_service=self._metric_service,
-            db_manager=self._db_manager,
         )
-        self._llm_manager.update_tool_map(full_tool_map)
+        self._llm_manager.register_tools(oracle_tools)
 
         self._trading_engine = TradingEngine(trading_scheduler, trading_executor)
         self._trading_engine_proxy = LocalTradingEngineProxy(

@@ -60,6 +60,12 @@ class LlmRuntimeManager(ApplicationLoggingMixin):
             enabled_tools = ToolFactory.get_enabled_tools(tool_map, self._llm_config)
             self.set_bound_tools(enabled_tools)
 
+    def register_tools(self, additional_tools: Dict[str, BaseTool]) -> None:
+        with self._lock:
+            self._tool_map.update(additional_tools)
+            enabled_tools = ToolFactory.get_enabled_tools(self._tool_map, self._llm_config)
+            self.set_bound_tools(enabled_tools)
+
     def get_active_adapter(self) -> LlmAdapter:
         with self._lock:
             if self._active_adapter is None:

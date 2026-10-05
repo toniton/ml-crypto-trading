@@ -1,5 +1,6 @@
 from decimal import Decimal
 from queue import Queue
+from typing import Optional
 from unittest.mock import MagicMock
 
 from api.interfaces.account_balance import AccountBalance
@@ -13,6 +14,7 @@ from src.configuration.strategy_config import StrategyConfig, StrategyType
 from src.core.interfaces.event_bus import EventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.decision.trading_decision import DecisionStatus, TradingDecision
 from src.trading.events.domain_events import TradingDecisionCreatedEvent
 from src.trading.managers.manager_container import ManagerContainer
@@ -21,7 +23,7 @@ from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
 
 
-def _create_test_asset() -> Asset:
+def _create_test_asset(dynamic_quantity: Optional[str] = None) -> Asset:
     return Asset(
         base_ticker_symbol="BTC",
         quote_ticker_symbol="USD",
@@ -33,6 +35,7 @@ def _create_test_asset() -> Asset:
         schedule=1,
         candles_timeframe="MIN1",
         enabled=True,
+        dynamic_quantity=dynamic_quantity,
         strategies=[
             StrategyConfig(
                 name="BuyLowerThanLowestBuyStrategy",
@@ -111,6 +114,7 @@ def test_trading_executor_records_decision_on_successful_buy():
         portfolio_risk_manager=portfolio_risk_mgr,
         reconciliation_engine=MagicMock(),
         health_monitor=None,
+        decision_manager=DecisionManager(repository=decision_repo),
     )
 
     executor = TradingExecutor(
@@ -120,7 +124,6 @@ def test_trading_executor_records_decision_on_successful_buy():
         position_sizer=PositionSizer(),
         strategies_registry=StrategyRegistry(),
         event_bus=event_bus,
-        decision_repository=decision_repo,
     )
 
     executor._process_buy_asset(asset)
@@ -200,6 +203,7 @@ def test_trading_executor_records_decision_when_risk_rejects():
         portfolio_risk_manager=portfolio_risk_mgr,
         reconciliation_engine=MagicMock(),
         health_monitor=None,
+        decision_manager=DecisionManager(repository=decision_repo),
     )
 
     executor = TradingExecutor(
@@ -209,7 +213,6 @@ def test_trading_executor_records_decision_when_risk_rejects():
         position_sizer=PositionSizer(),
         strategies_registry=StrategyRegistry(),
         event_bus=event_bus,
-        decision_repository=decision_repo,
     )
 
     executor._process_buy_asset(asset)
@@ -320,6 +323,7 @@ def test_trading_executor_records_decision_on_successful_sell():
         portfolio_risk_manager=MagicMock(),
         reconciliation_engine=MagicMock(),
         health_monitor=None,
+        decision_manager=DecisionManager(repository=decision_repo),
     )
 
     executor = TradingExecutor(
@@ -329,7 +333,6 @@ def test_trading_executor_records_decision_on_successful_sell():
         position_sizer=PositionSizer(),
         strategies_registry=StrategyRegistry(),
         event_bus=event_bus,
-        decision_repository=decision_repo,
     )
 
     executor._process_sell_asset(asset)
@@ -343,3 +346,96 @@ def test_trading_executor_records_decision_on_successful_sell():
     assert saved_decision.commit_hash == "commit-sell-456"
     assert saved_decision.resulting_order_id == "order-sell-456"
     assert saved_decision.consensus_snapshot.quorum is True
+
+
+def test_trading_executor_records_decision_with_dynamic_quantity_expression():
+    asset = _create_test_asset(dynamic_quantity="available_balance * 0.05 / close_price")
+
+    event_bus = MagicMock(spec=EventBus)
+    decision_repo = MagicMock()
+
+    account_mgr = MagicMock()
+    account_mgr.get_quote_balance.return_value = AccountBalance(
+        currency="USD", available_balance=Decimal("10000")
+    )
+    market_mgr = MagicMock()
+    market_mgr.get_market_data.return_value = MarketData(
+        close_price=Decimal("50000"),
+        high_price=Decimal("51000"),
+        low_price=Decimal("49000"),
+        volume=Decimal("100"),
+        timestamp=1700000000.0,
+        bid_price=Decimal("49990"),
+        ask_price=Decimal("50010"),
+    )
+    market_mgr.get_candles.return_value = []
+    fees_mgr = MagicMock()
+    fees_mgr.get_instrument_fees.return_value = Fees(
+        maker_fee_pct=Decimal("0.001"), taker_fee_pct=Decimal("0.002")
+    )
+    consensus_mgr = MagicMock()
+    consensus_mgr.evaluate.return_value = ConsensusDecision(
+        trade_action=TradeAction.BUY,
+        ticker_symbol="BTC",
+        votes={"BuyLowerThanLowestBuyStrategy": True},
+        weights={"BuyLowerThanLowestBuyStrategy": 1.0},
+        factor=1.0,
+    )
+
+    created_order = Order(
+        uuid="order-dyn-123",
+        provider_name="BACKTEST",
+        ticker_symbol="BTC_USD",
+        price=Decimal("50000"),
+        quantity="0.01",
+        trade_action=TradeAction.BUY,
+        created_time=1700000000.0,
+        status=OrderStatus.PENDING,
+    )
+    order_mgr = MagicMock()
+    order_mgr.has_outstanding_intent.return_value = False
+    order_mgr.open_order.return_value = created_order
+
+    portfolio_risk_mgr = MagicMock()
+    portfolio_risk_mgr.can_trade.return_value = (True, None)
+
+    session_mgr = MagicMock()
+    session_mgr.get_current_commit_hash.return_value = "commit-dyn-123"
+
+    container = ManagerContainer(
+        account_manager=account_mgr,
+        fees_manager=fees_mgr,
+        order_manager=order_mgr,
+        market_data_manager=market_mgr,
+        consensus_manager=consensus_mgr,
+        protection_manager=MagicMock(),
+        session_manager=session_mgr,
+        websocket_manager=MagicMock(),
+        rest_manager=MagicMock(),
+        portfolio_risk_manager=portfolio_risk_mgr,
+        reconciliation_engine=MagicMock(),
+        health_monitor=None,
+        decision_manager=DecisionManager(repository=decision_repo),
+    )
+
+    position_sizer = PositionSizer(assets=[asset])
+
+    executor = TradingExecutor(
+        assets=[asset],
+        manager_container=container,
+        activity_queue=Queue(),
+        position_sizer=position_sizer,
+        strategies_registry=StrategyRegistry(),
+        event_bus=event_bus,
+    )
+
+    executor._process_buy_asset(asset)
+
+    assert decision_repo.save.call_count >= 1
+    saved_decision: TradingDecision = decision_repo.save.call_args[0][0]
+
+    assert saved_decision.trade_action == TradeAction.BUY
+    assert saved_decision.status == DecisionStatus.EXECUTED
+    assert saved_decision.sizing_snapshot.formula == "available_balance * 0.05 / close_price"
+    assert saved_decision.sizing_snapshot.calculated_quantity is not None
+

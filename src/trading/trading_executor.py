@@ -20,9 +20,6 @@ from src.configuration.trading_config import TradingConfig
 from src.core.expressions.expression_parser import ExpressionParser
 from src.core.interfaces.trading_strategy import TradingStrategy
 
-from src.database.repositories.trading_decision_repository import (
-    TradingDecisionRepository,
-)
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.decision.trading_decision import (
     ConsensusSnapshot,
@@ -72,7 +69,6 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             position_sizer: PositionSizer,
             strategies_registry: StrategyRegistry,
             event_bus: Optional[EventBus],
-            decision_repository: Optional[TradingDecisionRepository] = None,
     ):
         self.assets = assets
         self.event_bus = event_bus
@@ -89,8 +85,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.portfolio_risk_manager = manager_container.portfolio_risk_manager
         self.websocket_manager = manager_container.websocket_manager
         self.health_monitor = manager_container.health_monitor
+        self.decision_manager = manager_container.decision_manager
         self._regime_detector = MarketRegimeDetector()
-        self._decision_repository = decision_repository
         self.activity_queue = activity_queue
         self._strategies_registry = strategies_registry
         self._strategies: list[TradingStrategy] = []
@@ -299,11 +295,10 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         )
 
     def _record_decision(self, decision: TradingDecision) -> None:
-        if self._decision_repository:
-            try:
-                self._decision_repository.save(decision)
-            except Exception as exc:  # pylint: disable=broad-except
-                self.app_logger.warning("Failed to persist TradingDecision %s: %s", decision.decision_id, exc)
+        try:
+            self.decision_manager.record_decision(decision)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning("Failed to persist TradingDecision %s: %s", decision.decision_id, exc)
         self._publish_event(TradingDecisionCreatedEvent(
             decision=decision,
             symbol=decision.ticker_symbol,
@@ -445,7 +440,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         order_cost = price * quantity_val
         parser = self._get_dynamic_quantity_parser(asset)
         sizing_snapshot = SizingSnapshot(
-            formula=parser.formula if parser else None,
+            formula=parser.expression if parser else None,
             calculated_quantity=quantity_val,
             min_quantity=Decimal(str(asset.min_quantity)),
             final_quantity=quantity_val,

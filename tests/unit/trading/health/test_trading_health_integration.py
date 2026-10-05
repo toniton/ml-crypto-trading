@@ -18,6 +18,7 @@ from src.trading.health import (
     TradingHealthCondition,
     TradingHealthState,
 )
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -98,6 +99,7 @@ def test_trading_executor_blocks_order_when_paused():
         portfolio_risk_manager=portfolio_risk_mgr,
         reconciliation_engine=MagicMock(),
         health_monitor=health_monitor,
+        decision_manager=DecisionManager(),
     )
 
     executor = TradingExecutor(

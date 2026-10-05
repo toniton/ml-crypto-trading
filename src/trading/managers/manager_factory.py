@@ -6,6 +6,7 @@ from src.metrics.collectors.exchange_metrics_collector import ExchangeMetricsCol
 from src.metrics.services.metric_service import MetricService
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.health import HealthMonitor, RecoveryConfig, TradingHealthState
 from src.trading.managers.manager_container import ManagerContainer
@@ -61,6 +62,7 @@ class ManagerFactory:
             assets, rest_manager, websocket_manager, session_manager, event_bus=event_bus
         )
         fees_manager = FeesManager(assets, rest_manager)
+        decision_manager = DecisionManager(database_manager=database_manager)
         reconciliation_engine = ExchangeReconciliationEngine.create(
             account_manager=account_manager,
             order_manager=order_manager,
@@ -85,5 +87,6 @@ class ManagerFactory:
             portfolio_risk_manager=portfolio_risk_manager,
             reconciliation_engine=reconciliation_engine,
             health_monitor=health_monitor,
+            decision_manager=decision_manager,
         )
         return container, trading_journal

@@ -14,6 +14,7 @@ from api.interfaces.trade_action import TradeAction
 from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.events import DecisionRejectedEvent, DecisionRejectedReason
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.sizing import PositionSizer
@@ -64,6 +65,7 @@ class ExecutionGuardrailsTest(TestCase):
             rest_manager=MagicMock(),
             reconciliation_engine=MagicMock(),
             health_monitor=MagicMock(),
+            decision_manager=DecisionManager(),
         )
         self.activity_queue = Queue()
         self.executor = TradingExecutor(

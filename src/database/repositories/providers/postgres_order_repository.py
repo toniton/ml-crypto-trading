@@ -22,8 +22,9 @@ class PostgresOrderRepository(OrderRepository):
         order_dao = OrderDBVSEntityMapper.map_to_db(entity)
         self.database_session.add(order_dao)
 
-    def get(self, entity_id: str):
-        self.database_session.query(OrderDao).filter(OrderDao.uuid == entity_id)
+    def get(self, entity_id: str) -> Optional[Order]:
+        row = self.database_session.query(OrderDao).filter(OrderDao.uuid == entity_id).first()
+        return OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, row)) if row else None
 
     def get_all(self):
         pass

@@ -179,7 +179,8 @@ class ExpressionParser:
                         message=f"Unknown function '{func_name}'.",
                         severity=DiagnosticSeverity.ERROR,
                         start_offset=getattr(node.func, "col_offset", 0),
-                        end_offset=getattr(node.func, "end_col_offset", getattr(node.func, "col_offset", 0) + len(func_name)),
+                        end_offset=getattr(node.func, "end_col_offset",
+                                           getattr(node.func, "col_offset", 0) + len(func_name)),
                         start_line=line,
                         start_column=col_start,
                         end_line=getattr(node.func, "end_lineno", line),
@@ -201,35 +202,44 @@ class ExpressionParser:
         if isinstance(node, ast.BinOp):
             if not isinstance(node.op, (ast.Add, ast.Mult, ast.Sub, ast.Div)):
                 cls._add_node_error(node, f"Unsupported binary operator: {type(node.op).__name__}", diagnostics)
-            cls._collect_and_validate_nodes(node.left, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
-            cls._collect_and_validate_nodes(node.right, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.left, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.right, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
             return
 
         if isinstance(node, ast.Compare):
-            cls._collect_and_validate_nodes(node.left, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.left, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
             for op, comparator in zip(node.ops, node.comparators):
                 if not isinstance(op, (ast.Gt, ast.Lt, ast.GtE, ast.LtE, ast.Eq, ast.NotEq)):
                     cls._add_node_error(node, f"Unsupported comparison operator: {type(op).__name__}", diagnostics)
-                cls._collect_and_validate_nodes(comparator, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+                cls._collect_and_validate_nodes(comparator, allowed_variables, allowed_functions, diagnostics,
+                                                referenced_variables, referenced_functions)
             return
 
         if isinstance(node, ast.IfExp):
-            cls._collect_and_validate_nodes(node.test, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
-            cls._collect_and_validate_nodes(node.body, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
-            cls._collect_and_validate_nodes(node.orelse, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.test, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.body, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.orelse, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
             return
 
         if isinstance(node, ast.BoolOp):
             if not isinstance(node.op, (ast.And, ast.Or)):
                 cls._add_node_error(node, f"Unsupported boolean operator: {type(node.op).__name__}", diagnostics)
             for v in node.values:
-                cls._collect_and_validate_nodes(v, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+                cls._collect_and_validate_nodes(v, allowed_variables, allowed_functions, diagnostics,
+                                                referenced_variables, referenced_functions)
             return
 
         if isinstance(node, ast.UnaryOp):
             if not isinstance(node.op, (ast.USub, ast.Not)):
                 cls._add_node_error(node, f"Unsupported unary operator: {type(node.op).__name__}", diagnostics)
-            cls._collect_and_validate_nodes(node.operand, allowed_variables, allowed_functions, diagnostics, referenced_variables, referenced_functions)
+            cls._collect_and_validate_nodes(node.operand, allowed_variables, allowed_functions, diagnostics,
+                                            referenced_variables, referenced_functions)
             return
 
         cls._add_node_error(node, f"Unsupported expression node: {type(node).__name__}", diagnostics)

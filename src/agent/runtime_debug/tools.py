@@ -6,8 +6,6 @@ from uuid import UUID
 from api.interfaces.order import Order
 from src.agent.runtime_debug.models import RuntimeErrorEvent, RuntimeIncident
 from src.core.interfaces.database_manager import DatabaseManager
-from src.database.dao.order_dao import OrderDao
-from src.database.repositories.mappers.order_db_vs_entity_mapper import OrderDBVSEntityMapper
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.database.repositories.providers.postgres_runtime_incident_repository import (
     PostgresRuntimeIncidentRepository,
@@ -83,12 +81,8 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
         if not self._database_manager:
             return None
         with self._database_manager.get_unit_of_work() as uow:
-            row = (
-                uow.session.query(OrderDao)
-                .filter(OrderDao.uuid == order_id)
-                .first()
-            )
-            return OrderDBVSEntityMapper.map_to_entity(row) if row else None
+            repo = uow.get_repository(PostgresOrderRepository)
+            return repo.get(order_id)
 
     def get_last_successful_order_commit(self, asset: str) -> Optional[str]:
         if not self._database_manager:

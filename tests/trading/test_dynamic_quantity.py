@@ -9,6 +9,7 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from src.trading.consensus.consensus_decision import ConsensusDecision
+from src.trading.decision.decision_manager import DecisionManager
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
@@ -49,6 +50,7 @@ class TestDynamicQuantity(unittest.TestCase):
         manager_container.websocket_manager = self.websocket_manager
         manager_container.reconciliation_engine = MagicMock()
         manager_container.health_monitor = None
+        manager_container.decision_manager = DecisionManager()
 
         executor = TradingExecutor(
             assets=assets,

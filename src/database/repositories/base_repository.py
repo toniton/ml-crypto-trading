@@ -1,10 +1,9 @@
 import abc
 from typing import Generic, List, Optional, TypeVar
 
-from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-T = TypeVar("T", bound=BaseModel)
+T = TypeVar("T")
 
 
 class BaseRepository(Generic[T], metaclass=abc.ABCMeta):

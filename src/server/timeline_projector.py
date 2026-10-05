@@ -31,7 +31,10 @@ from src.events.runtime_events import (
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
 from src.trading.events import ConsensusEvaluatedEvent
-from src.trading.events.domain_events import ReconciliationDiscrepancyEvent
+from src.trading.events.domain_events import (
+    ReconciliationDiscrepancyEvent,
+    TradingDecisionCreatedEvent,
+)
 from src.trading.helpers.format_helper import FormatHelper
 from src.vcs.application.events import RefChangedEvent
 
@@ -41,6 +44,7 @@ class TimelineProjector(ApplicationLoggingMixin):
 
     EVENT_CLASSES: tuple[type[Event], ...] = (
         ConsensusEvaluatedEvent,
+        TradingDecisionCreatedEvent,
         TradingActivityAnomalyDetectedEvent,
         AgentDecisionRecordedEvent,
         AgentActionCreatedEvent,
@@ -210,6 +214,8 @@ class TimelineProjector(ApplicationLoggingMixin):
     def _project_event(self, event: Event) -> Optional[TimelineItem]:
         if isinstance(event, ConsensusEvaluatedEvent):
             return self._project_consensus(event)
+        if isinstance(event, TradingDecisionCreatedEvent):
+            return self._project_trading_decision(event)
         if isinstance(event, TradingActivityAnomalyDetectedEvent):
             return self._project_anomaly(event)
         if isinstance(event, AgentDecisionRecordedEvent):
@@ -236,7 +242,47 @@ class TimelineProjector(ApplicationLoggingMixin):
             return self._project_reconciliation_discrepancy(event)
         return None
 
-    def _project_reconciliation_discrepancy(self, event: ReconciliationDiscrepancyEvent) -> TimelineItem:
+    @staticmethod
+    def _project_trading_decision(event: TradingDecisionCreatedEvent) -> TimelineItem:
+        decision = event.decision
+        symbol = event.symbol or (decision.ticker_symbol if decision is not None else "")
+        action = event.action or (decision.trade_action.value if decision is not None else "")
+        status = event.status or (decision.status.value if decision is not None else "")
+        entities = []
+        if symbol:
+            entities.append(EntityRef(type="ASSET", id=symbol))
+        if decision is not None and decision.resulting_order_id:
+            entities.append(EntityRef(type="ORDER", id=decision.resulting_order_id))
+
+        severity = "INFO" if status == "EXECUTED" else ("WARNING" if status == "REJECTED" else "INFO")
+        title = f"Trading Decision: {action} {symbol} ({status})"
+
+        if status == "EXECUTED":
+            qty_str = f"qty: {decision.sizing_snapshot.final_quantity}" if decision is not None and decision.sizing_snapshot and decision.sizing_snapshot.final_quantity else ""
+            regime_str = f"regime: {decision.regime_snapshot.regime}" if decision is not None and decision.regime_snapshot else ""
+            summary = f"Decision executed: {action} {symbol} ({qty_str}, {regime_str})"
+        elif status == "REJECTED":
+            reason = decision.rejection_reason if decision is not None else ""
+            summary = f"Decision rejected: {action} {symbol} - {reason}"
+        else:
+            summary = f"Decision skipped: {action} {symbol}"
+
+        return TimelineItem(
+            timestamp=datetime.fromtimestamp(decision.timestamp, tz=timezone.utc).isoformat() if decision is not None else datetime.now(timezone.utc).isoformat(),
+            category=TimelineCategory.DECISION,
+            severity=severity,
+            title=title,
+            summary=summary,
+            correlation_id=decision.decision_id if decision is not None else None,
+            causation_id=decision.commit_hash if decision is not None else None,
+            actor_type="ENGINE",
+            primary_entity=EntityRef(type="ASSET", id=symbol) if symbol else None,
+            entities=entities,
+            metadata=decision.to_dict() if decision is not None else {},
+        )
+
+    @staticmethod
+    def _project_reconciliation_discrepancy(event: ReconciliationDiscrepancyEvent) -> TimelineItem:
         entities = []
         if event.asset_or_currency:
             entities.append(EntityRef(type="ASSET", id=event.asset_or_currency))
