@@ -57,6 +57,16 @@ class BacktestTool(BaseTool, ApplicationLoggingMixin):
             fmt = "%Y-%m-%d %H:%M:%S UTC"
             time_range = f"  Start time: {summary.start_time.strftime(fmt)}\n"
 
+        robustness = ""
+        if summary.sharpe_ratio is not None:
+            robustness += f"  Sharpe ratio: {summary.sharpe_ratio}\n"
+        if summary.sortino_ratio is not None:
+            robustness += f"  Sortino ratio: {summary.sortino_ratio}\n"
+        if summary.profit_factor is not None:
+            robustness += f"  Profit factor: {summary.profit_factor}\n"
+        if summary.win_rate_pct is not None:
+            robustness += f"  Win rate: {summary.win_rate_pct}%\n"
+
         return (
             f"Backtest {summary.ticker_symbol} (session {summary.session_id}):\n"
             f"  Status: {summary.status}\n"
@@ -65,6 +75,7 @@ class BacktestTool(BaseTool, ApplicationLoggingMixin):
             f"  Return: {summary.return_pct:.4f}%\n"
             f"  PnL: {summary.absolute_pnl:.4f}\n"
             f"  Max drawdown: {summary.max_drawdown_pct:.4f}%\n"
+            f"{robustness}"
             f"  Round trips: {summary.round_trips}\n"
             f"  Fills: {summary.orders_filled}\n"
             f"  Cancelled: {summary.orders_cancelled}"

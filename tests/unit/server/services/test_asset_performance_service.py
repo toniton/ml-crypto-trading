@@ -164,4 +164,12 @@ def test_extract_trades_and_compute_metrics_with_slippage():
         "BTC_USD", datetime(2026, 9, 1, tzinfo=timezone.utc), datetime(2026, 9, 10, tzinfo=timezone.utc), orders
     )
     assert Decimal(res.summary.realized_pnl) == Decimal("195.00")
+    assert res.risk_adjusted is not None
+    assert res.behavior is not None
+    assert res.execution is not None
+    assert res.portfolio is not None
+    assert res.execution.total_slippage_cost == Decimal("1.00")
+    assert res.behavior.round_trips == 2
+    assert res.behavior.winning_trades == 2
+
 

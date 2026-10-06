@@ -9,6 +9,18 @@ from pydantic import BaseModel
 
 from api.interfaces.order import Order
 from api.interfaces.trade import Trade
+from api.interfaces.trade_action import TradeAction
+from src.backtest.analysis.calculators.execution_quality_calculator import ExecutionQualityCalculator
+from src.backtest.analysis.calculators.portfolio_risk_calculator import PortfolioRiskCalculator
+from src.backtest.analysis.calculators.risk_adjusted_calculator import RiskAdjustedCalculator
+from src.backtest.analysis.calculators.trading_behavior_calculator import TradingBehaviorCalculator
+from src.backtest.domain.metrics import (
+    ExecutionQualityMetrics,
+    PortfolioRiskMetrics,
+    RiskAdjustedMetrics,
+    TradingBehaviorMetrics,
+)
+from src.backtest.domain.result import PortfolioSnapshot
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.trading.analytics.trade_attribution_service import (
@@ -99,6 +111,10 @@ class AssetPerformanceResponse(BaseModel):
     trades: List[TradeExecutionItem]
     strategy_attribution: Dict[str, StrategyAttributionModel] = {}
     commit_attribution: Dict[str, StrategyAttributionModel] = {}
+    risk_adjusted: Optional[RiskAdjustedMetrics] = None
+    behavior: Optional[TradingBehaviorMetrics] = None
+    execution: Optional[ExecutionQualityMetrics] = None
+    portfolio: Optional[PortfolioRiskMetrics] = None
 
 
 class BuyLot:
@@ -417,6 +433,106 @@ class AssetPerformanceService:
             for c_hash, metrics in commit_attribution.items()
         }
 
+        # 4 Dimensions of Strategy Robustness Metrics
+        from api.interfaces.backtest_request import ExecutionConfiguration
+        from src.backtest.domain.result import BacktestFill, BacktestResult
+
+        initial_balance = Decimal("10000")
+        current_equity = initial_balance
+        peak_equity = initial_balance
+        max_dd = Decimal("0")
+        max_dd_pct = Decimal("0")
+
+        snapshots: list[PortfolioSnapshot] = [
+            PortfolioSnapshot(
+                timestamp=int(start.timestamp()),
+                cash=initial_balance,
+                positions={},
+                equity=initial_balance,
+            )
+        ]
+
+        for trade in matched_trades:
+            current_equity += trade.net_pnl
+            if current_equity > peak_equity:
+                peak_equity = current_equity
+            dd = peak_equity - current_equity
+            if dd > max_dd:
+                max_dd = dd
+            if peak_equity > Decimal("0"):
+                dd_pct = (dd / peak_equity) * Decimal("100")
+                if dd_pct > max_dd_pct:
+                    max_dd_pct = dd_pct
+            snapshots.append(
+                PortfolioSnapshot(
+                    timestamp=int(trade.exit_timestamp),
+                    cash=current_equity,
+                    positions={},
+                    equity=current_equity,
+                )
+            )
+
+        fills: list[BacktestFill] = []
+        for o in sorted_orders:
+            action = (
+                o.trade_action
+                if hasattr(o.trade_action, "value")
+                else (TradeAction.BUY if "BUY" in str(o.trade_action).upper() else TradeAction.SELL)
+            )
+            qty = Decimal(str(o.quantity or "0"))
+            fill_p = Decimal(str(o.fill_price or o.price or "0"))
+            req_p = Decimal(str(o.price or fill_p))
+            fee_val = Decimal(str(o.fees or "0"))
+            slip_val = Decimal(str(o.slippage or "0"))
+            slip_unit = (slip_val / qty) if qty > Decimal("0") else Decimal("0")
+            exec_t = float(o.executed_time or o.created_time or 0.0)
+            created_t = float(o.created_time or exec_t)
+
+            fills.append(
+                BacktestFill(
+                    order_uuid=o.uuid,
+                    ticker_symbol=ticker_symbol,
+                    trade_action=action,
+                    requested_price=req_p,
+                    market_price=req_p,
+                    execution_price=fill_p,
+                    quantity=qty,
+                    fee=fee_val,
+                    slippage_per_unit=slip_unit,
+                    slippage_cost=slip_val,
+                    submitted_at=created_t,
+                    executed_at=exec_t,
+                )
+            )
+
+        bt_result = BacktestResult(
+            session_id="live-performance",
+            ticker_symbol=ticker_symbol,
+            initial_balance=initial_balance,
+            final_balance=current_equity,
+            final_equity=current_equity,
+            execution=ExecutionConfiguration(),
+            orders=sorted_orders,
+            fills=fills,
+            portfolio_snapshots=snapshots,
+            trades=matched_trades,
+        )
+
+        risk_adjusted = RiskAdjustedCalculator().calculate(
+            snapshots=snapshots,
+            initial_balance=initial_balance,
+            final_equity=current_equity,
+            max_drawdown=max_dd,
+            max_drawdown_pct=max_dd_pct,
+        )
+        behavior = TradingBehaviorCalculator().calculate(
+            fills=fills,
+            snapshots=snapshots,
+            initial_balance=initial_balance,
+        )
+        execution = ExecutionQualityCalculator().calculate(fills=fills, orders=sorted_orders)
+        portfolio = PortfolioRiskCalculator().calculate(result=bt_result)
+
         return AssetPerformanceResponse(
             ticker_symbol=ticker_symbol,
             period=PeriodModel(start=start.isoformat(), end=end.isoformat()),
@@ -425,4 +541,8 @@ class AssetPerformanceService:
             trades=execution_items,
             strategy_attribution=strategy_attribution_models,
             commit_attribution=commit_attribution_models,
+            risk_adjusted=risk_adjusted,
+            behavior=behavior,
+            execution=execution,
+            portfolio=portfolio,
         )

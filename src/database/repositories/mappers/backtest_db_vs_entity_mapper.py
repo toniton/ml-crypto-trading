@@ -110,6 +110,18 @@ class BacktestDBVSEntityMapper:
         )
 
     @staticmethod
+    def _normalize_value(v: Any) -> Any:
+        if isinstance(v, Decimal):
+            return str(v)
+        if isinstance(v, datetime):
+            return v.isoformat()
+        if isinstance(v, dict):
+            return {k: BacktestDBVSEntityMapper._normalize_value(val) for k, val in v.items()}
+        if isinstance(v, list):
+            return [BacktestDBVSEntityMapper._normalize_value(item) for item in v]
+        return v
+
+    @staticmethod
     def _serialize_metrics(metrics: Optional[BacktestMetrics | dict[str, Any]]) -> dict[str, Any]:
         if metrics is None:
             return {}
@@ -120,14 +132,10 @@ class BacktestDBVSEntityMapper:
         else:
             raw_metrics = {}
 
-        metrics_dict: dict[str, Any] = {}
-        for k, v in raw_metrics.items():
-            if isinstance(v, Decimal):
-                metrics_dict[k] = str(v)
-            elif isinstance(v, datetime):
-                metrics_dict[k] = v.isoformat()
-            else:
-                metrics_dict[k] = v
+        metrics_dict: dict[str, Any] = {
+            k: BacktestDBVSEntityMapper._normalize_value(v)
+            for k, v in raw_metrics.items()
+        }
 
         for alias, source in (
                 ("total_pnl", "absolute_pnl"),
