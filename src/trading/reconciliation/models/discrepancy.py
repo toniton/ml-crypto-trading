@@ -7,6 +7,9 @@ from enum import Enum
 from typing import Any, Optional
 
 
+from src.core.severity import Severity
+
+
 class DiscrepancyType(str, Enum):
     BALANCE_MISMATCH = "BALANCE_MISMATCH"
     ORDER_STATUS_MISMATCH = "ORDER_STATUS_MISMATCH"
@@ -17,16 +20,10 @@ class DiscrepancyType(str, Enum):
     UNTRACKED_TRANSFER = "UNTRACKED_TRANSFER"
 
 
-class DiscrepancySeverity(str, Enum):
-    INFO = "INFO"
-    WARNING = "WARNING"
-    CRITICAL = "CRITICAL"
-
-
 @dataclass(frozen=True)
 class Discrepancy:
     discrepancy_type: DiscrepancyType
-    severity: DiscrepancySeverity
+    severity: Severity
     exchange: str
     asset_or_currency: str
     local_value: Any
@@ -38,11 +35,11 @@ class Discrepancy:
 
     @property
     def is_critical(self) -> bool:
-        return self.severity == DiscrepancySeverity.CRITICAL
+        return self.severity in (Severity.CRITICAL, Severity.FATAL)
 
     @property
     def is_warning(self) -> bool:
-        return self.severity == DiscrepancySeverity.WARNING
+        return self.severity == Severity.WARNING
 
     def format_alert(self) -> str:
         diff_str = f"{self.difference:+}" if self.difference is not None else "N/A"

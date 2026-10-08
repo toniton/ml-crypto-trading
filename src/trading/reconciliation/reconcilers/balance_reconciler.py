@@ -5,12 +5,12 @@ from typing import List, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
+from src.core.severity import Severity
 from src.exchange.managers.rest_manager import RestManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.base_reconciler import BaseReconciler
@@ -87,11 +87,11 @@ class BalanceReconciler(ApplicationLoggingMixin, BaseReconciler):
 
             if abs(diff) > self._warning_threshold:
                 severity = (
-                    DiscrepancySeverity.CRITICAL
+                    Severity.CRITICAL
                     if abs(diff) >= self._critical_threshold
-                    else DiscrepancySeverity.WARNING
+                    else Severity.WARNING
                 )
-                action = "TRADING_PAUSED_AND_LOCAL_SYNCED" if severity == DiscrepancySeverity.CRITICAL else "LOCAL_STATE_SYNCED"
+                action = "TRADING_PAUSED_AND_LOCAL_SYNCED" if severity == Severity.CRITICAL else "LOCAL_STATE_SYNCED"
 
                 discrepancy = Discrepancy(
                     discrepancy_type=DiscrepancyType.BALANCE_MISMATCH,

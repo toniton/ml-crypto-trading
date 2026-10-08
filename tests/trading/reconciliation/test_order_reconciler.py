@@ -7,9 +7,9 @@ from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import OrderStatus, TradeAction
+from src.core.severity import Severity
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.reconciliation.models.discrepancy import (
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.order_reconciler import (
@@ -76,7 +76,7 @@ class TestOrderReconciler(unittest.TestCase):
         self.assertEqual(len(discrepancies), 1)
         disc = discrepancies[0]
         self.assertEqual(disc.discrepancy_type, DiscrepancyType.ORDER_STATUS_MISMATCH)
-        self.assertEqual(disc.severity, DiscrepancySeverity.WARNING)
+        self.assertEqual(disc.severity, Severity.WARNING)
         self.assertEqual(local_order.status, OrderStatus.COMPLETED)
         self.assertEqual(local_order.fill_price, Decimal("50000"))
         self.mock_order_manager._save_orders_to_database.assert_called_with([local_order])
@@ -100,5 +100,5 @@ class TestOrderReconciler(unittest.TestCase):
         self.assertEqual(len(discrepancies), 1)
         disc = discrepancies[0]
         self.assertEqual(disc.discrepancy_type, DiscrepancyType.ORPHAN_ORDER_DETECTED)
-        self.assertEqual(disc.severity, DiscrepancySeverity.CRITICAL)
+        self.assertEqual(disc.severity, Severity.CRITICAL)
         self.assertEqual(disc.action_taken, "MANUAL_REVIEW_REQUIRED")

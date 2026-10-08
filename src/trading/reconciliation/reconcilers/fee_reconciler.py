@@ -4,11 +4,11 @@ from decimal import Decimal
 from typing import List
 
 from api.interfaces.asset import Asset
+from src.core.severity import Severity
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.fees.fees_manager import FeesManager
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.base_reconciler import BaseReconciler
@@ -34,7 +34,7 @@ class FeeReconciler(ApplicationLoggingMixin, BaseReconciler):
                 if cached_fee and (cached_fee.maker_fee_pct < Decimal("0") or cached_fee.taker_fee_pct < Decimal("0")):
                     discrepancies.append(Discrepancy(
                         discrepancy_type=DiscrepancyType.FEE_MISMATCH,
-                        severity=DiscrepancySeverity.WARNING,
+                        severity=Severity.WARNING,
                         exchange=ex_key,
                         asset_or_currency=asset.ticker_symbol,
                         local_value=f"maker: {cached_fee.maker_fee_pct}, taker: {cached_fee.taker_fee_pct}",

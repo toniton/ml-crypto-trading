@@ -37,18 +37,15 @@ class ActionStatus(str, Enum):
     FAILED = "FAILED"
 
 
+from src.core.severity import Severity
+
+
 class ApprovalStatus(str, Enum):
     PENDING = "PENDING"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
     EXPIRED = "EXPIRED"
     CANCELLED = "CANCELLED"
-
-
-class ActionSeverity(str, Enum):
-    INFO = "INFO"
-    WARNING = "WARNING"
-    CRITICAL = "CRITICAL"
 
 
 class AgentPermission(str, Enum):
@@ -114,7 +111,7 @@ class AgentAction(BaseModel):
     description: str
     payload: dict = Field(default_factory=dict)
     reason: Optional[ActionReason] = None
-    severity: ActionSeverity = ActionSeverity.INFO
+    severity: Severity = Severity.INFO
     requires_approval: bool = False
     safety_class: Optional[ActionSafetyClass] = None
     request_id: Optional[str] = None

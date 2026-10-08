@@ -8,12 +8,12 @@ from src.agent.runtime_debug.models import (
     DebugDiagnosis,
     DebugSuggestion,
     ErrorCategory,
-    ErrorSeverity,
     IncidentStatus,
     RiskLevel,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 from src.database.repositories.providers.postgres_runtime_incident_repository import (
     PostgresRuntimeIncidentRepository,
 )
@@ -36,7 +36,7 @@ def test_save_and_get_incident():
         fingerprint="fp-test-1",
         status=IncidentStatus.DETECTED,
         category=ErrorCategory.EXCHANGE_VALIDATION,
-        severity=ErrorSeverity.ERROR,
+        severity=Severity.ERROR,
         component="trading.orders.order_manager",
         asset="BTC_USD",
         exchange="CRYPTO_DOT_COM",
@@ -63,7 +63,7 @@ def test_get_by_fingerprint_with_status_filter():
         fingerprint="fp-dedupe",
         status=IncidentStatus.DETECTED,
         category=ErrorCategory.EXCHANGE_VALIDATION,
-        severity=ErrorSeverity.ERROR,
+        severity=Severity.ERROR,
         component="trading.orders.order_manager",
         asset="BTC_USD",
         first_seen=datetime.now(timezone.utc),
@@ -88,7 +88,7 @@ def test_add_and_get_error_events():
         fingerprint="fp-events",
         status=IncidentStatus.DETECTED,
         category=ErrorCategory.EXCHANGE_VALIDATION,
-        severity=ErrorSeverity.ERROR,
+        severity=Severity.ERROR,
         component="trading.orders.order_manager",
     )
     repo.save(incident)
@@ -96,7 +96,7 @@ def test_add_and_get_error_events():
     event1 = RuntimeErrorEvent(
         id=uuid4(),
         incident_id=incident.id,
-        severity=ErrorSeverity.ERROR,
+        severity=Severity.ERROR,
         component="trading.orders.order_manager",
         error_type="RuntimeError",
         message="Invalid quantity format",
@@ -119,7 +119,7 @@ def test_update_diagnosis_and_suggestion():
         fingerprint="fp-diag",
         status=IncidentStatus.DETECTED,
         category=ErrorCategory.EXCHANGE_VALIDATION,
-        severity=ErrorSeverity.ERROR,
+        severity=Severity.ERROR,
         component="trading.orders.order_manager",
     )
     repo.save(incident)

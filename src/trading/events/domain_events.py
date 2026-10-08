@@ -8,6 +8,7 @@ from typing import Any, Optional
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade import Trade
+from src.core.severity import Severity
 from src.events.trading_event import TradingEvent
 
 
@@ -205,7 +206,7 @@ class TradeClosedEvent(TradingEvent):
 class ReconciliationDiscrepancyEvent(TradingEvent):
     EVENT_TYPE = "ReconciliationDiscrepancyEvent"
     discrepancy_type: str = ""
-    severity: str = "CRITICAL"
+    severity: Severity = Severity.CRITICAL
     exchange: str = ""
     asset_or_currency: str = ""
     local_value: Any = None
@@ -257,7 +258,7 @@ class TradingHealthConditionDetectedEvent(TradingEvent):
     condition: str = ""
     scope_type: str = ""
     scope_identifier: str = ""
-    severity: str = "critical"
+    severity: Severity = Severity.CRITICAL
     measured_value: Any = None
     threshold: Any = None
     action_taken: str = ""

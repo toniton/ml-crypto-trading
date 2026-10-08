@@ -3,7 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Dict
 
-from src.agent.actions.models import ActionSeverity, AgentAction
+from src.agent.actions.models import AgentAction
+from src.core.severity import Severity
 
 
 class NotificationPolicy:
@@ -17,7 +18,7 @@ class NotificationPolicy:
 
     def should_deliver(self, action: AgentAction) -> bool:
         """Determines if the action should immediately be delivered as a chat message."""
-        if action.severity == ActionSeverity.CRITICAL or action.reason is None:
+        if action.severity == Severity.CRITICAL or action.reason is None:
             return True
 
         fingerprint = self._fingerprint(action)
@@ -26,7 +27,7 @@ class NotificationPolicy:
 
         cooldown = (
             self._info_cooldown_seconds
-            if action.severity == ActionSeverity.INFO
+            if action.severity == Severity.INFO
             else self._warning_cooldown_seconds
         )
 

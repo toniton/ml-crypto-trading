@@ -6,11 +6,11 @@ from uuid import uuid4
 from src.agent.runtime_debug.fingerprint import compute_error_fingerprint
 from src.agent.runtime_debug.models import (
     ErrorCategory,
-    ErrorSeverity,
     IncidentStatus,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
@@ -62,19 +62,19 @@ class IncidentAggregator(ApplicationLoggingMixin):
             self.process_error_event(error_event)
 
     @classmethod
-    def classify_error(cls, event: RuntimeErrorEvent) -> tuple[ErrorCategory, ErrorSeverity]:
+    def classify_error(cls, event: RuntimeErrorEvent) -> tuple[ErrorCategory, Severity]:
         msg = (event.message or "").lower()
         http_status = event.http_status
         exchange_code = event.exchange_code
 
         if http_status == 429 or "rate limit" in msg:
-            return ErrorCategory.RATE_LIMIT, ErrorSeverity.WARNING
+            return ErrorCategory.RATE_LIMIT, Severity.WARNING
 
         if http_status in (401, 403) or "unauthorized" in msg or "authentication" in msg:
-            return ErrorCategory.AUTHENTICATION, ErrorSeverity.CRITICAL
+            return ErrorCategory.AUTHENTICATION, Severity.CRITICAL
 
         if http_status in (502, 503, 504) or "timeout" in msg or "connection refused" in msg or "url error" in msg:
-            return ErrorCategory.TRANSIENT_NETWORK, ErrorSeverity.WARNING
+            return ErrorCategory.TRANSIENT_NETWORK, Severity.WARNING
 
         if (
             http_status == 400
@@ -84,15 +84,15 @@ class IncidentAggregator(ApplicationLoggingMixin):
             or "min_quantity" in msg
             or "insufficient balance" in msg
         ):
-            return ErrorCategory.EXCHANGE_VALIDATION, ErrorSeverity.CRITICAL
+            return ErrorCategory.EXCHANGE_VALIDATION, Severity.CRITICAL
 
         if "config" in (event.component or "").lower() or "configuration" in msg:
-            return ErrorCategory.CONFIGURATION, ErrorSeverity.ERROR
+            return ErrorCategory.CONFIGURATION, Severity.ERROR
 
         if "database" in msg or "sqlalchemy" in msg or "postgres" in msg:
-            return ErrorCategory.DATABASE, ErrorSeverity.CRITICAL
+            return ErrorCategory.DATABASE, Severity.CRITICAL
 
-        return ErrorCategory.UNKNOWN, event.severity or ErrorSeverity.ERROR
+        return ErrorCategory.UNKNOWN, event.severity or Severity.ERROR
 
     def process_error_event(self, event: RuntimeErrorEvent) -> RuntimeIncident:
         if not event.fingerprint:
@@ -150,7 +150,7 @@ class IncidentAggregator(ApplicationLoggingMixin):
 
                 if self._auto_investigate and (
                     category == ErrorCategory.EXCHANGE_VALIDATION
-                    or severity == ErrorSeverity.CRITICAL
+                    or severity == Severity.CRITICAL
                 ):
                     should_trigger_investigation = True
                     incident_id_to_investigate = str(incident.id)

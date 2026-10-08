@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional
 
+from src.core.severity import Severity
 from src.events.agent_event import AgentEvent
 from src.events.agent_event_metadata import AgentEventMetadata
 
@@ -71,7 +72,7 @@ class AgentActionPlanRequestedEvent(AgentEvent):
     conversation_id: Optional[str] = None
     payload: dict[str, Any] = None
     reason: Optional[dict[str, Any]] = None
-    severity: str = "INFO"
+    severity: Severity = Severity.INFO
     requires_approval: bool = False
     source: str = "user"
 

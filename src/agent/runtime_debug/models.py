@@ -7,11 +7,7 @@ from typing import Any, Optional
 from uuid import UUID, uuid4
 
 
-class ErrorSeverity(str, Enum):
-    INFO = "INFO"
-    WARNING = "WARNING"
-    ERROR = "ERROR"
-    CRITICAL = "CRITICAL"
+from src.core.severity import Severity
 
 
 class ErrorCategory(str, Enum):
@@ -153,7 +149,7 @@ class DebugSuggestion:
 class RuntimeErrorEvent:
     id: UUID = field(default_factory=uuid4)
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    severity: ErrorSeverity = ErrorSeverity.ERROR
+    severity: Severity = Severity.ERROR
     component: str = ""
     error_type: str = ""
     message: str = ""
@@ -209,7 +205,7 @@ class RuntimeErrorEvent:
         return cls(
             id=event_id,
             timestamp=ts,
-            severity=ErrorSeverity(data.get("severity", ErrorSeverity.ERROR.value)),
+            severity=Severity.from_value(data.get("severity"), Severity.ERROR),
             component=data.get("component", ""),
             error_type=data.get("error_type", ""),
             message=data.get("message", ""),
@@ -233,7 +229,7 @@ class RuntimeIncident:
     fingerprint: str = ""
     status: IncidentStatus = IncidentStatus.DETECTED
     category: ErrorCategory = ErrorCategory.UNKNOWN
-    severity: ErrorSeverity = ErrorSeverity.ERROR
+    severity: Severity = Severity.ERROR
     component: str = ""
     operation: Optional[str] = None
     asset: Optional[str] = None
@@ -294,7 +290,7 @@ class RuntimeIncident:
             fingerprint=data.get("fingerprint", ""),
             status=IncidentStatus(data.get("status", IncidentStatus.DETECTED.value)),
             category=ErrorCategory(data.get("category", ErrorCategory.UNKNOWN.value)),
-            severity=ErrorSeverity(data.get("severity", ErrorSeverity.ERROR.value)),
+            severity=Severity.from_value(data.get("severity"), Severity.ERROR),
             component=data.get("component", ""),
             operation=data.get("operation"),
             asset=data.get("asset"),

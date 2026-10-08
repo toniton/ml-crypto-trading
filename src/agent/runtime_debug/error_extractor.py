@@ -4,7 +4,8 @@ import traceback
 from typing import Any, Optional
 
 from api.interfaces.order import Order
-from src.agent.runtime_debug.models import ErrorSeverity, RuntimeErrorEvent
+from src.agent.runtime_debug.models import RuntimeErrorEvent
+from src.core.severity import Severity
 from src.trading.helpers.request_helper import ExchangeRequestError
 
 
@@ -45,9 +46,9 @@ class ErrorExtractor:
             metadata["order_price"] = str(order.price)
             metadata["trade_action"] = order.trade_action.value
 
-        severity = ErrorSeverity.ERROR
+        severity = Severity.ERROR
         if http_status == 400 and exchange_code:
-            severity = ErrorSeverity.CRITICAL
+            severity = Severity.CRITICAL
 
         return RuntimeErrorEvent(
             severity=severity,

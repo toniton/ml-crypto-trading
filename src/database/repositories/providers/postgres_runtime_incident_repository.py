@@ -7,11 +7,11 @@ from src.agent.runtime_debug.models import (
     DebugDiagnosis,
     DebugSuggestion,
     ErrorCategory,
-    ErrorSeverity,
     IncidentStatus,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 from src.database.dao.runtime_incident_dao import RuntimeErrorEventDao, RuntimeIncidentDao
 from src.database.repositories.runtime_incident_repository import RuntimeIncidentRepository
 
@@ -81,7 +81,7 @@ class PostgresRuntimeIncidentRepository(RuntimeIncidentRepository):
     def list_incidents(
             self,
             status: Optional[IncidentStatus] = None,
-            severity: Optional[ErrorSeverity] = None,
+            severity: Optional[Severity] = None,
             asset: Optional[str] = None,
             exchange: Optional[str] = None,
             limit: int = 50,
@@ -214,7 +214,7 @@ class PostgresRuntimeIncidentRepository(RuntimeIncidentRepository):
             fingerprint=dao.fingerprint,
             status=IncidentStatus(dao.status),
             category=ErrorCategory(dao.category),
-            severity=ErrorSeverity(dao.severity),
+            severity=Severity.from_value(dao.severity),
             component=dao.component,
             operation=dao.operation,
             asset=dao.asset,
@@ -256,7 +256,7 @@ class PostgresRuntimeIncidentRepository(RuntimeIncidentRepository):
         return RuntimeErrorEvent(
             id=UUID(dao.id),
             timestamp=dao.timestamp,
-            severity=ErrorSeverity(dao.severity),
+            severity=Severity.from_value(dao.severity),
             component=dao.component,
             error_type=dao.error_type,
             message=dao.message,

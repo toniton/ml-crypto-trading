@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Optional, Sequence
 
 from src.trading.health.enums import (
-    ConditionSeverity,
     ScopeType,
     TradingHealthState,
 )
@@ -26,12 +25,12 @@ class TradingTransitionPolicy:
             return current_state
 
         has_critical_global = any(
-            c.severity in (ConditionSeverity.CRITICAL, ConditionSeverity.FATAL)
+            c.severity.is_critical_or_higher
             and c.scope.scope_type == ScopeType.GLOBAL
             for c in active_conditions
         )
         has_any_critical = any(
-            c.severity in (ConditionSeverity.CRITICAL, ConditionSeverity.FATAL)
+            c.severity.is_critical_or_higher
             for c in active_conditions
         )
         has_conditions = len(active_conditions) > 0
@@ -105,7 +104,7 @@ class TradingTransitionPolicy:
 
         if requested_state == TradingHealthState.TRADING:
             has_critical = any(
-                c.severity in (ConditionSeverity.CRITICAL, ConditionSeverity.FATAL)
+                c.severity.is_critical_or_higher
                 for c in active_conditions
             )
             if has_critical:

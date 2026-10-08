@@ -8,6 +8,7 @@ from src.agent.oracle.events import OracleSummaryEvent
 from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
+from src.core.severity import Severity
 from src.database.dao.runtime_incident_dao import RuntimeIncidentDao
 from src.database.repositories.providers.postgres_timeline_repository import PostgresTimelineRepository
 from src.database.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
@@ -157,7 +158,7 @@ class TimelineProjector(ApplicationLoggingMixin):
                             TimelineItem(
                                 timestamp=seen_dt.isoformat(),
                                 category=TimelineCategory.RUNTIME,
-                                severity=inc.severity.upper() if inc.severity else "ERROR",
+                                severity=Severity.from_value(inc.severity, Severity.ERROR),
                                 title=f"Runtime Incident: {inc.id[:8] if inc.id else ''}",
                                 summary=inc.notes or f"Incident in {inc.component}: {inc.category}",
                                 correlation_id=None,
@@ -254,7 +255,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         if decision is not None and decision.resulting_order_id:
             entities.append(EntityRef(type="ORDER", id=decision.resulting_order_id))
 
-        severity = "INFO" if status == "EXECUTED" else ("WARNING" if status == "REJECTED" else "INFO")
+        severity = Severity.INFO if status == "EXECUTED" else (Severity.WARNING if status == "REJECTED" else Severity.INFO)
         title = f"Trading Decision: {action} {symbol} ({status})"
 
         if status == "EXECUTED":
@@ -297,7 +298,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.RUNTIME,
-            severity=event.severity.upper() if event.severity else "CRITICAL",
+            severity=Severity.from_value(event.severity, Severity.CRITICAL),
             title=f"Reconciliation: {event.discrepancy_type} ({event.asset_or_currency})",
             summary=summary,
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -327,7 +328,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.DECISION,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"Consensus Evaluated: {symbol} -> {decision}",
             summary=f"Consensus {decision} (Quorum: {quorum_met}, Buy: {buy_votes}, Sell: {sell_votes})",
             correlation_id=event.correlation_id,
@@ -351,7 +352,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,
-            severity="WARNING",
+            severity=Severity.WARNING,
             title=f"Trading Starvation Detected: {asset}",
             summary=f"Watchdog detected {anomaly_kind} beyond {threshold:.0f}s threshold",
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -375,7 +376,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.DECISION,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"Decision: {summary}" if summary else "Agent Decision Recorded",
             summary=rationale or summary,
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -402,7 +403,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.APPROVAL,
-            severity="WARNING",
+            severity=Severity.WARNING,
             title=f"Approval Requested: {title}",
             summary=payload.get("description") or title,
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -421,7 +422,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.APPROVAL,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"Proposal Decision: {decision.upper()}",
             summary=f"User {decision} proposal {approval_id}",
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -441,7 +442,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"Agent Action: {title}",
             summary=f"Created {action_type} action: {title}",
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -459,7 +460,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"Action Completed: {action_id[:8] if action_id else ''}",
             summary=f"Agent action {action_id} completed successfully",
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -477,7 +478,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,
-            severity="ERROR",
+            severity=Severity.ERROR,
             title=f"Action Failed: {action_id[:8] if action_id else ''}",
             summary=f"Agent action {action_id} failed: {error}",
             correlation_id=str(event.correlation_id) if event.correlation_id else None,
@@ -496,7 +497,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.AGENT,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"Oracle Summary: {symbol}" if symbol else "Oracle Summary",
             summary=summary_text[:120] if summary_text else "Trading state summarized by LLM Oracle",
             correlation_id=event.correlation_id,
@@ -514,7 +515,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.VCS,
-            severity="INFO",
+            severity=Severity.INFO,
             title=f"VCS Updated: {ref}",
             summary=f"Ref {ref} pointed to commit {commit_hash[:8] if commit_hash else ''}",
             correlation_id=None,
@@ -531,7 +532,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.RUNTIME,
-            severity="ERROR",
+            severity=Severity.ERROR,
             title=f"Runtime Error: {error_type}",
             summary=message or error_type,
             correlation_id=event.correlation_id,
@@ -550,7 +551,7 @@ class TimelineProjector(ApplicationLoggingMixin):
         return TimelineItem(
             timestamp=event.timestamp,
             category=TimelineCategory.RUNTIME,
-            severity=severity.upper() if severity else "ERROR",
+            severity=Severity.from_value(severity, Severity.ERROR),
             title=f"Runtime Incident: {incident_id[:8] if incident_id else ''}",
             summary=summary,
             correlation_id=event.correlation_id,

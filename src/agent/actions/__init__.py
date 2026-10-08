@@ -4,7 +4,6 @@ from src.agent.actions.executor import AgentActionExecutor
 from src.agent.actions.models import (
     ActionReason,
     ActionSafetyClass,
-    ActionSeverity,
     ActionStatus,
     AgentAction,
     AgentActionType,
@@ -24,7 +23,6 @@ __all__ = [
     "ActionSafetyClass",
     "ActionStatus",
     "ApprovalStatus",
-    "ActionSeverity",
     "AgentPermission",
     "ActionReason",
     "AgentApprovalRequest",

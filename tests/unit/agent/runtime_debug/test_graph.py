@@ -7,12 +7,12 @@ from src.agent.runtime_debug.graph import RuntimeDebugGraph
 from src.agent.runtime_debug.models import (
     ConfidenceLevel,
     ErrorCategory,
-    ErrorSeverity,
     IncidentStatus,
     RiskLevel,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.agent.runtime_debug.tools import RuntimeDebugToolbox
 from src.database.repositories.providers.postgres_runtime_incident_repository import (
@@ -78,7 +78,7 @@ def test_runtime_debug_service_investigate_and_update():
             fingerprint="fp-test-service",
             status=IncidentStatus.DETECTED,
             category=ErrorCategory.EXCHANGE_VALIDATION,
-            severity=ErrorSeverity.CRITICAL,
+            severity=Severity.CRITICAL,
             component="trading.orders.order_manager",
             asset="BTC_USD",
             exchange="CRYPTO_DOT_COM",

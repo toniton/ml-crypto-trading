@@ -7,10 +7,10 @@ from typing import Optional, Set
 from src.agent.actions.executor import AgentActionExecutor
 from src.agent.actions.models import (
     ActionReason,
-    ActionSeverity,
     AgentAction,
     AgentActionType,
 )
+from src.core.severity import Severity
 from src.agent.actions.safety import (
     ActionSafetyClass,
     DEFAULT_AUTOMATION_AUTHORITY,
@@ -128,7 +128,7 @@ class AutomationController(ApplicationLoggingMixin):
             conversation_id=event.conversation_id,
             payload=event.payload or {},
             reason=ActionReason(**event.reason) if event.reason else None,
-            severity=ActionSeverity(event.severity),
+            severity=Severity.from_value(event.severity),
             requires_approval=event.requires_approval,
             request_id=str(event.request_id) if event.request_id else None,
             correlation_id=str(event.correlation_id),
@@ -186,7 +186,7 @@ class AutomationController(ApplicationLoggingMixin):
                     "proposed_change": decision.proposed_change or {},
                     "asset": decision.asset,
                 },
-                severity=ActionSeverity.WARNING,
+                severity=Severity.WARNING,
             )
             if safety_class_for_action_type(AgentActionType.CREATE_PROPOSAL) in self._authority:
                 self._executor.plan_and_execute(action)
@@ -206,7 +206,7 @@ class AutomationController(ApplicationLoggingMixin):
             title: str,
             description: str,
             payload: dict,
-            severity: ActionSeverity,
+            severity: Severity,
     ) -> AgentAction:
         return AgentAction(
             type=action_type,

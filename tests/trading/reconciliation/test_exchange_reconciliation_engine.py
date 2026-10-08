@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
+from src.core.severity import Severity
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.events.domain_events import (
     ReconciliationCompletedEvent,
@@ -17,7 +18,6 @@ from src.trading.reconciliation.exchange_reconciliation_engine import (
 )
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 
@@ -69,7 +69,7 @@ class TestExchangeReconciliationEngine(unittest.TestCase):
     def test_reconcile_all_emits_events_and_pauses_on_critical(self):
         critical_disc = Discrepancy(
             discrepancy_type=DiscrepancyType.BALANCE_MISMATCH,
-            severity=DiscrepancySeverity.CRITICAL,
+            severity=Severity.CRITICAL,
             exchange="CRYPTO_DOT_COM",
             asset_or_currency="USD",
             local_value="USD 7610.00",
@@ -114,7 +114,7 @@ class TestExchangeReconciliationEngine(unittest.TestCase):
     def test_reconcile_all_auto_resumes_when_clean(self):
         critical_disc = Discrepancy(
             discrepancy_type=DiscrepancyType.BALANCE_MISMATCH,
-            severity=DiscrepancySeverity.CRITICAL,
+            severity=Severity.CRITICAL,
             exchange="CRYPTO_DOT_COM",
             asset_or_currency="USD",
             local_value="USD 7610.00",

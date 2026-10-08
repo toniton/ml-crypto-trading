@@ -4,11 +4,11 @@ from decimal import Decimal
 from typing import List
 
 from api.interfaces.asset import Asset
+from src.core.severity import Severity
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.base_reconciler import BaseReconciler
@@ -54,13 +54,13 @@ class PositionReconciler(ApplicationLoggingMixin, BaseReconciler):
                     crit_thresh = max(crit_thresh, Decimal(str(asset.min_quantity)))
 
                 severity = (
-                    DiscrepancySeverity.CRITICAL
+                    Severity.CRITICAL
                     if abs(diff) >= crit_thresh
-                    else DiscrepancySeverity.WARNING
+                    else Severity.WARNING
                 )
                 action = (
                     "TRADING_PAUSED_AND_LOCAL_SYNCED"
-                    if severity == DiscrepancySeverity.CRITICAL
+                    if severity == Severity.CRITICAL
                     else "LOCAL_STATE_SYNCED"
                 )
 

@@ -6,6 +6,7 @@ from enum import Enum
 from typing import Any, Optional
 from uuid import uuid4
 
+from src.core.severity import Severity
 from src.events.decision_models import ArtifactRef, EntityRef
 
 
@@ -26,7 +27,7 @@ class TimelineItem:
     timeline_id: str = field(default_factory=lambda: uuid4().hex)
     timestamp: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     category: TimelineCategory = TimelineCategory.TRADING
-    severity: str = "INFO"
+    severity: Severity = Severity.INFO
     title: str = ""
     summary: str = ""
     correlation_id: Optional[str] = None
@@ -43,7 +44,7 @@ class TimelineItem:
             "timeline_id": self.timeline_id,
             "timestamp": self.timestamp,
             "category": self.category.value if isinstance(self.category, TimelineCategory) else self.category,
-            "severity": self.severity,
+            "severity": self.severity.value if isinstance(self.severity, Severity) else str(self.severity),
             "title": self.title,
             "summary": self.summary,
             "correlation_id": self.correlation_id,

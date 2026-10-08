@@ -7,9 +7,9 @@ from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trading_context import TradingContext
+from src.core.severity import Severity
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.reconciliation.models.discrepancy import (
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.position_reconciler import (
@@ -60,7 +60,7 @@ class TestPositionReconciler(unittest.TestCase):
         self.assertEqual(len(discrepancies), 1)
         disc = discrepancies[0]
         self.assertEqual(disc.discrepancy_type, DiscrepancyType.POSITION_MISMATCH)
-        self.assertEqual(disc.severity, DiscrepancySeverity.CRITICAL)
+        self.assertEqual(disc.severity, Severity.CRITICAL)
         self.assertEqual(disc.difference, Decimal("-1.0"))
         # Verify authoritative sync
         self.assertEqual(trading_ctx.position_qty, Decimal("0.5"))
@@ -99,6 +99,6 @@ class TestPositionReconciler(unittest.TestCase):
 
         self.assertEqual(len(discrepancies), 1)
         disc = discrepancies[0]
-        self.assertEqual(disc.severity, DiscrepancySeverity.WARNING)
+        self.assertEqual(disc.severity, Severity.WARNING)
         self.assertEqual(disc.action_taken, "LOCAL_STATE_SYNCED")
         self.assertEqual(trading_ctx.position_qty, Decimal("1.005"))

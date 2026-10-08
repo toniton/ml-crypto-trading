@@ -7,11 +7,11 @@ from uuid import UUID
 from src.agent.runtime_debug.models import (
     DebugDiagnosis,
     DebugSuggestion,
-    ErrorSeverity,
     IncidentStatus,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 from src.database.repositories.base_repository import BaseRepository
 
 
@@ -24,7 +24,7 @@ class RuntimeIncidentRepository(BaseRepository[RuntimeIncident], metaclass=abc.A
     def list_incidents(
             self,
             status: Optional[IncidentStatus] = None,
-            severity: Optional[ErrorSeverity] = None,
+            severity: Optional[Severity] = None,
             asset: Optional[str] = None,
             exchange: Optional[str] = None,
             limit: int = 50,

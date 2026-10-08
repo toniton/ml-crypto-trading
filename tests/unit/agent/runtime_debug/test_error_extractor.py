@@ -2,7 +2,7 @@ from decimal import Decimal
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.agent.runtime_debug.error_extractor import ErrorExtractor
-from src.agent.runtime_debug.models import ErrorSeverity
+from src.core.severity import Severity
 from src.trading.helpers.request_helper import ExchangeRequestError
 
 
@@ -25,7 +25,7 @@ def test_extract_runtime_error_standard_exception():
     assert event.asset == "BTC_USD"
     assert event.order_id == "ord_1"
     assert event.exchange == "simulated"
-    assert event.severity == ErrorSeverity.ERROR
+    assert event.severity == Severity.ERROR
 
 
 def test_extract_runtime_error_exchange_request_error():
@@ -45,6 +45,6 @@ def test_extract_runtime_error_exchange_request_error():
     assert event.message == "insufficient balance"
     assert event.exchange_code == 10001
     assert event.http_status == 400
-    assert event.severity == ErrorSeverity.CRITICAL
+    assert event.severity == Severity.CRITICAL
     assert event.metadata["url"] == "https://api.crypto.com/v2/order"
     assert event.metadata["method"] == "POST"

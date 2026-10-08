@@ -7,9 +7,9 @@ from src.agent.runtime_debug.fingerprint import compute_error_fingerprint
 from src.agent.runtime_debug.incident_aggregator import IncidentAggregator
 from src.agent.runtime_debug.models import (
     ErrorCategory,
-    ErrorSeverity,
     RuntimeErrorEvent,
 )
+from src.core.severity import Severity
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.database.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 
@@ -73,7 +73,7 @@ def test_incident_aggregator_deduplicates_burst_errors():
 
     assert incident1.occurrence_count == 1
     assert incident1.category == ErrorCategory.EXCHANGE_VALIDATION
-    assert incident1.severity == ErrorSeverity.CRITICAL
+    assert incident1.severity == Severity.CRITICAL
     callback.assert_called_once_with(str(incident1.id))
 
     event2 = RuntimeErrorEvent(
@@ -95,14 +95,14 @@ def test_classify_error_categories():
     rate_limit_ev = RuntimeErrorEvent(http_status=429, message="Too Many Requests")
     cat, sev = IncidentAggregator.classify_error(rate_limit_ev)
     assert cat == ErrorCategory.RATE_LIMIT
-    assert sev == ErrorSeverity.WARNING
+    assert sev == Severity.WARNING
 
     auth_ev = RuntimeErrorEvent(http_status=401, message="Unauthorized API key")
     cat, sev = IncidentAggregator.classify_error(auth_ev)
     assert cat == ErrorCategory.AUTHENTICATION
-    assert sev == ErrorSeverity.CRITICAL
+    assert sev == Severity.CRITICAL
 
     network_ev = RuntimeErrorEvent(http_status=503, message="Service Unavailable: timeout")
     cat, sev = IncidentAggregator.classify_error(network_ev)
     assert cat == ErrorCategory.TRANSIENT_NETWORK
-    assert sev == ErrorSeverity.WARNING
+    assert sev == Severity.WARNING

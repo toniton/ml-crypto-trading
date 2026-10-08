@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Optional
 
+from src.core.severity import Severity
 from src.database.dao.timeline_item_dao import TimelineItemDao
 from src.events.decision_models import ArtifactRef, EntityRef
 from src.timeline.timeline_models import TimelineCategory, TimelineItem
@@ -92,7 +93,7 @@ class TimelineDBVSEntityMapper:
             timeline_id=dao.id,
             timestamp=iso_timestamp,
             category=category_enum,
-            severity=dao.severity or "INFO",
+            severity=Severity.from_value(dao.severity, Severity.INFO),
             title=dao.title or "",
             summary=dao.summary or "",
             correlation_id=dao.correlation_id,

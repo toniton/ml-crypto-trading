@@ -3,12 +3,12 @@ from __future__ import annotations
 from typing import List, Set
 
 from api.interfaces.asset import Asset
+from src.core.severity import Severity
 from src.exchange.managers.rest_manager import RestManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.orders.order_manager import OrderManager
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.base_reconciler import BaseReconciler
@@ -55,7 +55,7 @@ class OrderReconciler(ApplicationLoggingMixin, BaseReconciler):
                 self._order_manager._mark_reconciliation_required(order)
                 discrepancies.append(Discrepancy(
                     discrepancy_type=DiscrepancyType.ORDER_STATUS_MISMATCH,
-                    severity=DiscrepancySeverity.WARNING,
+                    severity=Severity.WARNING,
                     exchange=ex_key,
                     asset_or_currency=order.ticker_symbol,
                     local_value=str(order.status.value if order.status else "UNKNOWN"),
@@ -79,7 +79,7 @@ class OrderReconciler(ApplicationLoggingMixin, BaseReconciler):
 
                 discrepancies.append(Discrepancy(
                     discrepancy_type=DiscrepancyType.ORDER_STATUS_MISMATCH,
-                    severity=DiscrepancySeverity.WARNING,
+                    severity=Severity.WARNING,
                     exchange=ex_key,
                     asset_or_currency=order.ticker_symbol,
                     local_value=str(prev_status.value if prev_status else "UNKNOWN"),
@@ -100,7 +100,7 @@ class OrderReconciler(ApplicationLoggingMixin, BaseReconciler):
                     if ex_ord.uuid not in known_local_uuids:
                         discrepancies.append(Discrepancy(
                             discrepancy_type=DiscrepancyType.ORPHAN_ORDER_DETECTED,
-                            severity=DiscrepancySeverity.CRITICAL,
+                            severity=Severity.CRITICAL,
                             exchange=ex_key,
                             asset_or_currency=ex_ord.ticker_symbol,
                             local_value="NOT_TRACKED_LOCALLY",

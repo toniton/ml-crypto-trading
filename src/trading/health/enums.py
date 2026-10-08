@@ -23,12 +23,6 @@ class TradingHealthCondition(str, Enum):
     CONFIG_INVALID = "config_invalid"
 
 
-class ConditionSeverity(str, Enum):
-    WARNING = "warning"
-    CRITICAL = "critical"
-    FATAL = "fatal"
-
-
 class ScopeType(str, Enum):
     GLOBAL = "global"
     EXCHANGE = "exchange"

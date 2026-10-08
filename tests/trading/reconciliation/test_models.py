@@ -1,9 +1,9 @@
 import unittest
 from decimal import Decimal
 
+from src.core.severity import Severity
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.models.reconciliation_report import (
@@ -15,7 +15,7 @@ class TestReconciliationModels(unittest.TestCase):
     def test_discrepancy_creation_and_properties(self):
         disc = Discrepancy(
             discrepancy_type=DiscrepancyType.BALANCE_MISMATCH,
-            severity=DiscrepancySeverity.CRITICAL,
+            severity=Severity.CRITICAL,
             exchange="CRYPTO_DOT_COM",
             asset_or_currency="USD",
             local_value="USD 7610.00",
@@ -34,7 +34,7 @@ class TestReconciliationModels(unittest.TestCase):
     def test_reconciliation_report_aggregations(self):
         critical_disc = Discrepancy(
             discrepancy_type=DiscrepancyType.BALANCE_MISMATCH,
-            severity=DiscrepancySeverity.CRITICAL,
+            severity=Severity.CRITICAL,
             exchange="CRYPTO_DOT_COM",
             asset_or_currency="USD",
             local_value="USD 100",
@@ -44,7 +44,7 @@ class TestReconciliationModels(unittest.TestCase):
         )
         warning_disc = Discrepancy(
             discrepancy_type=DiscrepancyType.ORDER_STATUS_MISMATCH,
-            severity=DiscrepancySeverity.WARNING,
+            severity=Severity.WARNING,
             exchange="CRYPTO_DOT_COM",
             asset_or_currency="BTC",
             local_value="PENDING",

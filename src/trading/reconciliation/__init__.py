@@ -1,5 +1,5 @@
 from .exchange_reconciliation_engine import ExchangeReconciliationEngine
-from .models.discrepancy import Discrepancy, DiscrepancySeverity, DiscrepancyType
+from .models.discrepancy import Discrepancy, DiscrepancyType
 from .models.reconciliation_report import ReconciliationReport
 from .reconcilers.balance_reconciler import BalanceReconciler
 from .reconcilers.base_reconciler import BaseReconciler
@@ -12,7 +12,6 @@ __all__ = [
     "BalanceReconciler",
     "BaseReconciler",
     "Discrepancy",
-    "DiscrepancySeverity",
     "DiscrepancyType",
     "ExchangeReconciliationEngine",
     "FeeReconciler",

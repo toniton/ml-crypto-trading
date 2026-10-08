@@ -6,13 +6,13 @@ from src.agent.runtime_debug.models import (
     DebugDiagnosis,
     DebugSuggestion,
     ErrorCategory,
-    ErrorSeverity,
     Evidence,
     IncidentStatus,
     RiskLevel,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 
 
 def test_evidence_serialization():
@@ -78,7 +78,7 @@ def test_runtime_error_event_serialization():
     event = RuntimeErrorEvent(
         id=event_id,
         timestamp=datetime(2026, 9, 20, 15, 0, 0, tzinfo=timezone.utc),
-        severity=ErrorSeverity.CRITICAL,
+        severity=Severity.CRITICAL,
         component="trading.orders.order_manager",
         error_type="RuntimeError",
         message="Invalid quantity format",
@@ -98,7 +98,7 @@ def test_runtime_error_event_serialization():
     assert restored.id == event_id
     assert restored.exchange_code == 213
     assert restored.http_status == 400
-    assert restored.severity == ErrorSeverity.CRITICAL
+    assert restored.severity == Severity.CRITICAL
     assert restored.fingerprint == "test-fingerprint-sha"
 
 
@@ -109,7 +109,7 @@ def test_runtime_incident_serialization():
         fingerprint="fp-123",
         status=IncidentStatus.DETECTED,
         category=ErrorCategory.EXCHANGE_VALIDATION,
-        severity=ErrorSeverity.ERROR,
+        severity=Severity.ERROR,
         component="trading.orders.order_manager",
         operation="execute_order",
         asset="BTC_USD",

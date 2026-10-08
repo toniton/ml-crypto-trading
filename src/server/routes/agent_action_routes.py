@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 
 from src.agent.actions.models import (
     ActionReason,
-    ActionSeverity,
     AgentActionType,
     BacktestComparisonAction,
     BacktestComparisonResult,
 )
 from src.core.interfaces.event_bus import EventBus
+from src.core.severity import Severity
 from src.events.agent_event_metadata import AgentEventMetadata
 from src.events.agent_events import (
     AgentActionPlanRequestedEvent,
@@ -30,7 +30,7 @@ class PlanActionRequest(BaseModel):
     conversation_id: Optional[str] = None
     payload: dict = Field(default_factory=dict)
     reason: Optional[ActionReason] = None
-    severity: ActionSeverity = ActionSeverity.INFO
+    severity: Severity = Severity.INFO
     requires_approval: bool = False
 
 

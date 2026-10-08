@@ -6,9 +6,9 @@ from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.timeframe import Timeframe
+from src.core.severity import Severity
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.reconciliation.models.discrepancy import (
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.balance_reconciler import (
@@ -59,7 +59,7 @@ class TestBalanceReconciler(unittest.TestCase):
         self.assertEqual(len(discrepancies), 1)
         disc = discrepancies[0]
         self.assertEqual(disc.discrepancy_type, DiscrepancyType.BALANCE_MISMATCH)
-        self.assertEqual(disc.severity, DiscrepancySeverity.CRITICAL)
+        self.assertEqual(disc.severity, Severity.CRITICAL)
         self.assertEqual(disc.exchange, "CRYPTO_DOT_COM")
         self.assertEqual(disc.asset_or_currency, "USD")
         self.assertEqual(disc.difference, Decimal("-7586.86"))
@@ -84,7 +84,7 @@ class TestBalanceReconciler(unittest.TestCase):
 
         self.assertEqual(len(discrepancies), 1)
         disc = discrepancies[0]
-        self.assertEqual(disc.severity, DiscrepancySeverity.WARNING)
+        self.assertEqual(disc.severity, Severity.WARNING)
         self.assertEqual(disc.difference, Decimal("-0.50"))
         self.assertEqual(disc.action_taken, "LOCAL_STATE_SYNCED")
 

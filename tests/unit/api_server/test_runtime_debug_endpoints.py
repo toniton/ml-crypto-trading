@@ -8,12 +8,12 @@ from fastapi.testclient import TestClient
 from src.agent import AgentGateway
 from src.agent.runtime_debug.models import (
     ErrorCategory,
-    ErrorSeverity,
     IncidentStatus,
     RuntimeErrorEvent,
     RuntimeIncident,
 )
 from src.configuration.trading_config import TradingConfig
+from src.core.severity import Severity
 from src.database.repositories.providers.postgres_runtime_incident_repository import (
     PostgresRuntimeIncidentRepository,
 )
@@ -75,7 +75,7 @@ class TestRuntimeDebugEndpoints(unittest.TestCase):
                 fingerprint="fp-api-test",
                 status=IncidentStatus.DETECTED,
                 category=ErrorCategory.EXCHANGE_VALIDATION,
-                severity=ErrorSeverity.CRITICAL,
+                severity=Severity.CRITICAL,
                 component="trading.orders.order_manager",
                 asset="BTC_USD",
                 exchange="CRYPTO_DOT_COM",
@@ -88,7 +88,7 @@ class TestRuntimeDebugEndpoints(unittest.TestCase):
             error_event = RuntimeErrorEvent(
                 id=uuid4(),
                 incident_id=self.incident_id,
-                severity=ErrorSeverity.CRITICAL,
+                severity=Severity.CRITICAL,
                 component="trading.orders.order_manager",
                 error_type="RuntimeError",
                 message="Invalid quantity format: 0.000078",

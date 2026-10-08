@@ -2,10 +2,10 @@ from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 from src.core.interfaces.event_bus import EventBus
+from src.core.severity import Severity
 from src.trading.health import (
     ActiveCondition,
     ConditionRegistry,
-    ConditionSeverity,
     HealthMonitor,
     HealthObservation,
     HealthScope,
@@ -47,14 +47,14 @@ def test_transition_policy_deterministic_paths():
     critical_condition = ActiveCondition(
         condition=TradingHealthCondition.EXCHANGE_UNAVAILABLE,
         scope=HealthScope.global_scope(),
-        severity=ConditionSeverity.CRITICAL,
+        severity=Severity.CRITICAL,
         first_detected_at=now,
         last_observed_at=now,
     )
     warning_condition = ActiveCondition(
         condition=TradingHealthCondition.MARKET_DATA_STALE,
         scope=HealthScope.asset_scope("BTC_USD"),
-        severity=ConditionSeverity.WARNING,
+        severity=Severity.WARNING,
         first_detected_at=now,
         last_observed_at=now,
     )
@@ -97,7 +97,7 @@ def test_permission_policy_scoped_isolation():
     stale_btc = ActiveCondition(
         condition=TradingHealthCondition.MARKET_DATA_STALE,
         scope=HealthScope.asset_scope("BTC_USD"),
-        severity=ConditionSeverity.CRITICAL,
+        severity=Severity.CRITICAL,
         first_detected_at=now,
         last_observed_at=now,
     )

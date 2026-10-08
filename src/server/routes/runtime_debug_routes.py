@@ -5,10 +5,10 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from src.agent.runtime_debug.models import (
-    ErrorSeverity,
     IncidentStatus,
 )
 from src.agent.runtime_debug.service import RuntimeDebugService
+from src.core.severity import Severity
 
 
 class StatusUpdateRequest(BaseModel):
@@ -28,7 +28,7 @@ def create_runtime_debug_router(debug_service: RuntimeDebugService) -> APIRouter
             offset: int = 0,
     ):
         status_enum = IncidentStatus(status) if status else None
-        sev_enum = ErrorSeverity(severity) if severity else None
+        sev_enum = Severity.from_value(severity) if severity else None
 
         incidents = debug_service.list_incidents(
             status=status_enum,

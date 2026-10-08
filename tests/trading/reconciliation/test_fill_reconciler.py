@@ -7,9 +7,9 @@ from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import OrderStatus, TradeAction
+from src.core.severity import Severity
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.reconciliation.models.discrepancy import (
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.fill_reconciler import FillReconciler
@@ -57,7 +57,7 @@ class TestFillReconciler(unittest.TestCase):
         discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
         self.assertEqual(len(discrepancies), 1)
         self.assertEqual(discrepancies[0].discrepancy_type, DiscrepancyType.MISSING_FILL)
-        self.assertEqual(discrepancies[0].severity, DiscrepancySeverity.WARNING)
+        self.assertEqual(discrepancies[0].severity, Severity.WARNING)
 
     def test_reconcile_completed_order_with_valid_fill_price(self):
         completed_order_with_fill = Order(

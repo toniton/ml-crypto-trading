@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from src.trading.health.enums import ConditionSeverity
+from src.core.severity import Severity
 from src.trading.health.models import ActiveCondition
 
 
@@ -27,7 +27,7 @@ class RecoveryPolicy:
         return self._config
 
     def can_resolve(self, condition: ActiveCondition, current_time: datetime) -> bool:
-        if condition.severity == ConditionSeverity.FATAL:
+        if condition.severity == Severity.FATAL:
             return False
 
         if not self._config.automatic:

@@ -7,10 +7,10 @@ from src.agent.runtime_debug.graph import RuntimeDebugGraph
 from src.agent.runtime_debug.models import (
     DebugDiagnosis,
     DebugSuggestion,
-    ErrorSeverity,
     IncidentStatus,
     RuntimeIncident,
 )
+from src.core.severity import Severity
 from src.agent.runtime_debug.tools import RuntimeDebugToolbox
 from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event_bus import EventBus
@@ -72,7 +72,7 @@ class RuntimeDebugService(ApplicationLoggingMixin):
     def list_incidents(
             self,
             status: Optional[IncidentStatus] = None,
-            severity: Optional[ErrorSeverity] = None,
+            severity: Optional[Severity] = None,
             asset: Optional[str] = None,
             exchange: Optional[str] = None,
             limit: int = 50,

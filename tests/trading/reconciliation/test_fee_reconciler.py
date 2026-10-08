@@ -6,9 +6,9 @@ from api.interfaces.asset import Asset
 from api.interfaces.asset_schedule import AssetSchedule
 from api.interfaces.fees import Fees
 from api.interfaces.timeframe import Timeframe
+from src.core.severity import Severity
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.trading.reconciliation.models.discrepancy import (
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.fee_reconciler import FeeReconciler
@@ -50,4 +50,4 @@ class TestFeeReconciler(unittest.TestCase):
         discrepancies = self.reconciler.reconcile("CRYPTO_DOT_COM", [self.test_asset])
         self.assertEqual(len(discrepancies), 1)
         self.assertEqual(discrepancies[0].discrepancy_type, DiscrepancyType.FEE_MISMATCH)
-        self.assertEqual(discrepancies[0].severity, DiscrepancySeverity.WARNING)
+        self.assertEqual(discrepancies[0].severity, Severity.WARNING)

@@ -4,11 +4,11 @@ from typing import List
 
 from api.interfaces.asset import Asset
 from api.interfaces.trade_action import OrderStatus
+from src.core.severity import Severity
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.orders.order_manager import OrderManager
 from src.trading.reconciliation.models.discrepancy import (
     Discrepancy,
-    DiscrepancySeverity,
     DiscrepancyType,
 )
 from src.trading.reconciliation.reconcilers.base_reconciler import BaseReconciler
@@ -39,7 +39,7 @@ class FillReconciler(ApplicationLoggingMixin, BaseReconciler):
                     if order.fill_price is None or order.fill_price <= 0:
                         discrepancies.append(Discrepancy(
                             discrepancy_type=DiscrepancyType.MISSING_FILL,
-                            severity=DiscrepancySeverity.WARNING,
+                            severity=Severity.WARNING,
                             exchange=ex_key,
                             asset_or_currency=order.ticker_symbol,
                             local_value="MISSING_FILL_PRICE",

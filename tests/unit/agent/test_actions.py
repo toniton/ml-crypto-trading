@@ -5,13 +5,13 @@ import pytest
 from src.agent.actions.executor import AgentActionExecutor
 from src.agent.actions.models import (
     ActionReason,
-    ActionSeverity,
     ActionStatus,
     AgentAction,
     AgentActionType,
     AgentPermission,
 )
 from src.agent.actions.notification_policy import NotificationPolicy
+from src.core.severity import Severity
 from src.agent.actions.service import AgentActionService
 from src.events.message_event_bus import MessageEventBus
 from tests.unit.agent.fakes import FakeConversationStore
@@ -40,7 +40,7 @@ def test_create_and_get_action(action_service):
         type=AgentActionType.SEND_MESSAGE,
         title="Test Message",
         description="A test notification",
-        severity=ActionSeverity.INFO,
+        severity=Severity.INFO,
     )
     created = action_service.create_action(action)
 
@@ -73,7 +73,7 @@ def test_notification_policy_throttling():
         title="Drift Notice",
         description="Drift detected",
         reason=ActionReason(trigger="DRIFT_DETECTED", related_entities=["BTC_USD"]),
-        severity=ActionSeverity.INFO,
+        severity=Severity.INFO,
     )
     # First time delivers
     assert policy.should_deliver(action1) is True
@@ -84,7 +84,7 @@ def test_notification_policy_throttling():
         title="Drift Notice",
         description="Drift detected again",
         reason=ActionReason(trigger="DRIFT_DETECTED", related_entities=["BTC_USD"]),
-        severity=ActionSeverity.INFO,
+        severity=Severity.INFO,
     )
     assert policy.should_deliver(action2) is False
 
@@ -94,7 +94,7 @@ def test_notification_policy_throttling():
         title="Circuit Breaker",
         description="Halting trades",
         reason=ActionReason(trigger="CIRCUIT_BREAKER", related_entities=["BTC_USD"]),
-        severity=ActionSeverity.CRITICAL,
+        severity=Severity.CRITICAL,
     )
     assert policy.should_deliver(action_crit) is True
 

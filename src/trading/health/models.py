@@ -4,8 +4,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from src.core.severity import Severity
 from src.trading.health.enums import (
-    ConditionSeverity,
     ScopeType,
     TradingHealthCondition,
     TradingHealthState,
@@ -70,7 +70,7 @@ class HealthObservation:
     scope: HealthScope
     healthy: bool
     observed_at: datetime
-    severity: ConditionSeverity = ConditionSeverity.CRITICAL
+    severity: Severity = Severity.CRITICAL
     measured_value: Optional[Any] = None
     threshold: Optional[Any] = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -80,7 +80,7 @@ class HealthObservation:
 class ActiveCondition:
     condition: TradingHealthCondition
     scope: HealthScope
-    severity: ConditionSeverity
+    severity: Severity
     first_detected_at: datetime
     last_observed_at: datetime
     measured_value: Optional[Any] = None

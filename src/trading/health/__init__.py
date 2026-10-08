@@ -1,5 +1,4 @@
 from src.trading.health.enums import (
-    ConditionSeverity,
     ScopeType,
     TradingHealthCondition,
     TradingHealthState,
@@ -19,7 +18,6 @@ from src.trading.health.state_machine import TradingHealthStateMachine
 from src.trading.health.health_monitor import HealthMonitor
 
 __all__ = [
-    "ConditionSeverity",
     "ScopeType",
     "TradingHealthCondition",
     "TradingHealthState",
