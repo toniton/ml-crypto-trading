@@ -13,7 +13,12 @@ from src.trading.factories.trading_expression_factory import TradingExpressionFa
 
 class ExpressionStrategy(RuleBasedTradingStrategy, ApplicationLoggingMixin):
     def __init__(self, config: StrategyConfig, ticker_symbols: set[str] | list[str] | None = None):
-        super().__init__(ticker_symbols=ticker_symbols)
+        super().__init__(
+            ticker_symbols=ticker_symbols,
+            weight=config.weight,
+            schedule=config.schedule,
+            enabled=config.enabled,
+        )
         self.config = config
         self.action = config.action
         self._parser = ExpressionParser(config.expression)

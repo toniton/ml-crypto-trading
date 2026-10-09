@@ -12,6 +12,7 @@ from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.consensus.consensus_factor import ConsensusFactor
 from src.trading.events.domain_events import ConsensusEvaluatedEvent
+from src.trading.strategies.strategy_weight_resolver import StrategyWeightResolver
 
 
 class ConsensusManager(ApplicationLoggingMixin):
@@ -29,14 +30,14 @@ class ConsensusManager(ApplicationLoggingMixin):
         }
 
     def factor_for(self, ticker_symbol: str) -> Optional[ConsensusFactor]:
-        return self._asset_factors.get(ticker_symbol)
+        return self._asset_factors[ticker_symbol] if ticker_symbol in self._asset_factors else None
 
     def register_strategy(self, strategy: TradingStrategy):
         if strategy.ticker_symbols is not None and not strategy.ticker_symbols:
             raise ValueError(
                 f"Strategy '{strategy.name}' is not bound to any ticker symbol; refusing to register"
             )
-        existing = self.strategies.get(strategy.action, [])
+        existing = self.strategies[strategy.action] if strategy.action in self.strategies else []
         for other in existing:
             if other.name != strategy.name:
                 continue
@@ -105,13 +106,15 @@ class ConsensusManager(ApplicationLoggingMixin):
             )
         factor = consensus_factor.buy if trade_action == TradeAction.BUY else consensus_factor.sell
 
-        votes: dict[str, bool] = {}
-        weights: dict[str, float] = {}
-        for strategy in strategies:
-            vote = strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data, candles)
-            votes[strategy.name] = bool(vote)
-            weights[strategy.name] = float(strategy.weight)
-            self.app_logger.debug(f"Strategy: {strategy.name} Vote: {vote}")
+        timestamp = (
+            float(market_data.timestamp)
+            if market_data is not None and market_data.timestamp is not None
+            else time.time()
+        )
+
+        votes, weights = self._collect_strategy_votes(
+            strategies, trade_action, ticker_symbol, trading_context, market_data, candles, timestamp
+        )
 
         decision = ConsensusDecision(
             trade_action=trade_action, ticker_symbol=ticker_symbol,
@@ -132,6 +135,29 @@ class ConsensusManager(ApplicationLoggingMixin):
             weights=weights,
         )
         return decision
+
+    def _collect_strategy_votes(
+            self,
+            strategies: list[TradingStrategy],
+            trade_action: TradeAction,
+            ticker_symbol: str,
+            trading_context: TradingContext,
+            market_data: MarketData,
+            candles: list[Candle],
+            timestamp: float,
+    ) -> tuple[dict[str, bool], dict[str, float]]:
+        votes: dict[str, bool] = {}
+        weights: dict[str, float] = {}
+        for strategy in strategies:
+            effective_weight = StrategyWeightResolver.resolve_effective_weight(strategy, timestamp)
+            weights[strategy.name] = effective_weight
+            if effective_weight > 0:
+                vote = strategy.get_quorum(trade_action, ticker_symbol, trading_context, market_data, candles)
+                votes[strategy.name] = bool(vote)
+            else:
+                votes[strategy.name] = False
+            self.app_logger.debug(f"Strategy: {strategy.name} Weight: {effective_weight} Vote: {votes[strategy.name]}")
+        return votes, weights
 
     def _publish_evaluated_event(
             self,

@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from api.interfaces.trade_action import TradeAction
 from src.core.expressions.expression_parser import ExpressionParser
+from src.trading.strategies.models.strategy_schedule import StrategySchedule
 
 
 class StrategyType(str, Enum):
@@ -32,7 +33,10 @@ class StrategyConfig(BaseModel):
     expression: Optional[str] = Field(
         default=None,
         min_length=1,
-        description="Expression evaluated by a DYNAMIC strategy. True means it votes in its direction. May reference market, position and indicator variables.",
+        description=(
+            "Expression evaluated by a DYNAMIC strategy. True means it votes in its direction. "
+            "May reference market, position and indicator variables."
+        ),
         json_schema_extra={"mutable": True},
     )
     class_name: Optional[str] = Field(
@@ -44,6 +48,18 @@ class StrategyConfig(BaseModel):
     enabled: bool = Field(
         default=True,
         description="Whether the strategy is active in the consensus calculation.",
+        json_schema_extra={"mutable": True},
+    )
+    weight: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=10.0,
+        description="Relative influence of the strategy in consensus aggregation.",
+        json_schema_extra={"mutable": True},
+    )
+    schedule: Optional[StrategySchedule] = Field(
+        default=None,
+        description="Weekly trading schedule and timezone.",
         json_schema_extra={"mutable": True},
     )
 

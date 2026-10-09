@@ -15,11 +15,11 @@ from src.trading.strategies.strategy_registry import StrategyRegistry
 
 
 class StrategyResolver:
-    _static_classes: Optional[dict[str, type]] = None
+    _static_classes: dict[str, type] = {}
 
     @classmethod
     def _builtin_strategy_classes(cls) -> dict[str, type]:
-        if cls._static_classes is None:
+        if not cls._static_classes:
             for (_, module_name, _) in pkgutil.iter_modules(strategies_package.__path__):
                 importlib.import_module(f"{strategies_package.__name__}.{module_name}")
 
@@ -88,6 +88,9 @@ class StrategyResolver:
                 type=StrategyType.DYNAMIC,
                 action=action,
                 expression=expression,
+                weight=entry.weight,
+                schedule=entry.schedule,
+                enabled=entry.enabled,
             )
         )
         cls._bind_to_asset(strategy, asset)
@@ -95,13 +98,17 @@ class StrategyResolver:
 
     @classmethod
     def _resolve_static(cls, entry: StrategyConfig, asset: Asset) -> RuleBasedTradingStrategy:
-        strategy_class = cls._builtin_strategy_classes().get(entry.class_name)
-        if strategy_class is None:
+        builtin_classes = cls._builtin_strategy_classes()
+        if not builtin_classes or entry.class_name not in builtin_classes:
             raise ValueError(
                 f"Static strategy '{entry.name}' for asset {asset.ticker_symbol} references "
                 f"unknown class '{entry.class_name}'"
             )
+        strategy_class = builtin_classes[entry.class_name]
         strategy = strategy_class()
+        strategy.weight = entry.weight
+        strategy.schedule = entry.schedule
+        strategy.enabled = entry.enabled
         if entry.action is not None and entry.action != strategy.action:
             raise ValueError(
                 f"Static strategy '{entry.name}' for asset {asset.ticker_symbol} votes "

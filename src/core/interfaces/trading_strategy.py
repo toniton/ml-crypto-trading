@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import abc
+from typing import Any
 
 from api.interfaces.candle import Candle
 from api.interfaces.market_data import MarketData
@@ -9,10 +10,18 @@ from api.interfaces.trading_context import TradingContext
 
 
 class TradingStrategy(abc.ABC, metaclass=abc.ABCMeta):
-    def __init__(self, ticker_symbols: set[str] | list[str] | None = None, weight: float = 1.0):
+    def __init__(
+            self,
+            ticker_symbols: set[str] | list[str] | None = None,
+            weight: float = 1.0,
+            schedule: Any | None = None,
+            enabled: bool = True,
+    ):
         self.action: TradeAction | None = None
         self.ticker_symbols: set[str] | None = set(ticker_symbols) if ticker_symbols is not None else None
         self.weight: float = weight
+        self.schedule: Any | None = schedule
+        self.enabled: bool = enabled
 
     @property
     def name(self) -> str:

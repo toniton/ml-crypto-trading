@@ -1,3 +1,4 @@
+import sys
 import time
 
 from src.application import Application
@@ -7,7 +8,15 @@ from src.configuration.llm_config import LlmConfig
 from src.configuration.trading_config import TradingConfig
 
 
+def _assert_python_version() -> None:
+    if sys.version_info < (3, 11):
+        raise RuntimeError(
+            f"Rio Trading requires Python 3.11+, but running on {sys.version_info[0]}.{sys.version_info[1]}."
+        )
+
+
 def main():
+    _assert_python_version()
     environment_config = EnvironmentConfig()
 
     application_config = ApplicationConfig()
