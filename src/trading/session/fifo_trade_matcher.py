@@ -21,6 +21,7 @@ class FifoTradeMatcher:
             commit_hash: Optional[str] = None,
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
+            strategy_attributions: Optional[dict[str, float]] = None,
             exit_slippage: Decimal = Decimal(0),
     ) -> tuple[list[Trade], Decimal]:
         completed_trades: list[Trade] = []
@@ -48,8 +49,11 @@ class FifoTradeMatcher:
                 exit_timestamp=exit_timestamp,
                 slippage=total_matched_slippage,
                 commit_hash=commit_hash,
-                winning_strategy=winning_strategy or lot.winning_strategy,
-                strategy_votes=strategy_votes or lot.strategy_votes,
+                winning_strategy=lot.winning_strategy or winning_strategy,
+                strategy_votes=lot.strategy_votes or strategy_votes,
+                entry_strategy_attributions=lot.strategy_attributions,
+                exit_strategy_attributions=strategy_attributions,
+                exit_winning_strategy=winning_strategy,
             )
             completed_trades.append(trade)
 

@@ -260,6 +260,7 @@ class OrderManager(ApplicationLoggingMixin):
             timestamp: float, commit_hash: Optional[str] = None, uuid: str = None,
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
+            strategy_attributions: Optional[dict[str, float]] = None,
             decision_id: Optional[str] = None,
     ):
         resolved_commit_hash = (
@@ -277,6 +278,7 @@ class OrderManager(ApplicationLoggingMixin):
             commit_hash=resolved_commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            strategy_attributions=strategy_attributions,
             decision_id=decision_id,
         )
         with self._intent_lock:

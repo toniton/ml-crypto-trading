@@ -107,6 +107,166 @@ class TradeAttributionService:
         return {strategy: cls.calculate_metrics(group) for strategy, group in grouped.items()}
 
     @classmethod
+    def attribute_by_strategy_proportional(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
+        strategy_trades: dict[str, list[tuple[Trade, float]]] = defaultdict(list)
+        for trade in trades:
+            attributions = trade.entry_strategy_attributions
+            if not attributions:
+                winning = trade.winning_strategy or "UNKNOWN"
+                attributions = {winning: 1.0}
+            for strat_name, weight_share in attributions.items():
+                if weight_share > 0:
+                    strategy_trades[strat_name].append((trade, float(weight_share)))
+
+        result: dict[str, AttributionMetrics] = {}
+        for strat_name, weighted_list in strategy_trades.items():
+            result[strat_name] = cls._calculate_proportional_metrics(weighted_list)
+        return result
+
+    @classmethod
+    def compute_co_voting_matrix(cls, trades: list[Trade]) -> dict[str, dict[str, float]]:
+        strategy_votes_counts: dict[str, int] = defaultdict(int)
+        co_votes_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+        for trade in trades:
+            positive_strats: list[str] = []
+            if trade.strategy_votes:
+                for strat, vote in trade.strategy_votes.items():
+                    if vote in ("TRUE", "True", True):
+                        positive_strats.append(strat)
+            elif trade.entry_strategy_attributions:
+                positive_strats = list(trade.entry_strategy_attributions.keys())
+            elif trade.winning_strategy:
+                positive_strats = [trade.winning_strategy]
+
+            for s1 in positive_strats:
+                strategy_votes_counts[s1] += 1
+                for s2 in positive_strats:
+                    co_votes_counts[s1][s2] += 1
+
+        matrix: dict[str, dict[str, float]] = {}
+        for s1, total in strategy_votes_counts.items():
+            matrix[s1] = {}
+            for s2, co_count in co_votes_counts[s1].items():
+                ratio = round(co_count / total, 4) if total > 0 else 0.0
+                matrix[s1][s2] = ratio
+
+        return matrix
+
+    @classmethod
+    def attribute_by_participation(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
+        grouped: dict[str, list[Trade]] = defaultdict(list)
+        for trade in trades:
+            positive_strats: list[str] = []
+            if trade.entry_strategy_attributions:
+                positive_strats = list(trade.entry_strategy_attributions.keys())
+            elif trade.strategy_votes:
+                for strat, vote in trade.strategy_votes.items():
+                    if vote in ("TRUE", "True", True):
+                        positive_strats.append(strat)
+            elif trade.winning_strategy:
+                positive_strats = [trade.winning_strategy]
+
+            for strat in set(positive_strats):
+                grouped[strat].append(trade)
+
+        return {strat: cls.calculate_metrics(group) for strat, group in grouped.items()}
+
+    @classmethod
+    def attribute_by_entry_vs_exit(
+            cls, trades: list[Trade]
+    ) -> dict[str, dict[str, AttributionMetrics]]:
+        entry_trades: dict[str, list[Trade]] = defaultdict(list)
+        exit_trades: dict[str, list[Trade]] = defaultdict(list)
+
+        for trade in trades:
+            entry_strat = trade.winning_strategy or "UNKNOWN"
+            exit_strat = trade.exit_winning_strategy or "UNKNOWN"
+            entry_trades[entry_strat].append(trade)
+            exit_trades[exit_strat].append(trade)
+
+        return {
+            "entry": {strat: cls.calculate_metrics(group) for strat, group in entry_trades.items()},
+            "exit": {strat: cls.calculate_metrics(group) for strat, group in exit_trades.items()},
+        }
+
+    @classmethod
+    def _calculate_proportional_metrics(
+            cls, weighted_trades: list[tuple[Trade, float]]
+    ) -> AttributionMetrics:
+        if not weighted_trades:
+            return cls._empty_metrics()
+
+        total = len(weighted_trades)
+        wins = 0
+        losses = 0
+        break_even = 0
+        gross_pnl = Decimal(0)
+        fees = Decimal(0)
+        slippage = Decimal(0)
+        net_pnl = Decimal(0)
+        total_duration = 0.0
+        total_return = Decimal(0)
+        max_win = Decimal(0)
+        max_loss = Decimal(0)
+        gross_wins = Decimal(0)
+        gross_losses = Decimal(0)
+
+        for trade, share in weighted_trades:
+            share_dec = Decimal(str(share))
+            prop_gross = trade.gross_pnl * share_dec
+            prop_fees = trade.fees * share_dec
+            prop_slippage = trade.slippage * share_dec
+            prop_net = trade.net_pnl * share_dec
+
+            gross_pnl += prop_gross
+            fees += prop_fees
+            slippage += prop_slippage
+            net_pnl += prop_net
+
+            if prop_net > Decimal(0):
+                wins += 1
+                gross_wins += prop_net
+                max_win = max(max_win, prop_net)
+            elif prop_net < Decimal(0):
+                losses += 1
+                gross_losses += abs(prop_net)
+                max_loss = min(max_loss, prop_net)
+            else:
+                break_even += 1
+
+            total_return += trade.return_pct
+            total_duration += trade.duration_seconds
+
+        win_rate = round((wins / total * 100.0) if total > 0 else 0.0, 2)
+        avg_ret = round(float(total_return / Decimal(total)), 4) if total > 0 else 0.0
+        avg_dur = round(total_duration / total, 2) if total > 0 else 0.0
+
+        if gross_losses > Decimal(0):
+            profit_factor = round(float(gross_wins / gross_losses), 2)
+        elif gross_wins > Decimal(0):
+            profit_factor = 999.99
+        else:
+            profit_factor = 0.0
+
+        return AttributionMetrics(
+            total_trades=total,
+            winning_trades=wins,
+            losing_trades=losses,
+            break_even_trades=break_even,
+            win_rate_pct=win_rate,
+            gross_pnl=gross_pnl,
+            total_fees=fees,
+            total_slippage=slippage,
+            net_pnl=net_pnl,
+            profit_factor=profit_factor,
+            avg_return_pct=avg_ret,
+            avg_duration_seconds=avg_dur,
+            max_win=max_win,
+            max_loss=max_loss,
+        )
+
+    @classmethod
     def attribute_by_symbol(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
         grouped: dict[str, list[Trade]] = defaultdict(list)
         for trade in trades:

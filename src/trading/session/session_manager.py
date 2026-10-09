@@ -229,6 +229,7 @@ class SessionManager:
             timestamp=timestamp,
             winning_strategy=order.winning_strategy,
             strategy_votes=order.strategy_votes,
+            strategy_attributions=order.strategy_attributions,
             slippage=slippage,
         )
         ctx.position_lots.append(lot)
@@ -286,6 +287,7 @@ class SessionManager:
             commit_hash=order.commit_hash or ctx.commit_hash,
             winning_strategy=order.winning_strategy,
             strategy_votes=order.strategy_votes,
+            strategy_attributions=order.strategy_attributions,
             exit_slippage=slippage,
         )
         for trade in completed_trades:

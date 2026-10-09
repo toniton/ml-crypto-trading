@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Optional
 from uuid import uuid4
-from pydantic.dataclasses import dataclass
+from dataclasses import dataclass
 
 
 # pylint: disable=too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals
@@ -27,6 +27,9 @@ class Trade:
     commit_hash: Optional[str] = None
     winning_strategy: Optional[str] = None
     strategy_votes: Optional[dict[str, str]] = None
+    entry_strategy_attributions: Optional[dict[str, float]] = None
+    exit_strategy_attributions: Optional[dict[str, float]] = None
+    exit_winning_strategy: Optional[str] = None
 
     @classmethod
     def create(
@@ -46,6 +49,9 @@ class Trade:
             trade_id: Optional[str] = None,
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
+            entry_strategy_attributions: Optional[dict[str, float]] = None,
+            exit_strategy_attributions: Optional[dict[str, float]] = None,
+            exit_winning_strategy: Optional[str] = None,
     ) -> Trade:
         gross_pnl = (exit_price - entry_price) * quantity
         total_fees = entry_fee + exit_fee
@@ -73,4 +79,7 @@ class Trade:
             commit_hash=commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            entry_strategy_attributions=entry_strategy_attributions,
+            exit_strategy_attributions=exit_strategy_attributions,
+            exit_winning_strategy=exit_winning_strategy,
         )

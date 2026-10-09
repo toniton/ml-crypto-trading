@@ -231,15 +231,24 @@ class VCSService(ApplicationLoggingMixin):
                                 sa = strats_a[sname]
                                 sb = strats_b[sname]
                                 for skey in sorted(set(sa.keys()) | set(sb.keys())):
-                                    if sa.get(skey) != sb.get(skey):
-                                        changes.append(
-                                            ConfigChange(
-                                                path=f"assets.{sym}.strategies.{sname}.{skey}",
-                                                old_value=sa.get(skey),
-                                                new_value=sb.get(skey),
-                                                reason="",
+                                    s_va = sa.get(skey)
+                                    s_vb = sb.get(skey)
+                                    if s_va != s_vb:
+                                        if isinstance(s_va, dict) or isinstance(s_vb, dict):
+                                            diff_nested(
+                                                f"assets.{sym}.strategies.{sname}.{skey}",
+                                                s_va,
+                                                s_vb,
                                             )
-                                        )
+                                        else:
+                                            changes.append(
+                                                ConfigChange(
+                                                    path=f"assets.{sym}.strategies.{sname}.{skey}",
+                                                    old_value=s_va,
+                                                    new_value=s_vb,
+                                                    reason="",
+                                                )
+                                            )
                     elif isinstance(fa, dict) or isinstance(fb, dict):
                         diff_nested(f"assets.{sym}.{field}", fa, fb)
                     else:

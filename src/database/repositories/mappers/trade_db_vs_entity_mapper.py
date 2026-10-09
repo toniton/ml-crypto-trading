@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
 from api.interfaces.trade import Trade
 from src.database.dao.trade_dao import TradeDao
@@ -11,11 +11,17 @@ class TradeDBVSEntityMapper:
     def map_to_db(trade: Trade) -> TradeDao:
         entry_dt = datetime.fromtimestamp(trade.entry_timestamp, tz=timezone.utc)
         exit_dt = datetime.fromtimestamp(trade.exit_timestamp, tz=timezone.utc)
-        trade_metadata = {
+        trade_metadata: dict[str, Any] = {
             "commit_hash": trade.commit_hash,
             "winning_strategy": trade.winning_strategy,
             "strategy_votes": trade.strategy_votes,
         }
+        if trade.entry_strategy_attributions is not None:
+            trade_metadata["entry_strategy_attributions"] = trade.entry_strategy_attributions
+        if trade.exit_strategy_attributions is not None:
+            trade_metadata["exit_strategy_attributions"] = trade.exit_strategy_attributions
+        if trade.exit_winning_strategy is not None:
+            trade_metadata["exit_winning_strategy"] = trade.exit_winning_strategy
         return TradeDao(
             trade_id=trade.trade_id,
             ticker_symbol=trade.ticker_symbol,
@@ -43,6 +49,10 @@ class TradeDBVSEntityMapper:
         entry_ts = dao.entry_timestamp.timestamp() if dao.entry_timestamp else 0.0
         exit_ts = dao.exit_timestamp.timestamp() if dao.exit_timestamp else 0.0
         metadata = dao.metadata_ if isinstance(dao.metadata_, dict) else {}
+        entry_attributions = (
+                metadata.get("entry_strategy_attributions")
+                or metadata.get("strategy_attributions")
+        )
         return Trade(
             trade_id=dao.trade_id,
             ticker_symbol=dao.ticker_symbol,
@@ -62,4 +72,7 @@ class TradeDBVSEntityMapper:
             commit_hash=metadata.get("commit_hash"),
             winning_strategy=metadata.get("winning_strategy"),
             strategy_votes=metadata.get("strategy_votes"),
+            entry_strategy_attributions=entry_attributions,
+            exit_strategy_attributions=metadata.get("exit_strategy_attributions"),
+            exit_winning_strategy=metadata.get("exit_winning_strategy"),
         )

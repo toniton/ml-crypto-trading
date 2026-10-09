@@ -24,6 +24,7 @@ class Order:
     fill_price: Optional[Decimal] = None
     winning_strategy: Optional[str] = None
     strategy_votes: Optional[dict[str, str]] = None
+    strategy_attributions: Optional[dict[str, float]] = None
     slippage: Optional[Decimal] = None
     decision_id: Optional[str] = None
 

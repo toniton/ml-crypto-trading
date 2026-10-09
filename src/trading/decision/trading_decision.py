@@ -76,6 +76,7 @@ class ConsensusSnapshot:
     quorum_margin: float
     vote_ratio: float
     winning_strategy: Optional[str] = None
+    strategy_attributions: Optional[dict[str, float]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -87,6 +88,7 @@ class ConsensusSnapshot:
             "quorum_margin": self.quorum_margin,
             "vote_ratio": self.vote_ratio,
             "winning_strategy": self.winning_strategy,
+            "strategy_attributions": self.strategy_attributions,
         }
 
     @classmethod
@@ -100,6 +102,7 @@ class ConsensusSnapshot:
             quorum_margin=float(data.get("quorum_margin", 0.0)),
             vote_ratio=float(data.get("vote_ratio", 0.0)),
             winning_strategy=data.get("winning_strategy"),
+            strategy_attributions=data.get("strategy_attributions"),
         )
 
 
@@ -230,6 +233,7 @@ class TradingDecision:
     rejection_reason: Optional[str] = None
     commit_hash: Optional[str] = None
     winning_strategy: Optional[str] = None
+    strategy_attributions: Optional[dict[str, float]] = None
     resulting_order_id: Optional[str] = None
     health_evaluation: Optional[HealthEvaluation] = None
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -245,6 +249,7 @@ class TradingDecision:
             "rejection_reason": self.rejection_reason,
             "commit_hash": self.commit_hash,
             "winning_strategy": self.winning_strategy,
+            "strategy_attributions": self.strategy_attributions,
             "resulting_order_id": self.resulting_order_id,
             "market_snapshot": self.market_snapshot.to_dict(),
             "regime_snapshot": self.regime_snapshot.to_dict(),
@@ -268,6 +273,7 @@ class TradingDecision:
             rejection_reason=data.get("rejection_reason"),
             commit_hash=data.get("commit_hash"),
             winning_strategy=data.get("winning_strategy"),
+            strategy_attributions=data.get("strategy_attributions"),
             resulting_order_id=data.get("resulting_order_id"),
             market_snapshot=MarketSnapshot.from_dict(data["market_snapshot"]),
             regime_snapshot=RegimeSnapshot.from_dict(data["regime_snapshot"]),

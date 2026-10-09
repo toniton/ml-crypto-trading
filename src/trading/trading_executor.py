@@ -264,6 +264,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 quorum_margin=0.0,
                 vote_ratio=0.0,
                 winning_strategy=None,
+                strategy_attributions=None,
             )
         return ConsensusSnapshot(
             action=decision.trade_action,
@@ -274,6 +275,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             quorum_margin=decision.quorum_margin,
             vote_ratio=decision.vote_ratio,
             winning_strategy=self._resolve_winning_strategy(decision),
+            strategy_attributions=self._resolve_strategy_attributions(decision),
         )
 
     def _build_portfolio_snapshot(self, asset: Asset, trading_context: Optional[TradingContext]) -> PortfolioSnapshot:
@@ -382,6 +384,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         self.app_logger.info("Consensus reached to buy %s", asset.ticker_symbol)
         price = self._calculate_price(asset, market_data, fees)
         winning_strategy = self._resolve_winning_strategy(decision)
+        strategy_attributions = self._resolve_strategy_attributions(decision)
 
         if self.order_manager.has_outstanding_intent(asset.ticker_symbol, TradeAction.BUY):
             self.app_logger.debug(
@@ -401,6 +404,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 rejection_reason=DecisionRejectedReason.OUTSTANDING_INTENT.value,
                 commit_hash=commit_hash,
                 winning_strategy=winning_strategy,
+                strategy_attributions=strategy_attributions,
                 market_snapshot=market_snapshot,
                 regime_snapshot=regime_snapshot,
                 consensus_snapshot=consensus_snapshot,
@@ -420,6 +424,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 rejection_reason=DecisionRejectedReason.NEGATIVE_EDGE.value,
                 commit_hash=commit_hash,
                 winning_strategy=winning_strategy,
+                strategy_attributions=strategy_attributions,
                 market_snapshot=market_snapshot,
                 regime_snapshot=regime_snapshot,
                 consensus_snapshot=consensus_snapshot,
@@ -469,6 +474,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 rejection_reason=DecisionRejectedReason.INSUFFICIENT_BALANCE.value,
                 commit_hash=commit_hash,
                 winning_strategy=winning_strategy,
+                strategy_attributions=strategy_attributions,
                 market_snapshot=market_snapshot,
                 regime_snapshot=regime_snapshot,
                 consensus_snapshot=consensus_snapshot,
@@ -498,6 +504,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     rejection_reason=DecisionRejectedReason.RISK_REJECTED.value,
                     commit_hash=commit_hash,
                     winning_strategy=winning_strategy,
+                    strategy_attributions=strategy_attributions,
                     market_snapshot=market_snapshot,
                     regime_snapshot=regime_snapshot,
                     consensus_snapshot=consensus_snapshot,
@@ -547,6 +554,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     rejection_reason=DecisionRejectedReason.HEALTH_HALT.value,
                     commit_hash=commit_hash,
                     winning_strategy=winning_strategy,
+                    strategy_attributions=strategy_attributions,
                     market_snapshot=market_snapshot,
                     regime_snapshot=regime_snapshot,
                     consensus_snapshot=consensus_snapshot,
@@ -566,6 +574,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             status=DecisionStatus.EXECUTED,
             commit_hash=commit_hash,
             winning_strategy=winning_strategy,
+            strategy_attributions=strategy_attributions,
             market_snapshot=market_snapshot,
             regime_snapshot=regime_snapshot,
             consensus_snapshot=consensus_snapshot,
@@ -587,6 +596,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     ) -> None:
         commit_hash = self.session_manager.get_current_commit_hash()
         winning_strategy = self._resolve_winning_strategy(decision)
+        strategy_attributions = self._resolve_strategy_attributions(decision)
         strategy_votes = self._format_strategy_votes(decision)
         decision_id = trading_decision.decision_id if trading_decision else None
         buy_order = self.order_manager.open_order(
@@ -599,6 +609,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             commit_hash=commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            strategy_attributions=strategy_attributions,
             decision_id=decision_id,
         )
         if trading_decision:
@@ -675,6 +686,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             return
 
         winning_strategy = self._resolve_winning_strategy(decision)
+        strategy_attributions = self._resolve_strategy_attributions(decision)
 
         if not self._validate_execution_edge(asset, TradeAction.SELL, market_data, fees):
             trading_decision = TradingDecision(
@@ -685,6 +697,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 rejection_reason=DecisionRejectedReason.NEGATIVE_EDGE.value,
                 commit_hash=commit_hash,
                 winning_strategy=winning_strategy,
+                strategy_attributions=strategy_attributions,
                 market_snapshot=market_snapshot,
                 regime_snapshot=regime_snapshot,
                 consensus_snapshot=consensus_snapshot,
@@ -761,6 +774,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                     rejection_reason=DecisionRejectedReason.HEALTH_HALT.value,
                     commit_hash=commit_hash,
                     winning_strategy=winning_strategy,
+                    strategy_attributions=strategy_attributions,
                     market_snapshot=market_snapshot,
                     regime_snapshot=regime_snapshot,
                     consensus_snapshot=consensus_snapshot,
@@ -780,6 +794,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
                 status=DecisionStatus.EXECUTED,
                 commit_hash=commit_hash,
                 winning_strategy=winning_strategy,
+                strategy_attributions=strategy_attributions,
                 market_snapshot=market_snapshot,
                 regime_snapshot=regime_snapshot,
                 consensus_snapshot=consensus_snapshot,
@@ -801,6 +816,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
     ) -> None:
         commit_hash = self.session_manager.get_current_commit_hash()
         winning_strategy = self._resolve_winning_strategy(decision)
+        strategy_attributions = self._resolve_strategy_attributions(decision)
         strategy_votes = self._format_strategy_votes(decision)
         decision_id = trading_decision.decision_id if trading_decision else None
         sell_order = self.order_manager.open_order(
@@ -810,6 +826,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             commit_hash=commit_hash,
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
+            strategy_attributions=strategy_attributions,
             decision_id=decision_id,
         )
         if trading_decision:
@@ -919,8 +936,25 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         ]
         if not positive_votes:
             return None
-        positive_votes.sort(key=lambda x: x[1], reverse=True)
+        positive_votes.sort(key=lambda x: (-float(x[1]), x[0]))
         return positive_votes[0][0]
+
+    @staticmethod
+    def _resolve_strategy_attributions(decision: Optional[ConsensusDecision]) -> Optional[dict[str, float]]:
+        if not decision or not decision.votes:
+            return None
+        positive_weights = {
+            name: float(decision.weights[name] if name in decision.weights else 1.0)
+            for name, vote in decision.votes.items()
+            if vote
+        }
+        total_weight = sum(positive_weights.values())
+        if total_weight <= 0.0:
+            return None
+        return {
+            name: round(weight / total_weight, 4)
+            for name, weight in positive_weights.items()
+        }
 
     @staticmethod
     def _format_strategy_votes(decision: Optional[ConsensusDecision]) -> Optional[dict[str, str]]:
