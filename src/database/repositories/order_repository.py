@@ -45,5 +45,11 @@ class OrderRepository(BaseRepository[Order]):
         raise NotImplementedError()
 
     @abc.abstractmethod
+    def get_completed_by_executed_range(
+            self, start: datetime, end: datetime
+    ) -> list[Order]:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
     def get_last_completed_by_ticker(self, ticker_symbol: str) -> Optional[Order]:
         raise NotImplementedError()

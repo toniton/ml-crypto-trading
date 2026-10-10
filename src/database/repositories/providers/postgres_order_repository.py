@@ -133,6 +133,19 @@ class PostgresOrderRepository(OrderRepository):
             for row in query.all()
         ]
 
+    def get_completed_by_executed_range(
+        self, start: datetime, end: datetime
+    ) -> list[Order]:
+        query = self.database_session.query(OrderDao).filter(
+            OrderDao.status == OrderStatus.COMPLETED.value,
+            OrderDao.executed_timestamp >= start,
+            OrderDao.executed_timestamp < end,
+        ).order_by(OrderDao.executed_timestamp.asc())
+        return [
+            OrderDBVSEntityMapper.map_to_entity(cast(OrderDao, row))
+            for row in query.all()
+        ]
+
     def get_last_completed_by_ticker(self, ticker_symbol: str) -> Optional[Order]:
         symbols = {
             ticker_symbol,

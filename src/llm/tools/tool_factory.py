@@ -29,6 +29,7 @@ from src.llm.tools.portfolio_summary_tool import PortfolioSummaryTool
 from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
 from src.llm.tools.session_summary_tool import SessionSummaryTool
+from src.llm.tools.strategy_optimizer_tool import StrategyOptimizerTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
 from src.llm.tools.trade_attribution_tool import TradeAttributionTool
 from src.llm.tools.trading_context_tool import TradingContextTool
@@ -140,6 +141,10 @@ class ToolFactory:
     ) -> Dict[str, BaseTool]:
         return {
             "trade_attribution": TradeAttributionTool(
+                database_manager=db_manager,
+                session_manager=session_manager,
+            ),
+            "strategy_optimizer": StrategyOptimizerTool(
                 database_manager=db_manager,
                 session_manager=session_manager,
             ),

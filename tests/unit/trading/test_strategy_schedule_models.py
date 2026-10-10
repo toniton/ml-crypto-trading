@@ -60,6 +60,10 @@ class TestStrategyScheduleModels:
         assert schedule.timezone == "America/New_York"
         assert len(schedule.windows) == 1
 
+    def test_strategy_schedule_default_timezone_is_utc(self):
+        schedule = StrategySchedule()
+        assert schedule.timezone == "UTC"
+
     def test_strategy_schedule_rejects_invalid_timezone(self):
         with pytest.raises(ValidationError, match="Invalid IANA timezone"):
             StrategySchedule(

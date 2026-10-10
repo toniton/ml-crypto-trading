@@ -104,3 +104,24 @@ class TestUpsert:
         compiled_params = executed_clause.compile().params
         assert compiled_params.get("commit_hash") == "c4688f3b"
         assert compiled_params.get("uuid") == "test-uuid-order-hash"
+
+
+class TestGetCompletedByExecutedRange:
+    def test_queries_completed_orders_within_time_range(self):
+        session = MagicMock()
+        query = session.query.return_value
+        filtered_query = query.filter.return_value
+        ordered_query = filtered_query.order_by.return_value
+        dao = build_dao(status=OrderStatus.COMPLETED.value, executed_timestamp=CREATED_AT)
+        ordered_query.all.return_value = [dao]
+
+        repo = PostgresOrderRepository(database_session=session)
+        start = datetime(2026, 8, 22, 0, 0, 0, tzinfo=timezone.utc)
+        end = datetime(2026, 8, 23, 0, 0, 0, tzinfo=timezone.utc)
+        results = repo.get_completed_by_executed_range(start=start, end=end)
+
+        session.query.assert_called_once_with(OrderDao)
+        assert len(results) == 1
+        assert results[0].status is OrderStatus.COMPLETED
+        assert results[0].uuid == dao.uuid
+

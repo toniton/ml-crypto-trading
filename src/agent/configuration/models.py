@@ -6,7 +6,7 @@ from typing import Any, Literal, Optional, Union
 from pydantic import BaseModel, Field
 
 from src.agent.router.models import AgentGoal, AgentIntent
-from src.vcs.domain.diff import ConfigChange
+from src.vcs.domain.diff import ConfigChange, ConfigurationProposal
 
 # Backwards-compatible alias: goal extraction now lives in the router.
 ConfigurationGoal = AgentGoal
@@ -19,16 +19,6 @@ class ProposalDecision(str, Enum):
     @property
     def label(self) -> str:
         return "Approved" if self is ProposalDecision.APPROVE else "Rejected"
-
-
-class ConfigurationProposal(BaseModel):
-    summary: str = Field(description="Short human-readable summary of the proposal.")
-    changes: list[ConfigChange] = Field(description="The patch entries to apply.")
-    risks: list[str] = Field(default_factory=list, description="Potential downsides of the changes.")
-    expected_effect: str = Field(
-        default="",
-        description="What behaviour change the user can expect once the proposal is applied.",
-    )
 
 
 class ValidationResult(BaseModel):

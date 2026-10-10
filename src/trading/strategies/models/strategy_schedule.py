@@ -38,8 +38,8 @@ class TradingWindow(BaseModel):
 
 class StrategySchedule(BaseModel):
     timezone: str = Field(
-        default="Europe/Stockholm",
-        description="IANA timezone identifier (e.g. Europe/Stockholm, UTC, America/New_York)",
+        default="UTC",
+        description="IANA timezone identifier (e.g. UTC, America/New_York, Europe/London)",
         json_schema_extra={"mutable": True},
     )
     windows: list[TradingWindow] = Field(
