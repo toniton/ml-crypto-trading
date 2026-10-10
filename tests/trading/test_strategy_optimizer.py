@@ -130,10 +130,20 @@ def test_detect_strategy_redundancies():
     ]
 
     redundancies = StrategyOptimizer.detect_strategy_redundancies(trades, agreement_threshold=0.85)
-    assert len(redundancies) == 1
     assert redundancies[0].strategy_a == "StratA"
     assert redundancies[0].strategy_b == "StratB"
     assert redundancies[0].agreement_rate_pct == 100.0
+    assert redundancies[0].aligned_decisions == 4
+    assert "Investigate signal overlap" in redundancies[0].recommendation
+
+
+def test_detect_strategy_redundancies_skips_small_sample_size():
+    trade = _make_trade(
+        winning_strategy="StratA",
+        entry_strategy_attributions={"StratA": 0.5, "StratB": 0.5},
+    )
+    redundancies = StrategyOptimizer.detect_strategy_redundancies([trade], min_sample_size=2)
+    assert not redundancies
 
 
 def test_generate_optimization_proposal():

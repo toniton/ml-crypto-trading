@@ -4,9 +4,12 @@ import unittest
 from unittest.mock import MagicMock
 
 from api.interfaces.order import Order
+from api.interfaces.trade import Trade
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.llm.tools.strategy_optimizer_tool import StrategyOptimizerTool
 
 
@@ -38,13 +41,22 @@ class TestStrategyOptimizerTool(unittest.TestCase):
             strategy_attributions={strategy: 1.0},
         )
 
-    def _setup_mock_db(self, orders):
+    def _setup_mock_db(self, orders, trades=None):
         db_manager = MagicMock(spec=DatabaseManager)
         uow = MagicMock()
-        repo = MagicMock()
-        repo.get_completed_by_ticker_and_executed_range.return_value = orders
-        repo.get_completed_by_executed_range.return_value = orders
-        uow.get_repository.return_value = repo
+        order_repo = MagicMock(spec=PostgresOrderRepository)
+        order_repo.get_completed_by_ticker_and_executed_range.return_value = orders
+        order_repo.get_completed_by_executed_range.return_value = orders
+
+        trade_repo = MagicMock(spec=PostgresTradeRepository)
+        trade_repo.get_by_exit_range.return_value = trades or []
+
+        def get_repository(repo_cls):
+            if repo_cls is PostgresTradeRepository:
+                return trade_repo
+            return order_repo
+
+        uow.get_repository.side_effect = get_repository
         uow.__enter__.return_value = uow
         uow.__exit__.return_value = None
         db_manager.get_unit_of_work.return_value = uow
@@ -175,3 +187,39 @@ class TestStrategyOptimizerTool(unittest.TestCase):
         db = self._setup_mock_db([])
         with self.assertRaises(TypeError):
             StrategyOptimizerTool(database_manager=db)  # Missing configuration_service
+
+    def test_fetch_db_trades_prefers_authoritative_persisted_trades(self):
+        persisted = [
+            Trade.create(
+                ticker_symbol="BTC_USD",
+                entry_order_uuid="e-persisted",
+                exit_order_uuid="x-persisted",
+                entry_price=Decimal("100"),
+                exit_price=Decimal("110"),
+                quantity=Decimal("1"),
+                entry_fee=Decimal("0.1"),
+                exit_fee=Decimal("0.1"),
+                entry_timestamp=100.0,
+                exit_timestamp=200.0,
+                winning_strategy="TrendFollower",
+            )
+        ]
+        db = self._setup_mock_db(orders=[], trades=persisted)
+        config = self._setup_mock_config()
+        tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
+        trades = tool._gather_trades(ticker_symbol="BTC_USD", lookback_days=30)
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0].entry_order_uuid, "e-persisted")
+
+    def test_incomplete_history_warning_emitted_on_unmatched_exits(self):
+        now = datetime.now(timezone.utc)
+        orders = [
+            self._make_order(uuid="s_orphan", action=TradeAction.SELL, price="120.0", timestamp=now.timestamp()),
+            self._make_order(uuid="b1", action=TradeAction.BUY, price="100.0", timestamp=now.timestamp()),
+            self._make_order(uuid="s1", action=TradeAction.SELL, price="110.0", timestamp=now.timestamp()),
+        ]
+        db = self._setup_mock_db(orders=orders)
+        config = self._setup_mock_config()
+        tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
+        result = tool._run(action="calibrate", ticker_symbol="BTC_USD")
+        self.assertIn("Incomplete historical lookback detected", result)

@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -173,3 +174,13 @@ def test_extract_trades_and_compute_metrics_with_slippage():
     assert res.behavior.winning_trades == 2
 
 
+def test_extract_trades_with_audit_detects_unmatched_exits():
+    dt = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+    orders = [
+        make_order("o_orphan", TradeAction.SELL, 110.0, "5", dt),
+    ]
+
+    extraction = AssetPerformanceService.extract_trades_with_audit("BTC_USD", orders)
+    assert not extraction.trades
+    assert extraction.unmatched_exit_quantity == Decimal("5")
+    assert extraction.unmatched_exit_orders == 1

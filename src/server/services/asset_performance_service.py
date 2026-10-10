@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import collections
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Deque, Dict, List, Optional
 
 from pydantic import BaseModel
 
+from api.interfaces.backtest_request import ExecutionConfiguration
 from api.interfaces.order import Order
 from api.interfaces.trade import Trade
 from api.interfaces.trade_action import TradeAction
@@ -20,7 +22,7 @@ from src.backtest.domain.metrics import (
     RiskAdjustedMetrics,
     TradingBehaviorMetrics,
 )
-from src.backtest.domain.result import PortfolioSnapshot
+from src.backtest.domain.result import BacktestFill, BacktestResult, PortfolioSnapshot
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.trading.analytics.trade_attribution_service import (
@@ -143,6 +145,13 @@ class BuyLot:
         self.strategy_attributions = strategy_attributions
 
 
+@dataclass(frozen=True)
+class TradeExtractionResult:
+    trades: List[Trade]
+    unmatched_exit_quantity: Decimal
+    unmatched_exit_orders: int
+
+
 class AssetPerformanceService:
     def __init__(self, database_manager: DatabaseManager) -> None:
         self._database_manager = database_manager
@@ -168,7 +177,9 @@ class AssetPerformanceService:
             )
 
     @classmethod
-    def extract_trades(cls, ticker_symbol: str, orders: List[Order]) -> List[Trade]:  # pylint: disable=too-many-locals
+    def extract_trades_with_audit(  # pylint: disable=too-many-locals
+            cls, ticker_symbol: str, orders: List[Order]
+    ) -> TradeExtractionResult:
         def get_exec_dt(o: Order) -> datetime:
             if o.executed_time is not None:
                 return datetime.fromtimestamp(o.executed_time, tz=timezone.utc)
@@ -177,6 +188,8 @@ class AssetPerformanceService:
         sorted_orders = sorted(orders, key=get_exec_dt)
         buy_lots: Deque[BuyLot] = collections.deque()
         matched_trades: List[Trade] = []
+        unmatched_exit_quantity = Decimal("0")
+        unmatched_exit_orders = 0
 
         for order in sorted_orders:
             action_raw = order.trade_action.value
@@ -242,10 +255,22 @@ class AssetPerformanceService:
                     if oldest_lot.remaining_qty <= 0:
                         buy_lots.popleft()
 
-        return matched_trades
+                if remaining_sell_qty > 0:
+                    unmatched_exit_quantity += remaining_sell_qty
+                    unmatched_exit_orders += 1
+
+        return TradeExtractionResult(
+            trades=matched_trades,
+            unmatched_exit_quantity=unmatched_exit_quantity,
+            unmatched_exit_orders=unmatched_exit_orders,
+        )
 
     @classmethod
-    def compute_metrics(  # pylint: disable=too-many-locals,too-many-statements
+    def extract_trades(cls, ticker_symbol: str, orders: List[Order]) -> List[Trade]:
+        return cls.extract_trades_with_audit(ticker_symbol, orders).trades
+
+    @classmethod
+    def compute_metrics(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
             cls,
             ticker_symbol: str,
             start: datetime,
@@ -443,9 +468,6 @@ class AssetPerformanceService:
         }
 
         # 4 Dimensions of Strategy Robustness Metrics
-        from api.interfaces.backtest_request import ExecutionConfiguration
-        from src.backtest.domain.result import BacktestFill, BacktestResult
-
         initial_balance = Decimal("10000")
         current_equity = initial_balance
         peak_equity = initial_balance
@@ -463,15 +485,12 @@ class AssetPerformanceService:
 
         for trade in matched_trades:
             current_equity += trade.net_pnl
-            if current_equity > peak_equity:
-                peak_equity = current_equity
+            peak_equity = max(peak_equity, current_equity)
             dd = peak_equity - current_equity
-            if dd > max_dd:
-                max_dd = dd
+            max_dd = max(max_dd, dd)
             if peak_equity > Decimal("0"):
                 dd_pct = (dd / peak_equity) * Decimal("100")
-                if dd_pct > max_dd_pct:
-                    max_dd_pct = dd_pct
+                max_dd_pct = max(max_dd_pct, dd_pct)
             snapshots.append(
                 PortfolioSnapshot(
                     timestamp=int(trade.exit_timestamp),

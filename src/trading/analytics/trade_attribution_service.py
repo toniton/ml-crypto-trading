@@ -8,7 +8,7 @@ from typing import Any
 from api.interfaces.trade import Trade
 
 
-# pylint: disable=too-many-instance-attributes
+# pylint: disable=too-many-instance-attributes,duplicate-code
 @dataclass(frozen=True)
 class AttributionMetrics:
     total_trades: int
@@ -144,9 +144,9 @@ class TradeAttributionService:
         return result
 
     @classmethod
-    def compute_co_voting_matrix(  # pylint: disable=too-many-locals
+    def compute_co_voting_details(  # pylint: disable=too-many-locals
             cls, trades: list[Trade]
-    ) -> dict[str, dict[str, float]]:
+    ) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, int]]]:
         aligned_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
         agreed_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
@@ -170,12 +170,22 @@ class TradeAttributionService:
                         agreed_pairs[s1][s2] += 1
 
         matrix: dict[str, dict[str, float]] = {}
+        counts: dict[str, dict[str, int]] = {}
         for s1, targets in aligned_pairs.items():
             matrix[s1] = {}
+            counts[s1] = {}
             for s2, total in targets.items():
                 agreed = agreed_pairs[s1].get(s2, 0)
                 matrix[s1][s2] = round(agreed / total, 4) if total > 0 else 0.0
+                counts[s1][s2] = total
 
+        return matrix, counts
+
+    @classmethod
+    def compute_co_voting_matrix(
+            cls, trades: list[Trade]
+    ) -> dict[str, dict[str, float]]:
+        matrix, _ = cls.compute_co_voting_details(trades)
         return matrix
 
     @classmethod
@@ -216,7 +226,7 @@ class TradeAttributionService:
         }
 
     @classmethod
-    def _calculate_proportional_metrics(
+    def _calculate_proportional_metrics(  # pylint: disable=too-many-locals
             cls, weighted_trades: list[tuple[Trade, float]]
     ) -> AttributionMetrics:
         if not weighted_trades:

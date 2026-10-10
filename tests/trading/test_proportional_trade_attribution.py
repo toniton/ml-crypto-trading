@@ -130,8 +130,20 @@ def test_compute_co_voting_matrix_standardized_string_votes():
     assert matrix["MeanRev"]["Trend"] == 0.6667
     # Filter voted HOLD in all 3 -> agreed with itself 100%
     assert matrix["Filter"]["Filter"] == 1.0
-    # Trend and Filter never agreed (BUY!=HOLD, SELL!=HOLD) -> 0.0
     assert matrix["Trend"]["Filter"] == 0.0
+
+
+def test_compute_co_voting_details_returns_counts():
+    t1 = _make_trade(
+        strategy_votes={"Trend": "BUY", "MeanRev": "BUY"},
+    )
+    t2 = _make_trade(
+        strategy_votes={"Trend": "BUY", "MeanRev": "SELL"},
+    )
+
+    matrix, counts = TradeAttributionService.compute_co_voting_details([t1, t2])
+    assert matrix["Trend"]["MeanRev"] == 0.5
+    assert counts["Trend"]["MeanRev"] == 2
 
 
 def test_proportional_attribution_pnl_conservation():

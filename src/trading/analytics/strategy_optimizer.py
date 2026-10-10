@@ -44,6 +44,7 @@ class StrategyRedundancyRecommendation:
     agreement_rate_pct: float
     co_sponsored_trades: int
     recommendation: str
+    aligned_decisions: int = 0
 
 
 class StrategyOptimizer:
@@ -270,42 +271,65 @@ class StrategyOptimizer:
         )
 
     @classmethod
+    def _evaluate_pair_redundancy(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            cls,
+            s1: str,
+            s2: str,
+            trades: list[Trade],
+            matrix: dict[str, dict[str, float]],
+            counts: dict[str, dict[str, int]],
+            threshold: float,
+            min_sample: int,
+    ) -> Optional[StrategyRedundancyRecommendation]:
+        aligned_n = counts.get(s1, {}).get(s2, 0)
+        if aligned_n < min_sample:
+            return None
+
+        rate_1 = matrix.get(s1, {}).get(s2, 0.0)
+        rate_2 = matrix.get(s2, {}).get(s1, 0.0)
+        avg_rate = (rate_1 + rate_2) / 2.0
+
+        if avg_rate < threshold:
+            return None
+
+        pct = round(avg_rate * 100.0, 1)
+        rec = (
+            f"Observed high co-voting alignment ({pct}% agreement over {aligned_n} aligned decisions). "
+            f"Investigate signal overlap and regime specialization before making allocation changes."
+        )
+        co_trades = sum(
+            1 for t in trades
+            if t.entry_strategy_attributions
+            and s1 in t.entry_strategy_attributions
+            and s2 in t.entry_strategy_attributions
+        )
+        return StrategyRedundancyRecommendation(
+            strategy_a=s1,
+            strategy_b=s2,
+            agreement_rate_pct=pct,
+            co_sponsored_trades=co_trades,
+            recommendation=rec,
+            aligned_decisions=aligned_n,
+        )
+
+    @classmethod
     def detect_strategy_redundancies(
             cls,
             trades: list[Trade],
             agreement_threshold: float = 0.85,
+            min_sample_size: int = 2,
     ) -> list[StrategyRedundancyRecommendation]:
-        matrix = TradeAttributionService.compute_co_voting_matrix(trades)
+        matrix, counts = TradeAttributionService.compute_co_voting_details(trades)
         recommendations: list[StrategyRedundancyRecommendation] = []
         strategies = sorted(matrix.keys())
 
         for i, s1 in enumerate(strategies):
             for s2 in strategies[i + 1:]:
-                rate_1 = matrix.get(s1, {}).get(s2, 0.0)
-                rate_2 = matrix.get(s2, {}).get(s1, 0.0)
-                avg_rate = (rate_1 + rate_2) / 2.0
-
-                if avg_rate >= agreement_threshold:
-                    pct = round(avg_rate * 100.0, 1)
-                    rec = (
-                        f"High co-voting redundancy ({pct}% agreement). "
-                        f"Consider staggering trading windows or reallocating weights."
-                    )
-                    co_trades = sum(
-                        1 for t in trades
-                        if t.entry_strategy_attributions
-                        and s1 in t.entry_strategy_attributions
-                        and s2 in t.entry_strategy_attributions
-                    )
-                    recommendations.append(
-                        StrategyRedundancyRecommendation(
-                            strategy_a=s1,
-                            strategy_b=s2,
-                            agreement_rate_pct=pct,
-                            co_sponsored_trades=co_trades,
-                            recommendation=rec,
-                        )
-                    )
+                rec = cls._evaluate_pair_redundancy(
+                    s1, s2, trades, matrix, counts, agreement_threshold, min_sample_size
+                )
+                if rec is not None:
+                    recommendations.append(rec)
 
         return recommendations
 

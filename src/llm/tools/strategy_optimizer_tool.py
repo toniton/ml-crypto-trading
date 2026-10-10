@@ -6,10 +6,12 @@ from typing import Any, Optional, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.order import Order
 from api.interfaces.trade import Trade
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.server.services.asset_performance_service import AssetPerformanceService
 from src.trading.analytics.strategy_optimizer import StrategyOptimizer
@@ -52,6 +54,7 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             database_manager: DatabaseManager,
             configuration_service: ConfigurationService,
     ):
+        self._audit_warning: Optional[str] = None
         super().__init__(
             database_manager=database_manager,
             configuration_service=configuration_service,
@@ -81,19 +84,23 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             return "No historical trades found for the specified asset/period to perform optimization."
 
         if norm_action == "windows":
-            return self._run_windows(trades, ticker_symbol, timezone)
-        if norm_action == "redundancy":
-            return self._run_redundancy(trades)
-        if norm_action == "proposal":
-            return self._run_proposal(
+            result = self._run_windows(trades, ticker_symbol, timezone)
+        elif norm_action == "redundancy":
+            result = self._run_redundancy(trades)
+        elif norm_action == "proposal":
+            result = self._run_proposal(
                 trades,
                 ticker_symbol,
                 timezone,
                 asset_config,
                 base_commit_hash=base_commit_hash,
             )
+        else:
+            result = self._run_calibrate(trades, ticker_symbol, asset_config)
 
-        return self._run_calibrate(trades, ticker_symbol, asset_config)
+        if self._audit_warning:
+            return f"{result}\n\n{self._audit_warning}"
+        return result
 
     def _get_asset_config_snapshot(
             self, ticker_symbol: Optional[str]
@@ -140,14 +147,15 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             return "No high-redundancy strategy pairs detected (all co-voting agreement rates < 85%)."
         lines = ["### ⚠️ Strategy Redundancy Analysis\n"]
         for r in redundancies:
+            sample_str = f" across {r.aligned_decisions} decision(s)" if r.aligned_decisions > 0 else ""
             lines.append(
-                f"- **{r.strategy_a} & {r.strategy_b}**: {r.agreement_rate_pct}% agreement "
-                f"across {r.co_sponsored_trades} trade(s). {r.recommendation}"
+                f"- **{r.strategy_a} & {r.strategy_b}**: {r.agreement_rate_pct}% agreement{sample_str} "
+                f"({r.co_sponsored_trades} co-sponsored trade(s)). {r.recommendation}"
             )
         return "\n".join(lines)
 
+    @staticmethod
     def _run_proposal(
-            self,
             trades: list[Trade],
             ticker_symbol: Optional[str],
             target_tz: str,
@@ -212,27 +220,54 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
     def _gather_trades(self, ticker_symbol: Optional[str], lookback_days: int) -> list[Trade]:
         return self._fetch_db_trades(ticker_symbol, lookback_days)
 
+    @staticmethod
+    def _extract_and_audit_orders(
+            orders: list[Order],
+            symbols: list[str],
+            target_start: datetime,
+    ) -> tuple[list[Trade], int]:
+        all_trades: list[Trade] = []
+        total_unmatched = 0
+        for symbol in symbols:
+            sym_orders = [o for o in orders if o.ticker_symbol == symbol]
+            extraction = AssetPerformanceService.extract_trades_with_audit(symbol, sym_orders)
+            valid_trades = [t for t in extraction.trades if t.exit_timestamp >= target_start.timestamp()]
+            all_trades.extend(valid_trades)
+            total_unmatched += extraction.unmatched_exit_orders
+        return all_trades, total_unmatched
+
     def _fetch_db_trades(self, ticker_symbol: Optional[str], lookback_days: int) -> list[Trade]:
         now = datetime.now(timezone.utc)
         target_start = now - timedelta(days=max(1, lookback_days))
         fetch_start = now - timedelta(days=int(max(1, lookback_days) * 1.5) + 1)
+        self._audit_warning = None
+
         with self.database_manager.get_unit_of_work() as uow:
-            repo = uow.get_repository(PostgresOrderRepository)
+            sym = ticker_symbol.strip() if ticker_symbol else None
+            trade_repo = uow.get_repository(PostgresTradeRepository)
+            persisted_trades = trade_repo.get_by_exit_range(sym, start=target_start, end=now)
+            if persisted_trades:
+                return persisted_trades
+
+            order_repo = uow.get_repository(PostgresOrderRepository)
             if ticker_symbol:
-                orders = repo.get_completed_by_ticker_and_executed_range(
+                orders = order_repo.get_completed_by_ticker_and_executed_range(
                     ticker_symbol=ticker_symbol.strip(),
                     start=fetch_start,
                     end=now,
                 )
                 symbols = [ticker_symbol.strip()]
             else:
-                orders = repo.get_completed_by_executed_range(start=fetch_start, end=now)
+                orders = order_repo.get_completed_by_executed_range(start=fetch_start, end=now)
                 symbols = list({o.ticker_symbol for o in orders})
 
-            all_trades: list[Trade] = []
-            for symbol in symbols:
-                sym_orders = [o for o in orders if o.ticker_symbol == symbol]
-                trades = AssetPerformanceService.extract_trades(symbol, sym_orders)
-                valid_trades = [t for t in trades if t.exit_timestamp >= target_start.timestamp()]
-                all_trades.extend(valid_trades)
+            all_trades, total_unmatched = self._extract_and_audit_orders(orders, symbols, target_start)
+
+            if total_unmatched > 0:
+                self._audit_warning = (
+                    f"⚠️ Warning: Incomplete historical lookback detected "
+                    f"({total_unmatched} closing order(s) without matching entry lots "
+                    f"prior to the lookback window; metrics may reflect partial position data)."
+                )
+
             return all_trades
