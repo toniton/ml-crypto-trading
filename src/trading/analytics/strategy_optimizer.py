@@ -310,6 +310,65 @@ class StrategyOptimizer:
         return recommendations
 
     @classmethod
+    def _format_windows_payload(
+            cls,
+            windows: list[TradingWindow],
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "days": [d.value for d in w.days],
+                "start_time": w.start_time.strftime("%H:%M:%S"),
+                "end_time": w.end_time.strftime("%H:%M:%S"),
+            }
+            for w in windows
+        ]
+
+    @classmethod
+    def _build_strategy_schedule_change(
+            cls,
+            ticker_symbol: str,
+            strat: dict[str, Any],
+            suggested_windows: list[TradingWindow],
+            trades: Optional[list[Trade]],
+            timezone_str: str,
+            allow_asset_fallback: bool,
+    ) -> Optional[ConfigChange]:
+        sname = strat.get("name")
+        if not sname:
+            return None
+
+        strat_windows: list[TradingWindow] = []
+        if trades:
+            strat_windows = cls.optimize_strategy_trading_windows(
+                trades,
+                sname,
+                timezone_str=timezone_str,
+            )
+
+        effective_windows = strat_windows if strat_windows else (suggested_windows if allow_asset_fallback else [])
+        if not effective_windows:
+            return None
+
+        windows_payload = cls._format_windows_payload(effective_windows)
+        sched = strat.get("schedule")
+        current_windows = sched.get("windows", []) if isinstance(sched, dict) else []
+
+        if windows_payload == current_windows:
+            return None
+
+        reason = (
+            f"Empirically optimized active trading windows based on {sname}-specific trades."
+            if strat_windows
+            else f"Applied aggregate asset-level trading windows fallback for {sname}."
+        )
+        return ConfigChange(
+            path=f"assets.{ticker_symbol}.strategies.{sname}.schedule.windows",
+            old_value=current_windows,
+            new_value=windows_payload,
+            reason=reason,
+        )
+
+    @classmethod
     def _build_schedule_changes(
             cls,
             ticker_symbol: str,
@@ -317,51 +376,20 @@ class StrategyOptimizer:
             suggested_windows: list[TradingWindow],
             trades: Optional[list[Trade]] = None,
             timezone_str: str = "UTC",
+            allow_asset_fallback: bool = False,
     ) -> list[ConfigChange]:
         changes: list[ConfigChange] = []
         for strat in strategies_config:
-            sname = strat.get("name")
-            if not sname:
-                continue
-
-            strat_windows: list[TradingWindow] = []
-            if trades:
-                strat_windows = cls.optimize_strategy_trading_windows(
-                    trades,
-                    sname,
-                    timezone_str=timezone_str,
-                )
-
-            effective_windows = strat_windows if strat_windows else suggested_windows
-            if not effective_windows:
-                continue
-
-            windows_payload = [
-                {
-                    "days": [d.value for d in w.days],
-                    "start_time": w.start_time.strftime("%H:%M:%S"),
-                    "end_time": w.end_time.strftime("%H:%M:%S"),
-                }
-                for w in effective_windows
-            ]
-
-            sched = strat.get("schedule")
-            current_windows = sched.get("windows", []) if isinstance(sched, dict) else []
-
-            if windows_payload != current_windows:
-                reason = (
-                    f"Empirically optimized active trading windows based on {sname}-specific trades."
-                    if strat_windows
-                    else f"Empirically optimized active trading windows based on asset-level trades for {sname}."
-                )
-                changes.append(
-                    ConfigChange(
-                        path=f"assets.{ticker_symbol}.strategies.{sname}.schedule.windows",
-                        old_value=current_windows,
-                        new_value=windows_payload,
-                        reason=reason,
-                    )
-                )
+            change = cls._build_strategy_schedule_change(
+                ticker_symbol=ticker_symbol,
+                strat=strat,
+                suggested_windows=suggested_windows,
+                trades=trades,
+                timezone_str=timezone_str,
+                allow_asset_fallback=allow_asset_fallback,
+            )
+            if change is not None:
+                changes.append(change)
         return changes
 
     @classmethod
@@ -372,6 +400,7 @@ class StrategyOptimizer:
             trades: list[Trade],
             timezone_str: str = "UTC",
             base_commit_hash: Optional[str] = None,
+            allow_asset_fallback: bool = False,
     ) -> ConfigurationProposal:
         strategies_config = current_asset_config.get("strategies", [])
         current_weights = {
@@ -400,6 +429,7 @@ class StrategyOptimizer:
                 suggested_windows,
                 trades=trades,
                 timezone_str=timezone_str,
+                allow_asset_fallback=allow_asset_fallback,
             )
         )
 

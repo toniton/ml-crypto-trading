@@ -277,3 +277,57 @@ def test_generate_optimization_proposal_suppresses_unchanged_schedule_and_binds_
     schedule_changes = [c for c in proposal.changes if "schedule.windows" in c.path]
     # Since existing schedule equals discovered windows, no schedule change diff should be emitted
     assert len(schedule_changes) == 0
+
+
+def test_strategy_schedule_without_evidence_is_not_given_asset_windows_by_default():
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    trades = [
+        _make_trade(
+            entry_price=Decimal("100"),
+            exit_price=Decimal("120"),
+            winning_strategy="TrendA",
+            entry_strategy_attributions={"TrendA": 1.0},
+            entry_timestamp=base_ts + i * 60,
+        )
+        for i in range(4)
+    ]
+
+    current_config = {
+        "strategies": [
+            {
+                "name": "TrendA",
+                "weight": 1.0,
+                "schedule": {"timezone": "UTC", "windows": []},
+            },
+            {
+                "name": "TrendB_NoEvidence",
+                "weight": 1.0,
+                "schedule": {"timezone": "UTC", "windows": []},
+            },
+        ]
+    }
+
+    # Default: allow_asset_fallback is False
+    proposal = StrategyOptimizer.generate_optimization_proposal(
+        ticker_symbol="BTC_USD",
+        current_asset_config=current_config,
+        trades=trades,
+        allow_asset_fallback=False,
+    )
+
+    sched_changes = [c for c in proposal.changes if "schedule.windows" in c.path]
+    # TrendA has evidence and gets a schedule change
+    assert any("TrendA" in c.path for c in sched_changes)
+    # TrendB has NO evidence and should NOT receive a fabricated schedule
+    assert not any("TrendB_NoEvidence" in c.path for c in sched_changes)
+
+    # When explicit fallback is enabled, TrendB receives the fallback
+    fallback_prop = StrategyOptimizer.generate_optimization_proposal(
+        ticker_symbol="BTC_USD",
+        current_asset_config=current_config,
+        trades=trades,
+        allow_asset_fallback=True,
+    )
+    fallback_changes = [c for c in fallback_prop.changes if "schedule.windows" in c.path]
+    trend_b_change = next(c for c in fallback_changes if "TrendB_NoEvidence" in c.path)
+    assert "Applied aggregate asset-level trading windows fallback" in trend_b_change.reason

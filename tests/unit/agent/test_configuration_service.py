@@ -1,8 +1,10 @@
+import pytest
 import yaml
 
 from src.agent import ConfigChange, ConfigurationProposal
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.vcs.application.service import VCSService
+from src.vcs.domain.exceptions import VcsError
 from tests.unit.agent.conftest import SAMPLE_CONFIG
 from tests.unit.api_server.helpers import make_temp_db_manager
 
@@ -326,3 +328,52 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
 
         assert service.validate_proposal(proposal).valid is False
 
+    def test_get_asset_config_snapshot_returns_config_and_commit_hash(self, vcs):
+        service = ConfigurationService(vcs)
+        head_commit = vcs.resolve_commit_hash("HEAD")
+        asset_config, commit_hash = service.get_asset_config_snapshot("BTC_USD")
+
+        assert commit_hash == head_commit
+        assert asset_config is not None
+        assert asset_config["base_ticker_symbol"] == "BTC"
+        assert asset_config["quote_ticker_symbol"] == "USD"
+
+    def test_apply_proposal_to_vcs_succeeds_when_base_commit_matches(self, vcs):
+        service = ConfigurationService(vcs)
+        head_commit = vcs.resolve_commit_hash("HEAD")
+        proposal = ConfigurationProposal(
+            summary="Adjust buy threshold.",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3,
+                    new_value=1.1,
+                    reason="more signals",
+                )
+            ],
+            base_commit_hash=head_commit,
+        )
+
+        commit, warnings = service.apply_proposal_to_vcs(proposal)
+        assert commit.hash
+        assert vcs.resolve_commit_hash("HEAD") == commit.hash
+        assert not warnings
+
+    def test_apply_proposal_to_vcs_raises_vcs_error_on_commit_divergence(self, vcs):
+        service = ConfigurationService(vcs)
+        stale_commit = "stale-commit-hash-000000000000"
+        proposal = ConfigurationProposal(
+            summary="Stale proposal.",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3,
+                    new_value=1.1,
+                    reason="more signals",
+                )
+            ],
+            base_commit_hash=stale_commit,
+        )
+
+        with pytest.raises(VcsError, match="Configuration has diverged from base commit"):
+            service.apply_proposal_to_vcs(proposal)

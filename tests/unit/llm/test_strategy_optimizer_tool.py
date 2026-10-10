@@ -54,12 +54,14 @@ class TestStrategyOptimizerTool(unittest.TestCase):
         service = MagicMock(spec=ConfigurationService)
         if strategies is None:
             strategies = [{"name": "TrendFollower", "weight": 1.0, "enabled": True}]
-        service.get_asset_config.return_value = {
+        cfg = {
             "name": "Bitcoin",
             "base_ticker_symbol": "BTC",
             "quote_ticker_symbol": "USD",
             "strategies": strategies,
         }
+        service.get_asset_config.return_value = cfg
+        service.get_asset_config_snapshot.return_value = (cfg, commit_hash)
         service.get_head_commit_hash.return_value = commit_hash
         return service
 
@@ -106,6 +108,7 @@ class TestStrategyOptimizerTool(unittest.TestCase):
         db = self._setup_mock_db(orders)
         config = MagicMock(spec=ConfigurationService)
         config.get_asset_config.return_value = None
+        config.get_asset_config_snapshot.return_value = (None, None)
         tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
         result = tool._run(action="calibrate", ticker_symbol="UNKNOWN_PAIR")
         self.assertIn("Error: Asset 'UNKNOWN_PAIR' is not configured", result)

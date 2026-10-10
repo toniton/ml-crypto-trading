@@ -49,14 +49,27 @@ class ConfigurationService(AgentLoggingMixin):
         except VcsError:
             return None
 
-    def get_asset_config(self, ticker_symbol: str) -> Optional[dict]:
-        raw = self.load_raw_config()
+    def get_asset_config_snapshot(
+            self, ticker_symbol: str, ref: str = "HEAD"
+    ) -> Tuple[Optional[dict], Optional[str]]:
+        if self._vcs is None:
+            return None, None
+        try:
+            commit_hash = self._vcs.resolve_commit_hash(ref)
+            raw = self._vcs.checkout(commit_hash)
+        except VcsError:
+            return None, None
+
         target = ticker_symbol.strip()
         for entry in raw.get("assets", []) or []:
             sym = f"{entry.get('base_ticker_symbol')}_{entry.get('quote_ticker_symbol')}"
             if sym == target:
-                return entry
-        return None
+                return entry, commit_hash
+        return None, commit_hash
+
+    def get_asset_config(self, ticker_symbol: str) -> Optional[dict]:
+        config, _ = self.get_asset_config_snapshot(ticker_symbol)
+        return config
 
     def load_raw_config(self) -> dict:
         try:
@@ -454,6 +467,14 @@ class ConfigurationService(AgentLoggingMixin):
     ) -> Tuple[Any, List[str]]:
         if self._vcs is None:
             raise RuntimeError("ConfigurationService has no VCS backend configured.")
+
+        if proposal.base_commit_hash:
+            current_head = self._vcs.resolve_commit_hash(ref)
+            if current_head != proposal.base_commit_hash:
+                raise VcsError(
+                    f"Configuration has diverged from base commit '{proposal.base_commit_hash}' "
+                    f"(current {ref} is '{current_head}')."
+                )
 
         patched, warnings = self.apply_proposal(proposal)
         validated_config = TradingConfig.model_validate(patched)

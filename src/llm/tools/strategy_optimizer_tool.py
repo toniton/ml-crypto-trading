@@ -70,8 +70,9 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         norm_action = action.strip().lower()
 
         asset_config: Optional[dict[str, Any]] = None
+        base_commit_hash: Optional[str] = None
         if norm_action in ("calibrate", "proposal"):
-            asset_config, err = self._get_asset_config(ticker_symbol)
+            asset_config, base_commit_hash, err = self._get_asset_config_snapshot(ticker_symbol)
             if err is not None or asset_config is None:
                 return err or "Error loading asset configuration."
 
@@ -84,19 +85,37 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         if norm_action == "redundancy":
             return self._run_redundancy(trades)
         if norm_action == "proposal":
-            return self._run_proposal(trades, ticker_symbol, timezone, asset_config)
+            return self._run_proposal(
+                trades,
+                ticker_symbol,
+                timezone,
+                asset_config,
+                base_commit_hash=base_commit_hash,
+            )
 
         return self._run_calibrate(trades, ticker_symbol, asset_config)
 
-    def _get_asset_config(self, ticker_symbol: Optional[str]) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+    def _get_asset_config_snapshot(
+            self, ticker_symbol: Optional[str]
+    ) -> tuple[Optional[dict[str, Any]], Optional[str], Optional[str]]:
         if not ticker_symbol:
-            return None, "Error: 'ticker_symbol' is required for strategy calibration and proposal generation."
+            return None, None, "Error: 'ticker_symbol' is required for strategy calibration and proposal generation."
 
-        asset_config = self.configuration_service.get_asset_config(ticker_symbol)
+        snapshot_res = self.configuration_service.get_asset_config_snapshot(ticker_symbol)
+        if isinstance(snapshot_res, tuple) and len(snapshot_res) == 2:
+            asset_config, commit_hash = snapshot_res
+        else:
+            asset_config = self.configuration_service.get_asset_config(ticker_symbol)
+            commit_hash = None
+
         if asset_config is None:
-            return None, f"Error: Asset '{ticker_symbol}' is not configured in the active configuration."
+            return None, None, f"Error: Asset '{ticker_symbol}' is not configured in the active configuration."
 
-        return asset_config, None
+        return asset_config, commit_hash, None
+
+    def _get_asset_config(self, ticker_symbol: Optional[str]) -> tuple[Optional[dict[str, Any]], Optional[str]]:
+        cfg, _, err = self._get_asset_config_snapshot(ticker_symbol)
+        return cfg, err
 
     def _get_base_commit_hash(self) -> Optional[str]:
         return self.configuration_service.get_head_commit_hash()
@@ -133,8 +152,8 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             ticker_symbol: Optional[str],
             target_tz: str,
             asset_config: dict[str, Any],
+            base_commit_hash: Optional[str] = None,
     ) -> str:
-        base_commit_hash = self._get_base_commit_hash()
         sym = ticker_symbol.strip() if ticker_symbol else "PORTFOLIO"
         prop = StrategyOptimizer.generate_optimization_proposal(
             sym,
