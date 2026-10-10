@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from api.interfaces.asset import Asset
 from src.agent.backtest.backtest_service import BacktestService
+from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.oracle.oracle_service import OracleService
 from src.configuration.llm_config import LlmConfig, ToolConfig, ToolRegistryConfig
 from src.core.interfaces.database_manager import DatabaseManager
@@ -92,6 +93,12 @@ class TestToolFactory(unittest.TestCase):
         session_manager = MagicMock(spec=SessionManager)
         tools = ToolFactory.build_attribution_tools(db_manager, session_manager)
         self.assertIn("trade_attribution", tools)
+        self.assertNotIn("strategy_optimizer", tools)
+
+        config_service = MagicMock(spec=ConfigurationService)
+        tools_with_config = ToolFactory.build_attribution_tools(db_manager, session_manager, config_service)
+        self.assertIn("trade_attribution", tools_with_config)
+        self.assertIn("strategy_optimizer", tools_with_config)
 
     def test_build_oracle_tools(self):
         oracle_service = MagicMock(spec=OracleService)
@@ -134,6 +141,7 @@ class TestToolFactory(unittest.TestCase):
         self.assertIn("backtest_drift", tool_map)
         self.assertIn("metrics", tool_map)
         self.assertIn("trade_attribution", tool_map)
+        self.assertIn("strategy_optimizer", tool_map)
         self.assertIn("inspect_trading_decision", tool_map)
         self.assertIn("exchange_read", tool_map)
         self.assertIn("portfolio_summary", tool_map)

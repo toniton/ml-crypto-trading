@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, TIMESTAMP
 
+from src.database.dao.blob_dao import JSON_TYPE
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 
 
@@ -20,3 +21,4 @@ class OrderDao(SqlAlchemyDatabaseManager.BaseTableModel):
     last_updated_timestamp = Column(TIMESTAMP)
     created_timestamp = Column(TIMESTAMP)
     executed_timestamp = Column(TIMESTAMP)
+    metadata_ = Column("metadata", JSON_TYPE, server_default="{}", nullable=True)

@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time, timezone
 from decimal import Decimal
-from typing import Any
+from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from api.interfaces.trade import Trade
@@ -237,10 +237,7 @@ class StrategyOptimizer:
         profitable_slots: dict[Weekday, set[int]] = defaultdict(set)
 
         for p in profiles:
-            is_profitable = (p.total_trades >= min_trades and p.win_rate_pct >= min_win_rate) or (
-                    p.net_pnl > Decimal(0) and p.total_trades >= 1
-            )
-            if is_profitable:
+            if p.total_trades >= min_trades and p.win_rate_pct >= min_win_rate and p.net_pnl > Decimal(0):
                 profitable_slots[p.weekday].add(p.hour)
 
         if not profitable_slots:
@@ -248,6 +245,29 @@ class StrategyOptimizer:
 
         day_ranges = cls._extract_contiguous_day_ranges(profitable_slots)
         return cls._build_trading_windows_from_ranges(day_ranges)
+
+    @classmethod
+    def optimize_strategy_trading_windows(
+            cls,
+            trades: list[Trade],
+            strategy_name: str,
+            timezone_str: str = "UTC",
+            min_trades: int = 2,
+            min_win_rate: float = 50.0,
+    ) -> list[TradingWindow]:
+        strategy_trades = [
+            t for t in trades
+            if (t.entry_strategy_attributions and strategy_name in t.entry_strategy_attributions)
+               or t.winning_strategy == strategy_name
+        ]
+        if not strategy_trades:
+            return []
+        return cls.optimize_trading_windows(
+            strategy_trades,
+            timezone_str=timezone_str,
+            min_trades=min_trades,
+            min_win_rate=min_win_rate,
+        )
 
     @classmethod
     def detect_strategy_redundancies(
@@ -295,28 +315,51 @@ class StrategyOptimizer:
             ticker_symbol: str,
             strategies_config: list[dict[str, Any]],
             suggested_windows: list[TradingWindow],
-    ) -> list[Any]:
-        if not suggested_windows:
-            return []
-
-        windows_payload = [
-            {
-                "days": [d.value for d in w.days],
-                "start_time": w.start_time.strftime("%H:%M:%S"),
-                "end_time": w.end_time.strftime("%H:%M:%S"),
-            }
-            for w in suggested_windows
-        ]
+            trades: Optional[list[Trade]] = None,
+            timezone_str: str = "UTC",
+    ) -> list[ConfigChange]:
         changes: list[ConfigChange] = []
         for strat in strategies_config:
             sname = strat.get("name")
-            if sname:
+            if not sname:
+                continue
+
+            strat_windows: list[TradingWindow] = []
+            if trades:
+                strat_windows = cls.optimize_strategy_trading_windows(
+                    trades,
+                    sname,
+                    timezone_str=timezone_str,
+                )
+
+            effective_windows = strat_windows if strat_windows else suggested_windows
+            if not effective_windows:
+                continue
+
+            windows_payload = [
+                {
+                    "days": [d.value for d in w.days],
+                    "start_time": w.start_time.strftime("%H:%M:%S"),
+                    "end_time": w.end_time.strftime("%H:%M:%S"),
+                }
+                for w in effective_windows
+            ]
+
+            sched = strat.get("schedule")
+            current_windows = sched.get("windows", []) if isinstance(sched, dict) else []
+
+            if windows_payload != current_windows:
+                reason = (
+                    f"Empirically optimized active trading windows based on {sname}-specific trades."
+                    if strat_windows
+                    else f"Empirically optimized active trading windows based on asset-level trades for {sname}."
+                )
                 changes.append(
                     ConfigChange(
                         path=f"assets.{ticker_symbol}.strategies.{sname}.schedule.windows",
-                        old_value=strat.get("schedule", {}).get("windows", []),
+                        old_value=current_windows,
                         new_value=windows_payload,
-                        reason=f"Empirically optimized active trading windows for {sname}.",
+                        reason=reason,
                     )
                 )
         return changes
@@ -328,6 +371,7 @@ class StrategyOptimizer:
             current_asset_config: dict[str, Any],
             trades: list[Trade],
             timezone_str: str = "UTC",
+            base_commit_hash: Optional[str] = None,
     ) -> ConfigurationProposal:
         strategies_config = current_asset_config.get("strategies", [])
         current_weights = {
@@ -349,7 +393,15 @@ class StrategyOptimizer:
             for cal in calibrations
             if cal.recommended_weight != cal.current_weight
         ]
-        changes.extend(cls._build_schedule_changes(ticker_symbol, strategies_config, suggested_windows))
+        changes.extend(
+            cls._build_schedule_changes(
+                ticker_symbol,
+                strategies_config,
+                suggested_windows,
+                trades=trades,
+                timezone_str=timezone_str,
+            )
+        )
 
         summary = (
             f"Autonomous calibration for {ticker_symbol}: "
@@ -368,4 +420,5 @@ class StrategyOptimizer:
                 "Aligns strategy influence with empirical risk-adjusted performance "
                 "and restricts trading to high-probability windows."
             ),
+            base_commit_hash=base_commit_hash,
         )

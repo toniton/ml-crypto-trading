@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock
@@ -11,18 +12,18 @@ CREATED_AT = datetime(2026, 8, 22, 9, 14, 3, tzinfo=timezone.utc)
 
 
 def build_dao(**overrides) -> OrderDao:
-    defaults = dict(
-        uuid="92121e15-0000-4000-8000-000000000001",
-        provider_name="CRYPTO_DOT_COM",
-        ticker_symbol="BTC_USD",
-        price="63208.26661",
-        quantity="0.00005",
-        status=OrderStatus.PENDING.value,
-        trade_action=TradeAction.BUY.value,
-        last_updated_timestamp=CREATED_AT,
-        created_timestamp=CREATED_AT,
-        executed_timestamp=None,
-    )
+    defaults = {
+        "uuid": "92121e15-0000-4000-8000-000000000001",
+        "provider_name": "CRYPTO_DOT_COM",
+        "ticker_symbol": "BTC_USD",
+        "price": "63208.26661",
+        "quantity": "0.00005",
+        "status": OrderStatus.PENDING.value,
+        "trade_action": TradeAction.BUY.value,
+        "last_updated_timestamp": CREATED_AT,
+        "created_timestamp": CREATED_AT,
+        "executed_timestamp": None,
+    }
     defaults.update(overrides)
     return OrderDao(**defaults)
 
@@ -39,7 +40,7 @@ class TestGetNonTerminal:
 
         session.query.assert_called_once_with(OrderDao)
         query.filter.assert_called_once()
-        assert result == []
+        assert not result
 
     def test_maps_rows_to_entities(self):
         session = MagicMock()
@@ -105,6 +106,37 @@ class TestUpsert:
         assert compiled_params.get("commit_hash") == "c4688f3b"
         assert compiled_params.get("uuid") == "test-uuid-order-hash"
 
+    def test_upsert_executes_statement_with_attribution_fields(self):
+        session = MagicMock()
+        repo = PostgresOrderRepository(database_session=session)
+
+        order = Order(
+            uuid="test-uuid-attrib",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63000.00"),
+            quantity="0.05",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            decision_id="dec-abc",
+            winning_strategy="TrendA",
+            strategy_votes={"TrendA": "BUY"},
+            strategy_attributions={"TrendA": 1.0},
+            status=OrderStatus.COMPLETED,
+        )
+
+        repo.upsert(order)
+
+        session.execute.assert_called_once()
+        executed_clause = session.execute.call_args[0][0]
+        compiled_params = executed_clause.compile().params
+        assert compiled_params.get("decision_id") == "dec-abc"
+        assert compiled_params.get("metadata") == {
+            "winning_strategy": "TrendA",
+            "strategy_votes": {"TrendA": "BUY"},
+            "strategy_attributions": {"TrendA": 1.0},
+        }
+
 
 class TestGetCompletedByExecutedRange:
     def test_queries_completed_orders_within_time_range(self):
@@ -124,4 +156,3 @@ class TestGetCompletedByExecutedRange:
         assert len(results) == 1
         assert results[0].status is OrderStatus.COMPLETED
         assert results[0].uuid == dao.uuid
-

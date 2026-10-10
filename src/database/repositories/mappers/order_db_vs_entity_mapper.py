@@ -1,6 +1,8 @@
-from datetime import datetime, timezone
+from __future__ import annotations
 
+from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Any
 
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
@@ -11,6 +13,10 @@ class OrderDBVSEntityMapper:
 
     @staticmethod
     def map_to_entity(order_dao: OrderDao) -> Order:
+        metadata = order_dao.metadata_ if isinstance(order_dao.metadata_, dict) else {}
+        strategy_votes = metadata.get("strategy_votes")
+        strategy_attributions = metadata.get("strategy_attributions")
+
         return Order(
             uuid=order_dao.uuid,
             provider_name=order_dao.provider_name,
@@ -29,6 +35,11 @@ class OrderDBVSEntityMapper:
             fees=Decimal(order_dao.fees) if order_dao.fees is not None else None,
             fill_price=Decimal(order_dao.fill_price) if order_dao.fill_price is not None else None,
             decision_id=order_dao.decision_id,
+            winning_strategy=metadata.get("winning_strategy"),
+            strategy_votes=strategy_votes if isinstance(strategy_votes, dict) else None,
+            strategy_attributions=(
+                strategy_attributions if isinstance(strategy_attributions, dict) else None
+            ),
         )
 
     @staticmethod
@@ -39,6 +50,14 @@ class OrderDBVSEntityMapper:
             if order.executed_time is not None
             else None
         )
+        metadata: dict[str, Any] = {}
+        if order.winning_strategy is not None:
+            metadata["winning_strategy"] = order.winning_strategy
+        if order.strategy_votes is not None:
+            metadata["strategy_votes"] = order.strategy_votes
+        if order.strategy_attributions is not None:
+            metadata["strategy_attributions"] = order.strategy_attributions
+
         return OrderDao(
             uuid=order.uuid,
             provider_name=order.provider_name,
@@ -54,4 +73,5 @@ class OrderDBVSEntityMapper:
             last_updated_timestamp=datetime.now(timezone.utc),
             created_timestamp=created_datetime,
             executed_timestamp=executed_datetime,
+            metadata_=metadata if metadata else None,
         )

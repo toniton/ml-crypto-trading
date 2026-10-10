@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -13,18 +14,18 @@ EXECUTED_AT = datetime(2026, 8, 22, 9, 14, 5, tzinfo=timezone.utc)
 
 
 def build_dao(**overrides) -> OrderDao:
-    defaults = dict(
-        uuid="92121e15-0000-4000-8000-000000000001",
-        provider_name="CRYPTO_DOT_COM",
-        ticker_symbol="BTC_USD",
-        price="63208.26661",
-        quantity="0.00005",
-        status=OrderStatus.COMPLETED.value,
-        trade_action=TradeAction.BUY.value,
-        commit_hash="56339b9",
-        last_updated_timestamp=CREATED_AT,
-        created_timestamp=CREATED_AT,
-    )
+    defaults = {
+        "uuid": "92121e15-0000-4000-8000-000000000001",
+        "provider_name": "CRYPTO_DOT_COM",
+        "ticker_symbol": "BTC_USD",
+        "price": "63208.26661",
+        "quantity": "0.00005",
+        "status": OrderStatus.COMPLETED.value,
+        "trade_action": TradeAction.BUY.value,
+        "commit_hash": "56339b9",
+        "last_updated_timestamp": CREATED_AT,
+        "created_timestamp": CREATED_AT,
+    }
     defaults.update(overrides)
     return OrderDao(**defaults)
 
@@ -173,3 +174,52 @@ class TestRoundTrip:
         restored = OrderDBVSEntityMapper.map_to_entity(OrderDBVSEntityMapper.map_to_db(original))
         assert restored.executed_time == original.executed_time
         assert restored.commit_hash == original.commit_hash
+
+    def test_attribution_survives_round_trip(self):
+        original = Order(
+            uuid="92121e15-0000-4000-8000-000000000007",
+            provider_name="CRYPTO_DOT_COM",
+            ticker_symbol="BTC_USD",
+            price=Decimal("63000.00"),
+            quantity="0.05",
+            trade_action=TradeAction.BUY,
+            created_time=CREATED_AT.timestamp(),
+            executed_time=EXECUTED_AT.timestamp(),
+            status=OrderStatus.COMPLETED,
+            decision_id="dec-12345",
+            winning_strategy="TrendFollower",
+            strategy_votes={"TrendFollower": "BUY", "MeanReversion": "HOLD"},
+            strategy_attributions={"TrendFollower": 0.8, "Momentum": 0.2},
+        )
+
+        restored = OrderDBVSEntityMapper.map_to_entity(OrderDBVSEntityMapper.map_to_db(original))
+        assert restored.decision_id == "dec-12345"
+        assert restored.winning_strategy == "TrendFollower"
+        assert restored.strategy_votes == {"TrendFollower": "BUY", "MeanReversion": "HOLD"}
+        assert restored.strategy_attributions == {"TrendFollower": 0.8, "Momentum": 0.2}
+
+    def test_legacy_dao_without_attribution_maps_cleanly(self):
+        dao = build_dao(
+            decision_id=None,
+            metadata_=None,
+        )
+        entity = OrderDBVSEntityMapper.map_to_entity(dao)
+        assert entity.decision_id is None
+        assert entity.winning_strategy is None
+        assert entity.strategy_votes is None
+        assert entity.strategy_attributions is None
+
+    def test_dao_with_metadata_maps_cleanly(self):
+        dao = build_dao(
+            decision_id="dec-123",
+            metadata_={
+                "winning_strategy": "TrendFollower",
+                "strategy_votes": {"TrendFollower": "BUY"},
+                "strategy_attributions": {"TrendFollower": 1.0},
+            },
+        )
+        entity = OrderDBVSEntityMapper.map_to_entity(dao)
+        assert entity.decision_id == "dec-123"
+        assert entity.winning_strategy == "TrendFollower"
+        assert entity.strategy_votes == {"TrendFollower": "BUY"}
+        assert entity.strategy_attributions == {"TrendFollower": 1.0}

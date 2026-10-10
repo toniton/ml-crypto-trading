@@ -37,6 +37,27 @@ class ConfigurationService(AgentLoggingMixin):
         self._vcs = vcs
         self._schema = ConfigurationSchema()
 
+    @property
+    def vcs(self) -> VCSService:
+        return self._vcs
+
+    def get_head_commit_hash(self) -> Optional[str]:
+        if self._vcs is None:
+            return None
+        try:
+            return self._vcs.resolve_commit_hash("HEAD")
+        except VcsError:
+            return None
+
+    def get_asset_config(self, ticker_symbol: str) -> Optional[dict]:
+        raw = self.load_raw_config()
+        target = ticker_symbol.strip()
+        for entry in raw.get("assets", []) or []:
+            sym = f"{entry.get('base_ticker_symbol')}_{entry.get('quote_ticker_symbol')}"
+            if sym == target:
+                return entry
+        return None
+
     def load_raw_config(self) -> dict:
         try:
             return self._vcs.checkout("HEAD")

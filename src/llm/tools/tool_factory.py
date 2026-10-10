@@ -138,17 +138,20 @@ class ToolFactory:
     def build_attribution_tools(
             db_manager: DatabaseManager,
             session_manager: SessionManager,
+            configuration_service: Optional[ConfigurationService] = None,
     ) -> Dict[str, BaseTool]:
-        return {
+        tools: Dict[str, BaseTool] = {
             "trade_attribution": TradeAttributionTool(
                 database_manager=db_manager,
                 session_manager=session_manager,
             ),
-            "strategy_optimizer": StrategyOptimizerTool(
-                database_manager=db_manager,
-                session_manager=session_manager,
-            ),
         }
+        if configuration_service is not None:
+            tools["strategy_optimizer"] = StrategyOptimizerTool(
+                database_manager=db_manager,
+                configuration_service=configuration_service,
+            )
+        return tools
 
     @staticmethod
     def build_oracle_tools(
@@ -166,6 +169,7 @@ class ToolFactory:
         return tools
 
     @classmethod
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
     def build_tool_map(
             cls,
             managers: ManagerContainer,
@@ -190,7 +194,8 @@ class ToolFactory:
         if metric_service is not None:
             tools.update(cls.build_metric_tools(metric_service))
         if db_manager is not None:
-            tools.update(cls.build_attribution_tools(db_manager, managers.session_manager))
+            config_svc = ConfigurationService(vcs) if vcs is not None else None
+            tools.update(cls.build_attribution_tools(db_manager, managers.session_manager, config_svc))
         if oracle_service is not None:
             tools.update(cls.build_oracle_tools(oracle_service, timeline_projector))
         return tools

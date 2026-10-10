@@ -103,13 +103,79 @@ def test_compute_co_voting_matrix():
 
     matrix = TradeAttributionService.compute_co_voting_matrix([t1, t2])
 
-    # StratA participated in 2 trades; agreed with StratB in 1 trade (50%) and StratC in 1 trade (50%)
+    # StratA and StratB evaluated both t1 and t2: agreed in t1 (both TRUE), disagreed in t2 (TRUE vs FALSE).
+    # Agreement rate is 1 / 2 = 50% in both directions.
     assert matrix["StratA"]["StratB"] == 0.5
     assert matrix["StratA"]["StratC"] == 0.5
     assert matrix["StratA"]["StratA"] == 1.0
+    assert matrix["StratB"]["StratA"] == 0.5
 
-    # StratB participated in 1 trade; agreed with StratA in 1 trade (100%)
-    assert matrix["StratB"]["StratA"] == 1.0
+
+def test_compute_co_voting_matrix_standardized_string_votes():
+    # Verify string BUY, SELL, HOLD votes are recognized and compared across aligned decisions
+    t1 = _make_trade(
+        strategy_votes={"Trend": "BUY", "MeanRev": "BUY", "Filter": "HOLD"},
+    )
+    t2 = _make_trade(
+        strategy_votes={"Trend": "BUY", "MeanRev": "SELL", "Filter": "HOLD"},
+    )
+    t3 = _make_trade(
+        strategy_votes={"Trend": "SELL", "MeanRev": "SELL", "Filter": "HOLD"},
+    )
+
+    matrix = TradeAttributionService.compute_co_voting_matrix([t1, t2, t3])
+
+    # Trend and MeanRev agreed in t1 (BUY/BUY) and t3 (SELL/SELL), disagreed in t2 (BUY/SELL) -> 2/3 = 0.6667
+    assert matrix["Trend"]["MeanRev"] == 0.6667
+    assert matrix["MeanRev"]["Trend"] == 0.6667
+    # Filter voted HOLD in all 3 -> agreed with itself 100%
+    assert matrix["Filter"]["Filter"] == 1.0
+    # Trend and Filter never agreed (BUY!=HOLD, SELL!=HOLD) -> 0.0
+    assert matrix["Trend"]["Filter"] == 0.0
+
+
+def test_proportional_attribution_pnl_conservation():
+    # Conservation law invariant: sum(net_pnl(s)) == total_realized_net_pnl
+    t1 = _make_trade(
+        entry_price=Decimal("100"),
+        exit_price=Decimal("110"),
+        quantity=Decimal("10"),
+        fees=Decimal("14.50"),
+        slippage=Decimal("3.20"),
+        entry_strategy_attributions={"Strat1": 0.6, "Strat2": 0.4},
+    )
+    t2 = _make_trade(
+        entry_price=Decimal("100"),
+        exit_price=Decimal("95"),
+        quantity=Decimal("5"),
+        fees=Decimal("8.00"),
+        slippage=Decimal("1.50"),
+        entry_strategy_attributions={"Strat2": 0.7, "Strat3": 0.3},
+    )
+    t3 = _make_trade(
+        entry_price=Decimal("100"),
+        exit_price=Decimal("105"),
+        quantity=Decimal("2"),
+        fees=Decimal("2.00"),
+        slippage=Decimal("0.50"),
+        winning_strategy="LegacyStrat",
+        entry_strategy_attributions=None,  # Legacy trade
+    )
+
+    all_trades = [t1, t2, t3]
+    total_expected_net = sum(t.net_pnl for t in all_trades)
+    total_expected_fees = sum(t.fees for t in all_trades)
+    total_expected_slippage = sum(t.slippage for t in all_trades)
+
+    attr = TradeAttributionService.attribute_by_strategy_proportional(all_trades)
+
+    sum_attr_net = sum(m.net_pnl for m in attr.values())
+    sum_attr_fees = sum(m.total_fees for m in attr.values())
+    sum_attr_slippage = sum(m.total_slippage for m in attr.values())
+
+    assert sum_attr_net == total_expected_net
+    assert sum_attr_fees == total_expected_fees
+    assert sum_attr_slippage == total_expected_slippage
 
 
 def test_attribute_by_participation():

@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
+from typing import Any
 
 from api.interfaces.trade import Trade
 
@@ -107,16 +108,35 @@ class TradeAttributionService:
         return {strategy: cls.calculate_metrics(group) for strategy, group in grouped.items()}
 
     @classmethod
+    def _normalize_vote(cls, vote: Any) -> str:
+        if vote is None:
+            return "HOLD"
+        if isinstance(vote, bool):
+            return "BUY" if vote is True else "HOLD"
+        s = str(vote).strip().upper()
+        if s in ("TRUE", "1", "YES", "BUY", "TRADEACTION.BUY"):
+            return "BUY"
+        if s in ("SELL", "-1", "TRADEACTION.SELL"):
+            return "SELL"
+        return "HOLD"
+
+    @classmethod
     def attribute_by_strategy_proportional(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
         strategy_trades: dict[str, list[tuple[Trade, float]]] = defaultdict(list)
         for trade in trades:
             attributions = trade.entry_strategy_attributions
             if not attributions:
-                winning = trade.winning_strategy or "UNKNOWN"
+                winning = trade.winning_strategy or "UNATTRIBUTED"
                 attributions = {winning: 1.0}
+
+            allocated_weight = sum(attributions.values())
             for strat_name, weight_share in attributions.items():
                 if weight_share > 0:
                     strategy_trades[strat_name].append((trade, float(weight_share)))
+
+            if allocated_weight < 0.9999:
+                remainder = max(0.0, 1.0 - allocated_weight)
+                strategy_trades["UNATTRIBUTED"].append((trade, remainder))
 
         result: dict[str, AttributionMetrics] = {}
         for strat_name, weighted_list in strategy_trades.items():
@@ -124,32 +144,37 @@ class TradeAttributionService:
         return result
 
     @classmethod
-    def compute_co_voting_matrix(cls, trades: list[Trade]) -> dict[str, dict[str, float]]:
-        strategy_votes_counts: dict[str, int] = defaultdict(int)
-        co_votes_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    def compute_co_voting_matrix(  # pylint: disable=too-many-locals
+            cls, trades: list[Trade]
+    ) -> dict[str, dict[str, float]]:
+        aligned_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        agreed_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
         for trade in trades:
-            positive_strats: list[str] = []
+            strat_votes: dict[str, str] = {}
             if trade.strategy_votes:
-                for strat, vote in trade.strategy_votes.items():
-                    if vote in ("TRUE", "True", True):
-                        positive_strats.append(strat)
+                for strat, raw_vote in trade.strategy_votes.items():
+                    strat_votes[strat] = cls._normalize_vote(raw_vote)
             elif trade.entry_strategy_attributions:
-                positive_strats = list(trade.entry_strategy_attributions.keys())
+                for strat in trade.entry_strategy_attributions:
+                    strat_votes[strat] = "BUY"
             elif trade.winning_strategy:
-                positive_strats = [trade.winning_strategy]
+                strat_votes[trade.winning_strategy] = "BUY"
 
-            for s1 in positive_strats:
-                strategy_votes_counts[s1] += 1
-                for s2 in positive_strats:
-                    co_votes_counts[s1][s2] += 1
+            strats = sorted(strat_votes.keys())
+            for s1 in strats:
+                v1 = strat_votes[s1]
+                for s2 in strats:
+                    aligned_pairs[s1][s2] += 1
+                    if v1 == strat_votes[s2]:
+                        agreed_pairs[s1][s2] += 1
 
         matrix: dict[str, dict[str, float]] = {}
-        for s1, total in strategy_votes_counts.items():
+        for s1, targets in aligned_pairs.items():
             matrix[s1] = {}
-            for s2, co_count in co_votes_counts[s1].items():
-                ratio = round(co_count / total, 4) if total > 0 else 0.0
-                matrix[s1][s2] = ratio
+            for s2, total in targets.items():
+                agreed = agreed_pairs[s1].get(s2, 0)
+                matrix[s1][s2] = round(agreed / total, 4) if total > 0 else 0.0
 
         return matrix
 
@@ -162,7 +187,7 @@ class TradeAttributionService:
                 positive_strats = list(trade.entry_strategy_attributions.keys())
             elif trade.strategy_votes:
                 for strat, vote in trade.strategy_votes.items():
-                    if vote in ("TRUE", "True", True):
+                    if cls._normalize_vote(vote) in ("BUY", "SELL"):
                         positive_strats.append(strat)
             elif trade.winning_strategy:
                 positive_strats = [trade.winning_strategy]
@@ -205,12 +230,15 @@ class TradeAttributionService:
         fees = Decimal(0)
         slippage = Decimal(0)
         net_pnl = Decimal(0)
-        total_duration = 0.0
-        total_return = Decimal(0)
-        max_win = Decimal(0)
-        max_loss = Decimal(0)
         gross_wins = Decimal(0)
         gross_losses = Decimal(0)
+        max_win = Decimal(0)
+        max_loss = Decimal(0)
+
+        total_weight = sum(share for _, share in weighted_trades)
+        weighted_wins = 0.0
+        weighted_return = Decimal(0)
+        weighted_duration = 0.0
 
         for trade, share in weighted_trades:
             share_dec = Decimal(str(share))
@@ -226,6 +254,7 @@ class TradeAttributionService:
 
             if prop_net > Decimal(0):
                 wins += 1
+                weighted_wins += share
                 gross_wins += prop_net
                 max_win = max(max_win, prop_net)
             elif prop_net < Decimal(0):
@@ -235,12 +264,12 @@ class TradeAttributionService:
             else:
                 break_even += 1
 
-            total_return += trade.return_pct
-            total_duration += trade.duration_seconds
+            weighted_return += trade.return_pct * share_dec
+            weighted_duration += trade.duration_seconds * share
 
-        win_rate = round((wins / total * 100.0) if total > 0 else 0.0, 2)
-        avg_ret = round(float(total_return / Decimal(total)), 4) if total > 0 else 0.0
-        avg_dur = round(total_duration / total, 2) if total > 0 else 0.0
+        win_rate = round((weighted_wins / total_weight * 100.0) if total_weight > 0 else 0.0, 2)
+        avg_ret = round(float(weighted_return / Decimal(str(total_weight))), 4) if total_weight > 0 else 0.0
+        avg_dur = round(weighted_duration / total_weight, 2) if total_weight > 0 else 0.0
 
         if gross_losses > Decimal(0):
             profit_factor = round(float(gross_wins / gross_losses), 2)

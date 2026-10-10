@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 from pydantic import BaseModel, Field
 
 
@@ -18,4 +18,8 @@ class ConfigurationProposal(BaseModel):
     expected_effect: str = Field(
         default="",
         description="What behaviour change the user can expect once the proposal is applied.",
+    )
+    base_commit_hash: Optional[str] = Field(
+        default=None,
+        description="The VCS commit hash this proposal was generated against.",
     )
