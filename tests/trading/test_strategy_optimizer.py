@@ -341,3 +341,163 @@ def test_strategy_schedule_without_evidence_is_not_given_asset_windows_by_defaul
     fallback_changes = [c for c in fallback_prop.changes if "schedule.windows" in c.path]
     trend_b_change = next(c for c in fallback_changes if "TrendB_NoEvidence" in c.path)
     assert "Applied aggregate asset-level trading windows fallback" in trend_b_change.reason
+
+
+def test_calibrate_strategy_weights_uncertainty_and_shrinkage():
+    # StratA has 4 winning trades (LOW confidence < 5)
+    # StratB has 25 losing trades (HIGH confidence >= 20)
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    trades = []
+    for i in range(4):
+        trades.append(_make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + i * 60,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("120"),
+        ))
+    for i in range(25):
+        trades.append(_make_trade(
+            winning_strategy="StratB",
+            entry_strategy_attributions={"StratB": 1.0},
+            entry_timestamp=base_ts + (i + 10) * 60,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("90"),
+        ))
+
+    recs = StrategyOptimizer.calibrate_strategy_weights(trades, {"StratA": 1.0, "StratB": 1.0})
+    rec_map = {r.strategy_name: r for r in recs}
+
+    assert rec_map["StratA"].confidence_level == "LOW"
+    assert rec_map["StratA"].sample_margin_of_error_pct >= 0.0
+    # StratA ratio is shrunk because total_trades < 10
+    assert rec_map["StratA"].recommended_weight > 1.0
+
+    assert rec_map["StratB"].confidence_level == "HIGH"
+    assert rec_map["StratB"].total_trades == 25
+
+
+def test_evaluate_split_sample_baseline_demonstrates_improvement():
+    # 10 trades chronologically. StratA (good) and StratB (poor)
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    trades = []
+    for i in range(10):
+        if i % 2 == 0:
+            trades.append(_make_trade(
+                winning_strategy="StratA",
+                entry_strategy_attributions={"StratA": 1.0},
+                entry_timestamp=base_ts + i * 3600,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("130"),
+            ))
+        else:
+            trades.append(_make_trade(
+                winning_strategy="StratB",
+                entry_strategy_attributions={"StratB": 1.0},
+                entry_timestamp=base_ts + i * 3600,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("70"),
+            ))
+
+    current_weights = {"StratA": 1.0, "StratB": 1.0}
+    proposed_weights = {"StratA": 1.8, "StratB": 0.2}
+
+    res = StrategyOptimizer.evaluate_split_sample_baseline(
+        trades=trades,
+        current_weights=current_weights,
+        proposed_weights=proposed_weights,
+        train_ratio=0.7,
+    )
+
+    assert res is not None
+    assert res.in_sample_trades_count == 7
+    assert res.out_of_sample_trades_count == 3
+    assert res.demonstrates_improvement is True
+    assert res.pnl_delta > Decimal(0)
+    assert "demonstrated out-of-sample outperformance" in res.verdict
+
+
+def test_evaluate_split_sample_baseline_detects_underperformance():
+    # 1. Direct evaluation when proposed weights underperform
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    trades = []
+    for i in range(10):
+        if i % 2 == 0:
+            trades.append(_make_trade(
+                winning_strategy="StratA",
+                entry_strategy_attributions={"StratA": 1.0},
+                entry_timestamp=base_ts + i * 3600,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("130"),
+            ))
+        else:
+            trades.append(_make_trade(
+                winning_strategy="StratB",
+                entry_strategy_attributions={"StratB": 1.0},
+                entry_timestamp=base_ts + i * 3600,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("70"),
+            ))
+
+    current_weights = {"StratA": 1.0, "StratB": 1.0}
+    bad_proposed_weights = {"StratA": 0.2, "StratB": 1.8}
+
+    res = StrategyOptimizer.evaluate_split_sample_baseline(
+        trades=trades,
+        current_weights=current_weights,
+        proposed_weights=bad_proposed_weights,
+        train_ratio=0.7,
+    )
+
+    assert res is not None
+    assert res.demonstrates_improvement is False
+    assert res.pnl_delta < Decimal(0)
+    assert "underperformed unchanged baseline" in res.verdict
+
+    # 2. Walk-forward regime shift: in-sample StratA wins; out-of-sample StratA suffers severe losses
+    regime_shift_trades = []
+    # Trades 0..6 (in-sample 70%): StratA wins, StratB loses
+    for i in range(7):
+        regime_shift_trades.append(_make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + i * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("130"),
+        ))
+        regime_shift_trades.append(_make_trade(
+            winning_strategy="StratB",
+            entry_strategy_attributions={"StratB": 1.0},
+            entry_timestamp=base_ts + i * 3600 + 1800,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("80"),
+        ))
+    # Trades 7..9 (out-of-sample 30%): StratA suffers massive losses, StratB wins
+    for i in range(7, 10):
+        regime_shift_trades.append(_make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + i * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("40"),
+        ))
+        regime_shift_trades.append(_make_trade(
+            winning_strategy="StratB",
+            entry_strategy_attributions={"StratB": 1.0},
+            entry_timestamp=base_ts + i * 3600 + 1800,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("140"),
+        ))
+
+    current_config = {
+        "strategies": [
+            {"name": "StratA", "weight": 1.0},
+            {"name": "StratB", "weight": 1.0},
+        ]
+    }
+    proposal = StrategyOptimizer.generate_optimization_proposal(
+        ticker_symbol="BTC_USD",
+        current_asset_config=current_config,
+        trades=regime_shift_trades,
+    )
+    assert any("Out-of-sample validation caution" in r for r in proposal.risks or [])

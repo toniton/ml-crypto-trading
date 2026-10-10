@@ -35,6 +35,31 @@ class StrategyCalibrationRecommendation:
     win_rate_pct: float
     total_trades: int
     rationale: str
+    confidence_level: str = "LOW"
+    sample_margin_of_error_pct: float = 0.0
+
+
+@dataclass(frozen=True)
+class BaselineComparisonMetrics:
+    net_pnl: Decimal
+    gross_wins: Decimal
+    gross_losses: Decimal
+    profit_factor: float
+    win_rate_pct: float
+    trades_count: int
+
+
+@dataclass(frozen=True)
+class BaselineComparisonResult:
+    baseline_metrics: BaselineComparisonMetrics
+    proposed_metrics: BaselineComparisonMetrics
+    equal_weight_metrics: BaselineComparisonMetrics
+    pnl_delta: Decimal
+    pnl_improvement_pct: float
+    in_sample_trades_count: int
+    out_of_sample_trades_count: int
+    demonstrates_improvement: bool
+    verdict: str
 
 
 @dataclass(frozen=True)
@@ -69,6 +94,64 @@ class StrategyOptimizer:
         avg_score = sum(scores.values()) / len(scores) if scores else 1.0
         return scores, avg_score
 
+    @staticmethod
+    def _calculate_sample_uncertainty(total_trades: int, win_rate_pct: float) -> tuple[str, float]:
+        if total_trades <= 0:
+            return "LOW", 0.0
+        p = win_rate_pct / 100.0
+        variance = max(0.0, p * (1.0 - p))
+        margin_of_error = round(1.96 * ((variance / total_trades) ** 0.5) * 100.0, 1)
+        if total_trades < 5:
+            confidence = "LOW"
+        elif total_trades < 20:
+            confidence = "MEDIUM"
+        else:
+            confidence = "HIGH"
+        return confidence, margin_of_error
+
+    @staticmethod
+    def _calculate_adjusted_weight(
+            current_w: float,
+            score: float,
+            avg_score: float,
+            total_trades: int,
+            min_weight: float,
+            max_weight: float,
+    ) -> float:
+        if total_trades < 3:
+            return current_w
+        ratio = score / avg_score if avg_score > 0 else 1.0
+        if total_trades < 10:
+            shrinkage = total_trades / 10.0
+            effective_ratio = 1.0 + (ratio - 1.0) * shrinkage
+        else:
+            effective_ratio = ratio
+        return max(min_weight, min(max_weight, round(current_w * effective_ratio, 2)))
+
+    @staticmethod
+    def _format_calibration_rationale(
+            current_w: float,
+            rec_weight: float,
+            wr: float,
+            moe: float,
+            pf: float,
+            confidence: str,
+            total_trades: int,
+    ) -> str:
+        if total_trades < 3:
+            return (
+                f"Insufficient sample size ({total_trades} trades); maintaining weight at {current_w:.2f} "
+                f"(Confidence: {confidence})."
+            )
+        prefix = f"(Win Rate: {wr:.1f}% ± {moe:.1f}%, PF: {pf:.2f}, Confidence: {confidence})"
+        if rec_weight > current_w:
+            delta = rec_weight - current_w
+            return f"Strong performance {prefix}; recommended increase by +{delta:.2f} to {rec_weight:.2f}."
+        if rec_weight < current_w:
+            delta = current_w - rec_weight
+            return f"Subpar performance {prefix}; recommended reduction by -{delta:.2f} to {rec_weight:.2f}."
+        return f"Balanced performance {prefix}; optimal weight is {current_w:.2f}."
+
     @classmethod
     def _create_calibration_recommendation(
             cls,
@@ -84,29 +167,13 @@ class StrategyOptimizer:
         pf = metrics.profit_factor if metrics else 0.0
         wr = metrics.win_rate_pct if metrics else 0.0
 
-        if total_trades < 3:
-            rec_weight = current_w
-            rationale = f"Insufficient sample size ({total_trades} trades); maintaining weight at {current_w:.2f}."
-        else:
-            ratio = score / avg_score if avg_score > 0 else 1.0
-            rec_weight = max(min_weight, min(max_weight, round(current_w * ratio, 2)))
-            if rec_weight > current_w:
-                delta = rec_weight - current_w
-                rationale = (
-                    f"Strong performance (Win Rate: {wr:.1f}%, PF: {pf:.2f}); "
-                    f"recommended increase by +{delta:.2f} to {rec_weight:.2f}."
-                )
-            elif rec_weight < current_w:
-                delta = current_w - rec_weight
-                rationale = (
-                    f"Subpar performance (Win Rate: {wr:.1f}%, PF: {pf:.2f}); "
-                    f"recommended reduction by -{delta:.2f} to {rec_weight:.2f}."
-                )
-            else:
-                rationale = (
-                    f"Balanced performance (Win Rate: {wr:.1f}%, PF: {pf:.2f}); "
-                    f"optimal weight is {current_w:.2f}."
-                )
+        confidence, moe = cls._calculate_sample_uncertainty(total_trades, wr)
+        rec_weight = cls._calculate_adjusted_weight(
+            current_w, score, avg_score, total_trades, min_weight, max_weight
+        )
+        rationale = cls._format_calibration_rationale(
+            current_w, rec_weight, wr, moe, pf, confidence, total_trades
+        )
 
         return StrategyCalibrationRecommendation(
             strategy_name=name,
@@ -116,6 +183,8 @@ class StrategyOptimizer:
             win_rate_pct=wr,
             total_trades=total_trades,
             rationale=rationale,
+            confidence_level=confidence,
+            sample_margin_of_error_pct=moe,
         )
 
     @classmethod
@@ -416,6 +485,83 @@ class StrategyOptimizer:
                 changes.append(change)
         return changes
 
+    @staticmethod
+    def _build_weight_changes(
+            ticker_symbol: str,
+            calibrations: list[StrategyCalibrationRecommendation],
+    ) -> list[ConfigChange]:
+        return [
+            ConfigChange(
+                path=f"assets.{ticker_symbol}.strategies.{cal.strategy_name}.weight",
+                old_value=cal.current_weight,
+                new_value=cal.recommended_weight,
+                reason=cal.rationale,
+            )
+            for cal in calibrations
+            if cal.recommended_weight != cal.current_weight
+        ]
+
+    @staticmethod
+    def _build_proposal_narrative(
+            ticker_symbol: str,
+            calibrations: list[StrategyCalibrationRecommendation],
+            windows: list[TradingWindow],
+            baseline_eval: Optional[BaselineComparisonResult],
+    ) -> tuple[str, list[str], str]:
+        summary = (
+            f"Autonomous calibration for {ticker_symbol}: "
+            f"{len(calibrations)} strategy weight(s) evaluated and "
+            f"{len(windows)} optimal trading window(s) discovered."
+        )
+        risks = [
+            "Calibrated weights are empirical heuristics based on historical trade attribution.",
+            "Narrowed trading windows will prevent signals during historically low-win-rate intervals.",
+        ]
+        if baseline_eval is not None and not baseline_eval.demonstrates_improvement:
+            risks.append(
+                f"Out-of-sample validation caution: {baseline_eval.verdict} "
+                f"Review recommended before applying."
+            )
+        effect = (
+            f"Aligns strategy influence with empirical risk-adjusted performance. "
+            f"Out-of-sample walk-forward test: {baseline_eval.verdict}"
+            if baseline_eval is not None
+            else (
+                "Aligns strategy influence with empirical risk-adjusted performance "
+                "and restricts trading to high-probability windows."
+            )
+        )
+        return summary, risks, effect
+
+    @staticmethod
+    def _extract_current_weights(strategies_config: list[dict[str, Any]]) -> dict[str, float]:
+        return {
+            strat.get("name", f"Strategy_{i}"): float(strat.get("weight", 1.0))
+            for i, strat in enumerate(strategies_config)
+            if strat.get("name")
+        }
+
+    @classmethod
+    def _create_proposal(
+            cls,
+            ticker_symbol: str,
+            calibrations: list[StrategyCalibrationRecommendation],
+            windows: list[TradingWindow],
+            changes: list[ConfigChange],
+            baseline_eval: Optional[BaselineComparisonResult],
+            base_commit_hash: Optional[str],
+    ) -> ConfigurationProposal:
+        summary, risks, effect = cls._build_proposal_narrative(
+            ticker_symbol, calibrations, windows, baseline_eval
+        )
+        return ConfigurationProposal(
+            summary=summary,
+            changes=changes,
+            risks=risks,
+            expected_effect=effect,
+            base_commit_hash=base_commit_hash,
+        )
+
     @classmethod
     def generate_optimization_proposal(
             cls,
@@ -427,25 +573,12 @@ class StrategyOptimizer:
             allow_asset_fallback: bool = False,
     ) -> ConfigurationProposal:
         strategies_config = current_asset_config.get("strategies", [])
-        current_weights = {
-            strat.get("name", f"Strategy_{i}"): float(strat.get("weight", 1.0))
-            for i, strat in enumerate(strategies_config)
-            if strat.get("name")
-        }
+        current_weights = cls._extract_current_weights(strategies_config)
 
         calibrations = cls.calibrate_strategy_weights(trades, current_weights)
         suggested_windows = cls.optimize_trading_windows(trades, timezone_str=timezone_str)
 
-        changes: list[ConfigChange] = [
-            ConfigChange(
-                path=f"assets.{ticker_symbol}.strategies.{cal.strategy_name}.weight",
-                old_value=cal.current_weight,
-                new_value=cal.recommended_weight,
-                reason=cal.rationale,
-            )
-            for cal in calibrations
-            if cal.recommended_weight != cal.current_weight
-        ]
+        changes = cls._build_weight_changes(ticker_symbol, calibrations)
         changes.extend(
             cls._build_schedule_changes(
                 ticker_symbol,
@@ -457,22 +590,179 @@ class StrategyOptimizer:
             )
         )
 
-        summary = (
-            f"Autonomous calibration for {ticker_symbol}: "
-            f"{len(calibrations)} strategy weight(s) evaluated and "
-            f"{len(suggested_windows)} optimal trading window(s) discovered."
+        baseline_eval = cls.evaluate_split_sample_baseline(
+            trades,
+            current_weights,
+            {cal.strategy_name: cal.recommended_weight for cal in calibrations},
         )
 
-        return ConfigurationProposal(
-            summary=summary,
-            changes=changes,
-            risks=[
-                "Calibrated weights are based on historical sample performance and may need periodic re-evaluation.",
-                "Narrowed trading windows will prevent signals during historically low-win-rate intervals.",
-            ],
-            expected_effect=(
-                "Aligns strategy influence with empirical risk-adjusted performance "
-                "and restricts trading to high-probability windows."
-            ),
-            base_commit_hash=base_commit_hash,
+        return cls._create_proposal(
+            ticker_symbol,
+            calibrations,
+            suggested_windows,
+            changes,
+            baseline_eval,
+            base_commit_hash,
+        )
+
+    @staticmethod
+    def _split_trades_chronologically(
+            trades: list[Trade], train_ratio: float
+    ) -> tuple[list[Trade], list[Trade]]:
+        sorted_trades = sorted(trades, key=lambda t: t.exit_timestamp)
+        split_idx = max(2, min(len(sorted_trades) - 1, int(len(sorted_trades) * train_ratio)))
+        return sorted_trades[:split_idx], sorted_trades[split_idx:]
+
+    @classmethod
+    def _evaluate_out_of_sample_comparison(
+            cls,
+            out_of_sample: list[Trade],
+            current_weights: dict[str, float],
+            proposed_weights: dict[str, float],
+            in_sample_count: int,
+    ) -> BaselineComparisonResult:
+        base_metrics = cls._simulate_weighted_performance(out_of_sample, current_weights)
+        prop_metrics = cls._simulate_weighted_performance(out_of_sample, proposed_weights)
+        equal_metrics = cls._simulate_weighted_performance(out_of_sample, {s: 1.0 for s in current_weights})
+
+        pnl_delta = prop_metrics.net_pnl - base_metrics.net_pnl
+        pnl_imp = cls._calculate_pnl_improvement(pnl_delta, base_metrics.net_pnl)
+        improves = cls._check_demonstrates_improvement(prop_metrics, base_metrics)
+        verdict = cls._build_baseline_verdict(improves, pnl_delta, pnl_imp, prop_metrics, base_metrics)
+
+        return BaselineComparisonResult(
+            baseline_metrics=base_metrics,
+            proposed_metrics=prop_metrics,
+            equal_weight_metrics=equal_metrics,
+            pnl_delta=pnl_delta,
+            pnl_improvement_pct=pnl_imp,
+            in_sample_trades_count=in_sample_count,
+            out_of_sample_trades_count=len(out_of_sample),
+            demonstrates_improvement=improves,
+            verdict=verdict,
+        )
+
+    @classmethod
+    def evaluate_split_sample_baseline(
+            cls,
+            trades: list[Trade],
+            current_weights: dict[str, float],
+            proposed_weights: dict[str, float],
+            train_ratio: float = 0.7,
+    ) -> Optional[BaselineComparisonResult]:
+        if not trades or not current_weights or not proposed_weights or len(trades) < 4:
+            return None
+        in_sample, out_of_sample = cls._split_trades_chronologically(trades, train_ratio)
+        if not out_of_sample:
+            return None
+        return cls._evaluate_out_of_sample_comparison(
+            out_of_sample, current_weights, proposed_weights, len(in_sample)
+        )
+
+    @classmethod
+    def _simulate_weighted_performance(
+            cls,
+            trades: list[Trade],
+            weights: dict[str, float],
+    ) -> BaselineComparisonMetrics:
+        if not trades:
+            return BaselineComparisonMetrics(
+                net_pnl=Decimal(0),
+                gross_wins=Decimal(0),
+                gross_losses=Decimal(0),
+                profit_factor=0.0,
+                win_rate_pct=0.0,
+                trades_count=0,
+            )
+
+        total_w = sum(max(0.0, w) for w in weights.values())
+        avg_w = (total_w / len(weights)) if weights and total_w > 0 else 1.0
+
+        gross_wins = Decimal(0)
+        gross_losses = Decimal(0)
+        net_pnl = Decimal(0)
+        winning_trades = 0
+
+        for trade in trades:
+            trade_net = cls._calculate_trade_weighted_net(trade, weights, avg_w)
+            net_pnl += trade_net
+            if trade_net > Decimal(0):
+                gross_wins += trade_net
+                winning_trades += 1
+            elif trade_net < Decimal(0):
+                gross_losses += abs(trade_net)
+
+        profit_factor = cls._calculate_profit_factor(gross_wins, gross_losses)
+        win_rate = round((winning_trades / len(trades) * 100.0), 2)
+
+        return BaselineComparisonMetrics(
+            net_pnl=net_pnl,
+            gross_wins=gross_wins,
+            gross_losses=gross_losses,
+            profit_factor=profit_factor,
+            win_rate_pct=win_rate,
+            trades_count=len(trades),
+        )
+
+    @staticmethod
+    def _calculate_trade_weighted_net(
+            trade: Trade,
+            weights: dict[str, float],
+            avg_w: float,
+    ) -> Decimal:
+        attributions = trade.entry_strategy_attributions
+        if not attributions:
+            winning = trade.winning_strategy or "UNATTRIBUTED"
+            attributions = {winning: 1.0}
+
+        strat_mult = sum(
+            float(weights.get(strat, 1.0)) * float(share)
+            for strat, share in attributions.items()
+        )
+        norm_factor = strat_mult / avg_w if avg_w > 0 else 1.0
+        norm_dec = Decimal(str(round(norm_factor, 6)))
+        return trade.net_pnl * norm_dec
+
+    @staticmethod
+    def _calculate_profit_factor(gross_wins: Decimal, gross_losses: Decimal) -> float:
+        if gross_losses > Decimal(0):
+            return round(float(gross_wins / gross_losses), 2)
+        if gross_wins > Decimal(0):
+            return 999.99
+        return 0.0
+
+    @staticmethod
+    def _calculate_pnl_improvement(pnl_delta: Decimal, base_net_pnl: Decimal) -> float:
+        base_val = float(base_net_pnl)
+        if abs(base_val) > 1e-6:
+            return round((float(pnl_delta) / abs(base_val)) * 100.0, 2)
+        return 100.0 if pnl_delta > Decimal(0) else 0.0
+
+    @staticmethod
+    def _check_demonstrates_improvement(
+            prop: BaselineComparisonMetrics,
+            base: BaselineComparisonMetrics,
+    ) -> bool:
+        if prop.net_pnl > base.net_pnl:
+            return True
+        return prop.net_pnl == base.net_pnl and prop.profit_factor >= base.profit_factor
+
+    @staticmethod
+    def _build_baseline_verdict(
+            improves: bool,
+            pnl_delta: Decimal,
+            pnl_improvement_pct: float,
+            prop_metrics: BaselineComparisonMetrics,
+            base_metrics: BaselineComparisonMetrics,
+    ) -> str:
+        if improves and pnl_delta > Decimal(0):
+            return (
+                f"Proposed weights demonstrated out-of-sample outperformance: "
+                f"+{pnl_delta:.2f} P&L ({pnl_improvement_pct:+.1f}%) over unchanged baseline."
+            )
+        if prop_metrics.net_pnl == base_metrics.net_pnl:
+            return "Proposed weights matched unchanged baseline performance out-of-sample."
+        return (
+            f"Proposed weights underperformed unchanged baseline out-of-sample: "
+            f"{pnl_delta:.2f} P&L ({pnl_improvement_pct:+.1f}%). Retaining current configuration recommended."
         )

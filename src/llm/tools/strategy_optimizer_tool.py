@@ -14,13 +14,16 @@ from src.database.repositories.providers.postgres_order_repository import Postgr
 from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.server.services.asset_performance_service import AssetPerformanceService
-from src.trading.analytics.strategy_optimizer import StrategyOptimizer
+from src.trading.analytics.strategy_optimizer import (
+    BaselineComparisonResult,
+    StrategyOptimizer,
+)
 
 
 class StrategyOptimizerInput(BaseModel):
     action: str = Field(
         default="calibrate",
-        description="Optimization action: 'calibrate', 'windows', 'redundancy', or 'proposal'.",
+        description="Optimization action: 'calibrate', 'windows', 'redundancy', 'proposal', or 'compare'.",
     )
     ticker_symbol: Optional[str] = Field(
         default=None,
@@ -74,7 +77,7 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
 
         asset_config: Optional[dict[str, Any]] = None
         base_commit_hash: Optional[str] = None
-        if norm_action in ("calibrate", "proposal"):
+        if norm_action in ("calibrate", "proposal", "compare"):
             asset_config, base_commit_hash, err = self._get_asset_config_snapshot(ticker_symbol)
             if err is not None or asset_config is None:
                 return err or "Error loading asset configuration."
@@ -95,6 +98,8 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
                 asset_config,
                 base_commit_hash=base_commit_hash,
             )
+        elif norm_action == "compare":
+            result = self._run_compare(trades, ticker_symbol, asset_config)
         else:
             result = self._run_calibrate(trades, ticker_symbol, asset_config)
 
@@ -186,22 +191,58 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         )
 
     @staticmethod
-    def _run_calibrate(
-            trades: list[Trade],
-            ticker_symbol: Optional[str],
-            asset_config: dict[str, Any],
-    ) -> str:
+    def _extract_active_weights(
+            asset_config: dict[str, Any], ticker_symbol: Optional[str]
+    ) -> tuple[Optional[dict[str, float]], Optional[str]]:
         strategies = asset_config.get("strategies", [])
         if not strategies:
-            return f"Error: No strategies configured for asset '{ticker_symbol}'."
-
-        active_weights: dict[str, float] = {
+            return None, f"Error: No strategies configured for asset '{ticker_symbol}'."
+        active_weights = {
             strat.get("name"): float(strat.get("weight", 1.0))
             for strat in strategies
             if strat.get("name") and strat.get("enabled", True)
         }
         if not active_weights:
-            return f"Error: No active/enabled strategies configured for asset '{ticker_symbol}'."
+            return None, f"Error: No active/enabled strategies configured for asset '{ticker_symbol}'."
+        return active_weights, None
+
+    @staticmethod
+    def _format_baseline_comparison(eval_res: BaselineComparisonResult) -> list[str]:
+        b = eval_res.baseline_metrics
+        p = eval_res.proposed_metrics
+        e = eval_res.equal_weight_metrics
+        return [
+            "### 📊 Out-of-Sample Walk-Forward Baseline Comparison",
+            (
+                f"- **Sample Split**: {eval_res.in_sample_trades_count} in-sample / "
+                f"{eval_res.out_of_sample_trades_count} out-of-sample trades"
+            ),
+            (
+                f"- **Unchanged Baseline**: Net P&L = {b.net_pnl:.2f}, "
+                f"PF = {b.profit_factor:.2f}, Win Rate = {b.win_rate_pct:.1f}%"
+            ),
+            (
+                f"- **Proposed Calibrated**: Net P&L = {p.net_pnl:.2f}, "
+                f"PF = {p.profit_factor:.2f}, Win Rate = {p.win_rate_pct:.1f}%"
+            ),
+            (
+                f"- **Equal-Weight Benchmark**: Net P&L = {e.net_pnl:.2f}, "
+                f"PF = {e.profit_factor:.2f}, Win Rate = {e.win_rate_pct:.1f}%"
+            ),
+            f"- **Net P&L Delta vs Baseline**: {eval_res.pnl_delta:+.2f} ({eval_res.pnl_improvement_pct:+.1f}%)",
+            f"- **Verdict**: {eval_res.verdict}",
+        ]
+
+    @classmethod
+    def _run_calibrate(
+            cls,
+            trades: list[Trade],
+            ticker_symbol: Optional[str],
+            asset_config: dict[str, Any],
+    ) -> str:
+        active_weights, err = cls._extract_active_weights(asset_config, ticker_symbol)
+        if err is not None or active_weights is None:
+            return err or "Error extracting strategy weights."
 
         recommendations = StrategyOptimizer.calibrate_strategy_weights(trades, active_weights)
         lines = [
@@ -209,12 +250,50 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             f"*(Empirical heuristic based on historical trade attribution; validation required before live use)*\n"
         ]
         for rec in recommendations:
+            metrics_desc = (
+                f"(Confidence: {rec.confidence_level}, Win Rate: {rec.win_rate_pct:.1f}% ± "
+                f"{rec.sample_margin_of_error_pct:.1f}%, PF: {rec.profit_factor:.2f}, "
+                f"Trades: {rec.total_trades})"
+            )
             lines.append(
                 f"- **{rec.strategy_name}**: Current={rec.current_weight:.2f} -> "
-                f"**Recommended={rec.recommended_weight:.2f}** "
-                f"(Win Rate: {rec.win_rate_pct:.1f}%, PF: {rec.profit_factor:.2f}, Trades: {rec.total_trades})\n"
+                f"**Recommended={rec.recommended_weight:.2f}** {metrics_desc}\n"
                 f"  _{rec.rationale}_"
             )
+
+        proposed_w = {rec.strategy_name: rec.recommended_weight for rec in recommendations}
+        baseline_eval = StrategyOptimizer.evaluate_split_sample_baseline(trades, active_weights, proposed_w)
+        if baseline_eval is not None:
+            lines.append("")
+            lines.extend(cls._format_baseline_comparison(baseline_eval))
+
+        return "\n".join(lines)
+
+    @classmethod
+    def _run_compare(
+            cls,
+            trades: list[Trade],
+            ticker_symbol: Optional[str],
+            asset_config: dict[str, Any],
+    ) -> str:
+        active_weights, err = cls._extract_active_weights(asset_config, ticker_symbol)
+        if err is not None or active_weights is None:
+            return err or "Error extracting strategy weights."
+
+        recs = StrategyOptimizer.calibrate_strategy_weights(trades, active_weights)
+        proposed_w = {rec.strategy_name: rec.recommended_weight for rec in recs}
+        baseline_eval = StrategyOptimizer.evaluate_split_sample_baseline(trades, active_weights, proposed_w)
+        if baseline_eval is None:
+            return (
+                f"Insufficient trade history ({len(trades)} trades) to perform split-sample "
+                f"walk-forward comparison for {ticker_symbol}."
+            )
+
+        lines = [
+            f"### 📊 Walk-Forward Baseline Comparison for {ticker_symbol}\n"
+            f"*(Out-of-sample evaluation comparing proposed weights against the unchanged baseline)*\n"
+        ]
+        lines.extend(cls._format_baseline_comparison(baseline_eval))
         return "\n".join(lines)
 
     def _gather_trades(self, ticker_symbol: Optional[str], lookback_days: int) -> list[Trade]:

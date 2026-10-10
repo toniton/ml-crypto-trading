@@ -223,3 +223,34 @@ class TestStrategyOptimizerTool(unittest.TestCase):
         tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
         result = tool._run(action="calibrate", ticker_symbol="BTC_USD")
         self.assertIn("Incomplete historical lookback detected", result)
+
+    def test_compare_action_walk_forward_baseline(self):
+        orders = []
+        for i in range(4):
+            buy = self._make_order(uuid=f"b{i}", action=TradeAction.BUY, price="100.0")
+            sell = self._make_order(uuid=f"s{i}", action=TradeAction.SELL, price="115.0")
+            orders.extend([buy, sell])
+
+        db = self._setup_mock_db(orders)
+        config = self._setup_mock_config(
+            strategies=[{"name": "TrendFollower", "weight": 1.5, "enabled": True}]
+        )
+        tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
+        result = tool._run(action="compare", ticker_symbol="BTC_USD")
+        self.assertIn("Walk-Forward Baseline Comparison for BTC_USD", result)
+        self.assertIn("Unchanged Baseline", result)
+        self.assertIn("Proposed Calibrated", result)
+        self.assertIn("Equal-Weight Benchmark", result)
+
+    def test_compare_action_insufficient_trades(self):
+        orders = [
+            self._make_order(uuid="b1", action=TradeAction.BUY, price="100.0"),
+            self._make_order(uuid="s1", action=TradeAction.SELL, price="115.0"),
+        ]
+        db = self._setup_mock_db(orders)
+        config = self._setup_mock_config(
+            strategies=[{"name": "TrendFollower", "weight": 1.5, "enabled": True}]
+        )
+        tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
+        result = tool._run(action="compare", ticker_symbol="BTC_USD")
+        self.assertIn("Insufficient trade history", result)
