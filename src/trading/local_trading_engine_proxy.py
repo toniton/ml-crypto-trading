@@ -29,6 +29,9 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
         self._trading_engine = trading_engine
         self._market_data_store = market_data_store
         self._compare_backtest = compare_backtest
+        self._applied_commit_hash: Optional[str] = None
+        self._desired_commit_hash: Optional[str] = None
+        self._sync_error: Optional[str] = None
 
     @property
     def _managers(self) -> Optional[ManagerContainer]:
@@ -36,16 +39,33 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
             return self._trading_engine.managers
         return None
 
+    def set_applied_commit_hash(self, commit_hash: str) -> None:
+        self._applied_commit_hash = commit_hash
+        self._desired_commit_hash = commit_hash
+        self._sync_error = None
+
+    def record_sync_error(self, desired_commit_hash: str, error_message: str) -> None:
+        self._desired_commit_hash = desired_commit_hash
+        self._sync_error = error_message
+
     def get_status(self) -> EngineStatus:
         is_running = self._trading_engine.is_running
         monitored_assets = self.list_monitored_assets()
         state = "RUNNING" if is_running else "STOPPED"
+        applied_hash = self._applied_commit_hash
+        if applied_hash is None and self._managers and self._managers.session_manager:
+            raw_hash = self._managers.session_manager.get_current_commit_hash()
+            if isinstance(raw_hash, str):
+                applied_hash = raw_hash
 
         return EngineStatus(
             is_running=is_running,
             state=state,
             monitored_assets=monitored_assets,
             asset_count=len(monitored_assets),
+            applied_commit_hash=applied_hash,
+            desired_commit_hash=self._desired_commit_hash or applied_hash,
+            sync_error=self._sync_error,
         )
 
     def list_monitored_assets(self) -> List[str]:

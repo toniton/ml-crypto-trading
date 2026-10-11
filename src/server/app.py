@@ -21,6 +21,7 @@ from src.core.interfaces.proposal_store import ProposalStore
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.events.agent_events import AgentApprovalResolvedEvent
+from src.logging.factory import LoggingFactory
 from src.metrics.api.metric_routes import create_metric_router
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.request_metrics_collector import (
@@ -34,6 +35,8 @@ from src.server.response_reconstructor import ResponseReconstructor
 from src.server.services.asset_performance_service import AssetPerformanceService
 from src.server.services.backtest_application_service import BacktestApplicationService
 from src.server.services.backtest_service import BacktestService
+from src.server.services.walk_forward_application_service import WalkForwardApplicationService
+from src.server.routes.walk_forward_routes import create_walk_forward_router
 from src.server.services.configuration_service import ConfigurationService
 from src.server.services.conversation_service import ConversationService
 from src.server.services.dataset_service import DatasetService, DatasetValidationError
@@ -361,6 +364,15 @@ class ChatApp:
             dataset_service=dataset_service,
         )
         app.state.backtest_service = backtest_service
+
+        walk_forward_service = WalkForwardApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            market_data_store=trading_proxy.get_market_data_store(),
+            dataset_service=dataset_service,
+        )
+        app.state.walk_forward_service = walk_forward_service
+        app.include_router(create_walk_forward_router())
 
         backtest_branch_service = BacktestService(db_manager)
         app.state.backtest_branch_service = backtest_branch_service
@@ -847,14 +859,23 @@ class ChatApp:
             config_service: ConfigurationService,
             commit_hash: str,
     ) -> None:
+        proxy: Optional[TradingEngineProxy] = req.app.state.trading_proxy
+        if proxy is None:
+            return
         try:
-            proxy: Optional[TradingEngineProxy] = req.app.state.trading_proxy
-            if proxy is not None:
-                raw_config = config_service.checkout_vcs(commit_hash)
-                validated_config = TradingConfig.model_validate(raw_config)
-                proxy.update_config(validated_config)
-        except Exception:  # pylint: disable=broad-except
-            pass
+            raw_config = config_service.checkout_vcs(commit_hash)
+            validated_config = TradingConfig.model_validate(raw_config)
+            proxy.update_config(validated_config)
+            proxy.set_applied_commit_hash(commit_hash)
+        except Exception as exc:  # pylint: disable=broad-except
+            logger = LoggingFactory.get_application_logger("ChatApp")
+            logger.error(
+                "Runtime configuration sync failed for commit %s: %s",
+                commit_hash,
+                exc,
+                exc_info=True,
+            )
+            proxy.record_sync_error(commit_hash, str(exc))
 
     @staticmethod
     def _validate_date(year: int, month: int, day: int) -> None:

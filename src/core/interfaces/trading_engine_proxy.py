@@ -13,6 +13,9 @@ class EngineStatus(BaseModel):
     state: str = Field(default="STOPPED", description="Engine state: RUNNING, STOPPED, or PAUSED")
     monitored_assets: List[str] = Field(default_factory=list, description="List of active asset tickers")
     asset_count: int = Field(default=0, description="Total count of monitored assets")
+    applied_commit_hash: Optional[str] = Field(default=None, description="Active configuration commit hash")
+    desired_commit_hash: Optional[str] = Field(default=None, description="Desired configuration commit hash")
+    sync_error: Optional[str] = Field(default=None, description="Error message if config synchronization failed")
 
 
 class AssetRuntimeSnapshot(BaseModel):
@@ -57,6 +60,14 @@ class TradingEngineProxy(ABC):
     @abstractmethod
     def update_config(self, trading_config: TradingConfig) -> None:
         """Applies a configuration update to the trading engine."""
+
+    @abstractmethod
+    def set_applied_commit_hash(self, commit_hash: str) -> None:
+        """Sets the currently active configuration commit hash."""
+
+    @abstractmethod
+    def record_sync_error(self, desired_commit_hash: str, error_message: str) -> None:
+        """Records a configuration synchronization error."""
 
     @abstractmethod
     def compare_backtest_drift(self, action: Any) -> Any:
