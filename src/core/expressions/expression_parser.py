@@ -12,6 +12,7 @@ from src.core.interfaces.expression_context import ExpressionContext
 
 class ExpressionParser:
     _MAX_FORMULA_LENGTH = 1000
+    _VALID_ROLLING_SERIES = {"high", "low", "close", "open", "volume"}
 
     def __init__(self, expression: str):
         self.expression = expression
@@ -59,9 +60,13 @@ class ExpressionParser:
         clean_expr = expression.strip()
 
         if len(clean_expr) > cls._MAX_FORMULA_LENGTH:
+            msg = (
+                f"Formula exceeds maximum length of {cls._MAX_FORMULA_LENGTH} "
+                f"characters (got {len(clean_expr)})."
+            )
             diagnostics.append(
                 ExpressionDiagnostic(
-                    message=f"Formula exceeds maximum length of {cls._MAX_FORMULA_LENGTH} characters (got {len(clean_expr)}).",
+                    message=msg,
                     severity=DiagnosticSeverity.ERROR,
                     start_offset=0,
                     end_offset=len(clean_expr),
@@ -128,7 +133,7 @@ class ExpressionParser:
         )
 
     @classmethod
-    def _collect_and_validate_nodes(  # pylint: disable=too-many-branches,too-many-statements
+    def _collect_and_validate_nodes(  # pylint: disable=too-many-branches,too-many-statements,too-many-return-statements
             cls,
             node: ast.AST,
             allowed_variables: Optional[Set[str]],
@@ -188,6 +193,21 @@ class ExpressionParser:
                     )
                 )
 
+            if func_name in ("highest", "lowest"):
+                cls._validate_rolling_call(node, diagnostics)
+                if node.args and isinstance(node.args[0], ast.Name):
+                    referenced_variables.add(node.args[0].id)
+                for arg in node.args[1:]:
+                    cls._collect_and_validate_nodes(
+                        arg,
+                        allowed_variables,
+                        allowed_functions,
+                        diagnostics,
+                        referenced_variables,
+                        referenced_functions,
+                    )
+                return
+
             for arg in node.args:
                 cls._collect_and_validate_nodes(
                     arg,
@@ -245,6 +265,53 @@ class ExpressionParser:
         cls._add_node_error(node, f"Unsupported expression node: {type(node).__name__}", diagnostics)
 
     @classmethod
+    def _extract_series_name(cls, node: ast.AST) -> Optional[str]:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value
+        return None
+
+    @classmethod
+    def _validate_rolling_call(cls, node: ast.Call, diagnostics: List[ExpressionDiagnostic]) -> None:
+        func_name = node.func.id if isinstance(node.func, ast.Name) else "function"
+        if len(node.args) != 2:
+            cls._add_node_error(node, f"Function '{func_name}' expects 2 arguments: (series, period).", diagnostics)
+            return
+
+        series_name = cls._extract_series_name(node.args[0])
+        if series_name is None or series_name not in cls._VALID_ROLLING_SERIES:
+            supported = ", ".join(sorted(cls._VALID_ROLLING_SERIES))
+            cls._add_node_error(
+                node.args[0],
+                f"First argument to '{func_name}' must be a valid series name ({supported}).",
+                diagnostics,
+            )
+
+        if isinstance(node.args[1], ast.Constant):
+            period = node.args[1].value
+            if not isinstance(period, int) or isinstance(period, bool):
+                cls._add_node_error(node.args[1], f"Period for '{func_name}' must be an integer.", diagnostics)
+            elif period <= 0:
+                cls._add_node_error(node.args[1], f"Period for '{func_name}' must be greater than 0.", diagnostics)
+
+    @classmethod
+    def _validate_rolling_call_strict(cls, node: ast.Call) -> None:
+        func_name = node.func.id if isinstance(node.func, ast.Name) else "function"
+        if len(node.args) != 2:
+            raise ValueError(f"Function '{func_name}' expects 2 arguments: (series, period)")
+
+        series_name = cls._extract_series_name(node.args[0])
+        if series_name is None or series_name not in cls._VALID_ROLLING_SERIES:
+            supported = ", ".join(sorted(cls._VALID_ROLLING_SERIES))
+            raise ValueError(f"First argument to '{func_name}' must be a valid series name ({supported})")
+
+        if isinstance(node.args[1], ast.Constant):
+            period = node.args[1].value
+            if not isinstance(period, int) or isinstance(period, bool) or period <= 0:
+                raise ValueError(f"Period for '{func_name}' must be a positive integer")
+
+    @classmethod
     def _add_node_error(cls, node: ast.AST, message: str, diagnostics: List[ExpressionDiagnostic]) -> None:
         col_start = getattr(node, "col_offset", 0) + 1
         col_end = getattr(node, "end_col_offset", col_start + 1) + 1
@@ -264,19 +331,13 @@ class ExpressionParser:
 
     @classmethod
     def _infer_node_type(cls, node: ast.AST) -> ExpressionValueType:
-        if isinstance(node, (ast.Compare, ast.BoolOp)):
+        if isinstance(node, (ast.Compare, ast.BoolOp)) or (
+                isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not)
+        ):
             return ExpressionValueType.BOOLEAN
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
-            return ExpressionValueType.BOOLEAN
-        if isinstance(node, (ast.BinOp,)):
-            return ExpressionValueType.NUMBER
-        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
-            return ExpressionValueType.NUMBER
         if isinstance(node, ast.Constant):
             if isinstance(node.value, bool):
                 return ExpressionValueType.BOOLEAN
-            if isinstance(node.value, (int, float)):
-                return ExpressionValueType.NUMBER
             if isinstance(node.value, str):
                 return ExpressionValueType.STRING
         if isinstance(node, ast.IfExp):
@@ -284,10 +345,8 @@ class ExpressionParser:
         return ExpressionValueType.NUMBER
 
     @classmethod
-    def _validate_node(cls, node: ast.AST) -> None:
-        if isinstance(node, ast.Constant):
-            return
-        if isinstance(node, ast.Name):
+    def _validate_node(cls, node: ast.AST) -> None:  # pylint: disable=too-many-branches,too-many-return-statements
+        if isinstance(node, (ast.Constant, ast.Name)):
             return
         if isinstance(node, ast.BinOp):
             if not isinstance(node.op, (ast.Add, ast.Mult, ast.Sub, ast.Div)):
@@ -323,6 +382,8 @@ class ExpressionParser:
                 raise ValueError("Only simple function calls are supported")
             if node.keywords:
                 raise ValueError("Keyword arguments are not supported")
+            if node.func.id in ("highest", "lowest"):
+                cls._validate_rolling_call_strict(node)
             for arg in node.args:
                 cls._validate_node(arg)
             return
@@ -334,7 +395,7 @@ class ExpressionParser:
             return None
         return self._evaluate(self._tree.body, context)
 
-    def _evaluate(self, node: ast.AST, context: ExpressionContext) -> Any:
+    def _evaluate(self, node: ast.AST, context: ExpressionContext) -> Any:  # pylint: disable=too-many-return-statements
         if isinstance(node, ast.Constant):
             return node.value
         if isinstance(node, ast.Name):
@@ -378,6 +439,13 @@ class ExpressionParser:
         return True
 
     def _apply_comparison(self, left: Any, op: ast.cmpop, right: Any) -> bool:
+        if left is None or right is None:
+            if isinstance(op, ast.Eq):
+                return left is right
+            if isinstance(op, ast.NotEq):
+                return left is not right
+            return False
+
         comparisons = {
             ast.Gt: lambda a, b: a > b,
             ast.Lt: lambda a, b: a < b,
@@ -419,5 +487,12 @@ class ExpressionParser:
         if node.keywords:
             raise ValueError("Keyword arguments are not supported")
         func_name = node.func.id
+        if func_name in ("highest", "lowest") and node.args:
+            series_name = self._extract_series_name(node.args[0])
+            if series_name is None:
+                series_name = str(self._evaluate(node.args[0], context))
+            rest_args = [self._evaluate(arg, context) for arg in node.args[1:]]
+            return context.call_function(func_name, [series_name, *rest_args])
+
         args = [self._evaluate(arg, context) for arg in node.args]
         return context.call_function(func_name, args)

@@ -26,6 +26,8 @@ def test_functions_contain_atr_rsi_sma():
     assert "sma" in fn_names
     assert "ema" in fn_names
     assert "clamp" in fn_names
+    assert "highest" in fn_names
+    assert "lowest" in fn_names
 
 
 def test_semantic_inspection_valid_formula():

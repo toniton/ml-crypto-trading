@@ -10,3 +10,4 @@ class Candle:
     high: Decimal
     close: Decimal
     start_time: float
+    volume: Decimal = Decimal("0")

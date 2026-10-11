@@ -7,6 +7,7 @@ from api.interfaces.market_data import MarketData
 from api.interfaces.trade_action import TradeAction
 from api.interfaces.trading_context import TradingContext
 from src.core.expressions.default_context import DefaultContext
+from src.core.expressions.rolling_window_evaluator import RollingWindowEvaluator
 from src.core.interfaces.expression_context import ExpressionContext
 from src.trading.consensus.consensus_decision import ConsensusDecision
 from src.trading.protection.portfolio_policy_resolver import EffectivePortfolioConfig
@@ -216,6 +217,7 @@ class TradingExpressionFactory:
     @staticmethod
     def _build_functions(candles: List[Candle], market_data: Optional[MarketData] = None) -> dict:
         close = float(market_data.close_price) if market_data else 0.0
+        rolling_evaluator = RollingWindowEvaluator(candles, market_data)
         return {
             "max": max,
             "min": min,
@@ -227,6 +229,8 @@ class TradingExpressionFactory:
             "ema": TradingExpressionFactory._calculate_ema(candles),
             "rsi": TradingExpressionFactory._calculate_rsi(candles),
             "atr": TradingExpressionFactory._calculate_atr(candles),
+            "highest": rolling_evaluator.highest,
+            "lowest": rolling_evaluator.lowest,
             "regime": (
                 lambda period=20: TradingExpressionFactory._detector.detect(candles, market_data, period).regime.value
             ),

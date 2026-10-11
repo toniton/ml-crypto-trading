@@ -140,7 +140,9 @@ class ExpressionCatalog:
             name="rsi",
             display_name="Relative Strength Index (RSI)",
             category="Technical Indicators",
-            description="Calculates the Relative Strength Index momentum oscillator over a historical candle window (0 to 100).",
+            description=(
+                "Calculates the Relative Strength Index momentum oscillator over a historical candle window (0 to 100)."
+            ),
             parameters=[
                 ParameterSpec(
                     name="period",
@@ -215,6 +217,58 @@ class ExpressionCatalog:
             signature="atr(period: int = 14) -> number",
             example="atr(14)",
             autocomplete_snippet="atr(${1:14})",
+        ),
+        FunctionSpec(
+            name="highest",
+            display_name="Rolling Highest (Maximum)",
+            category="Technical Indicators",
+            description="Returns the highest (maximum) value of a candle series over the prior N closed candles.",
+            parameters=[
+                ParameterSpec(
+                    name="series",
+                    type=ExpressionValueType.STRING,
+                    description="Price or volume series name (e.g. high, low, close, open, volume)",
+                    required=True,
+                ),
+                ParameterSpec(
+                    name="period",
+                    type=ExpressionValueType.NUMBER,
+                    description="Lookback period in number of prior candles",
+                    required=True,
+                    default=20,
+                    min_value=1,
+                ),
+            ],
+            return_type=ExpressionValueType.NUMBER,
+            signature="highest(series: series, period: int) -> number",
+            example="highest(high, 20)",
+            autocomplete_snippet="highest(${1:high}, ${2:20})",
+        ),
+        FunctionSpec(
+            name="lowest",
+            display_name="Rolling Lowest (Minimum)",
+            category="Technical Indicators",
+            description="Returns the lowest (minimum) value of a candle series over the prior N closed candles.",
+            parameters=[
+                ParameterSpec(
+                    name="series",
+                    type=ExpressionValueType.STRING,
+                    description="Price or volume series name (e.g. high, low, close, open, volume)",
+                    required=True,
+                ),
+                ParameterSpec(
+                    name="period",
+                    type=ExpressionValueType.NUMBER,
+                    description="Lookback period in number of prior candles",
+                    required=True,
+                    default=20,
+                    min_value=1,
+                ),
+            ],
+            return_type=ExpressionValueType.NUMBER,
+            signature="lowest(series: series, period: int) -> number",
+            example="lowest(low, 20)",
+            autocomplete_snippet="lowest(${1:low}, ${2:20})",
         ),
         FunctionSpec(
             name="max",
@@ -347,7 +401,10 @@ class ExpressionCatalog:
             name="regime",
             display_name="Market Regime",
             category="Market Regime",
-            description="Returns the current classified market regime (e.g. TRENDING_UP, TRENDING_DOWN, RANGING, HIGH_VOLATILITY, LOW_VOLATILITY, ILLIQUID, UNKNOWN).",
+            description=(
+                "Returns the current classified market regime (e.g. TRENDING_UP, "
+                "TRENDING_DOWN, RANGING, HIGH_VOLATILITY, LOW_VOLATILITY, ILLIQUID, UNKNOWN)."
+            ),
             parameters=[
                 ParameterSpec(
                     name="period",
@@ -367,7 +424,10 @@ class ExpressionCatalog:
             name="volatility",
             display_name="Market Volatility (NATR)",
             category="Market Regime",
-            description="Calculates the normalized Average True Range volatility percentage over the specified candle period.",
+            description=(
+                "Calculates the normalized Average True Range volatility percentage "
+                "over the specified candle period."
+            ),
             parameters=[
                 ParameterSpec(
                     name="period",
@@ -387,7 +447,10 @@ class ExpressionCatalog:
             name="trend_strength",
             display_name="Trend Strength",
             category="Market Regime",
-            description="Quantifies directional momentum divergence between fast and slow moving averages over the candle window.",
+            description=(
+                "Quantifies directional momentum divergence between fast and "
+                "slow moving averages over the candle window."
+            ),
             parameters=[
                 ParameterSpec(
                     name="period",
@@ -569,7 +632,11 @@ class ExpressionCatalog:
             unit="signal",
             description="Directional trade signal (+1 for BUY, -1 for SELL, 0 for NEUTRAL)",
             example_value=1,
-            applicable_scopes=[ExpressionScope.DYNAMIC_QUANTITY, ExpressionScope.GUARD_CONDITION, ExpressionScope.GENERAL_CALCULATION],
+            applicable_scopes=[
+                ExpressionScope.DYNAMIC_QUANTITY,
+                ExpressionScope.GUARD_CONDITION,
+                ExpressionScope.GENERAL_CALCULATION,
+            ],
         ),
         VariableSpec(
             name="confidence",
@@ -579,7 +646,11 @@ class ExpressionCatalog:
             unit="ratio",
             description="Normalized confidence score (0.0 to 1.0) of consensus decision",
             example_value=0.85,
-            applicable_scopes=[ExpressionScope.DYNAMIC_QUANTITY, ExpressionScope.GUARD_CONDITION, ExpressionScope.GENERAL_CALCULATION],
+            applicable_scopes=[
+                ExpressionScope.DYNAMIC_QUANTITY,
+                ExpressionScope.GUARD_CONDITION,
+                ExpressionScope.GENERAL_CALCULATION,
+            ],
         ),
         VariableSpec(
             name="vote_ratio",
@@ -589,7 +660,11 @@ class ExpressionCatalog:
             unit="ratio",
             description="Proportion of agent committee votes supporting current trade action",
             example_value=0.75,
-            applicable_scopes=[ExpressionScope.DYNAMIC_QUANTITY, ExpressionScope.GUARD_CONDITION, ExpressionScope.GENERAL_CALCULATION],
+            applicable_scopes=[
+                ExpressionScope.DYNAMIC_QUANTITY,
+                ExpressionScope.GUARD_CONDITION,
+                ExpressionScope.GENERAL_CALCULATION,
+            ],
         ),
 
         # Asset Rules
@@ -619,7 +694,10 @@ class ExpressionCatalog:
             category="Market Regime",
             type=ExpressionValueType.STRING,
             unit="regime",
-            description="Current classified market regime string (TRENDING_UP, TRENDING_DOWN, RANGING, HIGH_VOLATILITY, LOW_VOLATILITY, ILLIQUID, UNKNOWN)",
+            description=(
+                "Current classified market regime string (TRENDING_UP, TRENDING_DOWN, "
+                "RANGING, HIGH_VOLATILITY, LOW_VOLATILITY, ILLIQUID, UNKNOWN)"
+            ),
             example_value="TRENDING_UP",
         ),
         VariableSpec(
