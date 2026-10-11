@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import MagicMock
 
 import yaml
 from fastapi.testclient import TestClient
@@ -52,8 +53,10 @@ class TestConfigEndpoints(unittest.TestCase):
             message="seed",
         )
         self.agent = AgentGateway(FakeLlmAdapter(), vcs=self.vcs)
+        self.mock_trading_engine = MagicMock()
+        self.trading_proxy = make_test_trading_proxy(trading_engine=self.mock_trading_engine)
         self.app = ChatApp.create(
-            trading_proxy=make_test_trading_proxy(),
+            trading_proxy=self.trading_proxy,
             agent=self.agent,
             event_bus=MessageEventBus(),
             db_manager=self.db,
@@ -119,6 +122,9 @@ class TestConfigEndpoints(unittest.TestCase):
         self.assertEqual(get_data["assets"][0]["base_ticker_symbol"], "ETH")
         self.assertEqual(get_data["dynamic_quantity"], "equity * 0.05")
         self.assertEqual(get_data["commit_hash"], post_data["commit_hash"])
+        self.mock_trading_engine.update_config.assert_called()
+        updated_trading_config = self.mock_trading_engine.update_config.call_args[0][0]
+        self.assertEqual(updated_trading_config.assets[0].base_ticker_symbol, "ETH")
 
     def test_post_config_validation_failure_returns_422(self):
         invalid_payload = {
@@ -225,6 +231,3 @@ class TestConfigEndpoints(unittest.TestCase):
         self.assertEqual(float(data["portfolio"]["exposure"]["max_total"]), 0.85)
         self.assertEqual(float(data["portfolio"]["guard"]["min_quote_reserve"]), 0.20)
         self.assertEqual(float(data["assets"][0]["portfolio"]["exposure"]["max_per_asset"]), 0.40)
-
-
-

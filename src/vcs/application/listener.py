@@ -52,10 +52,8 @@ class RefChangeListener(ApplicationLoggingMixin):
                 self.app_logger.info(f"Subscribed to PostgreSQL LISTEN channel '{self.channel_name}'.")
                 self._reconcile()
 
-                if callable(getattr(raw_conn, "notifies", None)):
-                    self._consume_notifications_psycopg3(raw_conn)
-                else:
-                    self._consume_notifications_psycopg2(raw_conn)
+                active_conn = self._unwrap_connection(raw_conn)
+                self._consume_notifications(active_conn)
 
                 cursor.close()
                 raw_conn.close()
@@ -64,6 +62,23 @@ class RefChangeListener(ApplicationLoggingMixin):
                 if not self._stop_event.is_set():
                     self.app_logger.error(f"Error in LISTEN loop (reconnecting in 2s): {e}", exc_info=True)
                     time.sleep(2.0)
+
+    @staticmethod
+    def _unwrap_connection(raw_conn):
+        try:
+            return raw_conn.driver_connection
+        except AttributeError:
+            return raw_conn
+
+    def _consume_notifications(self, conn) -> None:
+        try:
+            notifies_fn = conn.notifies
+            if callable(notifies_fn):
+                self._consume_notifications_psycopg3(conn)
+                return
+        except AttributeError:
+            pass
+        self._consume_notifications_psycopg2(conn)
 
     def _set_autocommit(self, raw_conn) -> None:
         try:
@@ -74,24 +89,35 @@ class RefChangeListener(ApplicationLoggingMixin):
             except Exception:
                 self.app_logger.debug("Raw connection does not support explicit isolation level.")
 
-    def _consume_notifications_psycopg3(self, raw_conn) -> None:
+    def _consume_notifications_psycopg3(self, conn) -> None:
         while not self._stop_event.is_set():
-            for notify in raw_conn.notifies(timeout=1.0):
-                if notify is not None and hasattr(notify, "payload"):
-                    self._handle_notify_payload(notify.payload)
+            for notify in conn.notifies(timeout=1.0):
+                if notify is not None:
+                    try:
+                        self._handle_notify_payload(notify.payload)
+                    except AttributeError:
+                        pass
                 if self._stop_event.is_set():
                     break
 
-    def _consume_notifications_psycopg2(self, raw_conn) -> None:
+    def _consume_notifications_psycopg2(self, conn) -> None:
         while not self._stop_event.is_set():
-            if select.select([raw_conn], [], [], 1.0) == ([], [], []):
+            if select.select([conn], [], [], 1.0) == ([], [], []):
                 continue
 
-            if hasattr(raw_conn, "poll"):
-                raw_conn.poll()
-            while getattr(raw_conn, "notifies", None):
-                notify = raw_conn.notifies.pop(0)
-                self._handle_notify_payload(notify.payload)
+            try:
+                conn.poll()
+            except AttributeError:
+                pass
+            try:
+                while conn.notifies:
+                    notify = conn.notifies.pop(0)
+                    try:
+                        self._handle_notify_payload(notify.payload)
+                    except AttributeError:
+                        pass
+            except AttributeError:
+                pass
 
     def _reconcile(self) -> None:
         if self.config_vcs is None:

@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from api.interfaces.trade_action import TradeAction
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.application import Application
 from src.configuration.trading_config import TradingConfig
@@ -129,7 +130,7 @@ class TestApplyConfigUpdate:
 
         app._apply_config_update("deadbeef" * 8)
 
-        assert app._trading_engine.configs == []
+        assert not app._trading_engine.configs
 
 
 class TestOnRefChange:
@@ -139,13 +140,21 @@ class TestOnRefChange:
 
         app._on_vcs_ref_change(RefChangedEvent(ref="production", commit_hash=commit.hash))
 
-        assert app._trading_engine.configs == []
+        assert not app._trading_engine.configs
 
     def test_applies_events_for_tracked_ref(self, vcs):
         app = _make_app(vcs)
         commit = _seed_config(vcs, assets=[_asset({"buy": 2.0, "sell": 0.8})])
 
         app._on_vcs_ref_change(RefChangedEvent(ref="HEAD", commit_hash=commit.hash))
+
+        assert app._trading_engine.configs[-1].assets[0].consensus.buy == 2.0
+
+    def test_applies_events_for_main_alias_when_tracking_head(self, vcs):
+        app = _make_app(vcs)
+        commit = _seed_config(vcs, assets=[_asset({"buy": 2.0, "sell": 0.8})])
+
+        app._on_vcs_ref_change(RefChangedEvent(ref="refs/heads/main", commit_hash=commit.hash))
 
         assert app._trading_engine.configs[-1].assets[0].consensus.buy == 2.0
 
@@ -272,6 +281,43 @@ class TestTradingExecutorUpdateConfig:
         executor.update_config(config2)
         assert executor.assets[0].enabled is False
 
+    def test_update_config_reloads_strategies_when_disabled_or_added(self):
+        executor = _make_executor()
+        strat1 = {
+            "name": "Strat1",
+            "type": "DYNAMIC",
+            "action": "BUY",
+            "expression": "close > 100",
+            "enabled": True,
+        }
+        strat2 = {
+            "name": "Strat2",
+            "type": "DYNAMIC",
+            "action": "BUY",
+            "expression": "close > 200",
+            "enabled": True,
+        }
+        asset_initial = _asset({"buy": 0.5, "sell": 0.5})
+        asset_initial["strategies"] = [strat1]
+        config1 = TradingConfig.model_validate({"assets": [asset_initial]})
+        executor.update_config(config1)
+
+        assert len(executor.strategies) == 1
+        assert executor.strategies[0].name == "Strat1"
+
+        # Now add Strat2 and disable Strat1
+        strat1_disabled = dict(strat1, enabled=False)
+        asset_updated = _asset({"buy": 0.5, "sell": 0.5})
+        asset_updated["strategies"] = [strat1_disabled, strat2]
+        config2 = TradingConfig.model_validate({"assets": [asset_updated]})
+        executor.update_config(config2)
+
+        # Strat1 should be unregistered and Strat2 registered
+        assert len(executor.strategies) == 1
+        assert executor.strategies[0].name == "Strat2"
+        assert TradeAction.BUY in executor.consensus_manager.strategies
+        assert [s.name for s in executor.consensus_manager.strategies[TradeAction.BUY]] == ["Strat2"]
+
     def test_create_buy_order_skips_disabled_asset(self, monkeypatch):
         executor = _make_executor()
         disabled_asset_dict = _asset({"buy": 1.0, "sell": 0.5})
@@ -283,11 +329,11 @@ class TestTradingExecutorUpdateConfig:
         monkeypatch.setattr(
             executor,
             "_prepare_trade_context",
-            lambda asset: called.append(asset),
+            called.append,
         )
 
         executor.create_buy_order([disabled_asset])
-        assert called == []
+        assert not called
 
     def test_create_buy_order_processes_enabled_asset(self, monkeypatch):
         executor = _make_executor()
@@ -300,7 +346,7 @@ class TestTradingExecutorUpdateConfig:
         monkeypatch.setattr(
             executor,
             "_prepare_trade_context",
-            lambda asset: called.append(asset),
+            called.append,
         )
 
         executor.create_buy_order([enabled_asset])

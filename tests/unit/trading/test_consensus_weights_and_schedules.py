@@ -203,3 +203,82 @@ class TestConsensusWeightsAndSchedules:
         assert decision.quorum is True
         assert decision.weighted_vote_ratio == pytest.approx(0.8 / 1.0)
         assert decision.quorum_margin == pytest.approx(0.6)
+
+    def test_disabled_strategy_is_excluded_from_voting(self):
+        epoch = datetime(2026, 10, 12, 10, 0, tzinfo=timezone.utc).timestamp()
+        strat_enabled = ExpressionStrategy(
+            StrategyConfig(
+                name="EnabledStrategy",
+                type=StrategyType.DYNAMIC,
+                action=TradeAction.BUY,
+                expression="close > 100",
+                enabled=True,
+                weight=1.0,
+            )
+        )
+        strat_disabled = ExpressionStrategy(
+            StrategyConfig(
+                name="DisabledStrategy",
+                type=StrategyType.DYNAMIC,
+                action=TradeAction.BUY,
+                expression="close < 50",
+                enabled=False,
+                weight=1.0,
+            )
+        )
+
+        manager = ConsensusManager()
+        manager.set_factors([_asset("BTC_USD", buy=0.5)])
+        manager.register_strategy(strat_enabled)
+        manager.register_strategy(strat_disabled)
+
+        decision = manager.evaluate(TradeAction.BUY, "BTC_USD", _context(), _market(epoch), [])
+        assert "DisabledStrategy" not in decision.votes
+        assert "DisabledStrategy" not in decision.weights
+        assert "EnabledStrategy" in decision.votes
+        assert decision.votes["EnabledStrategy"] is True
+        assert decision.total == 1
+        assert decision.quorum is True
+
+    def test_all_strategies_disabled_results_in_no_quorum(self):
+        epoch = datetime(2026, 10, 12, 10, 0, tzinfo=timezone.utc).timestamp()
+        strat_disabled = ExpressionStrategy(
+            StrategyConfig(
+                name="DisabledStrategy",
+                type=StrategyType.DYNAMIC,
+                action=TradeAction.BUY,
+                expression="close > 100",
+                enabled=False,
+                weight=1.0,
+            )
+        )
+
+        manager = ConsensusManager()
+        manager.set_factors([_asset("BTC_USD", buy=0.5)])
+        manager.register_strategy(strat_disabled)
+
+        decision = manager.evaluate(TradeAction.BUY, "BTC_USD", _context(), _market(epoch), [])
+        assert not decision.votes
+        assert not decision.weights
+        assert decision.total == 0
+        assert decision.quorum is False
+
+    def test_unregister_strategy_cleans_up_safely(self):
+        strat = ExpressionStrategy(
+            StrategyConfig(
+                name="TempStrategy",
+                type=StrategyType.DYNAMIC,
+                action=TradeAction.BUY,
+                expression="close > 100",
+                enabled=True,
+            )
+        )
+        manager = ConsensusManager()
+        manager.register_strategy(strat)
+        assert len(manager.strategies[TradeAction.BUY]) == 1
+
+        manager.unregister_strategy(strat)
+        assert TradeAction.BUY not in manager.strategies
+
+        # Calling unregister again does not raise error
+        manager.unregister_strategy(strat)

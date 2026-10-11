@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from api.interfaces.backtest_run_spec import BacktestRunSpec
+from src.configuration.trading_config import TradingConfig
 from src.agent import AgentGateway, ProposalDecision
 from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.events import AIEvent
@@ -756,6 +757,7 @@ class ChatApp:
             commit, warnings = await asyncio.to_thread(
                 configuration_service.apply_proposal_to_vcs, proposal
             )
+            ChatApp._sync_trading_proxy_config(req, configuration_service, commit.hash)
             await asyncio.to_thread(proposal_store.remove, message_id)
             await ChatApp._record_decision(
                 store, message_id, proposal, ProposalDecision.APPROVE, commit_hash=commit.hash
@@ -809,6 +811,7 @@ class ChatApp:
                     author=author,
                     message=message,
                 )
+                ChatApp._sync_trading_proxy_config(req, _configuration_service, commit.hash)
                 return {
                     "commit_hash": commit.hash,
                     "summary": commit.message,
@@ -837,6 +840,21 @@ class ChatApp:
                 ) from exc
 
         return app
+
+    @staticmethod
+    def _sync_trading_proxy_config(
+            req: Request,
+            config_service: ConfigurationService,
+            commit_hash: str,
+    ) -> None:
+        try:
+            proxy: Optional[TradingEngineProxy] = req.app.state.trading_proxy
+            if proxy is not None:
+                raw_config = config_service.checkout_vcs(commit_hash)
+                validated_config = TradingConfig.model_validate(raw_config)
+                proxy.update_config(validated_config)
+        except Exception:  # pylint: disable=broad-except
+            pass
 
     @staticmethod
     def _validate_date(year: int, month: int, day: int) -> None:

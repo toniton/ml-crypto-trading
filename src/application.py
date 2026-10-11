@@ -516,8 +516,15 @@ class Application(ApplicationLoggingMixin):
             message="Initial configuration committed at application start",
         )
 
+    @staticmethod
+    def _is_matching_ref(configured_ref: str, event_ref: str) -> bool:
+        if event_ref == configured_ref:
+            return True
+        default_aliases = {"HEAD", "refs/heads/main", "main"}
+        return configured_ref in default_aliases and event_ref in default_aliases
+
     def _on_vcs_ref_change(self, event: RefChangedEvent) -> None:
-        if event.ref != self._vcs_ref:
+        if not self._is_matching_ref(self._vcs_ref, event.ref):
             return
         self._apply_config_update(event.commit_hash)
         if self._event_bus is not None:

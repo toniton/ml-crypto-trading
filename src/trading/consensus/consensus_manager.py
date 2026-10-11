@@ -59,17 +59,20 @@ class ConsensusManager(ApplicationLoggingMixin):
         self.strategies[strategy.action].append(strategy)
 
     def unregister_strategy(self, strategy: TradingStrategy):
-        if strategy.action in self.strategies:
-            self.strategies[strategy.action].remove(strategy)
-            if len(self.strategies[strategy.action]) == 0:
-                del self.strategies[strategy.action]
+        actions_to_check = [strategy.action] if strategy.action in self.strategies else list(self.strategies.keys())
+        for action in actions_to_check:
+            if action in self.strategies and strategy in self.strategies[action]:
+                self.strategies[action].remove(strategy)
+                if len(self.strategies[action]) == 0:
+                    del self.strategies[action]
 
     @staticmethod
     def _eligible_strategies(strategies: list[TradingStrategy], ticker_symbol: str) -> list[TradingStrategy]:
         return [
             strategy
             for strategy in strategies
-            if strategy.ticker_symbols is None or ticker_symbol in strategy.ticker_symbols
+            if strategy.enabled
+               and (strategy.ticker_symbols is None or ticker_symbol in strategy.ticker_symbols)
         ]
 
     def evaluate(
@@ -149,6 +152,8 @@ class ConsensusManager(ApplicationLoggingMixin):
         votes: dict[str, bool] = {}
         weights: dict[str, float] = {}
         for strategy in strategies:
+            if not strategy.enabled:
+                continue
             effective_weight = StrategyWeightResolver.resolve_effective_weight(strategy, timestamp)
             weights[strategy.name] = effective_weight
             if effective_weight > 0:
