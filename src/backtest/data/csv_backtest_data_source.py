@@ -16,8 +16,9 @@ class CsvBacktestDataSource(DataSource[BacktestRequest, BacktestDataSet]):
         loader = BacktestDataLoader(self._path)
         data_points = loader.load(request.ticker_symbol)
 
-        if request.start_time is not None:
-            start_epoch = int(request.start_time.timestamp())
+        filter_start = request.warmup_start_time if request.warmup_start_time is not None else request.start_time
+        if filter_start is not None:
+            start_epoch = int(filter_start.timestamp())
             data_points = [data_point for data_point in data_points if data_point.timestamp >= start_epoch]
         if request.end_time is not None:
             end_epoch = int(request.end_time.timestamp())

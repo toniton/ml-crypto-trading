@@ -69,7 +69,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
         )
         self._calculator = BacktestMetricsCalculator()
 
-    def run(
+    def run(  # pylint: disable=too-many-locals
             self,
             spec: WalkForwardRunSpec,
             run_id: Optional[str] = None,
@@ -100,7 +100,15 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             data_source=ds_req,
             initial_balance=spec.initial_balance,
         )
-        dataset = source.load(full_request)
+        try:
+            dataset = source.load(full_request)
+        except ValueError as exc:
+            if "No recorded market data" in str(exc):
+                raise ValueError(
+                    f"No recorded market data observations found for {spec.ticker_symbol}. "
+                    "Please select a CSV dataset in the evaluation settings or record market data."
+                ) from exc
+            raise
 
         # 2. Data Integrity Guard
         DatasetIntegrityGuard.validate_historical_points(dataset.data_points)
@@ -143,6 +151,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
                 end_time=fold.train_end,
                 initial_balance=spec.initial_balance,
                 exec_cfg=exec_cfg,
+                warmup_start_time=fold.warmup_start,
             )
 
             # Out-of-Sample (Test) run with candidate weights
@@ -153,6 +162,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
                 end_time=fold.test_end,
                 initial_balance=spec.initial_balance,
                 exec_cfg=exec_cfg,
+                warmup_start_time=fold.test_warmup_start,
             )
 
             baseline_test_return: Optional[float] = None
@@ -164,6 +174,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
                     end_time=fold.test_end,
                     initial_balance=spec.initial_balance,
                     exec_cfg=exec_cfg,
+                    warmup_start_time=fold.test_warmup_start,
                 )
                 baseline_test_return = float(baseline_metrics.percentage_return)
 
@@ -174,6 +185,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
                 end_time=fold.test_end,
                 initial_balance=spec.initial_balance,
                 exec_cfg=exec_cfg,
+                warmup_start_time=fold.test_warmup_start,
             )
             equal_weight_test_return = float(equal_weight_metrics.percentage_return)
 
@@ -211,6 +223,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             end_time: datetime,
             initial_balance: Decimal,
             exec_cfg: ExecutionConfiguration,
+            warmup_start_time: Optional[datetime] = None,
     ):
         request = BacktestRequest(
             ticker_symbol=asset.ticker_symbol,
@@ -219,6 +232,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             data_source=ds_req,
             initial_balance=initial_balance,
             execution=exec_cfg,
+            warmup_start_time=warmup_start_time,
         )
         session = BacktestSession(
             ticker_symbol=asset.ticker_symbol,
@@ -228,7 +242,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             started_at=datetime.now(timezone.utc),
         )
         runner = BacktestRunner(
-            db_manager=self._db_manager,
+            db_manager=NoopDatabaseManager(),
             assets={asset.ticker_symbol: asset},
             dynamic_quantity=self._dynamic_quantity,
             data_source_resolver=self._resolver,

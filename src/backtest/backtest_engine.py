@@ -17,6 +17,7 @@ class BacktestEngine(TradingEngine):
             trading_executor: Optional[TradingExecutor] = None,
             infrastructure: Optional[BacktestInfrastructure] = None,
             assets: Optional[list[Asset]] = None,
+            warmup_cutoff_timestamp: Optional[int] = None,
     ):
         super().__init__(trading_scheduler, trading_executor)
         self._assets = assets or []
@@ -28,6 +29,7 @@ class BacktestEngine(TradingEngine):
                 execution_engine=infrastructure.execution_engine,
                 bus=infrastructure.bus,
                 strategy=self._trigger_trading_cycle,
+                warmup_cutoff_timestamp=warmup_cutoff_timestamp,
             )
 
     def _trigger_trading_cycle(self, asset: Asset, timestamp: int, market_data, candles) -> None:  # pylint: disable=unused-argument
@@ -50,3 +52,4 @@ class BacktestEngine(TradingEngine):
     def stop(self) -> None:
         if self._simulator is not None:
             self._simulator.stop()
+        self.stop_application()

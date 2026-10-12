@@ -36,3 +36,4 @@ class BacktestRequest:
     data_source: BacktestDataSourceRequest = field(default_factory=BacktestDataSourceRequest)
     initial_balance: Decimal = Decimal("10000.0")
     execution: ExecutionConfiguration = field(default_factory=ExecutionConfiguration)
+    warmup_start_time: Optional[datetime] = None

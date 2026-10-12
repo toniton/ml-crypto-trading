@@ -30,12 +30,14 @@ class BacktestSimulator:
             execution_engine: BacktestExecutionEngine,
             bus: BacktestEventBus,
             strategy: Optional[StrategyCallback] = None,
+            warmup_cutoff_timestamp: Optional[int] = None,
     ):
         self._clock = clock
         self._datasets = datasets
         self._execution_engine = execution_engine
         self._bus = bus
         self._strategy = strategy
+        self._warmup_cutoff = warmup_cutoff_timestamp
         self._candles: dict[str, list[Candle]] = {}
         self._is_running = True
 
@@ -60,6 +62,10 @@ class BacktestSimulator:
             candles.append(candle)
             self._bus.publish(MarketDataEvent(market_data=market_data, ticker_symbol=symbol))
             self._bus.publish(CandlesEvent(candles=[candle], ticker_symbol=symbol))
+
+        if self._warmup_cutoff is not None and timestamp < self._warmup_cutoff:
+            self._bus.publish(TickEvent(tick_time=timestamp))
+            return
 
         self._execution_engine.process(symbol, timestamp)
 

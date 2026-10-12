@@ -16,71 +16,81 @@ class WalkForwardFoldGenerator:
         self._window_spec = window_spec
 
     def generate_folds(self, timestamps: Sequence[int]) -> list[WalkForwardFold]:
-        total_count = len(timestamps)
-        if total_count < 4:
+        if len(timestamps) < 4:
             return []
 
         train_count, test_count, step_count = self._resolve_window_sizes(timestamps)
-
-        if train_count + test_count > total_count:
+        if train_count + test_count > len(timestamps):
             return []
 
-        warmup_count = max(0, self._window_spec.warmup_candle_count)
         folds: list[WalkForwardFold] = []
-        mode = self._window_spec.window_mode
-
         fold_idx = 0
         current_offset = 0
 
-        while True:
-            if mode == WindowMode.ROLLING:
-                train_start_idx = current_offset
-            else:
-                train_start_idx = 0
-
-            train_end_idx = current_offset + train_count - 1
-            test_start_idx = train_end_idx + 1
-            test_end_idx = test_start_idx + test_count - 1
-
-            if test_end_idx >= total_count:
-                break
-
-            warmup_start_idx = max(0, train_start_idx - warmup_count)
-            warmup_end_idx = train_start_idx - 1 if train_start_idx > warmup_start_idx else None
-
-            warmup_start = (
-                _timestamp_to_datetime(timestamps[warmup_start_idx])
-                if warmup_end_idx is not None
-                else None
+        while current_offset + train_count + test_count <= len(timestamps):
+            train_start_idx = (
+                current_offset
+                if self._window_spec.window_mode == WindowMode.ROLLING
+                else 0
             )
-            warmup_end = (
-                _timestamp_to_datetime(timestamps[warmup_end_idx])
-                if warmup_end_idx is not None
-                else None
-            )
-
-            train_start = _timestamp_to_datetime(timestamps[train_start_idx])
-            train_end = _timestamp_to_datetime(timestamps[train_end_idx])
-            test_start = _timestamp_to_datetime(timestamps[test_start_idx])
-            test_end = _timestamp_to_datetime(timestamps[test_end_idx])
-
             folds.append(
-                WalkForwardFold(
-                    fold_index=fold_idx,
-                    warmup_start=warmup_start,
-                    warmup_end=warmup_end,
-                    train_start=train_start,
-                    train_end=train_end,
-                    test_start=test_start,
-                    test_end=test_end,
-                    status="PENDING",
+                self._create_fold(
+                    fold_idx=fold_idx,
+                    timestamps=timestamps,
+                    train_start_idx=train_start_idx,
+                    train_end_idx=current_offset + train_count - 1,
+                    test_start_idx=current_offset + train_count,
+                    test_end_idx=current_offset + train_count + test_count - 1,
+                    warmup_count=max(0, self._window_spec.warmup_candle_count),
                 )
             )
-
             fold_idx += 1
             current_offset += step_count
 
         return folds
+
+    @staticmethod
+    def _create_fold(
+        fold_idx: int,
+        timestamps: Sequence[int],
+        train_start_idx: int,
+        train_end_idx: int,
+        test_start_idx: int,
+        test_end_idx: int,
+        warmup_count: int,
+    ) -> WalkForwardFold:
+        warmup_start_idx = max(0, train_start_idx - warmup_count)
+        warmup_end_idx = train_start_idx - 1 if train_start_idx > warmup_start_idx else None
+
+        warmup_start = (
+            _timestamp_to_datetime(timestamps[warmup_start_idx])
+            if warmup_end_idx is not None
+            else None
+        )
+        warmup_end = (
+            _timestamp_to_datetime(timestamps[warmup_end_idx])
+            if warmup_end_idx is not None
+            else None
+        )
+
+        test_warmup_start_idx = max(0, test_start_idx - warmup_count)
+        test_warmup_start = (
+            _timestamp_to_datetime(timestamps[test_warmup_start_idx])
+            if test_start_idx > test_warmup_start_idx
+            else None
+        )
+
+        return WalkForwardFold(
+            fold_index=fold_idx,
+            warmup_start=warmup_start,
+            warmup_end=warmup_end,
+            train_start=_timestamp_to_datetime(timestamps[train_start_idx]),
+            train_end=_timestamp_to_datetime(timestamps[train_end_idx]),
+            test_start=_timestamp_to_datetime(timestamps[test_start_idx]),
+            test_end=_timestamp_to_datetime(timestamps[test_end_idx]),
+            test_warmup_start=test_warmup_start,
+            status="PENDING",
+        )
 
     def _resolve_window_sizes(self, timestamps: Sequence[int]) -> tuple[int, int, int]:
         total = len(timestamps)

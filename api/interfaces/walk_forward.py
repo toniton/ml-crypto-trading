@@ -40,6 +40,7 @@ class WalkForwardRunSpec(BaseModel):
     initial_balance: Decimal = Decimal("10000.0")
     execution: BacktestExecutionSpec = Field(default_factory=BacktestExecutionSpec)
     candidate_weights: Optional[dict[str, float]] = None
+    baseline_weights: Optional[dict[str, float]] = None
 
 
 class WalkForwardFold(BaseModel):
@@ -50,6 +51,7 @@ class WalkForwardFold(BaseModel):
     train_end: datetime
     test_start: datetime
     test_end: datetime
+    test_warmup_start: Optional[datetime] = None
     status: str = "PENDING"
 
 
@@ -63,6 +65,10 @@ class FoldMetricsSummary(BaseModel):
     test_profit_factor: float
     baseline_test_return_pct: Optional[float] = None
     equal_weight_test_return_pct: Optional[float] = None
+    in_sample_trades: Optional[int] = None
+    out_of_sample_trades: Optional[int] = None
+    out_of_sample_win_rate_pct: Optional[float] = None
+    out_of_sample_profit_factor: Optional[float] = None
 
 
 class WalkForwardSummary(BaseModel):
@@ -76,3 +82,9 @@ class WalkForwardSummary(BaseModel):
     walk_forward_efficiency: float
     fold_results: list[FoldMetricsSummary] = Field(default_factory=list)
     verdict: str
+    out_of_sample_return_pct: Optional[float] = None
+    max_out_of_sample_drawdown_pct: Optional[float] = None
+    walk_forward_efficiency_ratio: Optional[float] = None
+    stability_classification: Optional[str] = None
+    folds: list[FoldMetricsSummary] = Field(default_factory=list)
+    in_sample_return_pct: Optional[float] = None

@@ -225,7 +225,7 @@ class TradingExpressionFactory:
             "abs": abs,
             "clamp": lambda val, min_v, max_v: max(min_v, min(val, max_v)),
             "round": round,
-            "sma": lambda n: sum(float(c.close) for c in candles[-n:]) / n if candles and len(candles) >= n else 0.0,
+            "sma": TradingExpressionFactory._calculate_sma(candles),
             "ema": TradingExpressionFactory._calculate_ema(candles),
             "rsi": TradingExpressionFactory._calculate_rsi(candles),
             "atr": TradingExpressionFactory._calculate_atr(candles),
@@ -247,9 +247,26 @@ class TradingExpressionFactory:
         }
 
     @staticmethod
+    def _calculate_sma(candles: List[Candle]):
+        def sma(*args):
+            if not args or len(args) > 2:
+                raise ValueError("SMA expects 1 or 2 arguments: sma(period) or sma(series, period)")
+            n = args[1] if len(args) == 2 else args[0]
+            if not isinstance(n, int) or n <= 0:
+                raise ValueError("SMA period must be > 0")
+            if not candles or len(candles) < n:
+                return 0.0
+            return sum(float(c.close) for c in candles[-n:]) / n
+
+        return sma
+
+    @staticmethod
     def _calculate_ema(candles: List[Candle]):
-        def ema(n):
-            if n <= 0:
+        def ema(*args):
+            if not args or len(args) > 2:
+                raise ValueError("EMA expects 1 or 2 arguments: ema(period) or ema(series, period)")
+            n = args[1] if len(args) == 2 else args[0]
+            if not isinstance(n, int) or n <= 0:
                 raise ValueError("EMA period must be > 0")
             if not candles or len(candles) < n:
                 return 0.0

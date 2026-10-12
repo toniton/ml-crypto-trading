@@ -182,3 +182,11 @@ class TestStrategyWeightResolver:
         dt = datetime(2026, 10, 12, 8, 0, 0, tzinfo=timezone.utc)
         epoch = dt.timestamp()
         assert StrategyWeightResolver.resolve_effective_weight(active_strategy, epoch) == 0.8
+
+    def test_eod_daily_bar_active_on_weekday(self, active_strategy: StrategyConfig):
+        eod_monday = datetime(2026, 10, 12, 23, 59, 59, tzinfo=timezone.utc)
+        assert StrategyWeightResolver.resolve_effective_weight(active_strategy, eod_monday) == 0.8
+
+    def test_eod_daily_bar_inactive_on_weekend(self, active_strategy: StrategyConfig):
+        eod_saturday = datetime(2026, 10, 17, 23, 59, 59, tzinfo=timezone.utc)
+        assert StrategyWeightResolver.resolve_effective_weight(active_strategy, eod_saturday) == 0.0

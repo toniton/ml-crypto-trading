@@ -31,8 +31,8 @@ from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.recorder.market_data_store import MarketDataStore
 from src.server.services.dataset_service import DatasetService
 from src.trading.events.domain_events import TradeClosedEvent
+from src.trading.managers.manager_container import ManagerContainer
 from src.trading.managers.manager_factory import ManagerFactory
-from src.trading.session.session_manager import SessionManager
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
@@ -78,9 +78,13 @@ class BacktestRunner:
         engine, bus, managers = self._build_engine(requests, assets)
 
         results = []
-        for asset, request in zip(assets, requests):
-            session = BacktestSession(ticker_symbol=request.ticker_symbol, request=request)
-            results.append(self._run_session(session, asset, engine, bus, managers.session_manager))
+        try:
+            for asset, request in zip(assets, requests):
+                session = BacktestSession(ticker_symbol=request.ticker_symbol, request=request)
+                results.append(self._run_session(session, asset, engine, bus, managers))
+        finally:
+            engine.stop()
+            managers.order_manager.stop()
         return results
 
     def run_one(self, request: BacktestRequest) -> BacktestResult:
@@ -89,7 +93,11 @@ class BacktestRunner:
     def run_session(self, session: BacktestSession) -> BacktestResult:
         asset = self._resolve_asset(session.request.ticker_symbol)
         engine, bus, managers = self._build_engine([session.request], [asset])
-        return self._run_session(session, asset, engine, bus, managers.session_manager)
+        try:
+            return self._run_session(session, asset, engine, bus, managers)
+        finally:
+            engine.stop()
+            managers.order_manager.stop()
 
     def _build_engine(self, requests, assets):  # pylint: disable=too-many-locals
         first = requests[0]
@@ -127,7 +135,18 @@ class BacktestRunner:
         infrastructure = BacktestInfrastructure(
             clock=clock, datasets=datasets, bus=bus, execution_engine=execution_engine
         )
-        engine = BacktestEngine(scheduler, executor, infrastructure=infrastructure, assets=assets)
+        warmup_cutoff = (
+            int(first.start_time.timestamp())
+            if first.warmup_start_time is not None and first.start_time is not None
+            else None
+        )
+        engine = BacktestEngine(
+            scheduler,
+            executor,
+            infrastructure=infrastructure,
+            assets=assets,
+            warmup_cutoff_timestamp=warmup_cutoff,
+        )
 
         engine.start_application()
         return engine, bus, managers
@@ -138,8 +157,9 @@ class BacktestRunner:
             asset: Asset,
             engine: BacktestEngine,
             bus: BacktestEventBus,
-            session_manager: SessionManager,
+            managers: ManagerContainer,
     ) -> BacktestResult:
+        session_manager = managers.session_manager
         collector = BacktestResultCollector(bus)
         if session_manager.is_running.is_set():
             session_manager.end_session()

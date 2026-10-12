@@ -39,3 +39,6 @@ class BacktestDataSourceResolver:
 
         raise ValueError(f"Unsupported data source type: {request.source_type}")
 
+
+# Alias for shared simulation components (Backtest, Walk-Forward, Optimization)
+SimulationDataSourceResolver = BacktestDataSourceResolver

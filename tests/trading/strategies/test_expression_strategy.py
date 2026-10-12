@@ -106,3 +106,37 @@ def test_strategy_supports_indicator_functions():
         candles=candles,
     )
     assert result is True
+
+
+def test_strategy_supports_two_arg_ema():
+    strategy = _make_strategy("ema(close, 3) > 100")
+    candles = [
+        Candle(open="100", close=str(close), high="110", low="90", start_time=i)
+        for i, close in enumerate([105, 104, 103, 102, 101, 100])
+    ]
+
+    result = strategy.get_quorum(
+        trade_action=TradeAction.BUY,
+        ticker_symbol="BTC_USD",
+        trading_context=_make_context(),
+        market_data=_make_market(),
+        candles=candles,
+    )
+    assert result is True
+
+
+def test_strategy_supports_two_arg_sma():
+    strategy = _make_strategy("sma(close, 3) > 100")
+    candles = [
+        Candle(open="100", close=str(close), high="110", low="90", start_time=i)
+        for i, close in enumerate([105, 104, 103, 102, 101, 100])
+    ]
+
+    result = strategy.get_quorum(
+        trade_action=TradeAction.BUY,
+        ticker_symbol="BTC_USD",
+        trading_context=_make_context(),
+        market_data=_make_market(),
+        candles=candles,
+    )
+    assert result is True

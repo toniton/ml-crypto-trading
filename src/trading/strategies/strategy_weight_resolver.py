@@ -19,7 +19,22 @@ class StrategyWeightResolver:
     """Pure, deterministic resolver for strategy effective weights and trading windows."""
 
     @staticmethod
-    def is_window_active(window: TradingWindow, local_dt: datetime) -> bool:
+    def _is_end_of_day_bar(dt: datetime) -> bool:
+        return (dt.hour == 23 and dt.minute >= 50) or (dt.hour == 0 and dt.minute == 0 and dt.second == 0)
+
+    @classmethod
+    def is_window_active(
+            cls,
+            window: TradingWindow,
+            local_dt: datetime,
+            utc_dt: datetime | None = None,
+    ) -> bool:
+        if utc_dt is not None and cls._is_end_of_day_bar(utc_dt):
+            return Weekday(utc_dt.weekday()) in window.days
+
+        if cls._is_end_of_day_bar(local_dt):
+            return Weekday(local_dt.weekday()) in window.days
+
         current_weekday = Weekday(local_dt.weekday())
         current_time = local_dt.time()
 
@@ -51,7 +66,10 @@ class StrategyWeightResolver:
         tz = ZoneInfo(schedule.timezone)
         local_dt = utc_dt.astimezone(tz)
 
-        return any(cls.is_window_active(window, local_dt) for window in schedule.windows)
+        return any(
+            cls.is_window_active(window, local_dt, utc_dt)
+            for window in schedule.windows
+        )
 
     @classmethod
     def resolve_effective_weight(

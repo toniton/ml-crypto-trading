@@ -12,6 +12,9 @@ from src.database.repositories.providers.postgres_walk_forward_repository import
     PostgresWalkForwardRepository,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.backtest.data.backtest_data_source_resolver import (
+    SimulationDataSourceResolver,
+)
 from src.recorder.market_data_store import MarketDataStore
 from src.server.services.dataset_service import DatasetService
 from src.vcs.application.service import VCSService
@@ -30,6 +33,10 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
         self._vcs_service = vcs_service
         self._market_data_store = market_data_store
         self._dataset_service = dataset_service
+        self._resolver = SimulationDataSourceResolver(
+            market_data_store=self._market_data_store,
+            dataset_service=self._dataset_service,
+        )
 
     def start_run(self, spec: WalkForwardRunSpec) -> dict[str, Any]:
         vcs_ref = spec.configuration.vcs_commit_hash or "HEAD"
@@ -62,6 +69,7 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
             db_manager=self._db_manager,
             assets=asset_map,
             dynamic_quantity=trading_config.dynamic_quantity,
+            data_source_resolver=self._resolver,
         )
 
         thread = threading.Thread(
@@ -95,7 +103,10 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
                     repo.update_run_summary(
                         run_id=run_id,
                         status="FAILED",
-                        summary={"error": str(exc)},
+                        summary={
+                            "error": str(exc),
+                            "error_message": str(exc),
+                        },
                     )
             except Exception:  # pylint: disable=broad-except
                 pass
