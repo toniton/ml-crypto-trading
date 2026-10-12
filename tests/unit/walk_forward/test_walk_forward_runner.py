@@ -133,6 +133,33 @@ class TestWalkForwardRunner(unittest.TestCase):
         assert summary.profitable_fold_ratio >= 0.0
         assert summary.verdict != "NO_FOLDS_EVALUATED"
 
+    def test_runs_walk_forward_with_candidate_and_baseline_weights(self):
+        runner = WalkForwardRunner(
+            db_manager=self.db,
+            assets={self.asset.ticker_symbol: self.asset},
+            data_source_resolver=self.mock_resolver,
+        )
+
+        spec = WalkForwardRunSpec(
+            ticker_symbol=self.asset.ticker_symbol,
+            windows=WalkForwardWindowSpec(
+                train_candle_count=15,
+                test_candle_count=5,
+                step_size_candles=5,
+                warmup_candle_count=2,
+                window_mode=WindowMode.ROLLING,
+            ),
+            initial_balance=Decimal("10000.0"),
+            candidate_weights={"BreakoutBuy": 2.0},
+            baseline_weights={"BreakoutBuy": 0.5},
+        )
+
+        summary = runner.run(spec)
+        assert summary.total_folds > 0
+        first_fold = summary.fold_results[0]
+        assert first_fold.baseline_test_return_pct is not None
+        assert first_fold.equal_weight_test_return_pct is not None
+
 
 class TestWalkForwardApi(unittest.TestCase):
     def setUp(self):

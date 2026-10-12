@@ -166,9 +166,14 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             )
 
             baseline_test_return: Optional[float] = None
-            if spec.candidate_weights:
+            if spec.candidate_weights or spec.baseline_weights:
+                baseline_asset = (
+                    _apply_weights_to_asset(asset, spec.baseline_weights)
+                    if spec.baseline_weights
+                    else asset
+                )
                 baseline_metrics = self._execute_sub_session(
-                    asset=asset,
+                    asset=baseline_asset,
                     ds_req=ds_req,
                     start_time=fold.test_start,
                     end_time=fold.test_end,

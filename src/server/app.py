@@ -383,6 +383,8 @@ class ChatApp:
             db_manager=db_manager,
             vcs_service=vcs,
             backtest_service=backtest_branch_service,
+            backtest_app_service=backtest_service,
+            walk_forward_app_service=walk_forward_service,
         )
         app.state.experiment_service = experiment_service
         app.include_router(create_experiment_router())

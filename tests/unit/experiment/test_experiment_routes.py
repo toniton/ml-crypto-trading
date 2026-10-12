@@ -66,3 +66,30 @@ class TestExperimentRoutes:  # pylint: disable=attribute-defined-outside-init
 
         res_404 = self.client.delete("/api/v1/experiments/exp_missing")
         assert res_404.status_code == 404
+
+    def test_start_experiment_route(self):
+        self.mock_service.start_experiment.return_value = {
+            "experiment_id": "exp_start_1",
+            "status": "RUNNING",
+        }
+        res = self.client.post("/api/v1/experiments/exp_start_1/start")
+        assert res.status_code == 200
+        assert res.json()["status"] == "RUNNING"
+
+    def test_cancel_experiment_route(self):
+        self.mock_service.cancel_experiment.side_effect = lambda eid: eid == "exp_to_cancel"
+        res_ok = self.client.post("/api/v1/experiments/exp_to_cancel/cancel")
+        assert res_ok.status_code == 200
+        assert res_ok.json()["cancelled"] is True
+
+        res_404 = self.client.post("/api/v1/experiments/exp_missing/cancel")
+        assert res_404.status_code == 404
+
+    def test_retry_candidate_route(self):
+        self.mock_service.retry_candidate.return_value = {
+            "experiment_id": "exp_1",
+            "status": "RUNNING",
+        }
+        res = self.client.post("/api/v1/experiments/exp_1/candidates/cand_1/retry")
+        assert res.status_code == 200
+        assert res.json()["status"] == "RUNNING"

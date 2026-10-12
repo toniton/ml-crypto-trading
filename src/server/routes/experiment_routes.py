@@ -72,4 +72,47 @@ def create_experiment_router() -> APIRouter:
             )
         return {"experiment_id": experiment_id, "deleted": True}
 
+    @router.post("/{experiment_id}/start")
+    async def start_experiment_endpoint(experiment_id: str, request: Request):
+        srv: ExperimentApplicationService = request.app.state.experiment_service
+        try:
+            return await asyncio.to_thread(srv.start_experiment, experiment_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to start experiment: {exc}",
+            ) from exc
+
+    @router.post("/{experiment_id}/cancel")
+    async def cancel_experiment_endpoint(experiment_id: str, request: Request):
+        srv: ExperimentApplicationService = request.app.state.experiment_service
+        success = await asyncio.to_thread(srv.cancel_experiment, experiment_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Experiment '{experiment_id}' not found.",
+            )
+        return {"experiment_id": experiment_id, "cancelled": True}
+
+    @router.post("/{experiment_id}/candidates/{candidate_id}/retry")
+    async def retry_candidate_endpoint(experiment_id: str, candidate_id: str, request: Request):
+        srv: ExperimentApplicationService = request.app.state.experiment_service
+        try:
+            return await asyncio.to_thread(srv.retry_candidate, experiment_id, candidate_id)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to retry candidate: {exc}",
+            ) from exc
+
     return router
