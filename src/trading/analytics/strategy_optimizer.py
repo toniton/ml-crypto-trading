@@ -8,10 +8,12 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from api.interfaces.trade import Trade
+from api.interfaces.walk_forward import WalkForwardRunSpec, WalkForwardSummary
 from src.core.weekday import Weekday
 from src.trading.analytics.trade_attribution_service import TradeAttributionService
 from src.trading.strategies.models.strategy_schedule import TradingWindow
 from src.vcs.domain.diff import ConfigChange, ConfigurationProposal
+from src.walk_forward.runner.walk_forward_runner import WalkForwardRunner
 
 
 @dataclass(frozen=True)
@@ -641,6 +643,14 @@ class StrategyOptimizer:
             demonstrates_improvement=improves,
             verdict=verdict,
         )
+
+    @classmethod
+    def evaluate_walk_forward_baseline(
+            cls,
+            runner: WalkForwardRunner,
+            spec: WalkForwardRunSpec,
+    ) -> WalkForwardSummary:
+        return runner.run(spec)
 
     @classmethod
     def evaluate_split_sample_baseline(

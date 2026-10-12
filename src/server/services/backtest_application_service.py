@@ -17,6 +17,7 @@ from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.noop_database_manager import NoopDatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.recorder.market_data_store import MarketDataStore
@@ -42,7 +43,7 @@ class BacktestApplicationService(ApplicationLoggingMixin):
             dataset_service=self._dataset_service,
         )
 
-    def start_backtest_run(self, spec: BacktestRunSpec) -> BacktestSession:
+    def start_backtest_run(self, spec: BacktestRunSpec) -> BacktestSession:  # pylint: disable=too-many-locals
         vcs_ref = spec.configuration.vcs_commit_hash or "HEAD"
         raw_config = self._vcs_service.checkout(vcs_ref)
         trading_config = TradingConfig.model_validate(raw_config)
@@ -98,7 +99,7 @@ class BacktestApplicationService(ApplicationLoggingMixin):
 
         # Spawn background execution
         runner = BacktestRunner(
-            db_manager=self._db_manager,
+            db_manager=NoopDatabaseManager(),
             assets=asset_map,
             dynamic_quantity=trading_config.dynamic_quantity,
             data_source_resolver=self._resolver,

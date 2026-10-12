@@ -32,12 +32,93 @@ Join our Discord community to discuss strategies, report issues, and collaborate
 ## Core Features
 
 - 🧠 **AI Agent & LangGraph Workflows**: Interactive multi-agent assistant with specialized subgraphs for configuration tuning, on-demand backtesting, trading performance analytics, and a proactive Trading Oracle.
+- 🛰️ **Autonomous Trading Activity Monitoring**: A background *Starvation Watchdog* tracks per-asset activity (market data, strategy evaluation, signals, orders, executions) and autonomously raises a structured trading-activity anomaly when an asset goes silent — without waiting for a user prompt.
+- ⚙️ **Event-Driven Agent Automation**: The server is a thin transport layer; agentic automation (watchdog, action planning, approvals, investigation) communicates with it purely over an event bus. Events are projected into read models and the chat by an idempotent `AgentEventProjector`.
+- 🔐 **Asynchronous Human-in-the-Loop Actions & Approvals**: Mutating REST commands return `202 Accepted` with a `request_id`; the final outcome (commit hash, structured error codes like `BASE_COMMIT_CHANGED`) streams back over WebSocket as `agent_action_*` / `agent_approval_*` events.
 - 📐 **Dynamic Expression Engine**: Define position sizing and custom strategy logic using spreadsheet formulas (`rsi`, `sma`, `ema`, `balance`, `equity`, `pnl`, etc.).
 - 🤝 **BFT Consensus Engine**: Flexible multi-strategy quorum voting supporting 1-of-1 single strategy, 1-of-2 independent triggers, and 2-of-2 strict consensus.
-- 📊 **High-Fidelity Backtesting**: Multi-asset independent clock simulation with realistic execution frictions (slippage, latency, fees), drift detection, and tick replay.
-- 🌐 **REST API & Real-Time WebSockets**: FastAPI server providing order analytics, monthly heatmaps, latency metrics, configuration proposals, and live log streaming (`/api/v1/logs/ws`).
-- 📈 **Runtime Observability & Metrics**: Built-in collectors for CPU/memory usage, WebSocket health, order lifecycle timings, and exchange telemetry.
+- 📊 **High-Fidelity Backtesting**: Multi-asset independent clock simulation with realistic execution frictions (slippage, latency, fees), **live drift detection** (`BacktestDriftDetector` compares live journal fills against a backtest replay), walk-forward testing, and tick replay.
+- 🌐 **REST API & Real-Time WebSockets**: FastAPI server providing chat streaming, order analytics, monthly heatmaps, latency metrics, agent actions/approvals, configuration proposals, agent/log/health event streaming via WebSocket.
+- 📈 **Runtime Observability & Metrics**: Built-in collectors for CPU/memory usage, WebSocket health, order lifecycle timings, exchange telemetry, plus a runtime-debug **incident investigation** subsystem and a decision-history timeline.
 - 📜 **Configuration Version Control (VCS)**: Git-like history tracking, audit trail, and rollback for runtime configuration changes.
+
+---
+
+## Agent Automation & Monitoring
+
+The bot ships with an autonomous agent automation subsystem that detects trading anomalies and reacts **without manual prompting**.
+
+> **Design principle:** *Automation detects and decides; events communicate; projectors persist/read-model; the UI presents and requests decisions; VCS/Trading/Backtest perform the approved operation.*
+
+### Architecture
+
+```
+                           EventBus
+                              │
+              ┌───────────────┴────────────────┐
+              │                                │
+          Transport (server)              Automation
+              │                                │
+      AgentEventProjector            AutomationController
+    (read models + chat + WS)      (watchdog · planner · approvals)
+```
+
+- **Starvation Watchdog** (`src/agent/monitoring/`) — polls per-asset activity (market data, strategy evaluation, signals, orders, executions) tracked by the `AssetActivityTracker` and emits `trading_activity_anomaly_detected` when a configured asset exceeds its inactivity threshold (derived from the asset's trading schedule).
+- **AutomationController** (`src/agent/automation/`) — consumes anomaly + command events on a dedicated worker queue, runs a deterministic investigation (`InvestigateActivityAnomaly`), decides what to do, and drives the `AgentActionExecutor`.
+- **Safety classification** (`ActionSafetyClass`) — every autonomous action is classified `INFORMATIONAL · DIAGNOSTIC · PROPOSAL · STATE_CHANGING · TRADING_CONTROL`. Autonomous monitors are, by default, permitted only informational/diagnostic/proposal actions; **state-changing and trading-control actions are prohibited** unless explicitly granted.
+- **Projection** — the server's `AgentEventProjector` treats the event as the source of truth: it is **idempotent** (deduplicated by `event_id`) and materialises events into the conversation store, the chat UI, and in-memory action/approval read models. Events are also streamed to the frontend over the `/api/v1/agent/ws` WebSocket.
+
+### Autonomous workflow
+
+```
+Watchdog detects inactivity
+   │  TradingActivityAnomalyDetectedEvent
+   ▼
+InvestigateActivityAnomaly            # deterministic, no LLM
+   │  (market data? evaluations? signals? orders/executions?)
+   ▼
+Automation decision
+   ├── Send Drift Diagnostic chat message           (INFORMATIONAL)
+   ├── Raise an Approval Proposal to pause the asset (PROPOSAL, e.g. assets.X.enabled=false)
+   └── escalate to a runtime incident                (subject to authority)
+   │
+   ▼
+VCS / Backtest services perform the approved operation
+```
+
+### Agent REST endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `POST` | `/api/v1/agent/actions` | Plan/execute an agent action. Returns `202 {request_id, status:"accepted"}`; lifecycle streams over WS. |
+| `GET` | `/api/v1/agent/actions` | List actions (projected read model). |
+| `GET` | `/api/v1/agent/actions/{id}` | Get a single action. |
+| `GET` | `/api/v1/agent/approvals` | List approval requests. |
+| `GET` | `/api/v1/agent/approvals/{id}` | Get an approval request. |
+| `POST` | `/api/v1/agent/approvals/{id}/decision` | Approve/reject. Returns `202`; the commit hash or structured `error_code`/`error_message` arrives over WS. |
+| `POST` | `/api/v1/agent/backtest/compare` | Synchronous backtest drift/config comparison between two commits. |
+| `WS` | `/api/v1/agent/ws` | Streams `agent_message_created`, `agent_action_*`, `agent_approval_requested/resolved`, `trading_activity_anomaly_detected`. |
+
+---
+
+## REST API
+
+The FastAPI server exposes the following namespaces (full route inventory in `src/server/app.py`):
+
+| Namespace | Endpoints | Purpose |
+| :--- | :--- | :--- |
+| `/api/v1/chat` | `POST` | Streaming (SSE) conversational agent chat. |
+| `/api/v1/sessions` | `GET`, `GET /{id}`, `GET /{id}/messages` | Conversation sessions. |
+| `/api/v1/proposals/{message_id}/decision` | `POST` | Approve/reject an AI configuration proposal. |
+| `/api/v1/config`, `/api/v1/configuration` | `GET`/`POST`, `GET /options` | Read/commit runtime configuration. |
+| `/api/v1/vcs` | `GET /log`, `GET /checkout/{hash}` | Configuration history & checkout. |
+| `/api/v1/agent/...` | — | Agent actions, approvals, drift comparison, WebSocket. |
+| `/api/v1/backtests` | — | Run/list backtests, datasets, recorded data. |
+| `/api/v1/backtests/branches` | — | Backtest branch preview, create, merge. |
+| `/api/v1/runtime` | `GET` | Runtime metrics snapshot. |
+| `/api/v1/orders` | `GET /lifecycle`, `GET /{y}/{m}/{d}`, latency & week | Order analytics. |
+| `/api/v1/heatmap/orders/{y}/{m}` | `GET` | Monthly order heatmap. |
+| `/api/v1/logs/ws` | `WS` | Live log streaming. |
 
 ---
 
@@ -241,6 +322,7 @@ For comprehensive information, please explore the documentation in the `docs/` d
 
 - [Introduction & Features](docs/introduction.md) — System motivation and comprehensive feature breakdown.
 - [Core Concepts](docs/concepts.md) — Consensus model, Dynamic expressions, AI Agent architecture, and Backtesting.
+- [Agent Automation & Monitoring](docs/agent-automation.md) — Watchdog, event-driven automation, safety classification, and the async approval lifecycle.
 - [Configuration & System Properties](docs/configuration.md) — CLI flags, environment variables, and YAML schemas.
 - [Architecture & Diagrams](docs/architecture.md) — Manager layer, Agent graphs, API server, and system flow.
 - [Logging Architecture](docs/logging.md) — Application, trading, audit replay, and WebSocket log streaming.

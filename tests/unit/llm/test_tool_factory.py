@@ -11,6 +11,9 @@ from src.core.interfaces.trading_journal import TradingJournal
 from src.exchange.managers.rest_manager import RestManager
 from src.llm.tools.tool_factory import ToolFactory
 from src.metrics.services.metric_service import MetricService
+from src.server.services.walk_forward_application_service import (
+    WalkForwardApplicationService,
+)
 from src.server.timeline_projector import TimelineProjector
 from src.trading.accounts.account_manager import AccountManager
 from src.trading.consensus.consensus_manager import ConsensusManager
@@ -107,9 +110,15 @@ class TestToolFactory(unittest.TestCase):
         self.assertIn("trading_summary", tools)
         self.assertIn("analyze_trading_state", tools)
 
+    def test_build_walk_forward_tools(self):
+        wf_service = MagicMock(spec=WalkForwardApplicationService)
+        tools = ToolFactory.build_walk_forward_tools(wf_service)
+        self.assertIn("walk_forward", tools)
+
     def test_build_tool_map_and_filtering(self):
         managers = self._create_mock_managers()
         mock_asset = MagicMock(spec=Asset)
+        wf_service = MagicMock(spec=WalkForwardApplicationService)
 
         tool_map = ToolFactory.build_tool_map(
             managers=managers,
@@ -121,7 +130,10 @@ class TestToolFactory(unittest.TestCase):
             backtest_service=MagicMock(spec=BacktestService),
             metric_service=MagicMock(spec=MetricService),
             db_manager=MagicMock(spec=DatabaseManager),
+            walk_forward_service=wf_service,
         )
+
+        self.assertIn("walk_forward", tool_map)
 
         self.assertIn("trading_context", tool_map)
         self.assertIn("exchange_fees", tool_map)

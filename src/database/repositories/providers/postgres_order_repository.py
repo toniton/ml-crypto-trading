@@ -15,7 +15,8 @@ from src.database.repositories.order_repository import OrderRepository
 class PostgresOrderRepository(OrderRepository):
     TERMINAL_STATUSES = {
         OrderStatus.COMPLETED.value,
-        OrderStatus.CANCELLED.value
+        OrderStatus.CANCELLED.value,
+        OrderStatus.REJECTED.value,
     }
 
     def save(self, entity: Order):

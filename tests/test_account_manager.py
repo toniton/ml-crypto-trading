@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.asset_schedule import AssetSchedule
 from src.trading.accounts.account_manager import AccountManager
+from src.trading.events import OrderRejectedEvent
 from src.trading.session.session_manager import SessionManager
 
 
@@ -175,3 +176,23 @@ class TestAccountManager(unittest.TestCase):
             self.mock_session_manager.close_asset_balance.assert_called_once_with(
                 self.mock_asset.key, Decimal("1200.0")
             )
+
+    def test_get_balance_refreshes_when_stale(self):
+        provider_name = "BINANCE"
+        balance = AccountBalance(currency="USDT", available_balance=Decimal("100.0"))
+        self.account_manager.balances = {provider_name: {"USDT": balance}}
+        self.account_manager.last_balance_updates = {provider_name: {"USDT": 0.0}}
+
+        with patch.object(self.account_manager, "reconcile_account_balances") as mock_reconcile:
+            self.account_manager._get_balance("USDT", provider_name)
+            mock_reconcile.assert_called_once_with(provider_name)
+
+    def test_order_rejected_triggers_reconciliation(self):
+        mock_order = MagicMock()
+        mock_order.uuid = "ord-123"
+        mock_order.provider_name = "CRYPTO_DOT_COM"
+        event = OrderRejectedEvent(symbol="CRO_USD", order=mock_order, reason="Insufficient balance")
+
+        with patch.object(self.account_manager, "reconcile_account_balances") as mock_reconcile:
+            self.account_manager._on_order_rejected(event)
+            mock_reconcile.assert_called_once_with("CRYPTO_DOT_COM")

@@ -34,7 +34,11 @@ from src.llm.tools.strategy_votes_tool import StrategyVotesTool
 from src.llm.tools.trade_attribution_tool import TradeAttributionTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 from src.llm.tools.trading_health_tool import TradingHealthTool
+from src.llm.tools.walk_forward_tool import WalkForwardTool
 from src.metrics.services.metric_service import MetricService
+from src.server.services.walk_forward_application_service import (
+    WalkForwardApplicationService,
+)
 from src.server.timeline_projector import TimelineProjector
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.session.session_manager import SessionManager
@@ -168,6 +172,14 @@ class ToolFactory:
             )
         return tools
 
+    @staticmethod
+    def build_walk_forward_tools(
+            walk_forward_service: WalkForwardApplicationService,
+    ) -> Dict[str, BaseTool]:
+        return {
+            "walk_forward": WalkForwardTool(walk_forward_service=walk_forward_service),
+        }
+
     @classmethod
     # pylint: disable=too-many-arguments,too-many-positional-arguments
     def build_tool_map(
@@ -181,6 +193,7 @@ class ToolFactory:
             backtest_service: Optional[BacktestService] = None,
             metric_service: Optional[MetricService] = None,
             db_manager: Optional[DatabaseManager] = None,
+            walk_forward_service: Optional[WalkForwardApplicationService] = None,
     ) -> Dict[str, BaseTool]:
         tools = cls.build_core_trading_tools(
             managers=managers,
@@ -196,6 +209,8 @@ class ToolFactory:
         if db_manager is not None:
             config_svc = ConfigurationService(vcs) if vcs is not None else None
             tools.update(cls.build_attribution_tools(db_manager, managers.session_manager, config_svc))
+        if walk_forward_service is not None:
+            tools.update(cls.build_walk_forward_tools(walk_forward_service))
         if oracle_service is not None:
             tools.update(cls.build_oracle_tools(oracle_service, timeline_projector))
         return tools

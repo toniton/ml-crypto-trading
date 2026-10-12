@@ -12,11 +12,14 @@ from src.exchange.managers.rest_manager import RestManager
 from src.exchange.managers.websocket_manager import WebSocketManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.accounts.account_state import AccountState
-from src.trading.events import BalanceChangedEvent
+from src.events.message_event_bus import CallbackSubscription
+from src.trading.events import BalanceChangedEvent, OrderRejectedEvent
 from src.trading.session.session_manager import SessionManager
 
 
 class AccountManager(ApplicationLoggingMixin):
+    BALANCE_TTL_SECONDS = 60.0
+
     def __init__(
             self,
             assets: list[Asset],
@@ -34,6 +37,11 @@ class AccountManager(ApplicationLoggingMixin):
         self.balances: dict[str, dict[str, AccountBalance]] = {}
         self.last_balance_updates: dict[str, dict[str, float]] = defaultdict(dict)
         self._lock = threading.Lock()
+        if self._event_bus:
+            self._event_bus.subscribe(
+                OrderRejectedEvent.__name__,
+                CallbackSubscription(self._on_order_rejected),
+            )
 
     def get_account_state(self, exchange: str) -> AccountState:
         with self._lock:
@@ -171,12 +179,32 @@ class AccountManager(ApplicationLoggingMixin):
                 self.account_states[ex_key].last_reconciliation_time = time.time()
         return data
 
+    def _on_order_rejected(self, event: OrderRejectedEvent) -> None:
+        if event.order and event.order.provider_name:
+            self.app_logger.info(
+                "Order %s rejected on %s; reconciling account balances",
+                event.order.uuid,
+                event.order.provider_name,
+            )
+            try:
+                self.reconcile_account_balances(event.order.provider_name)
+            except Exception as exc:  # pylint: disable=broad-except
+                self.app_logger.warning(
+                    "Balance reconciliation failed following order rejection: %s", exc
+                )
+
     def _get_balance(self, currency_symbol: str, provider_name: str) -> AccountBalance:
         curr_key = currency_symbol.upper()
         ex_key = provider_name.upper()
 
         with self._lock:
-            should_refresh = ex_key not in self.balances or curr_key not in self.balances[ex_key]
+            last_update = self.last_balance_updates.get(ex_key, {}).get(curr_key, 0.0)
+            is_stale = (time.time() - last_update) > self.BALANCE_TTL_SECONDS
+            should_refresh = (
+                ex_key not in self.balances
+                or curr_key not in self.balances[ex_key]
+                or is_stale
+            )
 
         if should_refresh:
             self.reconcile_account_balances(provider_name)

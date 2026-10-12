@@ -231,6 +231,10 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             ),
             f"- **Net P&L Delta vs Baseline**: {eval_res.pnl_delta:+.2f} ({eval_res.pnl_improvement_pct:+.1f}%)",
             f"- **Verdict**: {eval_res.verdict}",
+            (
+                "- **Multi-Fold Walk-Forward Validation**: Run the `walk_forward` tool "
+                "for full chronological multi-fold out-of-sample simulation."
+            ),
         ]
 
     @classmethod

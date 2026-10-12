@@ -50,6 +50,10 @@ class EnvironmentConfig(BaseSettings):
     postgres_user: Optional[str] = None
     postgres_database: Optional[str] = None
     postgres_password: Optional[SecretStr] = None
+    postgres_pool_size: int = Field(default=20)
+    postgres_max_overflow: int = Field(default=20)
+    postgres_pool_timeout: float = Field(default=30.0)
+    postgres_pool_recycle: int = Field(default=1800)
     log_dir: str = Field(default='.')
     log_level: Optional[str] = Field(default=None)
 

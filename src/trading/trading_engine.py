@@ -82,6 +82,7 @@ class TradingEngine:
 
             if self._trading_executor is not None:
                 self._trading_executor.health_monitor.set_state(TradingHealthState.STOPPED)
+        self.thread_pool_executor.shutdown(wait=False)
         self._is_running.clear()
 
     def update_config(self, trading_config: TradingConfig) -> None:

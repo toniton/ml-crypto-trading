@@ -58,8 +58,10 @@ class OrderManager(ApplicationLoggingMixin):
         self._assets = []
         self._synchronous_execution = synchronous_execution
         self._stop_event = threading.Event()
-        self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
-        self._execute_thread.start()
+        self._execute_thread: Optional[threading.Thread] = None
+        if not self._synchronous_execution:
+            self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
+            self._execute_thread.start()
 
     def place_order(
             self,
@@ -97,8 +99,7 @@ class OrderManager(ApplicationLoggingMixin):
                             order=order,
                             reason=str(exc),
                         ))
-                        from src.agent.runtime_debug.error_extractor import ErrorExtractor
-
+                        from src.agent.runtime_debug.error_extractor import ErrorExtractor  # pylint: disable=import-outside-toplevel
                         runtime_err = ErrorExtractor.extract_runtime_error_from_order_exception(exc, order=order)
                         self._event_bus.publish(RuntimeErrorCapturedEvent(
                             event_payload=runtime_err.to_dict(),
@@ -106,6 +107,9 @@ class OrderManager(ApplicationLoggingMixin):
             except queue.Empty:
                 pass
         self.app_logger.info("Order processing thread exiting")
+
+    def stop(self) -> None:
+        self._stop_order_executions()
 
     def _stop_order_executions(self):
         self.app_logger.info("Stopping order executions...")
@@ -307,6 +311,15 @@ class OrderManager(ApplicationLoggingMixin):
                 order_repository = uow.get_repository(PostgresOrderRepository)
                 order_repository.upsert(order)
         except Exception as exc:
+            order.status = OrderStatus.REJECTED
+            try:
+                with self._database_manager.get_unit_of_work() as uow:
+                    order_repository = uow.get_repository(PostgresOrderRepository)
+                    order_repository.upsert(order)
+            except Exception as save_exc:  # pylint: disable=broad-except
+                self.app_logger.warning(
+                    f"Unable to persist rejected order {order.uuid}: {save_exc}"
+                )
             raise RuntimeError("Error executing and/or saving order:", order) from exc
 
     def _cancel_order(self, open_order: Order) -> None:

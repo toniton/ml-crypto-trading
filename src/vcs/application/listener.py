@@ -42,6 +42,8 @@ class RefChangeListener(ApplicationLoggingMixin):
 
     def _listen_loop(self) -> None:
         while not self._stop_event.is_set():
+            cursor = None
+            raw_conn = None
             try:
                 engine = self.db_manager.get_engine()
                 raw_conn = engine.raw_connection()
@@ -55,13 +57,21 @@ class RefChangeListener(ApplicationLoggingMixin):
                 active_conn = self._unwrap_connection(raw_conn)
                 self._consume_notifications(active_conn)
 
-                cursor.close()
-                raw_conn.close()
-
             except Exception as e:
                 if not self._stop_event.is_set():
                     self.app_logger.error(f"Error in LISTEN loop (reconnecting in 2s): {e}", exc_info=True)
                     time.sleep(2.0)
+            finally:
+                if cursor is not None:
+                    try:
+                        cursor.close()
+                    except Exception:
+                        pass
+                if raw_conn is not None:
+                    try:
+                        raw_conn.close()
+                    except Exception:
+                        pass
 
     @staticmethod
     def _unwrap_connection(raw_conn):

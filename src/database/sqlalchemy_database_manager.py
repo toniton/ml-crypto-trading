@@ -16,12 +16,26 @@ class SqlAlchemyDatabaseManager(DatabaseManager):
     def __init__(self):
         config = DatabaseConfig.get_instance()
         self.database_connection_endpoint = config.get_connection_endpoint()
+        self.pool_size = getattr(config, "postgres_pool_size", 20)
+        self.max_overflow = getattr(config, "postgres_max_overflow", 20)
+        self.pool_timeout = getattr(config, "postgres_pool_timeout", 30.0)
+        self.pool_recycle = getattr(config, "postgres_pool_recycle", 1800)
         self.engine = None
         self._session_factory = None
 
     def get_engine(self):
         if self.engine is None:
-            self.engine = create_engine(self.database_connection_endpoint)
+            if "sqlite" in self.database_connection_endpoint:
+                self.engine = create_engine(self.database_connection_endpoint)
+            else:
+                self.engine = create_engine(
+                    self.database_connection_endpoint,
+                    pool_size=self.pool_size,
+                    max_overflow=self.max_overflow,
+                    pool_timeout=self.pool_timeout,
+                    pool_recycle=self.pool_recycle,
+                    pool_pre_ping=True,
+                )
         return self.engine
 
     def _create_tables(self):

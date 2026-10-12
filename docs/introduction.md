@@ -29,6 +29,13 @@ An intelligent multi-agent conversational assistant powered by LangGraph with mo
 - **Trading Oracle**: Generates automated market summaries and performance insights.
 - **Multi-Model Support**: Integrated with Groq, Google Gemini, DeepSeek, and Ollama.
 
+### Autonomous Agent Automation & Monitoring
+- **Starvation Watchdog**: Background monitor that tracks per-asset activity (market data, strategy evaluation, signals, orders, executions) and emits `TradingActivityAnomalyDetectedEvent` when an asset goes silent beyond its schedule-derived threshold.
+- **Event-Driven Architecture**: The server is transport-only; an `AutomationController` on a dedicated worker queue owns action planning, approvals, and anomaly investigation, communicating with the server purely via events.
+- **Safety Classification**: Autonomous actions are gated by `ActionSafetyClass` (informational / diagnostic / proposal / state-changing / trading-control); state-changing and trading-control are prohibited for autonomous monitors by default.
+- **Asynchronous Approvals**: Decisions return `202 Accepted`; the commit hash or structured error code is streamed back over WebSocket.
+- **Live Drift Detection**: `BacktestDriftDetector` compares live journal fills against a backtest replay to flag execution drift.
+
 ### High-Fidelity Backtesting & Simulation
 - **Multi-Asset Simulation**: Independent virtual clocks (`BacktestClock`) simulating realistic multi-market conditions.
 - **Execution Friction Modeling**: Configurable order latency (`--backtest-latency-ms`), tick slippage (`--backtest-slippage-ticks`), and exchange fee rates (`--backtest-fee-rate`).
