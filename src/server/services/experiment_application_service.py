@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import threading
 import time
 import uuid
@@ -92,6 +93,19 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     description="Equal weight baseline across all registered strategies",
                 )
             )
+        if req.control_policy.enable_random_pick_control:
+            seeds = req.control_policy.random_seeds or [42]
+            for seed in seeds:
+                candidates.append(
+                    ExperimentCandidate(
+                        candidate_id=f"cand_random_control_{seed}",
+                        name=f"Random Control (Seed {seed})",
+                        candidate_type=CandidateType.RANDOM_CONTROL,
+                        random_seed=seed,
+                        strategy_weights={},
+                        description=f"Fixed-seed ({seed}) random selection policy baseline",
+                    )
+                )
 
         spec = ExperimentSpec(
             name=req.name,
@@ -288,6 +302,45 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         return self.get_experiment(experiment_id) or {}
 
+    @staticmethod
+    def _apply_candidate_weights(
+            cand: ExperimentCandidate,
+            strategies: list[Any],
+    ) -> Optional[tuple[list[Any], str]]:
+        if cand.candidate_type == CandidateType.EQUAL_WEIGHT:
+            updated = [s.model_copy(update={"weight": 1.0}) for s in strategies]
+            msg = f"Experiment candidate variant: Equal-Weight ({cand.candidate_id})"
+            return updated, msg
+
+        if cand.candidate_type == CandidateType.PROPOSED_WEIGHTS and cand.strategy_weights:
+            updated = [
+                s.model_copy(update={"weight": float(cand.strategy_weights[s.name])})
+                if s.name and s.name in cand.strategy_weights else s
+                for s in strategies
+            ]
+            msg = f"Experiment candidate variant: {cand.name} ({cand.candidate_id})"
+            return updated, msg
+
+        if cand.candidate_type == CandidateType.RANDOM_CONTROL:
+            rng = random.Random(cand.random_seed or 42)
+            raw_weights = [rng.uniform(0.1, 1.0) for _ in strategies]
+            total = sum(raw_weights) or 1.0
+            norm_weights = [round(w / total, 4) for w in raw_weights]
+            cand.strategy_weights = {
+                s.name: w for s, w in zip(strategies, norm_weights) if s.name
+            }
+            updated = [
+                s.model_copy(update={"weight": w})
+                for s, w in zip(strategies, norm_weights)
+            ]
+            msg = (
+                f"Experiment candidate variant: Random Control "
+                f"Seed {cand.random_seed} ({cand.candidate_id})"
+            )
+            return updated, msg
+
+        return None
+
     def _resolve_candidate_commit(
             self,
             branch_id: str,
@@ -309,39 +362,19 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             trading_config = TradingConfig.model_validate(raw_config)
             matched_asset = next((a for a in trading_config.assets if a.ticker_symbol == ticker_symbol), None)
 
-            if not matched_asset or not matched_asset.strategies:
-                cand.candidate_commit_hash = head_commit
-                return head_commit
-
-            if cand.candidate_type == CandidateType.EQUAL_WEIGHT:
-                matched_asset.strategies = [
-                    s.model_copy(update={"weight": 1.0}) for s in matched_asset.strategies
-                ]
-                commit = self._vcs_service.commit(
-                    content=trading_config,
-                    author="experiment-service",
-                    message=f"Experiment candidate variant: Equal-Weight ({cand.candidate_id})",
-                    ref=branch_ref,
-                )
-                cand.candidate_commit_hash = commit.hash
-                return commit.hash
-
-            if cand.candidate_type == CandidateType.PROPOSED_WEIGHTS and cand.strategy_weights:
-                updated_strats = []
-                for s in matched_asset.strategies:
-                    if s.name and s.name in cand.strategy_weights:
-                        updated_strats.append(s.model_copy(update={"weight": float(cand.strategy_weights[s.name])}))
-                    else:
-                        updated_strats.append(s)
-                matched_asset.strategies = updated_strats
-                commit = self._vcs_service.commit(
-                    content=trading_config,
-                    author="experiment-service",
-                    message=f"Experiment candidate variant: {cand.name} ({cand.candidate_id})",
-                    ref=branch_ref,
-                )
-                cand.candidate_commit_hash = commit.hash
-                return commit.hash
+            if matched_asset and matched_asset.strategies:
+                variant_update = self._apply_candidate_weights(cand, matched_asset.strategies)
+                if variant_update:
+                    updated_strats, commit_msg = variant_update
+                    matched_asset.strategies = updated_strats
+                    commit = self._vcs_service.commit(
+                        content=trading_config,
+                        author="experiment-service",
+                        message=commit_msg,
+                        ref=branch_ref,
+                    )
+                    cand.candidate_commit_hash = commit.hash
+                    return commit.hash
         except Exception as exc:  # pylint: disable=broad-except
             self.app_logger.warning(
                 "Could not synthesize committed variant for candidate %s: %s",

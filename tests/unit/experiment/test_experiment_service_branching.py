@@ -73,6 +73,49 @@ class TestExperimentServiceBranching:
         )
         mock_repo.save_experiment.assert_called_once()
 
+    def test_create_experiment_with_random_control_registers_candidate(self):
+        mock_db = MagicMock()
+        mock_uow = MagicMock()
+        mock_db.get_unit_of_work.return_value.__enter__.return_value = mock_uow
+        mock_repo = MagicMock()
+        mock_uow.get_repository.return_value = mock_repo
+
+        mock_vcs = MagicMock()
+        mock_vcs.resolve_commit_hash.return_value = "commit_sha_head_12345"
+
+        mock_backtest = MagicMock()
+        mock_backtest.create_branch.return_value = {
+            "branch_id": "exp-random-test-1111",
+            "ref_name": "refs/heads/backtest/exp-random-test-1111",
+            "source_commit_hash": "commit_sha_head_12345",
+        }
+
+        service = ExperimentApplicationService(
+            db_manager=mock_db,
+            vcs_service=mock_vcs,
+            backtest_service=mock_backtest,
+        )
+
+        req = CreateExperimentRequest(
+            name="Random Control Test",
+            ticker_symbol="BTC_USD",
+            test_selection=TestSelection.BACKTEST_ONLY,
+            control_policy=ControlPolicySpec(
+                enable_equal_weight_baseline=False,
+                enable_random_pick_control=True,
+                random_seeds=[42, 99],
+            ),
+        )
+
+        result = service.create_experiment(req)
+        candidates = result["spec"]["candidates"]
+
+        assert len(candidates) == 3
+        assert candidates[1]["candidate_type"] == CandidateType.RANDOM_CONTROL.value
+        assert candidates[1]["random_seed"] == 42
+        assert candidates[2]["candidate_type"] == CandidateType.RANDOM_CONTROL.value
+        assert candidates[2]["random_seed"] == 99
+
     def test_delete_experiment_removes_branch_and_record(self):
         mock_db = MagicMock()
         mock_uow = MagicMock()

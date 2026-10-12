@@ -1,4 +1,5 @@
 from __future__ import annotations
+# pylint: disable=duplicate-code
 
 from unittest.mock import MagicMock, patch
 
@@ -289,3 +290,40 @@ class TestExperimentOrchestration:  # pylint: disable=attribute-defined-outside-
         assert custom_entry["deltas"]["backtest_return_diff"] == 5.0
         # Walk forward delta: 14.0 - 8.0 = 6.0
         assert custom_entry["deltas"]["walk_forward_oos_return_diff"] == 6.0
+
+    def test_resolve_candidate_commit_random_control(self):
+        self.mock_vcs.resolve_commit_hash.return_value = "commit_head_ref_001"
+        mock_strat_1 = MagicMock()
+        mock_strat_1.name = "TrendFollower"
+        mock_strat_1.model_copy.side_effect = lambda update: MagicMock(name="TrendFollower", weight=update["weight"])
+
+        mock_strat_2 = MagicMock()
+        mock_strat_2.name = "MeanReversion"
+        mock_strat_2.model_copy.side_effect = lambda update: MagicMock(name="MeanReversion", weight=update["weight"])
+
+        mock_asset = MagicMock()
+        mock_asset.ticker_symbol = "BTC_USD"
+        mock_asset.strategies = [mock_strat_1, mock_strat_2]
+
+        mock_config = MagicMock()
+        mock_config.assets = [mock_asset]
+
+        mock_commit = MagicMock()
+        mock_commit.hash = "commit_random_hash_999"
+        self.mock_vcs.commit.return_value = mock_commit
+
+        patch_target = "src.server.services.experiment_application_service.TradingConfig.model_validate"
+        with patch(patch_target, return_value=mock_config):
+            cand = ExperimentCandidate(
+                candidate_id="cand_random_42",
+                name="Random Control (42)",
+                candidate_type=CandidateType.RANDOM_CONTROL,
+                random_seed=42,
+            )
+            resolved_hash = self.service._resolve_candidate_commit("exp-branch-1", "BTC_USD", cand)
+
+            assert resolved_hash == "commit_random_hash_999"
+            assert cand.strategy_weights is not None
+            assert "TrendFollower" in cand.strategy_weights
+            assert "MeanReversion" in cand.strategy_weights
+            self.mock_vcs.commit.assert_called_once()
