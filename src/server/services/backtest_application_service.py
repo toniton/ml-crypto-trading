@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
+import threading
 
 from api.interfaces.asset import Asset
 from api.interfaces.backtest_request import (
@@ -105,8 +106,20 @@ class BacktestApplicationService(ApplicationLoggingMixin):
             data_source_resolver=self._resolver,
         )
 
-        loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, self._execute_run, runner, session)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            loop.run_in_executor(None, self._execute_run, runner, session)
+        else:
+            thread = threading.Thread(
+                target=self._execute_run,
+                args=(runner, session),
+                daemon=True,
+            )
+            thread.start()
 
         return session
 
