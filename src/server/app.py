@@ -37,6 +37,8 @@ from src.server.services.backtest_application_service import BacktestApplication
 from src.server.services.backtest_service import BacktestService
 from src.server.services.walk_forward_application_service import WalkForwardApplicationService
 from src.server.routes.walk_forward_routes import create_walk_forward_router
+from src.server.services.experiment_application_service import ExperimentApplicationService
+from src.server.routes.experiment_routes import create_experiment_router
 from src.server.services.configuration_service import ConfigurationService
 from src.server.services.conversation_service import ConversationService
 from src.server.services.dataset_service import DatasetService, DatasetValidationError
@@ -376,6 +378,14 @@ class ChatApp:
 
         backtest_branch_service = BacktestService(db_manager)
         app.state.backtest_branch_service = backtest_branch_service
+
+        experiment_service = ExperimentApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            backtest_service=backtest_branch_service,
+        )
+        app.state.experiment_service = experiment_service
+        app.include_router(create_experiment_router())
 
         @app.get("/api/v1/backtests/branches")
         async def list_backtest_branches_endpoint():
