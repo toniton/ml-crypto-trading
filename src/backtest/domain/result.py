@@ -53,3 +53,4 @@ class BacktestResult:
     trades: list[Trade] = field(default_factory=list)
     strategy_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)
     commit_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)
+    regime_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)

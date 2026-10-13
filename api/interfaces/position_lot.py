@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from __future__ import annotations
 
 from decimal import Decimal
@@ -6,7 +7,7 @@ from uuid import uuid4
 from dataclasses import dataclass
 
 
-# pylint: disable=too-many-arguments,too-many-positional-arguments
+# pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-instance-attributes,too-many-locals,duplicate-code
 @dataclass
 class PositionLot:
     lot_id: str
@@ -21,6 +22,7 @@ class PositionLot:
     winning_strategy: Optional[str] = None
     strategy_votes: Optional[dict[str, str]] = None
     strategy_attributions: Optional[dict[str, float]] = None
+    regime: Optional[str] = None
 
     @classmethod
     def create(
@@ -37,6 +39,7 @@ class PositionLot:
             strategy_attributions: Optional[dict[str, float]] = None,
             slippage: Decimal = Decimal(0),
             slippage_per_unit: Optional[Decimal] = None,
+            regime: Optional[str] = None,
     ) -> PositionLot:
         computed_fee_per_unit = (fee / quantity) if quantity > Decimal(0) else Decimal(0)
         computed_slippage_per_unit = (
@@ -57,4 +60,5 @@ class PositionLot:
             winning_strategy=winning_strategy,
             strategy_votes=strategy_votes,
             strategy_attributions=strategy_attributions,
+            regime=regime,
         )

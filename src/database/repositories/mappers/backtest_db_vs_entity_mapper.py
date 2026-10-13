@@ -16,6 +16,10 @@ from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
 from src.database.dao.backtest_result_dao import BacktestResultDao
 from src.database.dao.backtest_session_dao import BacktestSessionDao
+from src.trading.analytics.trade_attribution_service import (
+    AttributionMetrics,
+    TradeAttributionService,
+)
 
 
 class BacktestDBVSEntityMapper:
@@ -149,11 +153,54 @@ class BacktestDBVSEntityMapper:
         return metrics_dict
 
     @staticmethod
+    def _serialize_attribution_metric(metric: AttributionMetrics) -> dict[str, Any]:
+        return {
+            "total_trades": metric.total_trades,
+            "winning_trades": metric.winning_trades,
+            "losing_trades": metric.losing_trades,
+            "win_rate_pct": metric.win_rate_pct,
+            "net_pnl": float(metric.net_pnl),
+            "profit_factor": metric.profit_factor,
+            "avg_return_pct": metric.avg_return_pct,
+            "max_win": float(metric.max_win),
+            "max_loss": float(metric.max_loss),
+        }
+
+    @staticmethod
+    def _serialize_strategy_metrics(result: BacktestResult) -> dict[str, Any]:
+        data: dict[str, Any] = {}
+        if result.strategy_attribution:
+            data["strategy_attribution"] = {
+                k: BacktestDBVSEntityMapper._serialize_attribution_metric(v)
+                for k, v in result.strategy_attribution.items()
+            }
+        if result.trades:
+            co_matrix, co_counts = TradeAttributionService.compute_co_voting_details(result.trades)
+            data["co_voting_matrix"] = co_matrix
+            data["co_voting_counts"] = co_counts
+            data["co_voting_by_regime"] = TradeAttributionService.compute_co_voting_by_regime(result.trades)
+            strat_regime = TradeAttributionService.attribute_strategy_by_regime(result.trades)
+            data["strategy_regime_matrix"] = {
+                s: {
+                    r: BacktestDBVSEntityMapper._serialize_attribution_metric(m)
+                    for r, m in r_map.items()
+                }
+                for s, r_map in strat_regime.items()
+            }
+            regimes = result.regime_attribution or TradeAttributionService.attribute_by_regime(result.trades)
+            data["regime_attribution"] = {
+                r: BacktestDBVSEntityMapper._serialize_attribution_metric(m)
+                for r, m in regimes.items()
+            }
+        return data
+
+    @staticmethod
     def result_to_dao(
             result: BacktestResult,
             metrics: Optional[BacktestMetrics | dict[str, Any]] = None,
     ) -> BacktestResultDao:
         metrics_dict = BacktestDBVSEntityMapper._serialize_metrics(metrics)
+        metrics_dict.update(BacktestDBVSEntityMapper._serialize_strategy_metrics(result))
         execution_dict = {
             "latency_ms": result.execution.latency_ms,
             "slippage_ticks": result.execution.slippage_ticks,

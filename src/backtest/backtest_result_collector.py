@@ -56,6 +56,7 @@ class BacktestResultCollector:
         trades = list(self._trades)
         strategy_attribution = TradeAttributionService.attribute_by_strategy(trades)
         commit_attribution = TradeAttributionService.attribute_by_commit(trades)
+        regime_attribution = TradeAttributionService.attribute_by_regime(trades)
 
         return BacktestResult(
             session_id=session.id,
@@ -71,6 +72,7 @@ class BacktestResultCollector:
             trades=trades,
             strategy_attribution=strategy_attribution,
             commit_attribution=commit_attribution,
+            regime_attribution=regime_attribution,
         )
 
     @staticmethod

@@ -74,22 +74,24 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         )
         branch_id = branch_info["branch_id"]
 
+        current_weights = self._load_asset_strategy_weights(base_commit, req.ticker_symbol)
         candidates: list[ExperimentCandidate] = [
             ExperimentCandidate(
                 candidate_id="cand_current",
                 name="Current Configuration",
                 candidate_type=CandidateType.CURRENT_CONFIG,
-                strategy_weights={},
+                strategy_weights=dict(current_weights),
                 description="Configuration as defined in experiment branch",
             )
         ]
         if req.control_policy.enable_equal_weight_baseline:
+            equal_weights = {k: 1.0 for k in current_weights} if current_weights else {}
             candidates.append(
                 ExperimentCandidate(
                     candidate_id="cand_equal_weight",
                     name="Equal-Weight Strategies",
                     candidate_type=CandidateType.EQUAL_WEIGHT,
-                    strategy_weights={},
+                    strategy_weights=equal_weights,
                     description="Equal weight baseline across all registered strategies",
                 )
             )
@@ -156,6 +158,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             "base_commit_hash": base_commit,
             "status": ExperimentStatus.DRAFT.value,
             "spec": spec_dict,
+            "candidates": spec_dict.get("candidates", []),
             "run_bindings": [],
             "report": None,
         }
@@ -220,10 +223,18 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             exp = repo.get_experiment(experiment_id)
             if not exp:
                 raise ValueError(f"Experiment '{experiment_id}' not found.")
-            if exp["status"] not in (ExperimentStatus.DRAFT.value, ExperimentStatus.FAILED.value):
-                raise ValueError(f"Cannot start experiment '{experiment_id}' in status '{exp['status']}'.")
+            if exp["status"] in (
+                ExperimentStatus.RUNNING.value,
+                ExperimentStatus.PREPARING.value,
+                ExperimentStatus.AGGREGATING.value,
+            ):
+                raise ValueError(
+                    f"Experiment '{experiment_id}' is already actively executing (status '{exp['status']}')."
+                )
 
             spec = ExperimentSpec.model_validate(exp["spec"])
+            for cand in spec.candidates:
+                cand.candidate_commit_hash = None
             bindings = self._dispatch_candidate_runs(spec, spec.candidates)
             spec_dict = spec.model_dump(mode="json")
 
@@ -323,15 +334,16 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         if cand.candidate_type == CandidateType.RANDOM_CONTROL:
             rng = random.Random(cand.random_seed or 42)
-            raw_weights = [rng.uniform(0.1, 1.0) for _ in strategies]
+            enabled_strats = [s for s in strategies if getattr(s, "enabled", True)]
+            raw_weights = [rng.uniform(0.1, 1.0) for _ in enabled_strats]
             total = sum(raw_weights) or 1.0
             norm_weights = [round(w / total, 4) for w in raw_weights]
             cand.strategy_weights = {
-                s.name: w for s, w in zip(strategies, norm_weights) if s.name
+                s.name: w for s, w in zip(enabled_strats, norm_weights) if s.name
             }
             updated = [
-                s.model_copy(update={"weight": w})
-                for s, w in zip(strategies, norm_weights)
+                s.model_copy(update={"weight": cand.strategy_weights.get(s.name, s.weight)})
+                for s in strategies
             ]
             msg = (
                 f"Experiment candidate variant: Random Control "
@@ -340,6 +352,21 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             return updated, msg
 
         return None
+
+    def _load_asset_strategy_weights(self, commit_hash: str, ticker: str) -> dict[str, float]:
+        try:
+            raw_config = self._vcs_service.checkout(commit_hash)
+            trading_config = TradingConfig.model_validate(raw_config)
+            matched = next((a for a in trading_config.assets if a.ticker_symbol == ticker), None)
+            if matched and matched.strategies:
+                return {
+                    s.name: float(s.weight)
+                    for s in matched.strategies
+                    if s.name and getattr(s, "enabled", True)
+                }
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return {}
 
     def _resolve_candidate_commit(
             self,
@@ -354,8 +381,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         head_commit = self._vcs_service.resolve_commit_hash(branch_ref)
 
         if cand.candidate_type == CandidateType.CURRENT_CONFIG:
+            cand.strategy_weights = self._load_asset_strategy_weights(head_commit, ticker_symbol)
             cand.candidate_commit_hash = head_commit
             return head_commit
+
+        if cand.candidate_type == CandidateType.EQUAL_WEIGHT:
+            weights = self._load_asset_strategy_weights(head_commit, ticker_symbol)
+            cand.strategy_weights = {k: 1.0 for k in weights}
 
         try:
             raw_config = self._vcs_service.checkout(head_commit)
@@ -491,7 +523,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     spec_dict = exp.get("spec", {})
                     spec = ExperimentSpec.model_validate(spec_dict)
                     repo.update_status(experiment_id, ExperimentStatus.AGGREGATING.value)
-                    report = self._compute_experiment_report(uow, spec, bindings)
+                    report = self._compute_experiment_report(uow, spec, bindings, self._vcs_service)
                     final_status = (
                         ExperimentStatus.FAILED.value
                         if (any_failed and all(b.get("status") == "FAILED" for b in bindings))
@@ -540,11 +572,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         return bt_done, wf_done, b_failed, error_msg
 
-    @staticmethod
+    @classmethod
     def _compute_experiment_report(  # pylint: disable=too-many-locals
+            cls,
             uow: Any,
             spec: ExperimentSpec,
             bindings: list[dict[str, Any]],
+            vcs_service: Optional[VCSService] = None,
     ) -> dict[str, Any]:
         bt_repo = uow.get_repository(PostgresBacktestRepository)
         wf_repo = uow.get_repository(PostgresWalkForwardRepository)
@@ -596,6 +630,11 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         total_cands = len(bindings)
         completed_cands = sum(1 for b in bindings if b.get("status") == "COMPLETED")
+        strat_attr, combo_matrix, strat_actions, strat_weights, strat_regime, regime_attr = (
+            cls._extract_strategy_matrices(
+                candidate_reports, spec=spec, vcs_service=vcs_service
+            )
+        )
 
         return {
             "summary": {
@@ -605,4 +644,252 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 "test_selection": spec.test_selection.value,
             },
             "candidates": candidate_reports,
+            "strategy_attribution": strat_attr,
+            "strategy_combination_matrix": combo_matrix,
+            "strategy_actions": strat_actions,
+            "strategy_weights": strat_weights,
+            "strategy_regime_matrix": strat_regime,
+            "regime_attribution": regime_attr,
         }
+
+    @classmethod
+    def _extract_strategy_matrices(  # pylint: disable=too-many-locals
+            cls,
+            candidate_reports: dict[str, Any],
+            spec: Optional[ExperimentSpec] = None,
+            vcs_service: Optional[VCSService] = None,
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, str], dict[str, float], dict[str, Any], dict[str, Any]]:
+        strat_attr: dict[str, Any] = {}
+        co_matrix: dict[str, Any] = {}
+        co_counts: dict[str, Any] = {}
+        co_by_regime: dict[str, Any] = {}
+        strat_regime_matrix: dict[str, Any] = {}
+        regime_attr: dict[str, Any] = {}
+
+        candidate_keys = ["cand_current", *candidate_reports.keys()]
+        for cid in candidate_keys:
+            rep = candidate_reports.get(cid)
+            if not rep or not rep.get("backtest"):
+                continue
+            bt = rep["backtest"]
+            if not strat_attr and bt.get("strategy_attribution"):
+                strat_attr = dict(bt["strategy_attribution"])
+            if not co_matrix and bt.get("co_voting_matrix"):
+                co_matrix = dict(bt["co_voting_matrix"])
+                co_counts = dict(bt.get("co_voting_counts", {}))
+            if not co_by_regime and bt.get("co_voting_by_regime"):
+                co_by_regime = dict(bt["co_voting_by_regime"])
+            if not strat_regime_matrix and bt.get("strategy_regime_matrix"):
+                strat_regime_matrix = dict(bt["strategy_regime_matrix"])
+            if not regime_attr and bt.get("regime_attribution"):
+                regime_attr = dict(bt["regime_attribution"])
+            if strat_attr and co_matrix and co_by_regime and strat_regime_matrix:
+                break
+
+        strat_actions, strat_weights = cls._resolve_strategy_metadata(spec, vcs_service)
+        cls._harmonize_strategy_matrices(
+            strat_attr, co_matrix, co_counts, co_by_regime, strat_regime_matrix,
+            strat_actions, strat_weights, spec, regime_attr
+        )
+
+        combination_spec = {
+            "matrix": co_matrix,
+            "counts": co_counts,
+            "by_regime": co_by_regime,
+        }
+        return strat_attr, combination_spec, strat_actions, strat_weights, strat_regime_matrix, regime_attr
+
+    @staticmethod
+    def _resolve_target_commit(
+            spec: Optional[ExperimentSpec],
+            vcs_service: Optional[VCSService],
+    ) -> Optional[str]:
+        if not spec or not vcs_service:
+            return None
+        if spec.branch_id:
+            try:
+                branch_ref = f"refs/heads/backtest/{spec.branch_id}"
+                return vcs_service.resolve_commit_hash(branch_ref)
+            except Exception:  # pylint: disable=broad-except
+                pass
+        return spec.base_commit_hash
+
+    @classmethod
+    def _resolve_strategy_metadata(
+            cls,
+            spec: Optional[ExperimentSpec],
+            vcs_service: Optional[VCSService],
+    ) -> tuple[dict[str, str], dict[str, float]]:
+        strat_actions: dict[str, str] = {}
+        strat_weights: dict[str, float] = {}
+        commit_hash = cls._resolve_target_commit(spec, vcs_service)
+        if commit_hash and vcs_service and spec:
+            try:
+                raw_config = vcs_service.checkout(commit_hash)
+                trading_config = TradingConfig.model_validate(raw_config)
+                matched = next(
+                    (a for a in trading_config.assets if a.ticker_symbol == spec.ticker_symbol),
+                    None,
+                )
+                if matched and matched.strategies:
+                    for s in matched.strategies:
+                        if s.name and getattr(s, "enabled", True):
+                            action_val = s.action.value if hasattr(s.action, "value") else str(s.action or "BUY")
+                            strat_actions[s.name] = action_val
+                            strat_weights[s.name] = float(s.weight)
+            except Exception:  # pylint: disable=broad-except
+                pass
+
+        if spec and not strat_weights:
+            for cand in spec.candidates:
+                if cand.candidate_type == CandidateType.CURRENT_CONFIG and cand.strategy_weights:
+                    strat_weights.update(cand.strategy_weights)
+                    break
+        return strat_actions, strat_weights
+
+    @staticmethod
+    def _resolve_strategy_action(name: str, strat_actions: dict[str, str]) -> str:
+        if name in strat_actions:
+            return strat_actions[name]
+        lower = name.lower()
+        if "buy" in lower or "long" in lower:
+            return "BUY"
+        if "sell" in lower or "short" in lower:
+            return "SELL"
+        return "ALL"
+
+    @classmethod
+    def _harmonize_strategy_attribution(
+            cls,
+            strat_attr: dict[str, Any],
+            all_names: set[str],
+            strat_actions: dict[str, str],
+            strat_weights: dict[str, float],
+    ) -> None:
+        for name in all_names:
+            action_val = cls._resolve_strategy_action(name, strat_actions)
+            weight_val = strat_weights.get(name, 1.0)
+            if name not in strat_attr:
+                strat_attr[name] = {
+                    "total_trades": 0,
+                    "winning_trades": 0,
+                    "losing_trades": 0,
+                    "win_rate_pct": 0.0,
+                    "net_pnl": 0.0,
+                    "profit_factor": 0.0,
+                    "avg_return_pct": 0.0,
+                    "max_win": 0.0,
+                    "max_loss": 0.0,
+                    "action": action_val,
+                    "weight": weight_val,
+                }
+            else:
+                if "action" not in strat_attr[name]:
+                    strat_attr[name]["action"] = action_val
+                strat_attr[name]["weight"] = weight_val
+
+    @staticmethod
+    def _harmonize_co_voting_matrix(
+            co_matrix: dict[str, Any],
+            co_counts: dict[str, Any],
+            strat_attr: dict[str, Any],
+            all_names: set[str],
+    ) -> None:
+        for r in all_names:
+            if r not in co_matrix:
+                co_matrix[r] = {}
+                co_counts[r] = {}
+            for c in all_names:
+                if c not in co_matrix[r]:
+                    if r == c:
+                        co_matrix[r][c] = 1.0
+                        co_counts[r][c] = strat_attr.get(r, {}).get("total_trades", 0)
+                    else:
+                        co_matrix[r][c] = 0.0
+                        co_counts[r][c] = 0
+
+    @classmethod
+    def _harmonize_co_by_regime(
+            cls,
+            co_by_regime: dict[str, Any],
+            standard_regimes: tuple[str, ...],
+            strat_attr: dict[str, Any],
+            all_names: set[str],
+    ) -> None:
+        for reg in standard_regimes:
+            if reg not in co_by_regime:
+                co_by_regime[reg] = {"matrix": {}, "counts": {}}
+
+        for r_data in co_by_regime.values():
+            if isinstance(r_data, dict) and "matrix" in r_data and "counts" in r_data:
+                cls._harmonize_co_voting_matrix(r_data["matrix"], r_data["counts"], strat_attr, all_names)
+
+    @classmethod
+    def _harmonize_regime_matrices(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            cls,
+            co_by_regime: dict[str, Any],
+            strat_regime_matrix: dict[str, Any],
+            strat_attr: dict[str, Any],
+            all_names: set[str],
+            regime_attr: Optional[dict[str, Any]] = None,
+    ) -> None:
+        standard_regimes = (
+            "TRENDING_UP",
+            "TRENDING_DOWN",
+            "HIGH_VOLATILITY",
+            "LOW_VOLATILITY",
+            "RANGING",
+        )
+        cls._harmonize_co_by_regime(co_by_regime, standard_regimes, strat_attr, all_names)
+
+        known_regimes: set[str] = set(standard_regimes)
+        for r_map in strat_regime_matrix.values():
+            if isinstance(r_map, dict):
+                known_regimes.update(r_map.keys())
+
+        empty_metrics = {
+            "total_trades": 0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "win_rate_pct": 0.0,
+            "net_pnl": 0.0,
+            "profit_factor": 0.0,
+            "avg_return_pct": 0.0,
+            "max_win": 0.0,
+            "max_loss": 0.0,
+        }
+
+        for name in all_names:
+            if name not in strat_regime_matrix:
+                strat_regime_matrix[name] = {}
+            for regime in known_regimes:
+                if regime not in strat_regime_matrix[name]:
+                    strat_regime_matrix[name][regime] = dict(empty_metrics)
+
+        if regime_attr is not None:
+            for reg in standard_regimes:
+                if reg not in regime_attr:
+                    regime_attr[reg] = dict(empty_metrics)
+
+    @classmethod
+    def _harmonize_strategy_matrices(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            cls,
+            strat_attr: dict[str, Any],
+            co_matrix: dict[str, Any],
+            co_counts: dict[str, Any],
+            co_by_regime: dict[str, Any],
+            strat_regime_matrix: dict[str, Any],
+            strat_actions: dict[str, str],
+            strat_weights: dict[str, float],
+            spec: Optional[ExperimentSpec],
+            regime_attr: Optional[dict[str, Any]] = None,
+    ) -> None:
+        all_names = set(strat_attr.keys()) | set(strat_actions.keys()) | set(strat_weights.keys())
+        if spec:
+            for cand in spec.candidates:
+                if cand.strategy_weights:
+                    all_names.update(cand.strategy_weights.keys())
+
+        cls._harmonize_strategy_attribution(strat_attr, all_names, strat_actions, strat_weights)
+        cls._harmonize_co_voting_matrix(co_matrix, co_counts, strat_attr, all_names)
+        cls._harmonize_regime_matrices(co_by_regime, strat_regime_matrix, strat_attr, all_names, regime_attr)

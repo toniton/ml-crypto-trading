@@ -40,6 +40,7 @@ class OrderDBVSEntityMapper:
             strategy_attributions=(
                 strategy_attributions if isinstance(strategy_attributions, dict) else None
             ),
+            regime=metadata.get("regime"),
         )
 
     @staticmethod
@@ -57,6 +58,8 @@ class OrderDBVSEntityMapper:
             metadata["strategy_votes"] = order.strategy_votes
         if order.strategy_attributions is not None:
             metadata["strategy_attributions"] = order.strategy_attributions
+        if order.regime is not None:
+            metadata["regime"] = order.regime
 
         return OrderDao(
             uuid=order.uuid,

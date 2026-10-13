@@ -8,6 +8,7 @@ from pydantic.dataclasses import dataclass
 from api.interfaces.trade_action import OrderStatus, TradeAction
 
 
+# pylint: disable=too-many-instance-attributes
 @dataclass
 class Order:
     uuid: str
@@ -27,6 +28,7 @@ class Order:
     strategy_attributions: Optional[dict[str, float]] = None
     slippage: Optional[Decimal] = None
     decision_id: Optional[str] = None
+    regime: Optional[str] = None
 
     def model_dump_json(self) -> str:
         return RootModel[Order](self).model_dump_json()

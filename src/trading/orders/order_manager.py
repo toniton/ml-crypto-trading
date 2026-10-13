@@ -4,7 +4,7 @@ import queue
 import threading
 from decimal import Decimal
 from queue import Queue
-from typing import Optional
+from typing import Any, Optional
 from uuid import uuid4
 
 from api.interfaces.asset import Asset
@@ -63,7 +63,7 @@ class OrderManager(ApplicationLoggingMixin):
             self._execute_thread = threading.Thread(target=self.process_order_queue, daemon=True)
             self._execute_thread.start()
 
-    def place_order(
+    def place_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             exchange: str,
             uuid: str,
@@ -72,9 +72,17 @@ class OrderManager(ApplicationLoggingMixin):
             price: Decimal,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         self._rest_manager.place_order(
-            exchange, uuid, ticker_symbol, quantity, price, trade_action, created_time
+            exchange,
+            uuid,
+            ticker_symbol,
+            quantity,
+            price,
+            trade_action,
+            created_time=created_time,
+            metadata=metadata,
         )
 
     def get_order(self, exchange: str, uuid: str) -> Order:
@@ -257,7 +265,7 @@ class OrderManager(ApplicationLoggingMixin):
                 f"Failed to mark order {order.uuid} as reconciliation-required: {exc}"
             )
 
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def open_order(
             self, ticker_symbol: str, provider_name: str, quantity: str,
             price: Decimal, trade_action: TradeAction,
@@ -266,6 +274,7 @@ class OrderManager(ApplicationLoggingMixin):
             strategy_votes: Optional[dict[str, str]] = None,
             strategy_attributions: Optional[dict[str, float]] = None,
             decision_id: Optional[str] = None,
+            regime: Optional[str] = None,
     ):
         resolved_commit_hash = (
                 commit_hash
@@ -284,6 +293,7 @@ class OrderManager(ApplicationLoggingMixin):
             strategy_votes=strategy_votes,
             strategy_attributions=strategy_attributions,
             decision_id=decision_id,
+            regime=regime,
         )
         with self._intent_lock:
             self._in_flight_orders[order.uuid] = (order.ticker_symbol, order.trade_action)
@@ -298,6 +308,13 @@ class OrderManager(ApplicationLoggingMixin):
         try:
             if not order.commit_hash and self._session_manager:
                 order.commit_hash = self._session_manager.get_current_commit_hash()
+            metadata = {
+                "commit_hash": order.commit_hash or "HEAD",
+                "winning_strategy": order.winning_strategy,
+                "strategy_votes": order.strategy_votes,
+                "strategy_attributions": order.strategy_attributions,
+                "regime": order.regime,
+            }
             self.place_order(
                 order.provider_name,
                 order.uuid,
@@ -306,6 +323,7 @@ class OrderManager(ApplicationLoggingMixin):
                 order.price,
                 order.trade_action,
                 order.created_time,
+                metadata=metadata,
             )
             with self._database_manager.get_unit_of_work() as uow:
                 order_repository = uow.get_repository(PostgresOrderRepository)

@@ -179,6 +179,7 @@ class PostgresExperimentRepository(ExperimentRepository):
             "base_commit_hash": row.base_commit_hash,
             "status": row.status,
             "spec": row.spec or {},
+            "candidates": (row.spec or {}).get("candidates", []),
             "run_bindings": row.run_bindings or [],
             "report": row.report,
             "created_at": row.created_at.isoformat() if row.created_at else None,

@@ -90,6 +90,7 @@ class ExperimentRecord(BaseModel):
     base_commit_hash: str
     status: ExperimentStatus = ExperimentStatus.DRAFT
     spec: ExperimentSpec
+    candidates: list[ExperimentCandidate] = Field(default_factory=list)
     run_bindings: list[CandidateRunBinding] = Field(default_factory=list)
     report: Optional[dict[str, Any]] = None
     error_message: Optional[str] = None

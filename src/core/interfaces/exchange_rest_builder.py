@@ -3,7 +3,7 @@ from __future__ import annotations
 import abc
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 
 from pydantic import BaseModel
 
@@ -50,7 +50,7 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def create_order(
+    def create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             uuid: str,
             ticker_symbol: str,
@@ -58,6 +58,7 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
             price: Decimal,
             trade_action,
             created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> 'ExchangeRestBuilder[T, None]':
         raise NotImplementedError()
 

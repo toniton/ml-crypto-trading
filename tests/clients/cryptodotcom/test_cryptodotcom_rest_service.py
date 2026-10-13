@@ -1,6 +1,8 @@
+from decimal import Decimal
 import unittest
 from unittest.mock import MagicMock, patch
 
+from api.interfaces.trade_action import TradeAction
 from src.configuration.exchanges_config import ExchangesConfig
 from src.exchange.clients.cryptodotcom.cryptodotcom_rest_builder import CryptoDotComRestBuilder
 from src.exchange.clients.cryptodotcom.cryptodotcom_rest_service import CryptoDotComRestService
@@ -16,7 +18,10 @@ class TestCryptoDotComRestService(unittest.TestCase):
         self.config.crypto_dot_com.secret_key.get_secret_value.return_value = "test_secret"
 
         # Patching ExchangesConfig class in the service module
-        patcher = patch('src.exchange.clients.cryptodotcom.cryptodotcom_rest_service.ExchangesConfig', return_value=self.config)
+        patcher = patch(
+            'src.exchange.clients.cryptodotcom.cryptodotcom_rest_service.ExchangesConfig',
+            return_value=self.config
+        )
         self.mock_get_config = patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -68,3 +73,52 @@ class TestCryptoDotComRestBuilderOpenOrders(unittest.TestCase):
         builder = CryptoDotComRestBuilder()
         builder.get_open_orders()
         self.assertIsNotNone(builder.mapper())
+
+
+class TestCryptoDotComRestBuilderCreateOrder(unittest.TestCase):
+    def test_create_order_sets_correct_endpoint(self):
+        builder = CryptoDotComRestBuilder()
+        builder.create_order(
+            uuid="cb18b6d9-8fa6-46d2-b072-a781a574990e",
+            ticker_symbol="CRO_USD",
+            quantity="19",
+            price=Decimal("0.058750"),
+            trade_action=TradeAction.BUY,
+        )
+        self.assertEqual(builder.get_endpoint().path, "private/create-order")
+
+    def test_create_order_sets_correct_params(self):
+        builder = CryptoDotComRestBuilder()
+        builder.create_order(
+            uuid="cb18b6d9-8fa6-46d2-b072-a781a574990e",
+            ticker_symbol="CRO_USD",
+            quantity="19",
+            price=Decimal("0.058750"),
+            trade_action=TradeAction.BUY,
+        )
+        self.assertEqual(builder.get_params(), {
+            "instrument_name": "CRO_USD",
+            "side": "BUY",
+            "type": "LIMIT",
+            "price": "0.058750",
+            "quantity": "19",
+            "client_oid": "cb18b6d9-8fa6-46d2-b072-a781a574990e",
+            "time_in_force": "GOOD_TILL_CANCEL",
+        })
+
+    def test_create_order_accepts_audit_metadata_kwargs_without_error(self):
+        builder = CryptoDotComRestBuilder()
+        builder.create_order(
+            uuid="cb18b6d9-8fa6-46d2-b072-a781a574990e",
+            ticker_symbol="CRO_USD",
+            quantity="19",
+            price=Decimal("0.058750"),
+            trade_action=TradeAction.BUY,
+            metadata={
+                "commit_hash": "f065cc98755278e106e0f5ea5e0064a39df2c7706645e04c2eb85744e47bd18a",
+                "winning_strategy": "BreakoutBuy",
+                "strategy_votes": {"HammerAccumulationStrategy": "TRUE", "BreakoutBuy": "TRUE"},
+                "strategy_attributions": {"HammerAccumulationStrategy": 0.5, "BreakoutBuy": 0.5},
+            },
+        )
+        self.assertEqual(builder.get_params()["client_oid"], "cb18b6d9-8fa6-46d2-b072-a781a574990e")

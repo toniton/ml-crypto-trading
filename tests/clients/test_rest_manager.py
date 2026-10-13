@@ -2,6 +2,8 @@ import unittest
 from decimal import Decimal
 from unittest.mock import MagicMock
 
+from circuitbreaker import CircuitBreakerMonitor
+
 from api.interfaces.trade_action import TradeAction
 from src.core.interfaces.exchange_rest_service import ExchangeRestService
 from src.exchange.managers.rest_manager import RestManager
@@ -13,6 +15,10 @@ class TestRestManager(unittest.TestCase):
         self.mock_service = MagicMock(spec=ExchangeRestService)
         self.mock_service.get_provider_name.return_value = "TEST_EXCHANGE"
         self.rest_manager.register_service(self.mock_service)
+
+    def tearDown(self):
+        for cb in CircuitBreakerMonitor.get_circuits():
+            cb.reset()
 
     def test_get_market_data_encapsulation(self):
         mock_builder = self.mock_service.builder.return_value
@@ -84,7 +90,12 @@ class TestRestManager(unittest.TestCase):
         )
 
         mock_builder.create_order.assert_called_once_with(
-            "uuid1", "BTC/USDT", "1.0", Decimal("50000"), TradeAction.BUY, None
+            "uuid1",
+            "BTC/USDT",
+            "1.0",
+            Decimal("50000"),
+            TradeAction.BUY,
+            None,
+            metadata=None,
         )
         self.mock_service.execute.assert_called_once()
-

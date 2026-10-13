@@ -1,4 +1,5 @@
 import functools
+# pylint: disable=duplicate-code
 import time
 from decimal import Decimal
 from typing import Any, List, Optional
@@ -118,7 +119,7 @@ class RestManager(ExchangeRestManager, RestRegistry):
         return service.execute(builder)
 
     @_instrument_rest("place_order")
-    def place_order(
+    def place_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             exchange: str,
             uuid: str,
@@ -127,10 +128,12 @@ class RestManager(ExchangeRestManager, RestRegistry):
             price: Decimal,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         service = self.get_service(exchange)
         builder = service.builder().create_order(
-            uuid, ticker_symbol, quantity, price, trade_action, created_time
+            uuid, ticker_symbol, quantity, price, trade_action, created_time,
+            metadata=metadata,
         )
         service.execute(builder)
 

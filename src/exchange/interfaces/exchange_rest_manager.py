@@ -1,9 +1,10 @@
 from __future__ import annotations
+# pylint: disable=duplicate-code
 
 import abc
 from abc import ABC
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
@@ -43,7 +44,7 @@ class ExchangeRestManager(ABC):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def place_order(
+    def place_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self, exchange: str,
             uuid: str,
             ticker_symbol: str,
@@ -51,6 +52,7 @@ class ExchangeRestManager(ABC):
             price: str,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         raise NotImplementedError()
 

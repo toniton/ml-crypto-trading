@@ -56,6 +56,40 @@ class TestCCXTRestExecution(unittest.TestCase):
             params={'clientOrderId': 'test-uuid'}
         )
 
+    def test_execute_create_order_with_order_metadata_kwargs(self):
+        self.mock_exchange.create_order.return_value = {
+            'id': '123',
+            'clientOrderId': 'test-uuid',
+            'symbol': 'BTC/USDT',
+            'price': 50000,
+            'amount': 1.5,
+            'side': 'buy',
+            'timestamp': 1600000000000,
+            'status': 'open'
+        }
+        self.builder.create_order(
+            uuid='test-uuid',
+            ticker_symbol='BTC/USDT',
+            quantity='1.5',
+            price=Decimal('50000'),
+            trade_action=TradeAction.BUY,
+            metadata={
+                'commit_hash': 'abc1234',
+                'winning_strategy': 'TrendBuy',
+                'strategy_votes': {'TrendBuy': 'TRUE'},
+                'strategy_attributions': {'TrendBuy': 1.0},
+            },
+        )
+        self.service.execute(self.builder)
+        self.mock_exchange.create_order.assert_called_once_with(
+            symbol='BTC/USDT',
+            type='limit',
+            side='buy',
+            amount=1.5,
+            price=50000.0,
+            params={'clientOrderId': 'test-uuid'}
+        )
+
     def test_execute_get_open_orders(self):
         self.mock_exchange.fetch_open_orders.return_value = [
             {

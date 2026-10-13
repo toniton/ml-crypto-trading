@@ -23,6 +23,7 @@ from src.trading.session.fifo_trade_matcher import FifoTradeMatcher
 from src.vcs.application import VCSService
 
 
+# pylint: disable=too-many-public-methods
 class SessionManager:
     def __init__(self, event_bus: EventBus, config_vcs: Optional[VCSService] = None):
         self.current_session: Optional[TradingSession] = None
@@ -231,6 +232,7 @@ class SessionManager:
             strategy_votes=order.strategy_votes,
             strategy_attributions=order.strategy_attributions,
             slippage=slippage,
+            regime=order.regime or ctx.regime,
         )
         ctx.position_lots.append(lot)
         if quantity > Decimal(0):
@@ -266,7 +268,7 @@ class SessionManager:
             ctx.avg_entry_price = Decimal(0)
         return completed_trades
 
-    def _match_fifo_lots(
+    def _match_fifo_lots(  # pylint: disable=too-many-locals
             self,
             ctx: TradingContext,
             order: Order,
@@ -289,6 +291,7 @@ class SessionManager:
             strategy_votes=order.strategy_votes,
             strategy_attributions=order.strategy_attributions,
             exit_slippage=slippage,
+            exit_regime=order.regime or ctx.regime,
         )
         for trade in completed_trades:
             ctx.trades.append(trade)

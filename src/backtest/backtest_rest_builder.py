@@ -47,7 +47,7 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
         self.params = {"ticker_symbol": ticker_symbol}
         return self
 
-    def create_order(
+    def create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             uuid: str,
             ticker_symbol: str,
@@ -55,6 +55,7 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
             price: Decimal,
             trade_action,
             created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> 'BacktestRestBuilder[T, None]':
         self.method_name = "create_order"
         self.params = {
@@ -64,6 +65,7 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
             "price": str(price),
             "trade_action": trade_action,
             "created_time": created_time,
+            "metadata": metadata or {},
         }
         return self
 

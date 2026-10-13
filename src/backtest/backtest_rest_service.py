@@ -92,7 +92,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             taker_fee_pct=Decimal("0.0"),
         )
 
-    def _handle_create_order(
+    def _handle_create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             uuid: str,
             ticker_symbol: str,
@@ -100,8 +100,9 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             price: str,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
-            commit_hash: str = "HEAD",
+            metadata: Optional[dict[str, Any]] = None,
     ) -> Order:
+        meta = metadata or {}
         executed_at = created_time if created_time is not None else self.clock.now(ticker_symbol)
         order = Order(
             uuid=uuid or str(uuid4()),
@@ -112,7 +113,10 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             provider_name=self.get_provider_name(),
             trade_action=trade_action,
             created_time=executed_at,
-            commit_hash=commit_hash,
+            commit_hash=meta.get("commit_hash", "HEAD"),
+            winning_strategy=meta.get("winning_strategy"),
+            strategy_votes=meta.get("strategy_votes"),
+            strategy_attributions=meta.get("strategy_attributions"),
         )
         self.account.orders.append(order)
         self.execution_engine.submit(order, ticker_symbol)

@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from __future__ import annotations
 
 from decimal import Decimal
@@ -6,7 +7,7 @@ from uuid import uuid4
 from dataclasses import dataclass
 
 
-# pylint: disable=too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals
+# pylint: disable=too-many-instance-attributes,too-many-arguments,too-many-positional-arguments,too-many-locals,duplicate-code
 @dataclass(frozen=True)
 class Trade:
     trade_id: str
@@ -30,6 +31,9 @@ class Trade:
     entry_strategy_attributions: Optional[dict[str, float]] = None
     exit_strategy_attributions: Optional[dict[str, float]] = None
     exit_winning_strategy: Optional[str] = None
+    exit_strategy_votes: Optional[dict[str, str]] = None
+    entry_regime: Optional[str] = None
+    exit_regime: Optional[str] = None
 
     @classmethod
     def create(
@@ -52,6 +56,9 @@ class Trade:
             entry_strategy_attributions: Optional[dict[str, float]] = None,
             exit_strategy_attributions: Optional[dict[str, float]] = None,
             exit_winning_strategy: Optional[str] = None,
+            exit_strategy_votes: Optional[dict[str, str]] = None,
+            entry_regime: Optional[str] = None,
+            exit_regime: Optional[str] = None,
     ) -> Trade:
         gross_pnl = (exit_price - entry_price) * quantity
         total_fees = entry_fee + exit_fee
@@ -82,4 +89,7 @@ class Trade:
             entry_strategy_attributions=entry_strategy_attributions,
             exit_strategy_attributions=exit_strategy_attributions,
             exit_winning_strategy=exit_winning_strategy,
+            exit_strategy_votes=exit_strategy_votes,
+            entry_regime=entry_regime,
+            exit_regime=exit_regime,
         )

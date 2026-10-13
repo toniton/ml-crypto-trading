@@ -103,8 +103,22 @@ class TradeAttributionService:
     def attribute_by_strategy(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
         grouped: dict[str, list[Trade]] = defaultdict(list)
         for trade in trades:
-            strategy = trade.winning_strategy or "UNKNOWN"
-            grouped[strategy].append(trade)
+            strats: set[str] = set()
+            if trade.entry_strategy_attributions:
+                strats.update(s for s, w in trade.entry_strategy_attributions.items() if w > 0)
+            elif trade.winning_strategy:
+                strats.add(trade.winning_strategy)
+
+            if trade.exit_strategy_attributions:
+                strats.update(s for s, w in trade.exit_strategy_attributions.items() if w > 0)
+            elif trade.exit_winning_strategy:
+                strats.add(trade.exit_winning_strategy)
+
+            if not strats:
+                strats.add("UNKNOWN")
+
+            for strategy in strats:
+                grouped[strategy].append(trade)
         return {strategy: cls.calculate_metrics(group) for strategy, group in grouped.items()}
 
     @classmethod
@@ -124,19 +138,7 @@ class TradeAttributionService:
     def attribute_by_strategy_proportional(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
         strategy_trades: dict[str, list[tuple[Trade, float]]] = defaultdict(list)
         for trade in trades:
-            attributions = trade.entry_strategy_attributions
-            if not attributions:
-                winning = trade.winning_strategy or "UNATTRIBUTED"
-                attributions = {winning: 1.0}
-
-            allocated_weight = sum(attributions.values())
-            for strat_name, weight_share in attributions.items():
-                if weight_share > 0:
-                    strategy_trades[strat_name].append((trade, float(weight_share)))
-
-            if allocated_weight < 0.9999:
-                remainder = max(0.0, 1.0 - allocated_weight)
-                strategy_trades["UNATTRIBUTED"].append((trade, remainder))
+            cls._accumulate_proportional_trade(strategy_trades, trade)
 
         result: dict[str, AttributionMetrics] = {}
         for strat_name, weighted_list in strategy_trades.items():
@@ -144,23 +146,77 @@ class TradeAttributionService:
         return result
 
     @classmethod
-    def compute_co_voting_details(  # pylint: disable=too-many-locals
-            cls, trades: list[Trade]
-    ) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, int]]]:
-        aligned_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-        agreed_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    def _accumulate_proportional_trade(
+            cls, strategy_trades: dict[str, list[tuple[Trade, float]]], trade: Trade
+    ) -> None:
+        has_entry = bool(trade.entry_strategy_attributions)
+        has_exit = bool(trade.exit_strategy_attributions)
 
-        for trade in trades:
-            strat_votes: dict[str, str] = {}
-            if trade.strategy_votes:
-                for strat, raw_vote in trade.strategy_votes.items():
-                    strat_votes[strat] = cls._normalize_vote(raw_vote)
-            elif trade.entry_strategy_attributions:
-                for strat in trade.entry_strategy_attributions:
-                    strat_votes[strat] = "BUY"
-            elif trade.winning_strategy:
-                strat_votes[trade.winning_strategy] = "BUY"
+        if has_entry and has_exit:
+            cls._append_weighted_shares(strategy_trades, trade, trade.entry_strategy_attributions, 0.5)
+            cls._append_weighted_shares(strategy_trades, trade, trade.exit_strategy_attributions, 0.5)
+            return
 
+        if has_entry:
+            cls._append_single_leg_shares(strategy_trades, trade, trade.entry_strategy_attributions)
+            return
+
+        if has_exit:
+            cls._append_single_leg_shares(strategy_trades, trade, trade.exit_strategy_attributions)
+            return
+
+        winning = trade.winning_strategy or trade.exit_winning_strategy or "UNATTRIBUTED"
+        strategy_trades[winning].append((trade, 1.0))
+
+    @staticmethod
+    def _append_weighted_shares(
+            strategy_trades: dict[str, list[tuple[Trade, float]]],
+            trade: Trade,
+            attributions: dict[str, float],
+            scale: float,
+    ) -> None:
+        for strat_name, weight_share in attributions.items():
+            if weight_share > 0:
+                strategy_trades[strat_name].append((trade, float(weight_share) * scale))
+
+    @staticmethod
+    def _append_single_leg_shares(
+            strategy_trades: dict[str, list[tuple[Trade, float]]],
+            trade: Trade,
+            attributions: dict[str, float],
+    ) -> None:
+        allocated = sum(attributions.values())
+        for strat_name, weight_share in attributions.items():
+            if weight_share > 0:
+                strategy_trades[strat_name].append((trade, float(weight_share)))
+        if allocated < 0.9999:
+            strategy_trades["UNATTRIBUTED"].append((trade, max(0.0, 1.0 - allocated)))
+
+    @classmethod
+    def _extract_trade_vote_sets(cls, trade: Trade) -> list[dict[str, str]]:
+        vote_sets: list[dict[str, str]] = []
+        if trade.strategy_votes:
+            vote_sets.append({s: cls._normalize_vote(v) for s, v in trade.strategy_votes.items()})
+        elif trade.entry_strategy_attributions:
+            vote_sets.append({s: "BUY" for s in trade.entry_strategy_attributions})
+        elif trade.winning_strategy:
+            vote_sets.append({trade.winning_strategy: "BUY"})
+
+        if trade.exit_strategy_votes:
+            vote_sets.append({s: cls._normalize_vote(v) for s, v in trade.exit_strategy_votes.items()})
+        elif trade.exit_strategy_attributions:
+            vote_sets.append({s: "SELL" for s in trade.exit_strategy_attributions})
+        elif trade.exit_winning_strategy:
+            vote_sets.append({trade.exit_winning_strategy: "SELL"})
+        return vote_sets
+
+    @staticmethod
+    def _accumulate_co_voting(
+            aligned_pairs: dict[str, dict[str, int]],
+            agreed_pairs: dict[str, dict[str, int]],
+            vote_sets: list[dict[str, str]],
+    ) -> None:
+        for strat_votes in vote_sets:
             strats = sorted(strat_votes.keys())
             for s1 in strats:
                 v1 = strat_votes[s1]
@@ -168,6 +224,42 @@ class TradeAttributionService:
                     aligned_pairs[s1][s2] += 1
                     if v1 == strat_votes[s2]:
                         agreed_pairs[s1][s2] += 1
+
+    @staticmethod
+    def _accumulate_cross_strategy_synergy(
+            aligned_pairs: dict[str, dict[str, int]],
+            agreed_pairs: dict[str, dict[str, int]],
+            trade: Trade,
+    ) -> None:
+        entry_strats = (
+            list(trade.entry_strategy_attributions.keys())
+            if trade.entry_strategy_attributions
+            else ([trade.winning_strategy] if trade.winning_strategy else [])
+        )
+        exit_strats = (
+            list(trade.exit_strategy_attributions.keys())
+            if trade.exit_strategy_attributions
+            else ([trade.exit_winning_strategy] if trade.exit_winning_strategy else [])
+        )
+        for s_in in entry_strats:
+            for s_out in exit_strats:
+                aligned_pairs[s_in][s_out] += 1
+                aligned_pairs[s_out][s_in] += 1
+                if trade.net_pnl > Decimal(0):
+                    agreed_pairs[s_in][s_out] += 1
+                    agreed_pairs[s_out][s_in] += 1
+
+    @classmethod
+    def compute_co_voting_details(
+            cls, trades: list[Trade]
+    ) -> tuple[dict[str, dict[str, float]], dict[str, dict[str, int]]]:
+        aligned_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        agreed_pairs: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+
+        for trade in trades:
+            vote_sets = cls._extract_trade_vote_sets(trade)
+            cls._accumulate_co_voting(aligned_pairs, agreed_pairs, vote_sets)
+            cls._accumulate_cross_strategy_synergy(aligned_pairs, agreed_pairs, trade)
 
         matrix: dict[str, dict[str, float]] = {}
         counts: dict[str, dict[str, int]] = {}
@@ -194,13 +286,22 @@ class TradeAttributionService:
         for trade in trades:
             positive_strats: list[str] = []
             if trade.entry_strategy_attributions:
-                positive_strats = list(trade.entry_strategy_attributions.keys())
+                positive_strats.extend(trade.entry_strategy_attributions.keys())
             elif trade.strategy_votes:
                 for strat, vote in trade.strategy_votes.items():
                     if cls._normalize_vote(vote) in ("BUY", "SELL"):
                         positive_strats.append(strat)
             elif trade.winning_strategy:
-                positive_strats = [trade.winning_strategy]
+                positive_strats.append(trade.winning_strategy)
+
+            if trade.exit_strategy_attributions:
+                positive_strats.extend(trade.exit_strategy_attributions.keys())
+            elif trade.exit_strategy_votes:
+                for strat, vote in trade.exit_strategy_votes.items():
+                    if cls._normalize_vote(vote) in ("BUY", "SELL"):
+                        positive_strats.append(strat)
+            elif trade.exit_winning_strategy:
+                positive_strats.append(trade.exit_winning_strategy)
 
             for strat in set(positive_strats):
                 grouped[strat].append(trade)
@@ -215,10 +316,20 @@ class TradeAttributionService:
         exit_trades: dict[str, list[Trade]] = defaultdict(list)
 
         for trade in trades:
-            entry_strat = trade.winning_strategy or "UNKNOWN"
-            exit_strat = trade.exit_winning_strategy or "UNKNOWN"
-            entry_trades[entry_strat].append(trade)
-            exit_trades[exit_strat].append(trade)
+            entry_strats = (
+                list(trade.entry_strategy_attributions.keys())
+                if trade.entry_strategy_attributions
+                else ([trade.winning_strategy] if trade.winning_strategy else ["UNKNOWN"])
+            )
+            exit_strats = (
+                list(trade.exit_strategy_attributions.keys())
+                if trade.exit_strategy_attributions
+                else ([trade.exit_winning_strategy] if trade.exit_winning_strategy else ["UNKNOWN"])
+            )
+            for strat in entry_strats:
+                entry_trades[strat].append(trade)
+            for strat in exit_strats:
+                exit_trades[strat].append(trade)
 
         return {
             "entry": {strat: cls.calculate_metrics(group) for strat, group in entry_trades.items()},
@@ -311,6 +422,48 @@ class TradeAttributionService:
         for trade in trades:
             grouped[trade.ticker_symbol].append(trade)
         return {symbol: cls.calculate_metrics(group) for symbol, group in grouped.items()}
+
+    @classmethod
+    def attribute_by_regime(cls, trades: list[Trade]) -> dict[str, AttributionMetrics]:
+        grouped: dict[str, list[Trade]] = defaultdict(list)
+        for trade in trades:
+            regime = trade.entry_regime or trade.exit_regime or "UNKNOWN"
+            grouped[regime].append(trade)
+        return {regime: cls.calculate_metrics(group) for regime, group in grouped.items()}
+
+    @classmethod
+    def attribute_strategy_by_regime(
+            cls, trades: list[Trade]
+    ) -> dict[str, dict[str, AttributionMetrics]]:
+        regime_grouped: dict[str, list[Trade]] = defaultdict(list)
+        for trade in trades:
+            regime = trade.entry_regime or trade.exit_regime or "UNKNOWN"
+            regime_grouped[regime].append(trade)
+
+        result: dict[str, dict[str, AttributionMetrics]] = defaultdict(dict)
+        for regime, r_trades in regime_grouped.items():
+            strat_metrics = cls.attribute_by_strategy_proportional(r_trades)
+            for strat, metrics in strat_metrics.items():
+                result[strat][regime] = metrics
+        return dict(result)
+
+    @classmethod
+    def compute_co_voting_by_regime(
+            cls, trades: list[Trade]
+    ) -> dict[str, dict[str, Any]]:
+        regime_grouped: dict[str, list[Trade]] = defaultdict(list)
+        for trade in trades:
+            regime = trade.entry_regime or trade.exit_regime or "UNKNOWN"
+            regime_grouped[regime].append(trade)
+
+        result: dict[str, dict[str, Any]] = {}
+        all_matrix, all_counts = cls.compute_co_voting_details(trades)
+        result["ALL"] = {"matrix": all_matrix, "counts": all_counts}
+
+        for regime, r_trades in regime_grouped.items():
+            matrix, counts = cls.compute_co_voting_details(r_trades)
+            result[regime] = {"matrix": matrix, "counts": counts}
+        return result
 
     @staticmethod
     def _empty_metrics() -> AttributionMetrics:

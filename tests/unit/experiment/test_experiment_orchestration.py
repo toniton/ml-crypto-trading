@@ -327,3 +327,110 @@ class TestExperimentOrchestration:  # pylint: disable=attribute-defined-outside-
             assert "TrendFollower" in cand.strategy_weights
             assert "MeanReversion" in cand.strategy_weights
             self.mock_vcs.commit.assert_called_once()
+
+    def test_compute_experiment_report_harmonizes_all_candidate_strategies(self):
+        spec = ExperimentSpec(
+            name="Matrix Harmonization Test",
+            ticker_symbol="BTC_USD",
+            base_commit_hash="commit_sha_base_001",
+            branch_id="exp-btc-branch",
+            test_selection=TestSelection.BACKTEST_ONLY,
+            candidates=[
+                ExperimentCandidate(
+                    candidate_id="cand_current",
+                    name="Current Config",
+                    candidate_type=CandidateType.CURRENT_CONFIG,
+                    strategy_weights={"BuyStrat1": 1.0, "SellStrat2": 1.5, "IdleStrat3": 0.5},
+                ),
+            ],
+        )
+        bindings = [
+            {
+                "candidate_id": "cand_current",
+                "backtest_session_id": "bt_1",
+                "status": "COMPLETED",
+            },
+        ]
+        mock_uow = MagicMock()
+        mock_bt_repo = MagicMock()
+        mock_uow.get_repository.return_value = mock_bt_repo
+        mock_bt_repo.get_result_metrics.return_value = {
+            "percentage_return": 10.0,
+            "strategy_attribution": {
+                "BuyStrat1": {
+                    "total_trades": 2,
+                    "winning_trades": 1,
+                    "losing_trades": 1,
+                    "win_rate_pct": 50.0,
+                    "net_pnl": 100.0,
+                    "profit_factor": 1.5,
+                    "avg_return_pct": 0.05,
+                    "max_win": 150.0,
+                    "max_loss": -50.0,
+                }
+            },
+        }
+
+        report = ExperimentApplicationService._compute_experiment_report(mock_uow, spec, bindings)
+
+        assert "BuyStrat1" in report["strategy_attribution"]
+        assert "SellStrat2" in report["strategy_attribution"]
+        assert "IdleStrat3" in report["strategy_attribution"]
+        assert report["strategy_attribution"]["SellStrat2"]["action"] == "SELL"
+        assert report["strategy_attribution"]["IdleStrat3"]["total_trades"] == 0
+        assert report["strategy_attribution"]["SellStrat2"]["weight"] == 1.5
+        assert report["strategy_attribution"]["IdleStrat3"]["weight"] == 0.5
+        assert report["strategy_weights"]["SellStrat2"] == 1.5
+        matrix = report["strategy_combination_matrix"]["matrix"]
+        assert len(matrix) == 3
+        assert matrix["BuyStrat1"]["BuyStrat1"] == 1.0
+
+    def test_current_candidate_reloads_weights_from_branch_head_commit(self):
+        cand = ExperimentCandidate(
+            candidate_id="cand_current",
+            name="Current Configuration",
+            candidate_type=CandidateType.CURRENT_CONFIG,
+            strategy_weights={"TrendBreakoutBuy": 1.0},
+        )
+        self.mock_vcs.resolve_commit_hash.return_value = "commit_sha_branch_updated"
+        with patch.object(
+            self.service,
+            "_load_asset_strategy_weights",
+            return_value={"TrendBreakoutBuy": 2.3, "OversoldRecoverySell": 4.0},
+        ) as mock_load:
+            commit = self.service._resolve_candidate_commit("exp-branch-1", "BTC_USD", cand)
+            mock_load.assert_called_once_with("commit_sha_branch_updated", "BTC_USD")
+            assert commit == "commit_sha_branch_updated"
+            assert cand.strategy_weights["TrendBreakoutBuy"] == 2.3
+            assert cand.strategy_weights["OversoldRecoverySell"] == 4.0
+
+    def test_disabled_strategies_are_filtered_from_candidate_variants(self):
+        enabled_strat = MagicMock(name="EnabledStrat")
+        enabled_strat.name = "EnabledStrat"
+        enabled_strat.enabled = True
+        enabled_strat.weight = 1.0
+        enabled_strat.model_copy.side_effect = lambda update: MagicMock(
+            name="EnabledStrat", weight=update.get("weight", 1.0), enabled=True
+        )
+
+        disabled_strat = MagicMock(name="DisabledStrat")
+        disabled_strat.name = "DisabledStrat"
+        disabled_strat.enabled = False
+        disabled_strat.weight = 0.5
+        disabled_strat.model_copy.side_effect = lambda update: MagicMock(
+            name="DisabledStrat", weight=update.get("weight", 0.5), enabled=False
+        )
+
+        cand = ExperimentCandidate(
+            candidate_id="cand_random_42",
+            name="Random Control",
+            candidate_type=CandidateType.RANDOM_CONTROL,
+            random_seed=42,
+        )
+
+        ExperimentApplicationService._apply_candidate_weights(
+            cand, [enabled_strat, disabled_strat]
+        )
+
+        assert "EnabledStrat" in cand.strategy_weights
+        assert "DisabledStrat" not in cand.strategy_weights

@@ -69,14 +69,15 @@ class CCXTExchangeRestBuilder(ExchangeRestBuilder[T, R]):
         self._mapper = CCXTMapperFactory.get_mapper('fees')
         return self
 
-    def create_order(
+    def create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
             self,
             uuid: str,
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
             trade_action,
-            created_time: Optional[float] = None,  # pylint: disable=unused-argument
+            created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> 'CCXTExchangeRestBuilder[T, None]':
         self._method_name = 'create_order'
         self._params = {

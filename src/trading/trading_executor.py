@@ -57,7 +57,6 @@ from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.strategies.strategy_resolver import StrategyResolver
 
 
-
 class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLoggingMixin):
     health_monitor: Optional[HealthMonitor] = None
 
@@ -599,6 +598,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         strategy_attributions = self._resolve_strategy_attributions(decision)
         strategy_votes = self._format_strategy_votes(decision)
         decision_id = trading_decision.decision_id if trading_decision else None
+        snap = trading_decision.regime_snapshot if trading_decision else None
+        regime = snap.regime if snap else None
         buy_order = self.order_manager.open_order(
             ticker_symbol=asset.ticker_symbol,
             quantity=quantity,
@@ -611,6 +612,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             strategy_votes=strategy_votes,
             strategy_attributions=strategy_attributions,
             decision_id=decision_id,
+            regime=regime,
         )
         if trading_decision:
             trading_decision.resulting_order_id = buy_order.uuid
@@ -819,6 +821,8 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         strategy_attributions = self._resolve_strategy_attributions(decision)
         strategy_votes = self._format_strategy_votes(decision)
         decision_id = trading_decision.decision_id if trading_decision else None
+        snap = trading_decision.regime_snapshot if trading_decision else None
+        regime = snap.regime if snap else None
         sell_order = self.order_manager.open_order(
             price=price, trade_action=TradeAction.SELL,
             quantity=quantity, provider_name=asset.exchange.value,
@@ -828,6 +832,7 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             strategy_votes=strategy_votes,
             strategy_attributions=strategy_attributions,
             decision_id=decision_id,
+            regime=regime,
         )
         if trading_decision:
             trading_decision.resulting_order_id = sell_order.uuid
@@ -998,4 +1003,3 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             risk_metrics=risk_metrics,
             effective_config=effective_config,
         )
-

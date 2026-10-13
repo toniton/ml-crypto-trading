@@ -22,6 +22,10 @@ class TradeDBVSEntityMapper:
             trade_metadata["exit_strategy_attributions"] = trade.exit_strategy_attributions
         if trade.exit_winning_strategy is not None:
             trade_metadata["exit_winning_strategy"] = trade.exit_winning_strategy
+        if trade.entry_regime is not None:
+            trade_metadata["entry_regime"] = trade.entry_regime
+        if trade.exit_regime is not None:
+            trade_metadata["exit_regime"] = trade.exit_regime
         return TradeDao(
             trade_id=trade.trade_id,
             ticker_symbol=trade.ticker_symbol,
@@ -75,4 +79,6 @@ class TradeDBVSEntityMapper:
             entry_strategy_attributions=entry_attributions,
             exit_strategy_attributions=metadata.get("exit_strategy_attributions"),
             exit_winning_strategy=metadata.get("exit_winning_strategy"),
+            entry_regime=metadata.get("entry_regime"),
+            exit_regime=metadata.get("exit_regime"),
         )

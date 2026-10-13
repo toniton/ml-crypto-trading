@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 import time
 from decimal import Decimal
 from typing import Any, List, Optional
@@ -35,7 +36,7 @@ class SimulatedRestManager(RestManager):
     def get_open_orders(self, exchange: str, ticker_symbol: str = None) -> List[Order]:
         return self._account.get_open_orders(ticker_symbol)
 
-    def place_order(
+    def place_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
             self,
             exchange: str,
             uuid: str,
@@ -44,8 +45,9 @@ class SimulatedRestManager(RestManager):
             price: Decimal,
             trade_action: TradeAction,
             created_time: Optional[float] = None,
-            commit_hash: str = "HEAD",
+            metadata: Optional[dict[str, Any]] = None,
     ) -> None:
+        meta = metadata or {}
         order = Order(
             uuid=uuid,
             provider_name=exchange,
@@ -54,8 +56,11 @@ class SimulatedRestManager(RestManager):
             price=price,
             trade_action=trade_action,
             created_time=created_time if created_time is not None else time.time(),
-            commit_hash=commit_hash,
-            status=OrderStatus.PENDING
+            commit_hash=meta.get("commit_hash", "HEAD"),
+            status=OrderStatus.PENDING,
+            winning_strategy=meta.get("winning_strategy"),
+            strategy_votes=meta.get("strategy_votes"),
+            strategy_attributions=meta.get("strategy_attributions"),
         )
         self._account.add_order(order)
         self._account.execute_order(order)

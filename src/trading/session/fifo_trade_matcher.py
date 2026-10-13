@@ -23,6 +23,7 @@ class FifoTradeMatcher:
             strategy_votes: Optional[dict[str, str]] = None,
             strategy_attributions: Optional[dict[str, float]] = None,
             exit_slippage: Decimal = Decimal(0),
+            exit_regime: Optional[str] = None,
     ) -> tuple[list[Trade], Decimal]:
         completed_trades: list[Trade] = []
         sell_remaining = exit_quantity
@@ -54,6 +55,9 @@ class FifoTradeMatcher:
                 entry_strategy_attributions=lot.strategy_attributions,
                 exit_strategy_attributions=strategy_attributions,
                 exit_winning_strategy=winning_strategy,
+                exit_strategy_votes=strategy_votes,
+                entry_regime=lot.regime,
+                exit_regime=exit_regime,
             )
             completed_trades.append(trade)
 

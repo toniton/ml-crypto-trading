@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 from decimal import Decimal
 
 from api.interfaces.trade import Trade
@@ -91,6 +92,111 @@ class TestTradeAttributionService:
         by_symbol = TradeAttributionService.attribute_by_symbol(trades)
         assert by_symbol["ETH_USD"].net_pnl == Decimal("90")
 
+    def test_attribute_by_strategy_multi_entry_and_exit(self):
+        trade = Trade.create(
+            ticker_symbol="BTC_USD",
+            entry_order_uuid="e-1",
+            exit_order_uuid="x-1",
+            entry_price=Decimal("100"),
+            exit_price=Decimal("110"),
+            quantity=Decimal("1"),
+            entry_fee=Decimal("1"),
+            exit_fee=Decimal("1"),
+            entry_timestamp=1000.0,
+            exit_timestamp=1100.0,
+            entry_strategy_attributions={"RsiBuy": 0.6, "TrendBuy": 0.4},
+            exit_strategy_attributions={"StopLossSell": 1.0},
+        )
+        by_strat = TradeAttributionService.attribute_by_strategy([trade])
+        assert set(by_strat.keys()) == {"RsiBuy", "TrendBuy", "StopLossSell"}
+
+    def test_compute_co_voting_details_cross_strategy(self):
+        trade = Trade.create(
+            ticker_symbol="BTC_USD",
+            entry_order_uuid="e-1",
+            exit_order_uuid="x-1",
+            entry_price=Decimal("100"),
+            exit_price=Decimal("110"),
+            quantity=Decimal("1"),
+            entry_fee=Decimal("1"),
+            exit_fee=Decimal("1"),
+            entry_timestamp=1000.0,
+            exit_timestamp=1100.0,
+            entry_strategy_attributions={"RsiBuy": 1.0},
+            exit_strategy_attributions={"StopLossSell": 1.0},
+        )
+        matrix, counts = TradeAttributionService.compute_co_voting_details([trade])
+        assert matrix["RsiBuy"]["StopLossSell"] == 1.0
+        assert counts["RsiBuy"]["StopLossSell"] == 1
+
     def test_empty_trades_returns_zero_metrics(self):
         metrics = TradeAttributionService.calculate_metrics([])
         assert metrics.total_trades == 0
+
+    def test_attribute_by_regime_groups_correctly(self):
+        trades = [
+            Trade.create(
+                ticker_symbol="BTC_USD",
+                entry_order_uuid="e-1",
+                exit_order_uuid="x-1",
+                entry_price=Decimal("100"),
+                exit_price=Decimal("110"),
+                quantity=Decimal("1"),
+                entry_fee=Decimal("1"),
+                exit_fee=Decimal("1"),
+                entry_timestamp=100.0,
+                exit_timestamp=160.0,
+                entry_regime="TRENDING_UP",
+            ),
+            Trade.create(
+                ticker_symbol="BTC_USD",
+                entry_order_uuid="e-2",
+                exit_order_uuid="x-2",
+                entry_price=Decimal("100"),
+                exit_price=Decimal("90"),
+                quantity=Decimal("1"),
+                entry_fee=Decimal("1"),
+                exit_fee=Decimal("1"),
+                entry_timestamp=200.0,
+                exit_timestamp=260.0,
+                entry_regime="TRENDING_DOWN",
+            ),
+        ]
+        result = TradeAttributionService.attribute_by_regime(trades)
+        assert set(result.keys()) == {"TRENDING_UP", "TRENDING_DOWN"}
+
+    def test_attribute_strategy_by_regime_segments_performance(self):
+        trade = Trade.create(
+            ticker_symbol="BTC_USD",
+            entry_order_uuid="e-1",
+            exit_order_uuid="x-1",
+            entry_price=Decimal("100"),
+            exit_price=Decimal("110"),
+            quantity=Decimal("1"),
+            entry_fee=Decimal("1"),
+            exit_fee=Decimal("1"),
+            entry_timestamp=100.0,
+            exit_timestamp=160.0,
+            entry_strategy_attributions={"TrendBuy": 1.0},
+            entry_regime="HIGH_VOLATILITY",
+        )
+        matrix = TradeAttributionService.attribute_strategy_by_regime([trade])
+        assert matrix["TrendBuy"]["HIGH_VOLATILITY"].winning_trades == 1
+
+    def test_compute_co_voting_by_regime_partitions_votes(self):
+        trade = Trade.create(
+            ticker_symbol="BTC_USD",
+            entry_order_uuid="e-1",
+            exit_order_uuid="x-1",
+            entry_price=Decimal("100"),
+            exit_price=Decimal("110"),
+            quantity=Decimal("1"),
+            entry_fee=Decimal("1"),
+            exit_fee=Decimal("1"),
+            entry_timestamp=100.0,
+            exit_timestamp=160.0,
+            strategy_votes={"TrendBuy": "BUY", "RsiBuy": "BUY"},
+            entry_regime="RANGING",
+        )
+        by_regime = TradeAttributionService.compute_co_voting_by_regime([trade])
+        assert "ALL" in by_regime and "RANGING" in by_regime

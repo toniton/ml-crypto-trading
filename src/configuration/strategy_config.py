@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from api.interfaces.trade_action import TradeAction
 from src.core.expressions.expression_parser import ExpressionParser
@@ -62,6 +62,13 @@ class StrategyConfig(BaseModel):
         description="Weekly trading schedule and timezone.",
         json_schema_extra={"mutable": True},
     )
+
+    @field_validator("weight", mode="before")
+    @classmethod
+    def _parse_weight(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            return float(value.replace(",", ".").strip())
+        return value
 
     @model_validator(mode="after")
     def _validate_strategy(self) -> StrategyConfig:

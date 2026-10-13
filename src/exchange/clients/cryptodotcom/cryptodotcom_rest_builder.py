@@ -5,7 +5,7 @@ import hmac
 import json
 import time
 from decimal import Decimal
-from typing import Generic, Optional, TypeVar
+from typing import Any, Generic, Optional, TypeVar
 from urllib.parse import urlencode
 from urllib.request import Request
 
@@ -150,14 +150,15 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
         )
         return self._set_endpoint(endpoint, {"instrument_name": ticker_symbol})
 
-    def create_order(
+    def create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
             self,
             uuid: str,
             ticker_symbol: str,
             quantity: str,
             price: Decimal,
             trade_action: TradeAction,
-            created_time: Optional[float] = None,  # pylint: disable=unused-argument
+            created_time: Optional[float] = None,
+            metadata: Optional[dict[str, Any]] = None,
     ) -> CryptoDotComRestBuilder[None]:
         endpoint = Endpoint(
             path="private/create-order",

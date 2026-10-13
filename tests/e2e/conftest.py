@@ -99,7 +99,16 @@ class _FakeExchangeBuilder(ExchangeRestBuilder, ExchangeWebSocketBuilder):
         self.kind, self.payload = "order_update", {"instrument": instrument_name}
         return self
 
-    def create_order(self, uuid, ticker_symbol, quantity, price, trade_action, created_time=None):
+    def create_order(
+            self,
+            uuid,
+            ticker_symbol,
+            quantity,
+            price,
+            trade_action,
+            created_time=None,
+            metadata=None,
+    ):
         self.kind = "create_order"
         return self
 
