@@ -1,6 +1,7 @@
 import os
 from unittest.mock import MagicMock, patch
 
+from circuitbreaker import CircuitBreakerMonitor
 import pytest
 
 # Ensure required environment variables exist during pytest module collection
@@ -10,7 +11,7 @@ os.environ.setdefault("POSTGRES_USER", "postgres")
 os.environ.setdefault("POSTGRES_PASSWORD", "password")
 os.environ.setdefault("POSTGRES_DATABASE", "trading_bot")
 
-from src.configuration.environment_config import EnvironmentConfig
+from src.configuration.environment_config import EnvironmentConfig  # pylint: disable=wrong-import-position
 
 
 @pytest.fixture(autouse=True, scope="session")
@@ -28,3 +29,12 @@ def setup_test_environment():
     with patch('src.logging.manager.EnvironmentConfig', return_value=mock_env), \
          patch('src.configuration.providers.database_config.EnvironmentConfig', return_value=mock_env):
         yield mock_env
+
+
+@pytest.fixture(autouse=True)
+def reset_circuit_breakers():
+    for cb in CircuitBreakerMonitor.get_circuits():
+        cb.reset()
+    yield
+    for cb in CircuitBreakerMonitor.get_circuits():
+        cb.reset()

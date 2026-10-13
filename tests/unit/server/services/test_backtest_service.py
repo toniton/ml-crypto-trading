@@ -1,12 +1,13 @@
+# pylint: disable=redefined-outer-name,protected-access,too-many-locals
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from src.configuration.trading_config import TradingConfig
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.services.backtest_service import BacktestService
 from src.vcs.application.service import VCSService
 
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 @pytest.fixture
 def in_memory_db():
@@ -121,3 +122,7 @@ def test_backtest_branch_lifecycle_and_merge(in_memory_db, initial_config):
     # Verify main now has the merged consensus
     new_main_cfg = vcs.checkout("refs/heads/main")
     assert new_main_cfg["assets"][0]["consensus"]["buy"] == 0.75
+
+    # Verify get_configuration on main returns active configuration
+    main_branch_cfg = service.get_configuration("main")
+    assert main_branch_cfg["assets"][0]["consensus"]["buy"] == 0.75

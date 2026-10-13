@@ -160,7 +160,10 @@ class BacktestService(ApplicationLoggingMixin):
             branch_id: str,
             commit_hash: Optional[str] = None,
     ) -> Dict[str, Any]:
-        ref_or_hash = commit_hash or f"refs/heads/backtest/{branch_id}"
+        if branch_id in ("main", "refs/heads/main"):
+            ref_or_hash = commit_hash or "refs/heads/main"
+        else:
+            ref_or_hash = commit_hash or f"refs/heads/backtest/{branch_id}"
         config_dict = self.vcs.checkout(ref_or_hash)
         active_commit = self.vcs.head(ref_or_hash)
 
