@@ -23,6 +23,9 @@ from src.database.repositories.providers.postgres_backtest_repository import Pos
 from src.events.agent_events import AgentApprovalResolvedEvent
 from src.logging.factory import LoggingFactory
 from src.metrics.api.metric_routes import create_metric_router
+from src.retention.handlers import build_default_handlers
+from src.retention.manager import RetentionManager
+from src.server.routes.retention_routes import create_retention_router
 from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleCollector
 from src.metrics.collectors.request_metrics_collector import (
     RequestMetricsCollector,
@@ -143,6 +146,12 @@ class ChatApp:
         configuration_service = ConfigurationService(db_manager)
 
         metric_service = MetricService(db_manager)
+        retention_manager = RetentionManager(
+            db_manager,
+            handlers=build_default_handlers(
+                market_data_store=trading_proxy.get_market_data_store()
+            ),
+        )
         request_collector = RequestMetricsCollector(metric_service)
         runtime_collector = RuntimeMetricsCollector(metric_service)
         order_lifecycle_collector = OrderLifecycleCollector(metric_service, db_manager)
@@ -167,6 +176,7 @@ class ChatApp:
         app.state.proposal_store = CachedProposalStore(conversations=conversation_service)
         app.state.runtime_collector = runtime_collector
         app.state.order_lifecycle_collector = order_lifecycle_collector
+        app.state.retention_manager = retention_manager
 
         app.add_middleware(
             CORSMiddleware,
@@ -199,6 +209,7 @@ class ChatApp:
 
         app.add_middleware(RequestMetricsMiddleware, collector=request_collector)
         app.include_router(create_metric_router(metric_service))
+        app.include_router(create_retention_router(retention_manager))
         app.include_router(create_runtime_debug_router(runtime_debug_service))
         app.include_router(create_llm_router(llm_manager))
         app.include_router(

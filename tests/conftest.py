@@ -11,6 +11,12 @@ os.environ.setdefault("POSTGRES_USER", "postgres")
 os.environ.setdefault("POSTGRES_PASSWORD", "password")
 os.environ.setdefault("POSTGRES_DATABASE", "trading_bot")
 
+# Ensure project root is on import path for tests
+import sys, pathlib
+_root = str(pathlib.Path(__file__).resolve().parent.parent)
+if _root not in sys.path:
+    sys.path.insert(0, _root)
+
 from src.configuration.environment_config import EnvironmentConfig  # pylint: disable=wrong-import-position
 
 

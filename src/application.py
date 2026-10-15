@@ -59,8 +59,9 @@ from src.metrics.collectors.order_lifecycle_collector import OrderLifecycleColle
 from src.metrics.collectors.runtime_metrics_collector import RuntimeMetricsCollector
 from src.metrics.collectors.trading_metrics_collector import TradingMetricsCollector
 from src.metrics.services.metric_service import MetricService
-from src.metrics.services.retention_engine import RetentionEngine
-from src.metrics.services.retention_scheduler import RetentionScheduler
+from src.retention.handlers import build_default_handlers
+from src.retention.manager import RetentionManager
+from src.retention.scheduler import RetentionScheduler
 from src.recorder.market_data_recorder import MarketDataRecorder
 from src.recorder.market_data_store import MarketDataStore
 from src.server.server import ApiServer
@@ -114,7 +115,7 @@ class Application(ApplicationLoggingMixin):
         self._market_data_recorder = MarketDataRecorder(self._market_data_store)
         self._db_manager: Optional[DatabaseManager] = None
         self._metric_service: Optional[MetricService] = None
-        self._retention_engine: Optional[RetentionEngine] = None
+        self._retention_manager: Optional[RetentionManager] = None
         self._retention_scheduler: Optional[RetentionScheduler] = None
         self._event_metric_collector: Optional[EventMetricCollector] = None
         self._trading_metrics_collector: Optional[TradingMetricsCollector] = None
@@ -245,8 +246,11 @@ class Application(ApplicationLoggingMixin):
             self.is_ready.set()
             return
 
-        self._retention_engine = RetentionEngine(db_manager)
-        self._retention_scheduler = RetentionScheduler(self._retention_engine)
+        self._retention_manager = RetentionManager(
+            db_manager,
+            handlers=build_default_handlers(market_data_store=self._market_data_store),
+        )
+        self._retention_scheduler = RetentionScheduler(self._retention_manager)
         self._runtime_metrics_collector = RuntimeMetricsCollector(self._metric_service)
 
         self._vcs_ref = "HEAD"

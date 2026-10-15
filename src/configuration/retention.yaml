@@ -1,0 +1,85 @@
+retention:
+  enabled: true
+  schedule: DAILY
+  dry_run: true
+  batch_size: 1000
+  grace_period: 7d
+
+  policies:
+    financial_records:
+      data_category: FINANCIAL
+      retention_period: KEEP
+      retention_mode: KEEP
+      description: Orders, fills and ledger entries. Never auto-deleted.
+
+    trading_decisions:
+      data_category: TRADING_DECISION
+      retention_period: 730d
+      retention_mode: KEEP
+      description: Decision snapshots and attribution retained for reproducibility.
+
+    trace_events:
+      data_category: TRACE
+      retention_period: 90d
+      retention_mode: ARCHIVE
+      description: Detailed lifecycle events for recent investigations.
+
+    metric_samples:
+      data_category: METRICS
+      retention_period: 30d
+      retention_mode: DELETE
+      description: Raw metric samples; aggregates preserved by metric definitions.
+
+    runtime_incidents:
+      data_category: RUNTIME_ALERT
+      retention_period: 180d
+      retention_mode: AGGREGATE_THEN_DELETE
+      description: Drift alerts and runtime incident detail.
+
+    experiment_metadata:
+      data_category: EXPERIMENT
+      retention_period: KEEP
+      retention_mode: KEEP
+      description: Experiment definitions, triggers and provenance.
+
+    experiment_artifacts:
+      data_category: EXPERIMENT_ARTIFACT
+      retention_period: 90d
+      retention_mode: DELETE
+      description: Bulky experiment report payloads; disabled until reviewed.
+
+    backtest_reports:
+      data_category: REPORT
+      retention_period: 365d
+      retention_mode: DELETE
+      description: Backtest and walk-forward sessions not referenced by experiments.
+
+    market_datasets:
+      data_category: MARKET_DATA
+      retention_period: 365d
+      retention_mode: DELETE
+      description: Downloaded OHLCV datasets not referenced by retained runs.
+
+    application_logs:
+      data_category: APPLICATION_LOG
+      retention_period: 30d
+      retention_mode: DELETE
+      description: Rotated application, trading, agent and audit log files.
+
+    config_history:
+      data_category: CONFIG_HISTORY
+      retention_period: KEEP
+      retention_mode: KEEP
+      description: VCS commits and blobs referenced by retained records.
+
+    market_data_buffer:
+      data_category: MARKET_DATA_BUFFER
+      retention_period: 6h
+      retention_mode: DELETE
+      description: In-memory recorded market data used for backtests and recorded-data reads.
+
+    cache_buffers:
+      data_category: CACHE
+      retention_period: 1d
+      retention_mode: KEEP
+      description: Other rebuildable in-memory buffers.
