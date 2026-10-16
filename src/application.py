@@ -393,6 +393,7 @@ class Application(ApplicationLoggingMixin):
                 db_manager=self._db_manager,
                 vcs=self._vcs,
                 llm_manager=self._llm_manager,
+                retention_manager=self._retention_manager,
                 host=self._application_config.api_host,
                 port=self._application_config.api_port,
             )

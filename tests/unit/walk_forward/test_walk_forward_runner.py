@@ -197,6 +197,7 @@ class TestWalkForwardApi(unittest.TestCase):
             db_manager=self.db,
             vcs=self.vcs,
             llm_manager=make_test_llm_manager(self.db),
+            retention_manager=MagicMock(),
         )
         self.client = TestClient(self.app)
 

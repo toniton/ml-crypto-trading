@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from src.configuration.retention_config import RetentionConfig
@@ -68,7 +69,26 @@ class RetentionPolicyResolver:
             enabled=bool(merged.get("enabled", True)),
             grace_period=str(grace),
             description=merged.get("description", ""),
+            updated_at=merged.get("updated_at"),
+            updated_by=merged.get("updated_by"),
         )
+
+    def apply_overrides(self, overrides: dict[str, dict[str, Any]]) -> None:
+        for policy_id, data in overrides.items():
+            if not isinstance(data, dict):
+                continue
+            entry = self._overrides.setdefault(policy_id, {})
+            if data.get("retention_period") is not None:
+                entry["retention_period"] = data["retention_period"]
+            if data.get("retention_mode") is not None:
+                entry["retention_mode"] = data["retention_mode"]
+            if data.get("enabled") is not None:
+                entry["enabled"] = bool(data["enabled"])
+            if "updated_at" in data:
+                entry["updated_at"] = data["updated_at"]
+            if "updated_by" in data:
+                entry["updated_by"] = data["updated_by"]
+        self.rebuild()
 
     @staticmethod
     def _resolve_category(policy_id: str, raw_category: Optional[str]) -> DataCategory:
@@ -117,6 +137,8 @@ class RetentionPolicyResolver:
             retention_period: Optional[str] = None,
             retention_mode: Optional[str] = None,
             enabled: Optional[bool] = None,
+            actor: Optional[str] = None,
+            now: Optional[datetime] = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         policy = self._policies.get(policy_id)
         if policy is None:
@@ -133,6 +155,8 @@ class RetentionPolicyResolver:
         if not changes:
             return policy.to_dict(), policy.to_dict()
 
+        changes["updated_at"] = now or datetime.now(timezone.utc)
+        changes["updated_by"] = actor
         old_value = policy.to_dict()
         self._overrides.setdefault(policy_id, {}).update(changes)
         self.rebuild()

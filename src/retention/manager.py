@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
@@ -29,6 +30,10 @@ class RetentionConfirmationRequired(Exception):
     pass
 
 
+class RetentionRunAlreadyInProgress(Exception):
+    pass
+
+
 _SCHEDULE_INTERVALS = {
     "HOURLY": timedelta(hours=1),
     "DAILY": timedelta(days=1),
@@ -48,7 +53,23 @@ class RetentionManager(ApplicationLoggingMixin):
         self._config = config or RetentionConfig.load()
         self._resolver = resolver or RetentionPolicyResolver(self._config)
         self._handlers = handlers or build_default_handlers()
+        self._run_lock = threading.Lock()
+        self._load_persisted_overrides()
         self._sync_handlers()
+
+    def _load_persisted_overrides(self) -> None:
+        try:
+            with self._db_manager.get_unit_of_work() as uow:
+                session = getattr(uow, "session", None)
+                if session is None:
+                    return
+                repository = uow.get_repository(PostgresRetentionRepository)
+                if hasattr(repository, "load_persisted_policy_overrides"):
+                    overrides = repository.load_persisted_policy_overrides()
+                    if overrides:
+                        self._resolver.apply_overrides(overrides)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning("Could not load persisted retention overrides: %s", exc)
 
     def _sync_handlers(self) -> None:
         for policy in self._resolver.policies():
@@ -162,6 +183,7 @@ class RetentionManager(ApplicationLoggingMixin):
             retention_period=retention_period,
             retention_mode=retention_mode,
             enabled=enabled,
+            actor=actor,
         )
         updated_policy = self._resolver.get(policy_id)
         updated_handler = self._handlers.get(updated_policy.data_category) if updated_policy else None
@@ -186,6 +208,10 @@ class RetentionManager(ApplicationLoggingMixin):
             dry_run: bool,
             actor: Optional[str] = None,
     ) -> RetentionRun:
+        if not self._run_lock.acquire(blocking=False):
+            self.app_logger.warning("Retention run already in progress; rejecting trigger %s", trigger.value)
+            raise RetentionRunAlreadyInProgress("A retention run is already in progress.")
+
         now = datetime.now(timezone.utc)
         run = RetentionRun(
             status=RetentionRunStatus.RUNNING,
@@ -201,59 +227,94 @@ class RetentionManager(ApplicationLoggingMixin):
             actor,
             run.policy_version,
         )
-        with self._db_manager.get_unit_of_work() as uow:
-            session = getattr(uow, "session", None)
-            repository = (
-                uow.get_repository(PostgresRetentionRepository) if session is not None else None
-            )
-            if repository is not None:
-                repository.save_run(run)
-                repository.add_audit_event(
-                    RetentionAuditEvent(
-                        event_type=RetentionAuditEventType.RUN_STARTED,
-                        run_id=run.run_id,
-                        actor=actor,
-                        detail=f"{trigger.value} run started (dry_run={dry_run})",
-                    )
+        try:
+            with self._db_manager.get_unit_of_work() as uow:
+                session = getattr(uow, "session", None)
+                repository = (
+                    uow.get_repository(PostgresRetentionRepository) if session is not None else None
                 )
+                if repository is not None:
+                    repository.save_run(run)
+                    repository.add_audit_event(
+                        RetentionAuditEvent(
+                            event_type=RetentionAuditEventType.RUN_STARTED,
+                            run_id=run.run_id,
+                            actor=actor,
+                            detail=f"{trigger.value} run started (dry_run={dry_run})",
+                        )
+                    )
 
-            if not self._config.enabled:
-                run.status = RetentionRunStatus.COMPLETED
+                if not self._config.enabled:
+                    run.status = RetentionRunStatus.COMPLETED
+                    run.completed_at = datetime.now(timezone.utc)
+                    if repository is not None:
+                        repository.update_run(run)
+                        repository.add_audit_event(
+                            RetentionAuditEvent(
+                                event_type=RetentionAuditEventType.RUN_COMPLETED,
+                                run_id=run.run_id,
+                                actor=actor,
+                                detail=f"{trigger.value} run completed with status COMPLETED (disabled)",
+                            )
+                        )
+                    self.app_logger.info("Retention is disabled; run completed with no actions")
+                    return run
+
+                failures = 0
+                for policy in self._resolver.policies():
+                    outcome = self._evaluate_policy(policy, session, repository, now, dry_run)
+                    if any(reason.reason == "ERROR" for reason in outcome.skipped_reasons):
+                        failures += 1
+                    run.categories.append(outcome)
+
                 run.completed_at = datetime.now(timezone.utc)
-                self.app_logger.info("Retention is disabled; run completed with no actions")
-                return run
-
-            failures = 0
-            for policy in self._resolver.policies():
-                outcome = self._evaluate_policy(policy, session, repository, now, dry_run)
-                if any(reason.reason == "ERROR" for reason in outcome.skipped_reasons):
-                    failures += 1
-                run.categories.append(outcome)
-
-            run.completed_at = datetime.now(timezone.utc)
-            run.status = RetentionRunStatus.PARTIAL if failures else RetentionRunStatus.COMPLETED
-            run.storage_reclaimed_bytes = (
-                sum((category.storage_bytes or 0) for category in run.categories) or None
-            )
-
-            if repository is not None:
-                repository.update_run(run)
-                repository.add_audit_event(
-                    RetentionAuditEvent(
-                        event_type=RetentionAuditEventType.RUN_COMPLETED,
-                        run_id=run.run_id,
-                        actor=actor,
-                        detail=f"{trigger.value} run completed with status {run.status.value}",
-                    )
+                run.status = RetentionRunStatus.PARTIAL if failures else RetentionRunStatus.COMPLETED
+                run.storage_reclaimed_bytes = (
+                    sum((category.storage_bytes or 0) for category in run.categories) or None
                 )
-            self.app_logger.info(
-                "Retention run %s completed with status %s (reclaimed: %s bytes, failures: %d)",
-                run.run_id,
-                run.status.value,
-                run.storage_reclaimed_bytes or 0,
-                failures,
-            )
-            return run
+
+                if repository is not None:
+                    repository.update_run(run)
+                    repository.add_audit_event(
+                        RetentionAuditEvent(
+                            event_type=RetentionAuditEventType.RUN_COMPLETED,
+                            run_id=run.run_id,
+                            actor=actor,
+                            detail=f"{trigger.value} run completed with status {run.status.value}",
+                        )
+                    )
+                self.app_logger.info(
+                    "Retention run %s completed with status %s (reclaimed: %s bytes, failures: %d)",
+                    run.run_id,
+                    run.status.value,
+                    run.storage_reclaimed_bytes or 0,
+                    failures,
+                )
+                return run
+        except Exception as exc:
+            run.status = RetentionRunStatus.FAILED
+            run.completed_at = datetime.now(timezone.utc)
+            try:
+                with self._db_manager.get_unit_of_work() as uow:
+                    session = getattr(uow, "session", None)
+                    repository = (
+                        uow.get_repository(PostgresRetentionRepository) if session is not None else None
+                    )
+                    if repository is not None:
+                        repository.update_run(run)
+                        repository.add_audit_event(
+                            RetentionAuditEvent(
+                                event_type=RetentionAuditEventType.RUN_FAILED,
+                                run_id=run.run_id,
+                                actor=actor,
+                                detail=f"{trigger.value} run failed: {str(exc)}",
+                            )
+                        )
+            except Exception:  # pylint: disable=broad-except
+                pass
+            raise
+        finally:
+            self._run_lock.release()
 
     def _determine_skip_reason(self, policy: RetentionPolicy, repository) -> Optional[str]:
         if policy.data_category not in self._handlers:
@@ -281,6 +342,11 @@ class RetentionManager(ApplicationLoggingMixin):
                 policy_id=policy.policy_id,
                 retention_mode=policy.retention_mode,
             )
+        held_entity_ids = (
+            repository.get_held_entity_ids(policy.data_category)
+            if repository and hasattr(repository, "get_held_entity_ids")
+            else set()
+        )
         ctx = RetentionContext(
             session=session,
             policy=policy,
@@ -288,6 +354,7 @@ class RetentionManager(ApplicationLoggingMixin):
             cutoff=policy.cutoff(now),
             batch_size=self._config.batch_size,
             dry_run=dry_run,
+            held_entity_ids=held_entity_ids,
         )
         handler = self._handlers[policy.data_category]
         try:

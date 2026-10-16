@@ -12,6 +12,7 @@ from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, Configur
 from src.events.message_event_bus import MessageEventBus
 from src.llm.tools.metrics_tool import MetricsTool
 from src.metrics.services.metric_service import MetricService
+from src.retention.manager import RetentionManager
 from src.server.app import ChatApp
 from src.server.server import ApiServer
 from tests.unit.agent.fakes import FakeLlmAdapter
@@ -68,6 +69,7 @@ def build_app(llm):
         db_manager=db_mgr,
         vcs=vcs,
         llm_manager=make_test_llm_manager(db_mgr),
+        retention_manager=RetentionManager(db_mgr),
     )
 
 
@@ -120,6 +122,7 @@ class TestApiServerApp(unittest.TestCase):
             db_manager=db_mgr,
             vcs=vcs,
             llm_manager=make_test_llm_manager(db_mgr),
+            retention_manager=RetentionManager(db_mgr),
             host="127.0.0.1",
             port=9999,
         )
@@ -341,6 +344,7 @@ class TestConversationSessions(unittest.TestCase):
             db_manager=db,
             vcs=vcs,
             llm_manager=make_test_llm_manager(db),
+            retention_manager=RetentionManager(db),
         )
         client = TestClient(app)
         client.get("/api/v1/sessions")
@@ -364,6 +368,7 @@ class TestConversationSessions(unittest.TestCase):
             db_manager=db,
             vcs=vcs,
             llm_manager=make_test_llm_manager(db),
+            retention_manager=RetentionManager(db),
         )
         client = TestClient(app)
         res = client.get("/api/v1/runtime")
@@ -392,6 +397,7 @@ class TestConversationSessions(unittest.TestCase):
             db_manager=db,
             vcs=vcs,
             llm_manager=make_test_llm_manager(db),
+            retention_manager=RetentionManager(db),
         )
         client = TestClient(app)
         res = client.get("/api/v1/orders/lifecycle")

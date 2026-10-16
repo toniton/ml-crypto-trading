@@ -87,6 +87,7 @@ def client(db_manager, event_bus, llm_config, monkeypatch):
     vcs = VCSService(db_manager)
     agent = AgentGateway(FakeLlmAdapter([]), vcs=vcs)
     market_store = MarketDataStore(db_manager)
+    from src.retention.manager import RetentionManager
     llm_manager = LlmRuntimeManager(llm_config=llm_config, db_manager=db_manager)
     app = ChatApp.create(
         trading_proxy=make_test_trading_proxy(market_data_store=market_store),
@@ -95,6 +96,7 @@ def client(db_manager, event_bus, llm_config, monkeypatch):
         db_manager=db_manager,
         vcs=vcs,
         llm_manager=llm_manager,
+        retention_manager=RetentionManager(db_manager),
     )
     return TestClient(app)
 

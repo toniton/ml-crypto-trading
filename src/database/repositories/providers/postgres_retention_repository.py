@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 from uuid import uuid4
 
 from src.database.dao.retention_hold_dao import RetentionHoldDao
@@ -11,7 +11,12 @@ from src.database.repositories.mappers.retention_db_vs_entity_mapper import (
     RetentionDBVSEntityMapper,
 )
 from src.database.repositories.retention_repository import RetentionRepository
-from src.retention.models import DataCategory, RetentionAuditEvent, RetentionRun
+from src.retention.models import (
+    DataCategory,
+    RetentionAuditEvent,
+    RetentionAuditEventType,
+    RetentionRun,
+)
 
 
 class PostgresRetentionRepository(RetentionRepository):
@@ -78,14 +83,61 @@ class PostgresRetentionRepository(RetentionRepository):
 
     def is_category_held(self, category: DataCategory) -> bool:
         return (
-            self.database_session.query(RetentionHoldDao)
+                self.database_session.query(RetentionHoldDao)
+                .filter(
+                    RetentionHoldDao.data_category == category.value,
+                    RetentionHoldDao.active.is_(True),
+                    RetentionHoldDao.entity_id.is_(None),
+                )
+                .first()
+                is not None
+        )
+
+    def get_held_entity_ids(self, category: DataCategory) -> set[str]:
+        rows = (
+            self.database_session.query(RetentionHoldDao.entity_id)
             .filter(
                 RetentionHoldDao.data_category == category.value,
                 RetentionHoldDao.active.is_(True),
+                RetentionHoldDao.entity_id.isnot(None),
             )
-            .first()
-            is not None
+            .all()
         )
+        return {row[0] for row in rows if row[0]}
+
+    def is_entity_held(self, category: DataCategory, entity_id: str) -> bool:
+        if self.is_category_held(category):
+            return True
+        return (
+                self.database_session.query(RetentionHoldDao)
+                .filter(
+                    RetentionHoldDao.data_category == category.value,
+                    RetentionHoldDao.active.is_(True),
+                    RetentionHoldDao.entity_id == entity_id,
+                )
+                .first()
+                is not None
+        )
+
+    def load_persisted_policy_overrides(self) -> dict[str, dict[str, Any]]:
+        rows = (
+            self.database_session.query(RetentionAuditEventDao)
+            .filter(RetentionAuditEventDao.event_type == RetentionAuditEventType.POLICY_UPDATED.value)
+            .order_by(RetentionAuditEventDao.created_at.asc())
+            .all()
+        )
+        overrides: dict[str, dict[str, Any]] = {}
+        for row in rows:
+            if not row.policy_id or not isinstance(row.new_value, dict):
+                continue
+            overrides[row.policy_id] = {
+                "retention_period": row.new_value.get("retention_period"),
+                "retention_mode": row.new_value.get("retention_mode"),
+                "enabled": row.new_value.get("enabled"),
+                "updated_at": row.created_at,
+                "updated_by": row.actor,
+            }
+        return overrides
 
     def add_hold(self, category: DataCategory, reason: str, entity_id: Optional[str] = None) -> str:
         hold_id = str(uuid4())

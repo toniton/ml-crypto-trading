@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
@@ -38,6 +38,7 @@ class RetentionContext:
     cutoff: Optional[datetime]
     batch_size: int
     dry_run: bool
+    held_entity_ids: set[str] = field(default_factory=set)
 
 
 class RetentionHandler(ABC):
@@ -70,15 +71,29 @@ class RetentionHandler(ABC):
             outcome.skipped_reasons.append(SkipReason(reason="KEEP", count=examined))
         return outcome
 
+    @classmethod
+    def _is_unsupported_mode(cls, mode: RetentionMode) -> bool:
+        return mode in (RetentionMode.ARCHIVE, RetentionMode.AGGREGATE_THEN_DELETE)
+
+    def _unsupported_outcome(self, ctx: RetentionContext, examined: int, eligible: int) -> CategoryOutcome:
+        outcome = self._base(ctx)
+        outcome.examined = examined
+        outcome.eligible = eligible
+        outcome.skipped = eligible
+        if eligible:
+            outcome.skipped_reasons.append(
+                SkipReason(
+                    reason=f"{ctx.policy.retention_mode.value}_NOT_SUPPORTED",
+                    count=eligible,
+                    detail="Archive and aggregation pipelines not yet configured; records preserved safely without deletion",
+                )
+            )
+        return outcome
+
     def _apply_mode(self, outcome: CategoryOutcome, mode: RetentionMode, count: int) -> None:
         if count <= 0:
             return
-        if mode == RetentionMode.AGGREGATE_THEN_DELETE:
-            outcome.aggregated += count
-            outcome.deleted += count
-        elif mode == RetentionMode.ARCHIVE:
-            outcome.archived += count
-        elif mode == RetentionMode.DELETE:
+        if mode == RetentionMode.DELETE:
             outcome.deleted += count
 
     def _bulk_delete_before(
@@ -88,10 +103,14 @@ class RetentionHandler(ABC):
             timestamp_column,
             cutoff: datetime,
             batch_size: int,
+            held_entity_ids: Optional[set[str]] = None,
     ) -> int:
         total = 0
         while True:
-            rows = session.query(dao.id).filter(timestamp_column < cutoff).limit(batch_size).all()
+            query = session.query(dao.id).filter(timestamp_column < cutoff)
+            if held_entity_ids:
+                query = query.filter(dao.id.notin_(held_entity_ids))
+            rows = query.limit(batch_size).all()
             if not rows:
                 break
             id_values = [row[0] for row in rows]
@@ -119,8 +138,11 @@ class TableRetentionHandler(RetentionHandler):
     def _count(self, session: Session) -> int:
         return session.query(self._dao).count()
 
-    def _count_before(self, session: Session, cutoff: datetime) -> int:
-        return session.query(self._dao).filter(self._timestamp_column < cutoff).count()
+    def _count_before(self, session: Session, cutoff: datetime, held_entity_ids: Optional[set[str]] = None) -> int:
+        query = session.query(self._dao).filter(self._timestamp_column < cutoff)
+        if held_entity_ids:
+            query = query.filter(self._dao.id.notin_(held_entity_ids))
+        return query.count()
 
     def summary(self, session: Session) -> tuple[Optional[int], Optional[int]]:
         return self._count(session), None
@@ -129,14 +151,26 @@ class TableRetentionHandler(RetentionHandler):
         examined = self._count(ctx.session)
         if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
             return self._kept(ctx, examined)
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            eligible = self._count_before(ctx.session, ctx.cutoff, ctx.held_entity_ids)
+            return self._unsupported_outcome(ctx, examined, eligible)
         outcome = self._base(ctx)
         outcome.examined = examined
-        eligible = self._count_before(ctx.session, ctx.cutoff)
+        eligible = self._count_before(ctx.session, ctx.cutoff, ctx.held_entity_ids)
         outcome.eligible = eligible
+        if ctx.held_entity_ids:
+            held_count = (
+                ctx.session.query(self._dao)
+                .filter(self._timestamp_column < ctx.cutoff, self._dao.id.in_(ctx.held_entity_ids))
+                .count()
+            )
+            if held_count:
+                outcome.skipped += held_count
+                outcome.skipped_reasons.append(SkipReason(reason="HOLD", count=held_count))
         if dry_run:
             return outcome
         deleted = self._bulk_delete_before(
-            ctx.session, self._dao, self._timestamp_column, ctx.cutoff, ctx.batch_size
+            ctx.session, self._dao, self._timestamp_column, ctx.cutoff, ctx.batch_size, ctx.held_entity_ids
         )
         self._apply_mode(outcome, ctx.policy.retention_mode, deleted)
         return outcome
@@ -155,26 +189,44 @@ class RuntimeAlertHandler(RetentionHandler):
         examined = self._count(ctx.session)
         if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
             return self._kept(ctx, examined)
+        events_query = ctx.session.query(RuntimeErrorEventDao).filter(RuntimeErrorEventDao.timestamp < ctx.cutoff)
+        incidents_query = ctx.session.query(RuntimeIncidentDao).filter(RuntimeIncidentDao.first_seen < ctx.cutoff)
+        if ctx.held_entity_ids:
+            events_query = events_query.filter(RuntimeErrorEventDao.id.notin_(ctx.held_entity_ids))
+            incidents_query = incidents_query.filter(RuntimeIncidentDao.id.notin_(ctx.held_entity_ids))
+        events_eligible = events_query.count()
+        incidents_eligible = incidents_query.count()
+        eligible = events_eligible + incidents_eligible
+
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            return self._unsupported_outcome(ctx, examined, eligible)
+
         outcome = self._base(ctx)
         outcome.examined = examined
-        events_eligible = (
-            ctx.session.query(RuntimeErrorEventDao)
-            .filter(RuntimeErrorEventDao.timestamp < ctx.cutoff)
-            .count()
-        )
-        incidents_eligible = (
-            ctx.session.query(RuntimeIncidentDao)
-            .filter(RuntimeIncidentDao.first_seen < ctx.cutoff)
-            .count()
-        )
-        outcome.eligible = events_eligible + incidents_eligible
+        outcome.eligible = eligible
+        if ctx.held_entity_ids:
+            held_events = (
+                ctx.session.query(RuntimeErrorEventDao)
+                .filter(RuntimeErrorEventDao.timestamp < ctx.cutoff, RuntimeErrorEventDao.id.in_(ctx.held_entity_ids))
+                .count()
+            )
+            held_incidents = (
+                ctx.session.query(RuntimeIncidentDao)
+                .filter(RuntimeIncidentDao.first_seen < ctx.cutoff, RuntimeIncidentDao.id.in_(ctx.held_entity_ids))
+                .count()
+            )
+            total_held = held_events + held_incidents
+            if total_held:
+                outcome.skipped += total_held
+                outcome.skipped_reasons.append(SkipReason(reason="HOLD", count=total_held))
+
         if dry_run:
             return outcome
         removed_events = self._bulk_delete_before(
-            ctx.session, RuntimeErrorEventDao, RuntimeErrorEventDao.timestamp, ctx.cutoff, ctx.batch_size
+            ctx.session, RuntimeErrorEventDao, RuntimeErrorEventDao.timestamp, ctx.cutoff, ctx.batch_size, ctx.held_entity_ids
         )
         removed_incidents = self._bulk_delete_before(
-            ctx.session, RuntimeIncidentDao, RuntimeIncidentDao.first_seen, ctx.cutoff, ctx.batch_size
+            ctx.session, RuntimeIncidentDao, RuntimeIncidentDao.first_seen, ctx.cutoff, ctx.batch_size, ctx.held_entity_ids
         )
         self._apply_mode(outcome, ctx.policy.retention_mode, removed_events + removed_incidents)
         return outcome
@@ -203,8 +255,8 @@ class ReportHandler(RetentionHandler):
         return session_ids, run_ids
 
     def _partition_eligible_reports(
-            self, session: Session, cutoff: datetime
-    ) -> tuple[list[str], list[str], int]:
+            self, session: Session, cutoff: datetime, held_entity_ids: Optional[set[str]] = None
+    ) -> tuple[list[str], list[str], int, int]:
         referenced_sessions, referenced_runs = self._collect_report_references(session)
         old_sessions = [
             row[0]
@@ -218,25 +270,40 @@ class ReportHandler(RetentionHandler):
             .filter(WalkForwardRunDao.created_at < cutoff)
             .all()
         ]
-        eligible_sessions = [sid for sid in old_sessions if sid not in referenced_sessions]
-        eligible_runs = [rid for rid in old_runs if rid not in referenced_runs]
-        skipped = (len(old_sessions) - len(eligible_sessions)) + (len(old_runs) - len(eligible_runs))
-        return eligible_sessions, eligible_runs, skipped
+        held = held_entity_ids or set()
+        held_sessions = [sid for sid in old_sessions if sid in held]
+        held_runs = [rid for rid in old_runs if rid in held]
+        held_count = len(held_sessions) + len(held_runs)
+
+        eligible_sessions = [sid for sid in old_sessions if sid not in referenced_sessions and sid not in held]
+        eligible_runs = [rid for rid in old_runs if rid not in referenced_runs and rid not in held]
+        dep_skipped = (
+            (len(old_sessions) - len(eligible_sessions) - len(held_sessions))
+            + (len(old_runs) - len(eligible_runs) - len(held_runs))
+        )
+        return eligible_sessions, eligible_runs, dep_skipped, held_count
 
     def _act(self, ctx: RetentionContext, dry_run: bool) -> CategoryOutcome:
         examined = self._count(ctx.session)
         if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
             return self._kept(ctx, examined)
+
+        eligible_sessions, eligible_runs, dep_skipped, held_count = self._partition_eligible_reports(
+            ctx.session, ctx.cutoff, ctx.held_entity_ids
+        )
+        eligible_count = len(eligible_sessions) + len(eligible_runs)
+
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            return self._unsupported_outcome(ctx, examined, eligible_count)
+
         outcome = self._base(ctx)
         outcome.examined = examined
-
-        eligible_sessions, eligible_runs, skipped = self._partition_eligible_reports(
-            ctx.session, ctx.cutoff
-        )
-        outcome.skipped = skipped
-        outcome.eligible = len(eligible_sessions) + len(eligible_runs)
-        if skipped:
-            outcome.skipped_reasons.append(SkipReason(reason="DEPENDENCY", count=skipped))
+        outcome.skipped = dep_skipped + held_count
+        outcome.eligible = eligible_count
+        if dep_skipped:
+            outcome.skipped_reasons.append(SkipReason(reason="DEPENDENCY", count=dep_skipped))
+        if held_count:
+            outcome.skipped_reasons.append(SkipReason(reason="HOLD", count=held_count))
         if dry_run:
             return outcome
 
@@ -283,9 +350,8 @@ class ExperimentArtifactHandler(RetentionHandler):
         examined = self.summary(ctx.session)[0] or 0
         if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
             return self._kept(ctx, examined)
-        outcome = self._base(ctx)
-        outcome.examined = examined
-        rows = (
+        held = ctx.held_entity_ids or set()
+        all_eligible = (
             ctx.session.query(ExperimentDao)
             .filter(
                 ExperimentDao.report.isnot(None),
@@ -294,14 +360,25 @@ class ExperimentArtifactHandler(RetentionHandler):
             )
             .all()
         )
-        outcome.eligible = len(rows)
+        held_rows = [r for r in all_eligible if r.id in held]
+        eligible_rows = [r for r in all_eligible if r.id not in held]
+
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            return self._unsupported_outcome(ctx, examined, len(eligible_rows))
+
+        outcome = self._base(ctx)
+        outcome.examined = examined
+        outcome.eligible = len(eligible_rows)
+        if held_rows:
+            outcome.skipped += len(held_rows)
+            outcome.skipped_reasons.append(SkipReason(reason="HOLD", count=len(held_rows)))
         if dry_run:
             return outcome
-        for row in rows:
+        for row in eligible_rows:
             report = row.report or {}
             row.report = {key: report[key] for key in self._COMPACT_KEYS if key in report}
         ctx.session.flush()
-        self._apply_mode(outcome, ctx.policy.retention_mode, len(rows))
+        self._apply_mode(outcome, ctx.policy.retention_mode, len(eligible_rows))
         return outcome
 
 
@@ -361,38 +438,62 @@ class MarketDataHandler(RetentionHandler):
         examined = len(self._meta_files())
         if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
             return self._kept(ctx, examined)
-        outcome = self._base(ctx)
-        outcome.examined = examined
         references = self._collect_dataset_references(ctx.session)
         cutoff_ts = ctx.cutoff.timestamp()
+        held = ctx.held_entity_ids or set()
         eligible: list[str] = []
-        skipped = 0
+        dep_skipped = 0
+        held_skipped = 0
         for meta in self._meta_files():
             dataset_id = meta.stem.replace(".meta", "")
+            if dataset_id in held:
+                held_skipped += 1
+                continue
             if dataset_id in references:
-                skipped += 1
+                dep_skipped += 1
                 continue
             if meta.stat().st_mtime < cutoff_ts:
                 eligible.append(dataset_id)
+
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            return self._unsupported_outcome(ctx, examined, len(eligible))
+
+        outcome = self._base(ctx)
+        outcome.examined = examined
         outcome.eligible = len(eligible)
-        outcome.skipped = skipped
-        if skipped:
-            outcome.skipped_reasons.append(SkipReason(reason="DEPENDENCY", count=skipped))
+        outcome.skipped = dep_skipped + held_skipped
+        if dep_skipped:
+            outcome.skipped_reasons.append(SkipReason(reason="DEPENDENCY", count=dep_skipped))
+        if held_skipped:
+            outcome.skipped_reasons.append(SkipReason(reason="HOLD", count=held_skipped))
         outcome.storage_bytes = sum(self._dataset_bytes(dataset_id) for dataset_id in eligible)
         if dry_run:
             return outcome
+
         removed = 0
+        reclaimed_bytes = 0
         for dataset_id in eligible:
+            dataset_fully_deleted = True
+            bytes_freed = 0
             for suffix in (".csv", ".meta.json"):
                 candidate = self._datasets_dir / f"{dataset_id}{suffix}"
                 if candidate.is_file():
                     try:
+                        size = candidate.stat().st_size
                         candidate.unlink()
-                        removed += 1
+                        bytes_freed += size
                     except OSError:
-                        pass
-        self._apply_mode(outcome, ctx.policy.retention_mode, len(eligible))
-        outcome.storage_bytes = outcome.storage_bytes if outcome.deleted or outcome.archived else 0
+                        dataset_fully_deleted = False
+            reclaimed_bytes += bytes_freed
+            if dataset_fully_deleted:
+                removed += 1
+            else:
+                outcome.skipped += 1
+                outcome.skipped_reasons.append(
+                    SkipReason(reason="PARTIAL_DELETE_FAILURE", count=1, detail=dataset_id)
+                )
+        self._apply_mode(outcome, ctx.policy.retention_mode, removed)
+        outcome.storage_bytes = reclaimed_bytes
         return outcome
 
 
@@ -424,19 +525,33 @@ class ApplicationLogHandler(RetentionHandler):
         examined = len(files)
         if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
             return self._kept(ctx, examined)
-        outcome = self._base(ctx)
-        outcome.examined = examined
         cutoff_ts = ctx.cutoff.timestamp()
         eligible = [f for f in files if f.stat().st_mtime < cutoff_ts]
+
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            return self._unsupported_outcome(ctx, examined, len(eligible))
+
+        outcome = self._base(ctx)
+        outcome.examined = examined
         outcome.eligible = len(eligible)
         outcome.storage_bytes = sum(f.stat().st_size for f in eligible)
         if dry_run:
             return outcome
+
         reclaimed = 0
+        removed = 0
         for candidate in eligible:
-            reclaimed += candidate.stat().st_size
-            candidate.unlink()
-        self._apply_mode(outcome, ctx.policy.retention_mode, len(eligible))
+            try:
+                size = candidate.stat().st_size
+                candidate.unlink()
+                reclaimed += size
+                removed += 1
+            except OSError:
+                outcome.skipped += 1
+                outcome.skipped_reasons.append(
+                    SkipReason(reason="FILE_ERROR", count=1, detail=candidate.name)
+                )
+        self._apply_mode(outcome, ctx.policy.retention_mode, removed)
         outcome.storage_bytes = reclaimed
         return outcome
 
@@ -448,22 +563,32 @@ class MarketDataBufferHandler(RetentionHandler):
         self._store = store
 
     def sync_policy(self, policy: RetentionPolicy) -> None:
-        self._store.set_max_age(policy.period_delta())
+        if policy.enabled and policy.retention_mode == RetentionMode.DELETE:
+            self._store.set_max_age(policy.period_delta())
+        else:
+            self._store.set_max_age(None)
 
     def summary(self, _session: Session) -> tuple[Optional[int], Optional[int]]:
         return self._store.size(), None
 
     def _act(self, ctx: RetentionContext, dry_run: bool) -> CategoryOutcome:
         examined = self._store.size()
-        if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None:
+        if ctx.policy.retention_mode == RetentionMode.KEEP or ctx.cutoff is None or not ctx.policy.enabled:
             return self._kept(ctx, examined)
+        cutoff_epoch = ctx.cutoff.timestamp()
+        eligible = self._store.count_before(cutoff_epoch)
+
+        if self._is_unsupported_mode(ctx.policy.retention_mode):
+            return self._unsupported_outcome(ctx, examined, eligible)
+
         outcome = self._base(ctx)
         outcome.examined = examined
-        cutoff_epoch = ctx.cutoff.timestamp()
-        outcome.eligible = self._store.count_before(cutoff_epoch)
+        outcome.eligible = eligible
         if dry_run:
             return outcome
-        self._apply_mode(outcome, ctx.policy.retention_mode, self._store.prune(cutoff_epoch))
+
+        pruned_count = self._store.prune(cutoff_epoch)
+        self._apply_mode(outcome, ctx.policy.retention_mode, pruned_count)
         return outcome
 
 

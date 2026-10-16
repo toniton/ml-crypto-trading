@@ -108,6 +108,7 @@ def app(db_manager, vcs, event_bus, automation):
         compare_backtest=executor.compare_backtest_drift,
     )
     llm_manager = make_test_llm_manager(db_manager)
+    from src.retention.manager import RetentionManager
     return ChatApp.create(
         trading_proxy=trading_proxy,
         agent=gateway,
@@ -115,6 +116,7 @@ def app(db_manager, vcs, event_bus, automation):
         db_manager=db_manager,
         vcs=vcs,
         llm_manager=llm_manager,
+        retention_manager=RetentionManager(db_manager),
     )
 
 

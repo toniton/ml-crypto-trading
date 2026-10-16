@@ -29,6 +29,7 @@ def build_client(bus: MessageEventBus) -> TestClient:
         db_manager=db_mgr,
         vcs=vcs,
         llm_manager=make_test_llm_manager(db_mgr),
+        retention_manager=MagicMock(),
     )
     return TestClient(app)
 

@@ -32,6 +32,7 @@ def build_app(db_manager):
         db_manager=db_manager,
         vcs=vcs,
         llm_manager=make_test_llm_manager(db_manager),
+        retention_manager=MagicMock(),
     )
 
 

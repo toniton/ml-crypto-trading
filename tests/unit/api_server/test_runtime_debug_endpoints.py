@@ -55,6 +55,7 @@ class TestRuntimeDebugEndpoints(unittest.TestCase):
         )
         self.llm = FakeLlmAdapter(chunks=["ok"])
         self.gateway = AgentGateway(self.llm, vcs=self.vcs)
+        from src.retention.manager import RetentionManager
         self.app = ChatApp.create(
             trading_proxy=make_test_trading_proxy(),
             agent=self.gateway,
@@ -62,6 +63,7 @@ class TestRuntimeDebugEndpoints(unittest.TestCase):
             db_manager=self.db_manager,
             vcs=self.vcs,
             llm_manager=make_test_llm_manager(self.db_manager),
+            retention_manager=RetentionManager(self.db_manager),
         )
         self.client = TestClient(self.app)
 

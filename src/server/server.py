@@ -9,6 +9,7 @@ from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
 from src.llm import LlmRuntimeManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.retention.manager import RetentionManager
 from src.server.app import ChatApp
 from src.vcs.application.service import VCSService
 
@@ -22,6 +23,7 @@ class ApiServer(ApplicationLoggingMixin):
             db_manager: DatabaseManager,
             vcs: VCSService,
             llm_manager: LlmRuntimeManager,
+            retention_manager: RetentionManager,
             host: str = "0.0.0.0",
             port: int = 8000,
     ):
@@ -30,6 +32,7 @@ class ApiServer(ApplicationLoggingMixin):
         self.agent = agent
         self.vcs = vcs
         self.trading_proxy = trading_proxy
+        self.retention_manager = retention_manager
         self.app = ChatApp.create(
             trading_proxy=trading_proxy,
             agent=agent,
@@ -37,6 +40,7 @@ class ApiServer(ApplicationLoggingMixin):
             db_manager=db_manager,
             vcs=vcs,
             llm_manager=llm_manager,
+            retention_manager=retention_manager,
         )
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None

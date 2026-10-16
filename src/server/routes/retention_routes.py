@@ -5,7 +5,11 @@ import asyncio
 from fastapi import APIRouter, HTTPException, status
 
 from api.interfaces.retention import RunRequest, UpdatePolicyRequest
-from src.retention.manager import RetentionConfirmationRequired, RetentionManager
+from src.retention.manager import (
+    RetentionConfirmationRequired,
+    RetentionManager,
+    RetentionRunAlreadyInProgress,
+)
 
 
 class RetentionRouterFactory:
@@ -41,7 +45,13 @@ class RetentionRouterFactory:
 
         @router.post("/preview")
         async def preview_run():
-            return await asyncio.to_thread(retention_manager.preview)
+            try:
+                return await asyncio.to_thread(retention_manager.preview)
+            except RetentionRunAlreadyInProgress as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=str(exc),
+                ) from exc
 
         @router.post("/run")
         async def execute_run(req_body: RunRequest):
@@ -50,7 +60,13 @@ class RetentionRouterFactory:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Explicit confirmation is required to execute a retention run.",
                 )
-            return await asyncio.to_thread(retention_manager.execute, "api")
+            try:
+                return await asyncio.to_thread(retention_manager.execute, "api")
+            except RetentionRunAlreadyInProgress as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=str(exc),
+                ) from exc
 
         @router.patch("/policies/{policy_id}")
         async def update_policy(policy_id: str, req_body: UpdatePolicyRequest):

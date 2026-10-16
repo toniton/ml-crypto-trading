@@ -102,3 +102,33 @@ class TestRetentionRepository:
             assert repository.is_category_held(DataCategory.FINANCIAL) is True
             assert repository.release_hold(hold_id) is True
             assert repository.is_category_held(DataCategory.FINANCIAL) is False
+
+    def test_entity_specific_holds(self, db_manager):
+        with db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresRetentionRepository)
+            hold_id = repository.add_hold(DataCategory.TRACE, "investigation", entity_id="item-42")
+            assert repository.is_category_held(DataCategory.TRACE) is False
+            assert repository.get_held_entity_ids(DataCategory.TRACE) == {"item-42"}
+            assert repository.is_entity_held(DataCategory.TRACE, "item-42") is True
+            assert repository.is_entity_held(DataCategory.TRACE, "item-99") is False
+
+            repository.release_hold(hold_id)
+            assert repository.get_held_entity_ids(DataCategory.TRACE) == set()
+            assert repository.is_entity_held(DataCategory.TRACE, "item-42") is False
+
+    def test_load_persisted_policy_overrides(self, db_manager):
+        with db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresRetentionRepository)
+            repository.add_audit_event(
+                RetentionAuditEvent(
+                    event_type=RetentionAuditEventType.POLICY_UPDATED,
+                    policy_id="trace_events",
+                    actor="admin",
+                    new_value={"retention_period": "14d", "retention_mode": "DELETE", "enabled": True},
+                )
+            )
+            overrides = repository.load_persisted_policy_overrides()
+            assert "trace_events" in overrides
+            assert overrides["trace_events"]["retention_period"] == "14d"
+            assert overrides["trace_events"]["updated_by"] == "admin"
+            assert overrides["trace_events"]["updated_at"] is not None

@@ -102,6 +102,48 @@ class TestTableRetentionHandler:
             assert outcome.skipped == 1
             assert outcome.skipped_reasons[0].reason == "KEEP"
 
+    def test_archive_mode_skips_without_deletion(self, db_manager):
+        now = naive_now()
+        cutoff = now - timedelta(days=30)
+        with db_manager.get_unit_of_work() as uow:
+            session = uow.session
+            session.add(TimelineItemDao(id="trace-arch", timestamp=now - timedelta(days=100), category="TRADING", title="old"))
+            session.flush()
+
+            handler = TableRetentionHandler(DataCategory.TRACE, TimelineItemDao, TimelineItemDao.timestamp)
+            policy = make_policy(DataCategory.TRACE, RetentionMode.ARCHIVE)
+
+            outcome = handler.execute(make_context(session, policy, cutoff, dry_run=False))
+            assert outcome.deleted == 0
+            assert outcome.archived == 0
+            assert outcome.skipped == 1
+            assert outcome.skipped_reasons[0].reason == "ARCHIVE_NOT_SUPPORTED"
+            # Verify record was preserved
+            assert session.query(TimelineItemDao).filter(TimelineItemDao.id == "trace-arch").count() == 1
+
+    def test_entity_hold_skips_held_record(self, db_manager):
+        now = naive_now()
+        cutoff = now - timedelta(days=30)
+        with db_manager.get_unit_of_work() as uow:
+            session = uow.session
+            session.add(TimelineItemDao(id="item-held", timestamp=now - timedelta(days=100), category="TRADING", title="held"))
+            session.add(TimelineItemDao(id="item-free", timestamp=now - timedelta(days=100), category="TRADING", title="free"))
+            session.flush()
+
+            handler = TableRetentionHandler(DataCategory.TRACE, TimelineItemDao, TimelineItemDao.timestamp)
+            policy = make_policy(DataCategory.TRACE, RetentionMode.DELETE)
+
+            ctx = make_context(session, policy, cutoff, dry_run=False)
+            ctx.held_entity_ids = {"item-held"}
+
+            outcome = handler.execute(ctx)
+            assert outcome.deleted == 1
+            assert outcome.skipped == 1
+            assert any(r.reason == "HOLD" and r.count == 1 for r in outcome.skipped_reasons)
+            assert session.query(TimelineItemDao).filter(TimelineItemDao.id == "item-held").count() == 1
+            assert session.query(TimelineItemDao).filter(TimelineItemDao.id == "item-free").count() == 0
+
+
 
 class TestReportHandler:
     def test_skips_reports_referenced_by_experiments(self, db_manager):
@@ -197,6 +239,61 @@ class TestMarketDataHandler:
             assert not (tmp_path / "aabbccddeeff.csv").exists()
             assert (tmp_path / "112233445566.csv").exists()
 
+    def test_held_dataset_is_skipped(self, db_manager, tmp_path):
+        now = naive_now()
+        cutoff = now - timedelta(days=30)
+        old_ts = (now - timedelta(days=100)).timestamp()
+
+        (tmp_path / "dataset-held.csv").write_text("data", encoding="utf-8")
+        (tmp_path / "dataset-held.meta.json").write_text("{}", encoding="utf-8")
+        os.utime(tmp_path / "dataset-held.csv", (old_ts, old_ts))
+        os.utime(tmp_path / "dataset-held.meta.json", (old_ts, old_ts))
+
+        with db_manager.get_unit_of_work() as uow:
+            session = uow.session
+            handler = MarketDataHandler(datasets_dir=str(tmp_path))
+            policy = make_policy(DataCategory.MARKET_DATA, RetentionMode.DELETE, "30d")
+            ctx = make_context(session, policy, cutoff)
+            ctx.held_entity_ids = {"dataset-held"}
+
+            outcome = handler.execute(ctx)
+            assert outcome.deleted == 0
+            assert outcome.skipped == 1
+            assert any(r.reason == "HOLD" for r in outcome.skipped_reasons)
+            assert (tmp_path / "dataset-held.csv").exists()
+
+    def test_partial_unlink_failure_is_handled(self, db_manager, tmp_path, monkeypatch):
+        now = naive_now()
+        cutoff = now - timedelta(days=30)
+        old_ts = (now - timedelta(days=100)).timestamp()
+
+        (tmp_path / "dataset-err.csv").write_text("data", encoding="utf-8")
+        (tmp_path / "dataset-err.meta.json").write_text("{}", encoding="utf-8")
+        os.utime(tmp_path / "dataset-err.csv", (old_ts, old_ts))
+        os.utime(tmp_path / "dataset-err.meta.json", (old_ts, old_ts))
+
+        from pathlib import Path
+        original_unlink = Path.unlink
+
+        def failing_unlink(self_path):
+            if self_path.suffix == ".csv":
+                raise OSError("Permission denied / locked file")
+            return original_unlink(self_path)
+
+        monkeypatch.setattr(Path, "unlink", failing_unlink)
+
+        with db_manager.get_unit_of_work() as uow:
+            session = uow.session
+            handler = MarketDataHandler(datasets_dir=str(tmp_path))
+            policy = make_policy(DataCategory.MARKET_DATA, RetentionMode.DELETE, "30d")
+            outcome = handler.execute(make_context(session, policy, cutoff))
+
+            # Not fully deleted, so outcome.deleted should be 0 and skipped reason PARTIAL_DELETE_FAILURE
+            assert outcome.deleted == 0
+            assert outcome.skipped == 1
+            assert any(r.reason == "PARTIAL_DELETE_FAILURE" for r in outcome.skipped_reasons)
+
+
 
 
 class TestMarketDataBufferHandler:
@@ -239,6 +336,27 @@ class TestMarketDataBufferHandler:
         handler.sync_policy(policy)
 
         assert store.max_age == timedelta(hours=6)
+
+    def test_sync_policy_keep_mode_clears_max_age(self):
+        store = MarketDataStore(max_age=timedelta(hours=6))
+        handler = MarketDataBufferHandler(store)
+        keep_policy = make_policy(DataCategory.MARKET_DATA_BUFFER, RetentionMode.KEEP, "6h")
+        handler.sync_policy(keep_policy)
+        assert store.max_age is None
+
+    def test_sync_policy_disabled_clears_max_age(self):
+        store = MarketDataStore(max_age=timedelta(hours=6))
+        handler = MarketDataBufferHandler(store)
+        disabled_policy = RetentionPolicy(
+            policy_id="market_data_buffer",
+            data_category=DataCategory.MARKET_DATA_BUFFER,
+            retention_period="6h",
+            retention_mode=RetentionMode.DELETE,
+            enabled=False,
+        )
+        handler.sync_policy(disabled_policy)
+        assert store.max_age is None
+
 
 
 class TestRuntimeAlertHandler:
@@ -303,12 +421,51 @@ class TestRuntimeAlertHandler:
             preview = handler.evaluate(make_context(session, policy, cutoff, dry_run=True))
             assert preview.eligible == 2
             assert preview.examined == 4
+            assert preview.skipped == 2
 
             outcome = handler.execute(make_context(session, policy, cutoff, dry_run=False))
+            assert outcome.deleted == 0
+            assert outcome.aggregated == 0
+            assert outcome.skipped == 2
+            assert session.query(RuntimeIncidentDao).count() == 2
+            assert session.query(RuntimeErrorEventDao).count() == 2
+
+    def test_deletes_when_mode_is_delete(self, db_manager):
+        now = naive_now()
+        cutoff = now - timedelta(days=180)
+        with db_manager.get_unit_of_work() as uow:
+            session = uow.session
+            session.add(
+                RuntimeIncidentDao(
+                    id="inc-old",
+                    fingerprint="fp1",
+                    severity="HIGH",
+                    status="RESOLVED",
+                    category="TRADING",
+                    component="engine",
+                    first_seen=now - timedelta(days=200),
+                    last_seen=now - timedelta(days=200),
+                )
+            )
+            session.add(
+                RuntimeErrorEventDao(
+                    id="err-old",
+                    timestamp=now - timedelta(days=200),
+                    severity="CRITICAL",
+                    component="engine",
+                    error_type="ValueError",
+                    message="Old error",
+                    fingerprint="fp1",
+                )
+            )
+            session.flush()
+
+            handler = RuntimeAlertHandler()
+            policy = make_policy(DataCategory.RUNTIME_ALERT, RetentionMode.DELETE, "180d")
+            outcome = handler.execute(make_context(session, policy, cutoff, dry_run=False))
             assert outcome.deleted == 2
-            assert outcome.aggregated == 2
-            assert session.query(RuntimeIncidentDao).count() == 1
-            assert session.query(RuntimeErrorEventDao).count() == 1
+            assert session.query(RuntimeIncidentDao).count() == 0
+            assert session.query(RuntimeErrorEventDao).count() == 0
 
 
 class TestExperimentArtifactHandler:

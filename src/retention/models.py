@@ -65,6 +65,8 @@ class RetentionPolicy:
     enabled: bool = True
     grace_period: str = "0d"
     description: str = ""
+    updated_at: Optional[datetime] = None
+    updated_by: Optional[str] = None
 
     def period_delta(self) -> Optional[timedelta]:
         return parse_duration(self.retention_period)
@@ -94,8 +96,8 @@ class RetentionPolicy:
             "description": self.description,
             "record_count": record_count,
             "estimated_storage_bytes": estimated_storage_bytes,
-            "updated_at": None,
-            "updated_by": None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "updated_by": self.updated_by,
         }
 
 

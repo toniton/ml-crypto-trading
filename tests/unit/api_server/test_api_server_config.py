@@ -59,6 +59,7 @@ class TestApiServerConfig(unittest.TestCase):
         db_manager = MagicMock()
         vcs = MagicMock()
         llm_manager = MagicMock()
+        retention_manager = MagicMock()
 
         server = ApiServer(
             trading_proxy=trading_proxy,
@@ -67,6 +68,7 @@ class TestApiServerConfig(unittest.TestCase):
             db_manager=db_manager,
             vcs=vcs,
             llm_manager=llm_manager,
+            retention_manager=retention_manager,
         )
         self.assertEqual(server.host, "0.0.0.0")
         self.assertEqual(server.port, 8000)

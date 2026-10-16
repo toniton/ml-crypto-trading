@@ -75,3 +75,19 @@ class TestRetentionRoutes:
             json={"enabled": False},
         )
         assert response.status_code == 404
+
+    def test_concurrent_run_rejection(self, db_manager):
+        manager = RetentionManager(db_manager, config=RetentionConfig())
+        app = FastAPI()
+        app.include_router(RetentionRouterFactory.create_router(manager))
+        client = TestClient(app)
+
+        # Simulate ongoing run by holding run lock
+        assert manager._run_lock.acquire(blocking=False)
+        try:
+            conflict_run = client.post("/api/v1/retention/run", json={"confirm": True})
+            assert conflict_run.status_code == 409
+            assert "already in progress" in conflict_run.json()["detail"]
+        finally:
+            manager._run_lock.release()
+

@@ -50,6 +50,7 @@ def event_bus():
 
 @pytest.fixture
 def client(db_manager, event_bus):
+    from src.retention.manager import RetentionManager
     vcs = VCSService(db_manager)
     agent = AgentGateway(FakeLlmAdapter([]), vcs=vcs)
     market_store = MarketDataStore(db_manager)
@@ -60,6 +61,7 @@ def client(db_manager, event_bus):
         db_manager=db_manager,
         vcs=vcs,
         llm_manager=make_test_llm_manager(db_manager),
+        retention_manager=RetentionManager(db_manager),
     )
     return TestClient(app)
 

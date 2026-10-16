@@ -77,6 +77,7 @@ def _configuration_llm():
 
 
 def _build_app(config_file, db_manager):
+    from src.retention.manager import RetentionManager
     vcs = VCSService(db_manager)
     gateway = AgentGateway(_configuration_llm(), vcs=vcs)
     return ChatApp.create(
@@ -86,6 +87,7 @@ def _build_app(config_file, db_manager):
         db_manager=db_manager,
         vcs=vcs,
         llm_manager=make_test_llm_manager(db_manager),
+        retention_manager=RetentionManager(db_manager),
     )
 
 

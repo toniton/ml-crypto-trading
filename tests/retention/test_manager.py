@@ -4,8 +4,12 @@ from src.configuration.retention_config import RetentionConfig
 from src.database.repositories.providers.postgres_retention_repository import (
     PostgresRetentionRepository,
 )
-from src.retention.manager import RetentionConfirmationRequired, RetentionManager
-from src.retention.models import RetentionRunStatus
+from src.retention.manager import (
+    RetentionConfirmationRequired,
+    RetentionManager,
+    RetentionRunAlreadyInProgress,
+)
+from src.retention.models import RetentionAuditEventType, RetentionRunStatus
 
 
 class TestRetentionManager:
@@ -169,6 +173,7 @@ class TestRetentionManager:
             session.flush()
 
         manager = self.make_manager(db_manager, dry_run=False)
+        manager.update_policy("trace_events", retention_mode="DELETE", confirm=True)
         run = manager.execute(actor="integration-test")
 
         assert run["status"] == RetentionRunStatus.COMPLETED.value
@@ -188,3 +193,45 @@ class TestRetentionManager:
             exp = session.query(ExperimentDao).filter(ExperimentDao.id == "exp-active").first()
             assert "summary" in exp.report
             assert "heavy_data" not in exp.report
+
+    def test_disabled_retention_persists_completed_terminal_status_and_audit(self, db_manager):
+        config = RetentionConfig(enabled=False)
+        manager = RetentionManager(db_manager, config=config)
+        run = manager.execute(actor="disabled-tester")
+
+        assert run["status"] == RetentionRunStatus.COMPLETED.value
+        assert run["completed_at"] is not None
+
+        # Verify database record has terminal status COMPLETED, not left in RUNNING
+        with db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresRetentionRepository)
+            saved_run = repository.get_run(run["run_id"])
+            assert saved_run is not None
+            assert saved_run.status == RetentionRunStatus.COMPLETED
+            assert saved_run.completed_at is not None
+
+            # Verify RUN_COMPLETED audit event is present
+            events = repository.list_audit_events()
+            completed_events = [e for e in events if e.run_id == run["run_id"] and e.event_type == RetentionAuditEventType.RUN_COMPLETED]
+            assert len(completed_events) == 1
+
+    def test_persisted_policy_overrides_loaded_on_restart(self, db_manager):
+        manager = self.make_manager(db_manager)
+        manager.update_policy("trace_events", retention_period="14d", confirm=True, actor="ops_user")
+
+        # Create a new manager instance mimicking application reboot
+        new_manager = self.make_manager(db_manager)
+        policy = new_manager.resolver.get("trace_events")
+        assert policy.retention_period == "14d"
+        assert policy.updated_by == "ops_user"
+        assert policy.updated_at is not None
+
+    def test_overlapping_runs_rejected_by_run_lock(self, db_manager):
+        manager = self.make_manager(db_manager)
+        assert manager._run_lock.acquire(blocking=False)
+        try:
+            with pytest.raises(RetentionRunAlreadyInProgress):
+                manager.execute(actor="concurrent-tester")
+        finally:
+            manager._run_lock.release()
+

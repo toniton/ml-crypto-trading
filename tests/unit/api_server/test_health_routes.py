@@ -23,6 +23,7 @@ class TestHealthRoutes(unittest.TestCase):
             db_manager=self.mock_db,
             vcs=self.mock_vcs,
             llm_manager=self.mock_llm_manager,
+            retention_manager=MagicMock(),
         )
         self.client = TestClient(self.app)
 

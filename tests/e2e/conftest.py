@@ -315,6 +315,8 @@ class E2EStack:
             compare_backtest=self.agent_executor.compare_backtest_drift,
         )
 
+        from src.retention.manager import RetentionManager
+
         gateway = AgentGateway(FakeLlmAdapter([]), vcs=self.vcs)
         self.app = ChatApp.create(
             trading_proxy=self.trading_proxy,
@@ -323,6 +325,7 @@ class E2EStack:
             db_manager=self.db,
             vcs=self.vcs,
             llm_manager=self.llm_manager,
+            retention_manager=RetentionManager(self.db),
         )
         from fastapi.testclient import TestClient
 
