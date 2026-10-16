@@ -7,14 +7,17 @@ from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.decision_inspector_tool import DecisionInspectorTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.exchange_read_tool import ExchangeReadOnlyTool
+from src.llm.tools.experiment_inspector_tool import ExperimentInspectorTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
 from src.llm.tools.metrics_tool import MetricsTool
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
 from src.llm.tools.portfolio_summary_tool import PortfolioSummaryTool
 from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
+from src.llm.tools.retention_governance_tool import RetentionGovernanceTool
 from src.llm.tools.session_summary_tool import SessionSummaryTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
+from src.llm.tools.tick_trace_tool import ScheduleTickTrace, ScheduleTickTracer, TickTraceTool
 from src.llm.tools.trade_attribution_tool import TradeAttributionTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 
@@ -28,14 +31,19 @@ __all__ = [
     "DecisionInspectorTool",
     "ExchangeFeesTool",
     "ExchangeReadOnlyTool",
+    "ExperimentInspectorTool",
     "GetOpenOrdersTool",
     "MarketStatisticsTool",
     "MetricsTool",
     "PortfolioSummaryTool",
     "PositionTool",
     "RecentTradesTool",
+    "RetentionGovernanceTool",
+    "ScheduleTickTrace",
+    "ScheduleTickTracer",
     "SessionSummaryTool",
     "StrategyVotesTool",
+    "TickTraceTool",
     "TradeAttributionTool",
     "TradingContextTool",
 ]

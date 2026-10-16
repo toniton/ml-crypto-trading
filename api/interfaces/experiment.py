@@ -72,6 +72,7 @@ class ExperimentSpec(BaseModel):
     execution: BacktestExecutionSpec = Field(default_factory=BacktestExecutionSpec)
     control_policy: ControlPolicySpec = Field(default_factory=ControlPolicySpec)
     candidates: list[ExperimentCandidate] = Field(default_factory=list)
+    triggered_by: Optional[dict[str, Any]] = None
 
 
 class CandidateRunBinding(BaseModel):
@@ -109,3 +110,4 @@ class CreateExperimentRequest(BaseModel):
     execution: BacktestExecutionSpec = Field(default_factory=BacktestExecutionSpec)
     control_policy: ControlPolicySpec = Field(default_factory=ControlPolicySpec)
     source_commit_hash: Optional[str] = None
+    triggered_by: Optional[dict[str, Any]] = None

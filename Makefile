@@ -9,7 +9,7 @@ DEFAULT_CONFIG := examples/configurations/trading-config.yaml
 BACKTEST_CONFIG := examples/configurations/backtest-trading-config.yaml
 BACKTEST_SOURCE := examples/coinmarketcap/history
 
-.PHONY: help setup venv install install-dev clean db-up db-down db-setup migrate upgrade downgrade format lint test run-simulated run-backtest run-live run-headless start
+.PHONY: help setup venv install install-dev clean db-up db-down db-setup migrate upgrade downgrade format lint test test-agent-20q benchmark-agent run-simulated run-backtest run-live run-headless start
 
 help:
 	@echo "Available commands:"
@@ -27,6 +27,8 @@ help:
 	@echo "  make format         - Run code formatter and pre-commit hooks"
 	@echo "  make lint           - Run pylint checks"
 	@echo "  make test           - Run pytest suite with coverage"
+	@echo "  make test-agent-20q - Run Rio 20-Question Acceptance & Grounding pytest suite"
+	@echo "  make benchmark-agent - Generate Rio 20-Question benchmark report (Markdown + JSON)"
 	@echo "  make run-simulated  - Run bot in paper trading / simulated mode"
 	@echo "  make run-backtest   - Run bot in backtesting mode"
 	@echo "  make run-live       - Run bot in live trading mode (with API server)"
@@ -82,6 +84,12 @@ lint: .pylintrc
 
 test:
 	export PYTHONPATH=. && $(PYTEST) tests/ --cov --cov-branch --cov-report=xml -s
+
+test-agent-20q:
+	export PYTHONPATH=. && $(PYTEST) tests/benchmark/agent_20q/ -v
+
+benchmark-agent:
+	export PYTHONPATH=. && $(PYTHON) ./scripts/benchmark_rio_20q.py --output-md docs/benchmarks/rio-20q-baseline.md --output-json docs/benchmarks/rio-20q-baseline.json
 
 run-simulated:
 	$(PYTHON) ./main.py --assets-conf=$(DEFAULT_CONFIG) --simulated=true

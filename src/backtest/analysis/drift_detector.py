@@ -25,6 +25,12 @@ class DriftReport:
     quantity_drift: Decimal
     price_drift: Decimal | None
     drifted: bool
+    window_start: str | None = None
+    window_end: str | None = None
+    partial_fill_legs_merged: int = 0
+    simulated_fees: Decimal = Decimal("0")
+    live_fees: Decimal = Decimal("0")
+    fee_drift: Decimal = Decimal("0")
 
 
 class BacktestDriftDetector:
@@ -54,7 +60,7 @@ class BacktestDriftDetector:
         live_fills = self._trading_journal.entries(ticker_symbol)
         return self._compare(ticker_symbol, result.fills, live_fills)
 
-    def _compare(
+    def _compare(  # pylint: disable=too-many-locals
             self,
             ticker_symbol: str,
             simulated_fills: list[BacktestFill],
@@ -62,12 +68,21 @@ class BacktestDriftDetector:
     ) -> DriftReport:
         simulated_fill_count = len(simulated_fills)
         live_fill_count = len(live_orders)
+        unique_parent_orders = {
+            getattr(o, "parent_order_id", None) or o.uuid
+            for o in live_orders
+        }
+        partial_legs = max(0, live_fill_count - len(unique_parent_orders))
 
         simulated_quantity = self._sum_fill_quantity(simulated_fills)
         live_quantity = self._sum_order_quantity(live_orders)
 
         simulated_average_price = self._average_fill_price(simulated_fills, simulated_quantity)
         live_average_price = self._average_order_price(live_orders, live_quantity)
+
+        simulated_fees = sum((getattr(f, "fee", None) or Decimal("0") for f in simulated_fills), Decimal("0"))
+        live_fees = sum((getattr(o, "fees", None) or Decimal("0") for o in live_orders), Decimal("0"))
+        fee_drift = simulated_fees - live_fees
 
         fill_count_drift = simulated_fill_count - live_fill_count
         quantity_drift = simulated_quantity - live_quantity
@@ -94,6 +109,10 @@ class BacktestDriftDetector:
             quantity_drift=quantity_drift,
             price_drift=price_drift,
             drifted=drifted,
+            partial_fill_legs_merged=partial_legs,
+            simulated_fees=simulated_fees,
+            live_fees=live_fees,
+            fee_drift=fee_drift,
         )
 
     @staticmethod

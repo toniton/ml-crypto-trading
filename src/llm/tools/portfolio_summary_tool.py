@@ -35,7 +35,7 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, portfolio_risk_manager: PortfolioRiskManager):
         super().__init__(portfolio_risk_manager=portfolio_risk_manager)
 
-    def _run(  # pylint: disable=arguments-differ
+    def _run(  # pylint: disable=arguments-differ,too-many-locals
             self,
             quote_currency: Optional[str] = None,
             exchange: Optional[str] = None,
@@ -65,25 +65,48 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
                 price = p.asset_mark_prices.get(ticker, Decimal("0"))
                 val = qty * price
                 conc = p.get_asset_concentration(ticker) * Decimal("100")
+                price_note = " [PRICE UNAVAILABLE]" if qty > Decimal("0") and price <= Decimal("0") else ""
                 pos_lines.append(
-                    f"    • {ticker}: {FormatHelper.format_decimal(qty)} units @ ${FormatHelper.format_decimal(price)} "
-                    f"= ${FormatHelper.format_decimal(val)} {p.quote_currency} ({FormatHelper.format_decimal(conc)}% of portfolio)"
+                    f"    • {ticker}: {FormatHelper.format_decimal(qty)} units @ "
+                    f"${FormatHelper.format_decimal(price)} = ${FormatHelper.format_decimal(val)} "
+                    f"{p.quote_currency} ({FormatHelper.format_decimal(conc)}% of portfolio){price_note}"
                 )
             pos_text = "\n".join(pos_lines) if pos_lines else "    • (No open base asset positions)"
 
-            dd_limit_str = f"{FormatHelper.format_decimal(p_mgr.max_portfolio_drawdown)}%" if p_mgr.max_portfolio_drawdown else "Not set"
-            conc_limit_str = f"{FormatHelper.format_decimal(p_mgr.max_asset_concentration)}%" if p_mgr.max_asset_concentration else "Not set"
+            dd_limit_str = (
+                f"{FormatHelper.format_decimal(p_mgr.max_portfolio_drawdown)}%"
+                if p_mgr.max_portfolio_drawdown else "Not set"
+            )
+            conc_limit_str = (
+                f"{FormatHelper.format_decimal(p_mgr.max_asset_concentration)}%"
+                if p_mgr.max_asset_concentration else "Not set"
+            )
             current_dd_pct = abs(p.get_drawdown()) * Decimal("100")
+            val_ts = getattr(p, "valuation_timestamp", None) or "Live"
+            reserved_orders_str = (
+                ", ".join(
+                    f"{oid} (${FormatHelper.format_decimal(amt)})"
+                    for oid, amt in sorted(p.open_orders.items())
+                )
+                if p.open_orders else "None"
+            )
+            missing_prices = p.unavailable_price_assets() if hasattr(p, "unavailable_price_assets") else []
+            missing_str = ", ".join(missing_prices) if missing_prices else "None"
+            tot_eq = FormatHelper.format_decimal(p.get_total_equity())
+            cur_dd = FormatHelper.format_decimal(current_dd_pct)
 
             section = (
                 f"Portfolio [{p.exchange} / {p.quote_currency}]:\n"
-                f"  Total Mark-to-Market Equity: ${FormatHelper.format_decimal(p.get_total_equity())} {p.quote_currency}\n"
+                f"  Valuation Timestamp: {val_ts}\n"
+                f"  Total Mark-to-Market Equity: ${tot_eq} {p.quote_currency}\n"
                 f"  Available Cash:             ${FormatHelper.format_decimal(p.available_cash)} {p.quote_currency}\n"
                 f"  Reserved Order Cash:        ${FormatHelper.format_decimal(p.reserved_cash)} {p.quote_currency}\n"
+                f"  Reserved Orders: {reserved_orders_str}\n"
                 f"  Total Cash Balance:         ${FormatHelper.format_decimal(p.total_cash)} {p.quote_currency}\n"
                 f"  Peak Equity (HWM):          ${FormatHelper.format_decimal(p.peak_equity)} {p.quote_currency}\n"
-                f"  Current Drawdown:           {FormatHelper.format_decimal(current_dd_pct)}% (Limit: {dd_limit_str})\n"
+                f"  Current Drawdown:           {cur_dd}% (Limit: {dd_limit_str})\n"
                 f"  Max Concentration Limit:    {conc_limit_str}\n"
+                f"  Unavailable Price Data: {missing_str}\n"
                 f"  Positions Breakdown:\n{pos_text}"
             )
             sections.append(section)

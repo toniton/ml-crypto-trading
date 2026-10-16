@@ -122,6 +122,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             execution=req.execution,
             control_policy=req.control_policy,
             candidates=candidates,
+            triggered_by=req.triggered_by,
         )
 
         experiment_id = f"exp_{uuid.uuid4().hex[:12]}"

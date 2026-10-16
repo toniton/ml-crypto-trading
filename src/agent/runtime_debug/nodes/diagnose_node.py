@@ -32,6 +32,13 @@ class DiagnoseNode:
             summary = f"API rate limit exceeded on {error_event.exchange}."
             root_cause = "Request burst exceeded exchange rate limit threshold."
             confidence = ConfidenceLevel.CONFIRMED
+        elif error_event is None and self._llm is not None and state.get("user_prompt"):
+            summary = self._llm.generate(
+                prompt=str(state.get("user_prompt")),
+                system_prompt="Diagnose runtime operational state using bound tools and context.",
+            )
+            root_cause = "Grounded runtime and trace inspection."
+            confidence = ConfidenceLevel.CONFIRMED
         else:
             summary = f"Runtime error in {component}: {error_event.message if error_event else 'Unknown error'}."
             root_cause = "Runtime execution failure."

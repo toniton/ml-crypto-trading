@@ -132,6 +132,7 @@ class BuyLot:
             winning_strategy: Optional[str] = None,
             strategy_votes: Optional[dict[str, str]] = None,
             strategy_attributions: Optional[dict[str, float]] = None,
+            regime: Optional[str] = None,
     ) -> None:
         self.order_uuid = order_uuid
         self.remaining_qty = remaining_qty
@@ -143,6 +144,7 @@ class BuyLot:
         self.winning_strategy = winning_strategy
         self.strategy_votes = strategy_votes
         self.strategy_attributions = strategy_attributions
+        self.regime = regime
 
 
 @dataclass(frozen=True)
@@ -215,6 +217,7 @@ class AssetPerformanceService:
                         winning_strategy=order.winning_strategy,
                         strategy_votes=order.strategy_votes,
                         strategy_attributions=order.strategy_attributions,
+                        regime=order.regime,
                     )
                 )
             else:
@@ -248,6 +251,8 @@ class AssetPerformanceService:
                             entry_strategy_attributions=oldest_lot.strategy_attributions,
                             exit_strategy_attributions=order.strategy_attributions,
                             exit_winning_strategy=order.winning_strategy,
+                            entry_regime=oldest_lot.regime,
+                            exit_regime=order.regime,
                         )
                     )
                     oldest_lot.remaining_qty -= match_qty
@@ -341,6 +346,8 @@ class AssetPerformanceService:
                         commit_hash=order.commit_hash,
                         winning_strategy=order.winning_strategy,
                         strategy_votes=order.strategy_votes,
+                        strategy_attributions=order.strategy_attributions,
+                        regime=order.regime,
                     )
                 )
             else:
@@ -388,6 +395,8 @@ class AssetPerformanceService:
                         entry_strategy_attributions=oldest_lot.strategy_attributions,
                         exit_strategy_attributions=order.strategy_attributions,
                         exit_winning_strategy=order.winning_strategy,
+                        entry_regime=oldest_lot.regime,
+                        exit_regime=order.regime,
                     )
                     matched_trades.append(trade_obj)
 

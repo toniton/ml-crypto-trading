@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Optional, Type
 
 from langchain_core.tools import BaseTool
@@ -52,7 +53,7 @@ class TradeAttributionTool(BaseTool, ApplicationLoggingMixin):
     ):
         super().__init__(database_manager=database_manager, session_manager=session_manager)
 
-    def _run(  # pylint: disable=arguments-differ
+    def _run(  # pylint: disable=arguments-differ,too-many-return-statements
             self,
             dimension: str = "strategy",
             ticker_symbol: Optional[str] = None,
@@ -72,12 +73,16 @@ class TradeAttributionTool(BaseTool, ApplicationLoggingMixin):
         if normalized_dim == "symbol":
             attr = TradeAttributionService.attribute_by_symbol(trades)
             return self._format_attribution_dict("Ticker Symbol", attr)
+        if normalized_dim == "regime":
+            attr = TradeAttributionService.attribute_by_regime(trades)
+            return self._format_attribution_dict("Market Regime", attr)
+        if normalized_dim in ("strategy_by_regime", "regime_strategy"):
+            return self._format_strategy_by_regime(trades, lookback_days)
         if normalized_dim == "overall":
             metrics = TradeAttributionService.calculate_metrics(trades)
             return self._format_single_attribution("Overall Performance", metrics)
 
-        attr = TradeAttributionService.attribute_by_strategy(trades)
-        return self._format_attribution_dict("Strategy", attr)
+        return self._format_reconciled_strategy_attribution(trades, lookback_days)
 
     def _gather_trades(self, ticker_symbol: Optional[str], lookback_days: int) -> list[Trade]:
         trades: list[Trade] = []
@@ -129,17 +134,78 @@ class TradeAttributionTool(BaseTool, ApplicationLoggingMixin):
         return "\n".join(lines)
 
     @staticmethod
-    def _format_metrics_block(metrics: AttributionMetrics) -> str:
+    def _fmt_signed_usd(val: Decimal) -> str:
+        sign = "+" if val >= Decimal("0") else "-"
+        return f"{sign}${abs(val):.2f}"
+
+    @classmethod
+    def _format_reconciled_strategy_attribution(cls, trades: list[Trade], lookback_days: int) -> str:
+        overall = TradeAttributionService.calculate_metrics(trades)
+        prop_attr = TradeAttributionService.attribute_by_strategy_proportional(trades)
+        part_attr = TradeAttributionService.attribute_by_strategy(trades)
+        reconciled_sum = sum((m.net_pnl for m in prop_attr.values()), Decimal("0"))
+        reconciled = abs(reconciled_sum - overall.net_pnl) <= Decimal("0.01")
+
+        lines = [
+            f"Trade Attribution Breakdown by Strategy (Window: {lookback_days}d UTC, Basis: Realized Closed Trades):",
+            f"Reconciled Portfolio Realized Net PnL: {cls._fmt_signed_usd(overall.net_pnl)} "
+            f"(Proportional Strategy Sum: {cls._fmt_signed_usd(reconciled_sum)}, "
+            f"Reconciled: {reconciled}, Total Trades: {overall.total_trades})",
+        ]
+        for key in sorted(prop_attr.keys()):
+            prop_m = prop_attr[key]
+            part_m = part_attr.get(key)
+            unadjusted_note = (
+                f" | Unadjusted Participation Net PnL: {cls._fmt_signed_usd(part_m.net_pnl)} "
+                f"across {part_m.total_trades} trade(s)"
+                if part_m is not None else ""
+            )
+            lines.append(
+                f"\n[Strategy: {key}] (Proportional Net PnL: "
+                f"{cls._fmt_signed_usd(prop_m.net_pnl)}{unadjusted_note})"
+            )
+            lines.append(cls._format_metrics_block(prop_m))
+        return "\n".join(lines)
+
+    @classmethod
+    def _format_strategy_by_regime(cls, trades: list[Trade], lookback_days: int) -> str:
+        overall = TradeAttributionService.calculate_metrics(trades)
+        by_regime = TradeAttributionService.attribute_strategy_by_regime(trades)
+        regime_totals = TradeAttributionService.attribute_by_regime(trades)
+        lines = [
+            f"Strategy Performance by Market Regime (Window: {lookback_days}d UTC, "
+            f"Baseline Net PnL: {cls._fmt_signed_usd(overall.net_pnl)}, "
+            f"Baseline Win Rate: {overall.win_rate_pct:.1f}%, Total Sample Size: {overall.total_trades} trades):"
+        ]
+        for regime, r_metrics in sorted(regime_totals.items()):
+            low_sample = " [LOW SAMPLE SIZE]" if r_metrics.total_trades < 5 else ""
+            lines.append(
+                f"\n=== Regime: {regime} (Sample Size: n={r_metrics.total_trades}, "
+                f"Regime Net PnL: {cls._fmt_signed_usd(r_metrics.net_pnl)}, "
+                f"Win Rate: {r_metrics.win_rate_pct:.1f}%){low_sample} ==="
+            )
+        for strat, regimes in sorted(by_regime.items()):
+            lines.append(f"\n[Strategy: {strat}]")
+            for regime, m in sorted(regimes.items()):
+                low_sample = " (Warning: Small Sample Size n<5)" if m.total_trades < 5 else ""
+                lines.append(
+                    f"  - Regime {regime}: Net PnL={cls._fmt_signed_usd(m.net_pnl)} | Win Rate={m.win_rate_pct:.1f}% | "
+                    f"Sample Size n={m.total_trades} | Avg Return={m.avg_return_pct:+.2f}%{low_sample}"
+                )
+        return "\n".join(lines)
+
+    @classmethod
+    def _format_metrics_block(cls, metrics: AttributionMetrics) -> str:
         return (
             f"  Trades: {metrics.total_trades} "
             f"(Wins: {metrics.winning_trades}, Losses: {metrics.losing_trades}, "
             f"Break-even: {metrics.break_even_trades})\n"
             f"  Win Rate: {metrics.win_rate_pct:.1f}%\n"
-            f"  Net PnL: ${metrics.net_pnl:+.2f} "
-            f"(Gross: ${metrics.gross_pnl:+.2f}, Fees: ${metrics.total_fees:.4f}, "
+            f"  Net PnL: {cls._fmt_signed_usd(metrics.net_pnl)} "
+            f"(Gross: {cls._fmt_signed_usd(metrics.gross_pnl)}, Fees: ${metrics.total_fees:.4f}, "
             f"Slippage: ${metrics.total_slippage:.4f})\n"
             f"  Profit Factor: {metrics.profit_factor:.2f}\n"
             f"  Avg Return: {metrics.avg_return_pct:+.2f}%\n"
             f"  Avg Duration: {metrics.avg_duration_seconds:.1f}s\n"
-            f"  Max Win: ${metrics.max_win:+.2f} | Max Loss: ${metrics.max_loss:+.2f}"
+            f"  Max Win: {cls._fmt_signed_usd(metrics.max_win)} | Max Loss: {cls._fmt_signed_usd(metrics.max_loss)}"
         )

@@ -77,6 +77,7 @@ class ConsensusSnapshot:
     vote_ratio: float
     winning_strategy: Optional[str] = None
     strategy_attributions: Optional[dict[str, float]] = None
+    strategy_rejections: Optional[dict[str, str]] = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -89,12 +90,15 @@ class ConsensusSnapshot:
             "vote_ratio": self.vote_ratio,
             "winning_strategy": self.winning_strategy,
             "strategy_attributions": self.strategy_attributions,
+            "strategy_rejections": self.strategy_rejections,
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ConsensusSnapshot:
+        act_raw = data.get("action", TradeAction.BUY)
+        action_val = TradeAction(act_raw) if isinstance(act_raw, str) else act_raw
         return cls(
-            action=TradeAction(data["action"]) if isinstance(data.get("action"), str) else data.get("action", TradeAction.BUY),
+            action=action_val,
             votes={k: bool(v) for k, v in data.get("votes", {}).items()},
             weights={k: float(v) for k, v in data.get("weights", {}).items()},
             factor=float(data.get("factor", 1.0)),
@@ -103,6 +107,7 @@ class ConsensusSnapshot:
             vote_ratio=float(data.get("vote_ratio", 0.0)),
             winning_strategy=data.get("winning_strategy"),
             strategy_attributions=data.get("strategy_attributions"),
+            strategy_rejections=data.get("strategy_rejections"),
         )
 
 
@@ -128,11 +133,16 @@ class SizingSnapshot:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> SizingSnapshot:
+        calc_qty = (
+            Decimal(str(data["calculated_quantity"]))
+            if data.get("calculated_quantity") is not None else None
+        )
+        fin_qty = Decimal(str(data["final_quantity"])) if data.get("final_quantity") is not None else None
         return cls(
             formula=data.get("formula"),
-            calculated_quantity=Decimal(str(data["calculated_quantity"])) if data.get("calculated_quantity") is not None else None,
+            calculated_quantity=calc_qty,
             min_quantity=Decimal(str(data.get("min_quantity", 0))),
-            final_quantity=Decimal(str(data["final_quantity"])) if data.get("final_quantity") is not None else None,
+            final_quantity=fin_qty,
             variables=data.get("variables", {}),
         )
 
@@ -166,30 +176,71 @@ class PortfolioSnapshot:
 
 
 @dataclass(frozen=True)
+class GuardCheckResult:
+    guard_name: str
+    passed: bool
+    observed_value: Optional[str] = None
+    limit_value: Optional[str] = None
+    rejection_reason: Optional[str] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "guard_name": self.guard_name,
+            "passed": self.passed,
+            "observed_value": self.observed_value,
+            "limit_value": self.limit_value,
+            "rejection_reason": self.rejection_reason,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> GuardCheckResult:
+        return cls(
+            guard_name=str(data.get("guard_name", "UnknownGuard")),
+            passed=bool(data.get("passed", False)),
+            observed_value=str(data["observed_value"]) if data.get("observed_value") is not None else None,
+            limit_value=str(data["limit_value"]) if data.get("limit_value") is not None else None,
+            rejection_reason=data.get("rejection_reason"),
+        )
+
+
+@dataclass(frozen=True)
 class RiskEvaluation:
     passed: bool
     effective_max_per_asset: Optional[Decimal] = None
     effective_max_total: Optional[Decimal] = None
     min_quote_reserve: Optional[Decimal] = None
     rejection_reason: Optional[str] = None
+    guard_evaluations: list[GuardCheckResult] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
+        max_pa = str(self.effective_max_per_asset) if self.effective_max_per_asset is not None else None
+        max_tot = str(self.effective_max_total) if self.effective_max_total is not None else None
+        min_qr = str(self.min_quote_reserve) if self.min_quote_reserve is not None else None
         return {
             "passed": self.passed,
-            "effective_max_per_asset": str(self.effective_max_per_asset) if self.effective_max_per_asset is not None else None,
-            "effective_max_total": str(self.effective_max_total) if self.effective_max_total is not None else None,
-            "min_quote_reserve": str(self.min_quote_reserve) if self.min_quote_reserve is not None else None,
+            "effective_max_per_asset": max_pa,
+            "effective_max_total": max_tot,
+            "min_quote_reserve": min_qr,
             "rejection_reason": self.rejection_reason,
+            "guard_evaluations": [g.to_dict() for g in self.guard_evaluations],
         }
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> RiskEvaluation:
+        raw_guards = data.get("guard_evaluations") or []
+        raw_pa = data.get("effective_max_per_asset")
+        raw_tot = data.get("effective_max_total")
+        raw_qr = data.get("min_quote_reserve")
         return cls(
             passed=bool(data.get("passed", False)),
-            effective_max_per_asset=Decimal(str(data["effective_max_per_asset"])) if data.get("effective_max_per_asset") is not None else None,
-            effective_max_total=Decimal(str(data["effective_max_total"])) if data.get("effective_max_total") is not None else None,
-            min_quote_reserve=Decimal(str(data["min_quote_reserve"])) if data.get("min_quote_reserve") is not None else None,
+            effective_max_per_asset=Decimal(str(raw_pa)) if raw_pa is not None else None,
+            effective_max_total=Decimal(str(raw_tot)) if raw_tot is not None else None,
+            min_quote_reserve=Decimal(str(raw_qr)) if raw_qr is not None else None,
             rejection_reason=data.get("rejection_reason"),
+            guard_evaluations=[
+                GuardCheckResult.from_dict(g) if isinstance(g, dict) else g
+                for g in raw_guards
+            ],
         )
 
 
@@ -263,13 +314,17 @@ class TradingDecision:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> TradingDecision:
+        raw_act = data["trade_action"]
+        act_val = TradeAction(raw_act) if isinstance(raw_act, str) else raw_act
+        raw_stat = data.get("status", DecisionStatus.EXECUTED)
+        stat_val = DecisionStatus(raw_stat) if isinstance(raw_stat, str) else raw_stat
         return cls(
             decision_id=data.get("decision_id", f"dec_{uuid4().hex}"),
             timestamp=float(data.get("timestamp", datetime.now(timezone.utc).timestamp())),
             ticker_symbol=data["ticker_symbol"],
             exchange=data["exchange"],
-            trade_action=TradeAction(data["trade_action"]) if isinstance(data["trade_action"], str) else data["trade_action"],
-            status=DecisionStatus(data["status"]) if isinstance(data.get("status"), str) else data.get("status", DecisionStatus.EXECUTED),
+            trade_action=act_val,
+            status=stat_val,
             rejection_reason=data.get("rejection_reason"),
             commit_hash=data.get("commit_hash"),
             winning_strategy=data.get("winning_strategy"),

@@ -8,7 +8,13 @@ from src.agent.actions.service import AgentApprovalService
 from src.agent.backtest.graph import BacktestGraph
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.graph import ConfigurationGraph
-from src.agent.configuration.models import ClarificationResult, ConfigurationResult, GeneralResult
+from src.agent.configuration.models import (
+    ClarificationResult,
+    ConfigurationPresentation,
+    ConfigurationResult,
+    GeneralResult,
+    ValidationResult,
+)
 from src.agent.decision_investigation.graph import DecisionInvestigationGraph
 from src.agent.portfolio_insights.graph import PortfolioInsightsGraph
 from src.agent.performance_analysis.graph import PerformanceAnalysisGraph
@@ -71,11 +77,25 @@ class AgentGateway:
                 presentation=state["presentation"],
             )
 
+        raw_presentation = state["presentation"]
+        if not isinstance(raw_presentation, ConfigurationPresentation):
+            raw_presentation = ConfigurationPresentation(
+                blocks=list(getattr(raw_presentation, "blocks", []))
+            )
+
+        raw_validation = state.get("validation")
+        if raw_validation is not None and not isinstance(raw_validation, ValidationResult):
+            raw_validation = ValidationResult(
+                valid=bool(getattr(raw_validation, "valid", True)),
+                errors=list(getattr(raw_validation, "errors", [])),
+                warnings=list(getattr(raw_validation, "warnings", [])),
+            )
+
         return ConfigurationResult(
             goal=route.goal,
             proposal=state.get("proposal"),
-            validation=state.get("validation"),
-            presentation=state["presentation"],
+            validation=raw_validation,
+            presentation=raw_presentation,
         )
 
     def _route(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentRoute:
@@ -217,7 +237,10 @@ class AgentGateway:
             ),
             AgentDefinition(
                 name="portfolio_review",
-                description="Analyzes total mark-to-market equity, quote portfolio cash reserves, drawdowns, and asset concentration",
+                description=(
+                    "Analyzes total mark-to-market equity, quote portfolio cash reserves, "
+                    "drawdowns, and asset concentration"
+                ),
                 graph=PortfolioInsightsGraph(llm).build(),
                 presentation_node="present_insights",
                 capabilities=frozenset({"portfolio.read", "exchange.read", "trading_config.read"}),

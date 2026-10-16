@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 from src.agent.backtest.models import (
     BacktestPresentation,
     BacktestQuality,
@@ -30,9 +32,22 @@ class PresentResultNode:
 
         summary: BacktestSummary | None = state.get("summary")
         quality: BacktestQuality | None = state.get("quality")
+        result = state.get("result")
         parts: list[str] = []
         if summary is not None:
             parts.append(PresentResultNode._format_summary(summary))
+        if result is not None and isinstance(getattr(result, "initial_balance", None), (int, float, Decimal)):
+            exec_cfg = getattr(result, "execution", None)
+            fee_str = f", Fee rate: {exec_cfg.fee_rate}" if exec_cfg and hasattr(exec_cfg, "fee_rate") else ""
+            slip_str = (
+                f", Slippage ticks: {exec_cfg.slippage_ticks}"
+                if exec_cfg and hasattr(exec_cfg, "slippage_ticks") else ""
+            )
+            parts.append(
+                f"Execution Assumptions: Starting Capital: {result.initial_balance}{fee_str}{slip_str}"
+            )
+        if result is not None and isinstance(getattr(result, "report_markdown", None), str):
+            parts.append(result.report_markdown)
         if quality is not None:
             notes = PresentResultNode._format_quality(quality)
             if notes:

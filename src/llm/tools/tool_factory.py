@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from langchain_core.tools import BaseTool
 
@@ -22,24 +22,32 @@ from src.llm.tools.consensus_tool import ConsensusTool
 from src.llm.tools.decision_inspector_tool import DecisionInspectorTool
 from src.llm.tools.exchange_fees_tool import ExchangeFeesTool
 from src.llm.tools.exchange_read_tool import ExchangeReadOnlyTool
+from src.llm.tools.experiment_inspector_tool import ExperimentInspectorTool
 from src.llm.tools.market_statistics_tool import MarketStatisticsTool
 from src.llm.tools.metrics_tool import MetricsTool
 from src.llm.tools.open_orders_tool import GetOpenOrdersTool
 from src.llm.tools.portfolio_summary_tool import PortfolioSummaryTool
 from src.llm.tools.position_tool import PositionTool
 from src.llm.tools.recent_trades_tool import RecentTradesTool
+from src.llm.tools.retention_governance_tool import RetentionGovernanceTool
 from src.llm.tools.session_summary_tool import SessionSummaryTool
 from src.llm.tools.strategy_optimizer_tool import StrategyOptimizerTool
 from src.llm.tools.strategy_votes_tool import StrategyVotesTool
+from src.llm.tools.tick_trace_tool import ScheduleTickTracer, TickTraceTool
 from src.llm.tools.trade_attribution_tool import TradeAttributionTool
 from src.llm.tools.trading_context_tool import TradingContextTool
 from src.llm.tools.trading_health_tool import TradingHealthTool
 from src.llm.tools.walk_forward_tool import WalkForwardTool
 from src.metrics.services.metric_service import MetricService
+from src.retention.manager import RetentionManager
+from src.server.services.experiment_application_service import (
+    ExperimentApplicationService,
+)
 from src.server.services.walk_forward_application_service import (
     WalkForwardApplicationService,
 )
 from src.server.timeline_projector import TimelineProjector
+from src.trading.activity.asset_activity_tracker import AssetActivityTracker
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.session.session_manager import SessionManager
 from src.vcs.application.service import VCSService
@@ -180,8 +188,48 @@ class ToolFactory:
             "walk_forward": WalkForwardTool(walk_forward_service=walk_forward_service),
         }
 
+    @staticmethod
+    def build_trace_tools(
+            tick_tracer: Optional[ScheduleTickTracer] = None,
+            activity_tracker: Optional[AssetActivityTracker] = None,
+            decision_manager: Optional[Any] = None,
+    ) -> Dict[str, BaseTool]:
+        return {
+            "inspect_schedule_tick_trace": TickTraceTool(
+                tick_tracer=tick_tracer,
+                activity_tracker=activity_tracker,
+                decision_manager=decision_manager,
+            ),
+        }
+
+    @staticmethod
+    def build_experiment_tools(
+            experiment_service: Optional[ExperimentApplicationService] = None,
+            health_monitor: Optional[Any] = None,
+            activity_tracker: Optional[AssetActivityTracker] = None,
+            drift_detector: Optional[BacktestDriftDetector] = None,
+    ) -> Dict[str, BaseTool]:
+        return {
+            "inspect_experiment": ExperimentInspectorTool(
+                experiment_service=experiment_service,
+                health_monitor=health_monitor,
+                activity_tracker=activity_tracker,
+                drift_detector=drift_detector,
+            ),
+        }
+
+    @staticmethod
+    def build_retention_tools(
+            retention_manager: RetentionManager,
+    ) -> Dict[str, BaseTool]:
+        return {
+            "inspect_retention_governance": RetentionGovernanceTool(
+                retention_manager=retention_manager,
+            ),
+        }
+
     @classmethod
-    # pylint: disable=too-many-arguments,too-many-positional-arguments
+    # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     def build_tool_map(
             cls,
             managers: ManagerContainer,
@@ -194,6 +242,10 @@ class ToolFactory:
             metric_service: Optional[MetricService] = None,
             db_manager: Optional[DatabaseManager] = None,
             walk_forward_service: Optional[WalkForwardApplicationService] = None,
+            tick_tracer: Optional[ScheduleTickTracer] = None,
+            activity_tracker: Optional[AssetActivityTracker] = None,
+            experiment_service: Optional[ExperimentApplicationService] = None,
+            retention_manager: Optional[RetentionManager] = None,
     ) -> Dict[str, BaseTool]:
         tools = cls.build_core_trading_tools(
             managers=managers,
@@ -213,6 +265,30 @@ class ToolFactory:
             tools.update(cls.build_walk_forward_tools(walk_forward_service))
         if oracle_service is not None:
             tools.update(cls.build_oracle_tools(oracle_service, timeline_projector))
+        if tick_tracer is not None or activity_tracker is not None:
+            tools.update(
+                cls.build_trace_tools(
+                    tick_tracer=tick_tracer,
+                    activity_tracker=activity_tracker,
+                    decision_manager=managers.decision_manager,
+                )
+            )
+        if experiment_service is not None:
+            drift_det = (
+                BacktestDriftDetector(backtest_service, trading_journal)
+                if backtest_service is not None and trading_journal is not None
+                else None
+            )
+            tools.update(
+                cls.build_experiment_tools(
+                    experiment_service=experiment_service,
+                    health_monitor=managers.health_monitor,
+                    activity_tracker=activity_tracker,
+                    drift_detector=drift_det,
+                )
+            )
+        if retention_manager is not None:
+            tools.update(cls.build_retention_tools(retention_manager))
         return tools
 
     @staticmethod

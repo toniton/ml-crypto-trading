@@ -28,13 +28,16 @@ class FetchMetricsNode:
             except Exception as exc:  # pylint: disable=broad-except
                 results.append(f"Error fetching metrics: {exc}")
 
-        attr_tool = self._llm.get_tool("get_trade_attribution")
-        focus = intent.analysis_focus.lower() if intent.analysis_focus else ""
-        if attr_tool is not None and any(w in focus for w in ["strategy", "attribution", "trade", "pnl", "win"]):
+        attr_tool = self._llm.get_tool("get_trade_attribution") or self._llm.get_tool("trade_attribution")
+        focus = (intent.analysis_focus or "").lower()
+        prompt_lower = (state.get("user_prompt") or "").lower()
+        combined_text = f"{focus} {prompt_lower}"
+        if attr_tool is not None and any(w in combined_text for w in ["strategy", "attribution", "trade", "pnl", "win", "regime", "performed", "performance"]):
             try:
                 lookback_days = max(1, intent.lookback_seconds // 86400)
+                dim = "strategy_by_regime" if "regime" in combined_text else "strategy"
                 attr_data = attr_tool.invoke({
-                    "dimension": "strategy",
+                    "dimension": dim,
                     "lookback_days": lookback_days,
                 })
                 results.append(str(attr_data))

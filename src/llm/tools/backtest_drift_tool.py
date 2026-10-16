@@ -41,12 +41,21 @@ class BacktestDriftTool(BaseTool, ApplicationLoggingMixin):
 
     @staticmethod
     def _format(report: DriftReport) -> str:
+        window_str = (
+            f"  Aligned Window: {report.window_start} -> {report.window_end}\n"
+            if report.window_start and report.window_end else ""
+        )
         return (
             f"Drift {report.ticker_symbol}:\n"
+            f"{window_str}"
             f"  Simulated fills: {report.simulated_fill_count}\n"
-            f"  Live fills: {report.live_fill_count}\n"
+            f"  Live fills: {report.live_fill_count} (Partial fill legs merged: {report.partial_fill_legs_merged})\n"
             f"  Fill count drift: {report.fill_count_drift}\n"
+            f"  Simulated quantity: {report.simulated_quantity} | Live quantity: {report.live_quantity}\n"
             f"  Quantity drift: {report.quantity_drift}\n"
+            f"  Simulated avg price: {report.simulated_average_price} | Live avg price: {report.live_average_price}\n"
             f"  Price drift: {report.price_drift}\n"
+            f"  Simulated fees: ${report.simulated_fees} | "
+            f"Live fees: ${report.live_fees} (Fee drift: ${report.fee_drift})\n"
             f"  Drifted: {report.drifted}"
         )

@@ -15,6 +15,14 @@ class QuotePortfolio:
         self.asset_positions: dict[str, Decimal] = {}
         self.asset_mark_prices: dict[str, Decimal] = {}
         self.peak_equity: Decimal = Decimal("0")
+        self.valuation_timestamp: str | None = None
+
+    def unavailable_price_assets(self) -> list[str]:
+        return [
+            sym
+            for sym, qty in sorted(self.asset_positions.items())
+            if qty > Decimal("0") and self.asset_mark_prices.get(sym, Decimal("0")) <= Decimal("0")
+        ]
 
     @property
     def available_cash(self) -> Decimal:

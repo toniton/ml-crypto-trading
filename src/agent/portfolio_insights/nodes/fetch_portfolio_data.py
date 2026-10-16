@@ -10,8 +10,9 @@ class FetchPortfolioDataNode(ApplicationLoggingMixin):
     def __init__(self, llm: LlmAdapter):
         self._llm = llm
 
-    def __call__(self, state: PortfolioInsightsState) -> dict:
-        intent = state["portfolio_query"] if "portfolio_query" in state and state["portfolio_query"] is not None else PortfolioQueryIntent()
+    def __call__(self, state: PortfolioInsightsState) -> dict:  # pylint: disable=too-many-locals,too-many-branches
+        raw_intent = state.get("portfolio_query")
+        intent = raw_intent if raw_intent is not None else PortfolioQueryIntent()
         results: list[str] = []
 
         exchange_tool = self._llm.get_tool("exchange_read_api")
@@ -54,6 +55,19 @@ class FetchPortfolioDataNode(ApplicationLoggingMixin):
             except Exception as exc:  # pylint: disable=broad-except
                 self.app_logger.error(f"Error fetching portfolio summary: {exc}")
                 results.append(f"Error fetching portfolio summary: {exc}")
+
+        open_orders_tool = self._llm.get_tool("get_open_orders") or self._llm.get_tool("open_orders")
+        if open_orders_tool is not None:
+            try:
+                order_args = {}
+                if intent.exchange:
+                    order_args["exchange"] = intent.exchange
+                if intent.target_asset:
+                    order_args["ticker_symbol"] = intent.target_asset
+                open_orders_data = open_orders_tool.invoke(order_args)
+                results.append(str(open_orders_data))
+            except Exception as exc:  # pylint: disable=broad-except
+                self.app_logger.error(f"Error fetching open orders: {exc}")
 
         if not results:
             return {"portfolio_data": "Portfolio summary tool is not available."}

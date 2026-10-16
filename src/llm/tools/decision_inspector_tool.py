@@ -44,7 +44,7 @@ class DecisionInspectorTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, decision_manager: DecisionManager):
         super().__init__(decision_manager=decision_manager)
 
-    def _run(
+    def _run(  # pylint: disable=arguments-differ
             self,
             decision_id: Optional[str] = None,
             order_id: Optional[str] = None,
@@ -77,7 +77,7 @@ class DecisionInspectorTool(BaseTool, ApplicationLoggingMixin):
         return self._format_decision_list(decisions)
 
     @classmethod
-    def _format_decision_detail(cls, d: TradingDecision) -> str:
+    def _format_decision_detail(cls, d: TradingDecision) -> str:  # pylint: disable=too-many-branches,too-many-statements
         dt = datetime.fromtimestamp(d.timestamp, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         lines = [
             f"=== Trading Decision {d.decision_id} ===",
@@ -109,18 +109,25 @@ class DecisionInspectorTool(BaseTool, ApplicationLoggingMixin):
         lines.append(f"  Trend Strength: {d.regime_snapshot.trend_strength:+.3f}")
         lines.append(f"  Exposure Multiplier: {d.regime_snapshot.exposure_multiplier:.2f}x")
 
-        # Consensus Snapshot
         lines.append("\n[Strategy Consensus]")
-        lines.append(f"  Quorum Reached: {d.consensus_snapshot.quorum} (Vote Ratio: {d.consensus_snapshot.vote_ratio * 100:.1f}%)")
+        lines.append(
+            f"  Quorum Reached: {d.consensus_snapshot.quorum} "
+            f"(Vote Ratio: {d.consensus_snapshot.vote_ratio * 100:.1f}%)"
+        )
         lines.append(f"  Consensus Factor: {d.consensus_snapshot.factor}")
         if d.consensus_snapshot.winning_strategy:
             lines.append(f"  Winning Strategy: {d.consensus_snapshot.winning_strategy}")
         lines.append("  Votes:")
+        rejections = d.consensus_snapshot.strategy_rejections or {}
         for strat, vote in sorted(d.consensus_snapshot.votes.items()):
             weight = d.consensus_snapshot.weights.get(strat, 1.0)
-            lines.append(f"    - {strat}: {'BUY' if vote else 'HOLD/REJECT'} (Weight: {weight})")
+            rej_suffix = f" [Rejected: {rejections[strat]}]" if strat in rejections else ""
+            lines.append(f"    - {strat}: {'BUY' if vote else 'HOLD/REJECT'} (Weight: {weight}){rej_suffix}")
+        if rejections:
+            lines.append("  Strategy Rejection Reasons:")
+            for strat, reason in sorted(rejections.items()):
+                lines.append(f"    - {strat}: {reason}")
 
-        # Dynamic Sizing
         lines.append("\n[Position Sizing]")
         if d.sizing_snapshot.formula:
             lines.append(f"  Formula: {d.sizing_snapshot.formula}")
@@ -130,7 +137,6 @@ class DecisionInspectorTool(BaseTool, ApplicationLoggingMixin):
         if d.sizing_snapshot.final_quantity is not None:
             lines.append(f"  Final Order Quantity: {d.sizing_snapshot.final_quantity}")
 
-        # Portfolio Snapshot & Risk Guard
         lines.append("\n[Portfolio & Risk Guard]")
         lines.append(f"  Total Equity: ${d.portfolio_snapshot.total_equity:.2f}")
         lines.append(f"  Available Cash: ${d.portfolio_snapshot.available_cash:.2f}")
@@ -140,8 +146,16 @@ class DecisionInspectorTool(BaseTool, ApplicationLoggingMixin):
         lines.append(f"  Risk Guard Passed: {d.risk_evaluation.passed}")
         if d.risk_evaluation.rejection_reason:
             lines.append(f"  Guard Violation: {d.risk_evaluation.rejection_reason}")
+        if d.risk_evaluation.guard_evaluations:
+            lines.append("  Guard Evaluations:")
+            for g in d.risk_evaluation.guard_evaluations:
+                obs = f", Observed: {g.observed_value}" if g.observed_value is not None else ""
+                lim = f", Limit: {g.limit_value}" if g.limit_value is not None else ""
+                reas = f", Reason: {g.rejection_reason}" if g.rejection_reason else ""
+                lines.append(
+                    f"    - {g.guard_name} [{'PASSED' if g.passed else 'REJECTED'}]{obs}{lim}{reas}"
+                )
 
-        # Health Evaluation
         if d.health_evaluation:
             lines.append("\n[Trading Health]")
             lines.append(f"  State: {d.health_evaluation.state} (Allowed: {d.health_evaluation.allowed})")
@@ -158,7 +172,8 @@ class DecisionInspectorTool(BaseTool, ApplicationLoggingMixin):
             order_info = f" -> Order: {d.resulting_order_id}" if d.resulting_order_id else ""
             reason_info = f" (Reason: {d.rejection_reason})" if d.rejection_reason else ""
             lines.append(
-                f"- [{dt}] ID: {d.decision_id} | {d.ticker_symbol} {d.trade_action.value} | Status: {d.status.value}{order_info}{reason_info}"
+                f"- [{dt}] ID: {d.decision_id} | {d.ticker_symbol} {d.trade_action.value} | "
+                f"Status: {d.status.value}{order_info}{reason_info}"
             )
         lines.append("\nUse 'inspect_trading_decision' with a specific decision_id or order_id for full details.")
         return "\n".join(lines)

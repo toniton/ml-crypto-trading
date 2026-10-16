@@ -35,7 +35,7 @@ class MetricsQueryInput(BaseModel):
     )
     labels: Optional[dict[str, str]] = Field(
         default=None,
-        description="Optional key-value labels to filter metric samples (e.g. {'symbol': 'BTC_USD', 'strategy': 'HammerStrategy'}).",
+        description="Optional key-value labels to filter metric samples (e.g. {'symbol': 'BTC_USD'}).",
     )
 
 
@@ -99,6 +99,8 @@ class MetricsTool(BaseTool, ApplicationLoggingMixin):
 
     @staticmethod
     def _format_series(series) -> str:
+        if isinstance(series, dict):
+            return "Metric Summary: " + ", ".join(f"{k}={v}" for k, v in series.items())
         points_str = ", ".join(
             f"{p.timestamp.strftime('%H:%M:%S')}: {p.value:.4f}"
             for p in series.points

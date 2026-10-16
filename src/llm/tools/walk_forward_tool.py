@@ -108,7 +108,78 @@ class WalkForwardTool(BaseTool, ApplicationLoggingMixin):
             )
         if norm_action == "get":
             return self._handle_get(run_id)
+        if norm_action in ("compare", "compare_candidates"):
+            return self._handle_compare_candidates(ticker_symbol)
         return self._handle_list()
+
+    def _handle_compare_candidates(  # pylint: disable=too-many-locals
+            self,
+            ticker_symbol: Optional[str],
+    ) -> str:
+        runs = self.walk_forward_service.list_runs(limit=50)
+        if ticker_symbol:
+            target = ticker_symbol.strip().upper()
+            runs = [r for r in runs if str(r.get("ticker_symbol", "")).upper() == target]
+        completed = [
+            r for r in runs
+            if r.get("status") == "COMPLETED" and isinstance(r.get("performance_summary"), dict)
+        ]
+        if not completed:
+            return "No completed walk-forward candidate runs available for comparison."
+
+        lines = [
+            f"### 🏆 Walk-Forward Candidate Comparison ({ticker_symbol or 'ALL'})\n",
+            "Comparing candidates across out-of-sample folds, untouched test windows, WFE, and fold variability:\n",
+        ]
+        robust_name: Optional[str] = None
+        robust_oos: float = float("-inf")
+        robust_wfe: float = 0.0
+        exp_name: Optional[str] = None
+        exp_is: float = float("-inf")
+        exp_oos: float = 0.0
+
+        for r in completed:
+            rid = str(r.get("run_id", "N/A"))
+            summary = r["performance_summary"]
+            cand_name = str(summary.get("candidate_name") or r.get("candidate_id") or rid)
+            stability = str(summary.get("stability_classification", "UNKNOWN"))
+            is_ret = float(summary.get("in_sample_return_pct", 0.0))
+            oos_ret = float(summary.get("out_of_sample_return_pct", 0.0))
+            wfe = float(summary.get("walk_forward_efficiency_ratio", 0.0))
+            max_dd = float(summary.get("max_out_of_sample_drawdown_pct", 0.0))
+            prof_folds = int(summary.get("profitable_folds", 0))
+            tot_folds = int(summary.get("total_folds", 0))
+            folds = summary.get("folds") or []
+            fold_oos = [float(f.get("out_of_sample_return_pct", 0.0)) for f in folds if isinstance(f, dict)]
+            fold_spread = (max(fold_oos) - min(fold_oos)) if len(fold_oos) >= 2 else 0.0
+
+            lines.append(
+                f"- **Candidate `{cand_name}`** (Run `{rid}`): Classification=**{stability}** | "
+                f"IS Return={is_ret:+.2f}% | OOS Return={oos_ret:+.2f}% | WFE={wfe:.2f} | "
+                f"Max OOS DD={max_dd:.2f}% | Profitable Folds={prof_folds}/{tot_folds} | "
+                f"Fold OOS Range Spread={fold_spread:.2f}%"
+            )
+            if stability == "ROBUST" and (robust_name is None or oos_ret > robust_oos):
+                robust_name = cand_name
+                robust_oos = oos_ret
+                robust_wfe = wfe
+            if exp_name is None or is_ret > exp_is:
+                exp_name = cand_name
+                exp_is = is_ret
+                exp_oos = oos_ret
+
+        if robust_name is not None:
+            lines.append(
+                f"\n**Recommended Robust Candidate**: `{robust_name}` "
+                f"(OOS Return {robust_oos:+.2f}%, WFE {robust_wfe:.2f}, consistent across untouched folds)."
+            )
+        if exp_name is not None and exp_name != robust_name:
+            lines.append(
+                f"**Exploratory / In-Sample Winner Warning**: `{exp_name}` had the highest "
+                f"in-sample return ({exp_is:+.2f}%) but degraded out-of-sample ({exp_oos:+.2f}%) — "
+                f"do NOT promote based on in-sample return alone."
+            )
+        return "\n".join(lines)
 
     def _handle_start(
             self,
