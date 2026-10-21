@@ -117,8 +117,36 @@ class WalkForwardRunner(ApplicationLoggingMixin):
         fold_gen = WalkForwardFoldGenerator(spec.windows)
         folds = fold_gen.generate_folds(dataset.timestamps)
 
+        dataset_identity = (
+            spec.data_source.dataset_id
+            or spec.data_source.path
+            or (
+                spec.data_source.source_type.value
+                if hasattr(spec.data_source.source_type, "value")
+                else str(spec.data_source.source_type)
+            )
+        )
+        execution_assumptions = spec.execution.model_dump(mode="json")
+        strategy_weights = {
+            "candidate": spec.candidate_weights,
+            "baseline": spec.baseline_weights,
+        } if (spec.candidate_weights or spec.baseline_weights) else None
+        software_version = getattr(spec, "software_version", None) or "1.0.0"
+        commit_hash = spec.configuration.vcs_commit_hash
+
         if not folds:
-            return WalkForwardAggregator.aggregate(run_identifier, spec.ticker_symbol, [])
+            return WalkForwardAggregator.aggregate(
+                run_id=run_identifier,
+                ticker_symbol=spec.ticker_symbol,
+                fold_metrics=[],
+                vcs_commit_hash=commit_hash,
+                dataset_identity=dataset_identity,
+                execution_assumptions=execution_assumptions,
+                strategy_weights=strategy_weights,
+                candidate_weights=spec.candidate_weights,
+                baseline_weights=spec.baseline_weights,
+                software_version=software_version,
+            )
 
         fold_summaries: list[FoldMetricsSummary] = []
         exec_cfg = ExecutionConfiguration(
@@ -218,7 +246,18 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             if on_fold_complete:
                 on_fold_complete(summary)
 
-        return WalkForwardAggregator.aggregate(run_identifier, spec.ticker_symbol, fold_summaries)
+        return WalkForwardAggregator.aggregate(
+            run_id=run_identifier,
+            ticker_symbol=spec.ticker_symbol,
+            fold_metrics=fold_summaries,
+            vcs_commit_hash=commit_hash,
+            dataset_identity=dataset_identity,
+            execution_assumptions=execution_assumptions,
+            strategy_weights=strategy_weights,
+            candidate_weights=spec.candidate_weights,
+            baseline_weights=spec.baseline_weights,
+            software_version=software_version,
+        )
 
     def _execute_sub_session(
             self,

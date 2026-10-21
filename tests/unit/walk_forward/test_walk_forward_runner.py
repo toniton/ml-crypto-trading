@@ -230,3 +230,5 @@ class TestWalkForwardApi(unittest.TestCase):
         assert res_list.status_code == 200
         runs = res_list.json()
         assert len(runs) >= 1
+
+        self.app.state.walk_forward_service.wait_for_run(run_id, timeout=10.0)

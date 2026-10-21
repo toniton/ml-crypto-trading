@@ -110,6 +110,8 @@ class LlmConfig(BaseSettings):
         for model in self.models:
             if identifier in (model.id, model.name):
                 return model
+        if not self.models and identifier == "default":
+            return self.default_model
         raise ValueError(f"Model '{identifier}' not registered in the LLM configuration.")
 
     def is_tool_enabled(self, tool_name: str) -> bool:

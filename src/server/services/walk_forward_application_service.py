@@ -37,20 +37,27 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
             market_data_store=self._market_data_store,
             dataset_service=self._dataset_service,
         )
+        self._threads: dict[str, threading.Thread] = {}
 
     def start_run(self, spec: WalkForwardRunSpec) -> dict[str, Any]:
         vcs_ref = spec.configuration.vcs_commit_hash or "HEAD"
-        raw_config = self._vcs_service.checkout(vcs_ref)
+        resolved_commit_hash = self._vcs_service.resolve_commit_hash(vcs_ref)
+        raw_config = self._vcs_service.checkout(resolved_commit_hash)
         trading_config = TradingConfig.model_validate(raw_config)
 
         asset_map: dict[str, Asset] = {a.ticker_symbol: a for a in trading_config.assets}
         if spec.ticker_symbol not in asset_map:
             raise ValueError(
-                f"Asset '{spec.ticker_symbol}' not found in configuration snapshot ({vcs_ref}). "
+                f"Asset '{spec.ticker_symbol}' not found in configuration snapshot ({resolved_commit_hash}). "
                 f"Available assets: {sorted(asset_map.keys())}"
             )
 
         run_id = f"wf_{uuid.uuid4().hex[:12]}"
+        spec = spec.model_copy(deep=True)
+        spec.configuration.vcs_commit_hash = resolved_commit_hash
+        if not getattr(spec, "software_version", None):
+            spec.software_version = "1.0.0"
+
         spec_dict = spec.model_dump(mode="json")
 
         try:
@@ -62,8 +69,9 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
                     status="RUNNING",
                     spec=spec_dict,
                 )
-        except Exception as exc:  # pylint: disable=broad-except
-            self.app_logger.warning("Could not persist initial walk-forward run record: %s", exc)
+        except Exception as exc:
+            self.app_logger.error("Failed to persist initial walk-forward run record: %s", exc, exc_info=True)
+            raise RuntimeError(f"Failed to persist initial walk-forward run record: {exc}") from exc
 
         runner = WalkForwardRunner(
             db_manager=self._db_manager,
@@ -77,6 +85,7 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
             args=(runner, spec, run_id),
             daemon=True,
         )
+        self._threads[run_id] = thread
         thread.start()
 
         return {
@@ -84,6 +93,8 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
             "status": "RUNNING",
             "ticker_symbol": spec.ticker_symbol,
             "spec": spec_dict,
+            "vcs_commit_hash": resolved_commit_hash,
+            "software_version": spec.software_version,
         }
 
     def _execute_run(self, runner: WalkForwardRunner, spec: WalkForwardRunSpec, run_id: str) -> None:
@@ -106,10 +117,33 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
                         summary={
                             "error": str(exc),
                             "error_message": str(exc),
+                            "vcs_commit_hash": spec.configuration.vcs_commit_hash,
+                            "dataset_identity": (
+                                spec.data_source.dataset_id
+                                or spec.data_source.path
+                                or (
+                                    spec.data_source.source_type.value
+                                    if hasattr(spec.data_source.source_type, "value")
+                                    else str(spec.data_source.source_type)
+                                )
+                            ),
+                            "execution_assumptions": spec.execution.model_dump(mode="json"),
+                            "strategy_weights": {
+                                "candidate": spec.candidate_weights,
+                                "baseline": spec.baseline_weights,
+                            } if (spec.candidate_weights or spec.baseline_weights) else None,
+                            "candidate_weights": spec.candidate_weights,
+                            "baseline_weights": spec.baseline_weights,
+                            "software_version": getattr(spec, "software_version", "1.0.0"),
                         },
                     )
             except Exception:  # pylint: disable=broad-except
                 pass
+
+    def wait_for_run(self, run_id: str, timeout: Optional[float] = None) -> None:
+        thread = self._threads.get(run_id)
+        if thread and thread.is_alive():
+            thread.join(timeout=timeout)
 
     def get_run(self, run_id: str) -> Optional[dict[str, Any]]:
         with self._db_manager.get_unit_of_work() as uow:

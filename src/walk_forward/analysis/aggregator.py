@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Any, Optional, Sequence
 
 from api.interfaces.walk_forward import FoldMetricsSummary, WalkForwardSummary
 
@@ -58,6 +58,13 @@ class WalkForwardAggregator:
             run_id: str,
             ticker_symbol: str,
             fold_metrics: Sequence[FoldMetricsSummary],
+            vcs_commit_hash: Optional[str] = None,
+            dataset_identity: Optional[str] = None,
+            execution_assumptions: Optional[dict[str, Any]] = None,
+            strategy_weights: Optional[dict[str, Any]] = None,
+            candidate_weights: Optional[dict[str, float]] = None,
+            baseline_weights: Optional[dict[str, float]] = None,
+            software_version: Optional[str] = None,
     ) -> WalkForwardSummary:
         total = len(fold_metrics)
         if total == 0:
@@ -72,6 +79,13 @@ class WalkForwardAggregator:
                 walk_forward_efficiency=0.0,
                 fold_results=[],
                 verdict="NO_FOLDS_EVALUATED",
+                vcs_commit_hash=vcs_commit_hash,
+                dataset_identity=dataset_identity,
+                execution_assumptions=execution_assumptions,
+                strategy_weights=strategy_weights,
+                candidate_weights=candidate_weights,
+                baseline_weights=baseline_weights,
+                software_version=software_version,
             )
 
         profitable = sum(1 for f in fold_metrics if f.test_return_pct > 0.0)
@@ -108,4 +122,11 @@ class WalkForwardAggregator:
             stability_classification=classification,
             folds=list(fold_metrics),
             in_sample_return_pct=round(avg_is, 2),
+            vcs_commit_hash=vcs_commit_hash,
+            dataset_identity=dataset_identity,
+            execution_assumptions=execution_assumptions,
+            strategy_weights=strategy_weights,
+            candidate_weights=candidate_weights,
+            baseline_weights=baseline_weights,
+            software_version=software_version,
         )

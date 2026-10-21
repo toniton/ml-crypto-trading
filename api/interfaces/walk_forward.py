@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -41,6 +41,7 @@ class WalkForwardRunSpec(BaseModel):
     execution: BacktestExecutionSpec = Field(default_factory=BacktestExecutionSpec)
     candidate_weights: Optional[dict[str, float]] = None
     baseline_weights: Optional[dict[str, float]] = None
+    software_version: Optional[str] = "1.0.0"
 
 
 class WalkForwardFold(BaseModel):
@@ -88,3 +89,10 @@ class WalkForwardSummary(BaseModel):
     stability_classification: Optional[str] = None
     folds: list[FoldMetricsSummary] = Field(default_factory=list)
     in_sample_return_pct: Optional[float] = None
+    vcs_commit_hash: Optional[str] = None
+    dataset_identity: Optional[str] = None
+    execution_assumptions: Optional[dict[str, Any]] = None
+    strategy_weights: Optional[dict[str, Any]] = None
+    candidate_weights: Optional[dict[str, float]] = None
+    baseline_weights: Optional[dict[str, float]] = None
+    software_version: Optional[str] = None

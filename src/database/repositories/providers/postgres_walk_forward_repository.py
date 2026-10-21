@@ -137,6 +137,23 @@ class PostgresWalkForwardRepository(WalkForwardRepository):
             if isinstance(norm_summary, dict)
             else None
         )
+        spec = row.spec if isinstance(row.spec, dict) else {}
+        config = spec.get("configuration", {}) if isinstance(spec.get("configuration"), dict) else {}
+        ds = spec.get("data_source", {}) if isinstance(spec.get("data_source"), dict) else {}
+        vcs_commit_hash = (
+            (norm_summary.get("vcs_commit_hash") if isinstance(norm_summary, dict) else None)
+            or config.get("vcs_commit_hash")
+        )
+        software_version = (
+            (norm_summary.get("software_version") if isinstance(norm_summary, dict) else None)
+            or spec.get("software_version")
+        )
+        dataset_identity = (
+            (norm_summary.get("dataset_identity") if isinstance(norm_summary, dict) else None)
+            or ds.get("dataset_id")
+            or ds.get("path")
+            or ds.get("source_type")
+        )
         return {
             "id": row.id,
             "run_id": row.id,
@@ -145,6 +162,9 @@ class PostgresWalkForwardRepository(WalkForwardRepository):
             "spec": row.spec,
             "summary": norm_summary,
             "performance_summary": norm_summary,
+            "vcs_commit_hash": vcs_commit_hash,
+            "software_version": software_version,
+            "dataset_identity": dataset_identity,
             "error_message": error_msg,
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
@@ -166,6 +186,23 @@ class PostgresWalkForwardRepository(WalkForwardRepository):
                 if isinstance(norm, dict)
                 else None
             )
+            spec = r.spec if isinstance(r.spec, dict) else {}
+            config = spec.get("configuration", {}) if isinstance(spec.get("configuration"), dict) else {}
+            ds = spec.get("data_source", {}) if isinstance(spec.get("data_source"), dict) else {}
+            vcs_commit_hash = (
+                (norm.get("vcs_commit_hash") if isinstance(norm, dict) else None)
+                or config.get("vcs_commit_hash")
+            )
+            software_version = (
+                (norm.get("software_version") if isinstance(norm, dict) else None)
+                or spec.get("software_version")
+            )
+            dataset_identity = (
+                (norm.get("dataset_identity") if isinstance(norm, dict) else None)
+                or ds.get("dataset_id")
+                or ds.get("path")
+                or ds.get("source_type")
+            )
             result.append(
                 {
                     "id": r.id,
@@ -175,6 +212,9 @@ class PostgresWalkForwardRepository(WalkForwardRepository):
                     "spec": r.spec,
                     "summary": norm,
                     "performance_summary": norm,
+                    "vcs_commit_hash": vcs_commit_hash,
+                    "software_version": software_version,
+                    "dataset_identity": dataset_identity,
                     "error_message": err,
                     "created_at": r.created_at.isoformat() if r.created_at else None,
                     "updated_at": r.updated_at.isoformat() if r.updated_at else None,
