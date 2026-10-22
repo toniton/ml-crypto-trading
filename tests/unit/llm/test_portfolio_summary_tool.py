@@ -21,7 +21,7 @@ def test_portfolio_summary_tool():
     risk_mgr.portfolios = {("CRYPTO_DOT_COM", "USD"): portfolio}
 
     tool = PortfolioSummaryTool(portfolio_risk_manager=risk_mgr)
-    result = tool._run()
+    result = tool.invoke({})
 
     assert "Portfolio [CRYPTO_DOT_COM / USD]:" in result
     assert "Total Mark-to-Market Equity: $4000 USD" in result
@@ -36,5 +36,32 @@ def test_portfolio_summary_tool_empty():
     risk_mgr.portfolios = {}
 
     tool = PortfolioSummaryTool(portfolio_risk_manager=risk_mgr)
-    result = tool._run()
+    result = tool.invoke({})
     assert "No active quote portfolios registered" in result
+
+
+def test_portfolio_summary_tool_normalizes_fractional_limits_and_rounds_percentages():
+    risk_mgr = MagicMock(spec=PortfolioRiskManager)
+    risk_mgr.max_portfolio_drawdown = Decimal("0.10")
+    risk_mgr.max_asset_concentration = Decimal("0.25")
+
+    portfolio = QuotePortfolio(exchange="CRYPTO_DOT_COM", quote_currency="USD")
+    portfolio.update_cash(Decimal("71.02344384"))
+    portfolio.update_asset_position("BTC_USD", Decimal("0.00003546"))
+    portfolio.update_asset_mark_price("BTC_USD", Decimal("84467.69"))
+    portfolio.update_asset_position("CRO_USD", Decimal("22.1316"))
+    portfolio.update_asset_mark_price("CRO_USD", Decimal("0.05846"))
+    portfolio.update_asset_position("DOGE_USD", Decimal("280.995"))
+    portfolio.update_asset_mark_price("DOGE_USD", Decimal("0.082246"))
+    portfolio.peak_equity = Decimal("100.5859695112")
+
+    risk_mgr.portfolios = {("CRYPTO_DOT_COM", "USD"): portfolio}
+
+    tool = PortfolioSummaryTool(portfolio_risk_manager=risk_mgr)
+    result = tool.invoke({})
+
+    assert "Current Drawdown:           2.15% (Limit: 10%)" in result
+    assert "Max Concentration Limit:    25%" in result
+    assert "(23.48% of portfolio)" in result
+    assert "(3.04% of portfolio)" in result
+    assert "(1.31% of portfolio)" in result

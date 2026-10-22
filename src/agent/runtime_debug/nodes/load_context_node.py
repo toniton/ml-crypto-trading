@@ -39,6 +39,10 @@ class LoadContextNode:
         if health_snapshot:
             context["trading_health"] = health_snapshot
 
+        machine_snapshot = self._toolbox.get_machine_snapshot()
+        if machine_snapshot:
+            context["machine"] = machine_snapshot
+
         return {
             "incident": incident,
             "error_event": error_event,

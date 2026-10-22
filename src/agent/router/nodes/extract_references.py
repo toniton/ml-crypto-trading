@@ -7,7 +7,7 @@ from src.agent.router.models import AgentReferences
 from src.agent.router.state import RouterState
 
 _COMMIT_HASH_PATTERN = re.compile(r"(?:Base:\s*|commit[:\s]+)?\b([0-9a-f]{7,40})\b", re.IGNORECASE)
-_ASSET_PATTERN = re.compile(r"\b([A-Z0-9]{2,10}[_/][A-Z0-9]{2,10})\b")
+_ASSET_PATTERN = re.compile(r"\b([A-Z0-9]{2,6}[_/](?:USD|USDT|USDC|EUR|BTC|ETH))\b", re.IGNORECASE)
 _PROPOSAL_PATTERN = re.compile(r"\b(prop-[a-f0-9]+)\b", re.IGNORECASE)
 _APPROVAL_PATTERN = re.compile(r"\b(appr-[a-f0-9]+)\b", re.IGNORECASE)
 

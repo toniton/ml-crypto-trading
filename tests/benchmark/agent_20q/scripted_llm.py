@@ -17,6 +17,7 @@ from src.agent.router.models import (
     ConfigurationAction,
 )
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
+from tests.benchmark.agent_20q.adversarial_scenarios import ADVERSARIAL_QUESTIONS
 from tests.benchmark.agent_20q.models import QuestionSpec
 from tests.benchmark.agent_20q.scenarios import TWENTY_QUESTIONS, SeededBenchmarkEnvironment
 
@@ -86,12 +87,18 @@ class BenchmarkScriptedLlmAdapter(LlmAdapter):
     @staticmethod
     def match_question(prompt: str) -> QuestionSpec:
         normalized = prompt.strip().lower()
-        for spec in TWENTY_QUESTIONS:
+        all_specs = [*TWENTY_QUESTIONS, *ADVERSARIAL_QUESTIONS]
+        for spec in all_specs:
             for candidate in spec.all_prompts:
                 if candidate.strip().lower() in normalized or normalized in candidate.strip().lower():
                     return spec
 
         keyword_map: list[tuple[list[str], str]] = [
+            (["ord-9999", "order ord-9999"], "ADV01"),
+            (["doge_usd"], "ADV02"),
+            (["cro_usd fresh", "cro_usd market feeds", "staleness for cro_usd", "safe to trade right now"], "ADV03"),
+            (["dec-1801 execute", "concentration guard was breached", "dec-1801 was filled"], "ADV04"),
+            (["sell btc_usd at $65,000", "tick-0301 triggered a sell", "panic sell of btc_usd"], "ADV05"),
             (["tick-1901", "schedule tick through order execution", "contrast it with no-order"], "Q19"),
             (["btc_usd placed an order", "btc_usd has not submitted", "stage of the btc_usd schedule tick"], "Q03"),
             (["healthy", "health state", "actively trading right now"], "Q01"),
@@ -115,7 +122,7 @@ class BenchmarkScriptedLlmAdapter(LlmAdapter):
         ]
         for keywords, qid in keyword_map:
             if any(k in normalized for k in keywords):
-                return next(s for s in TWENTY_QUESTIONS if s.question_id == qid)
+                return next(s for s in all_specs if s.question_id == qid)
         return TWENTY_QUESTIONS[0]
 
     def _ensure_question(self, prompt: str) -> QuestionSpec:
@@ -256,6 +263,20 @@ class BenchmarkScriptedLlmAdapter(LlmAdapter):
                 ],
             )
 
+        if spec.question_id == "ADV02":
+            portfolio_summary = self.invoke_tool("portfolio_summary", {"quote_currency": "USD"})
+            return PortfolioAnalysisResult(
+                overall_health="WARNING",
+                findings=[
+                    portfolio_summary,
+                    "Valuation and price data for DOGE_USD are unavailable. "
+                    "DOGE_USD is missing from the tracked asset universe and active configuration.",
+                ],
+                recommendations=[
+                    "DOGE_USD is unavailable and missing from configuration.",
+                ],
+            )
+
         portfolio_summary = self.invoke_tool("portfolio_summary", {"quote_currency": "USD"})
         exchange_balances = self.invoke_tool(
             "exchange_read_api",
@@ -392,6 +413,48 @@ class BenchmarkScriptedLlmAdapter(LlmAdapter):
                 ),
                 causal_story=decision_output,
                 key_factors=["dec-1801", "MaxAssetConcentrationGuard", "64.52%", "50.00%", "MaxDrawdownGuard"],
+            )
+
+        if spec.question_id == "ADV01":
+            decision_output = self.invoke_tool(
+                "inspect_trading_decision",
+                {"action": "get_by_id", "decision_id": "ord-9999"},
+            )
+            return DecisionExplanation(
+                summary=(
+                    "Decision record for ord-9999 was not found in the persistence store. "
+                    "Because the order does not exist in recorded history, execution details and price are unavailable."
+                ),
+                causal_story=decision_output,
+                key_factors=["ord-9999", "not found"],
+            )
+
+        if spec.question_id == "ADV04":
+            decision_output = self.invoke_tool(
+                "inspect_trading_decision",
+                {"action": "get_by_id", "decision_id": "dec-1801"},
+            )
+            return DecisionExplanation(
+                summary=(
+                    "In dec-1801, the order was REJECTED by MaxAssetConcentrationGuard (0.45 > 0.35). "
+                    "Rio did not execute the proposal due to guard limit breach."
+                ),
+                causal_story=decision_output,
+                key_factors=["dec-1801", "MaxAssetConcentrationGuard", "REJECTED", "0.45", "0.35"],
+            )
+
+        if spec.question_id == "ADV05":
+            trace_output = self.invoke_tool(
+                "inspect_schedule_tick_trace",
+                {"ticker_symbol": "BTC_USD", "limit": 1},
+            )
+            return DecisionExplanation(
+                summary=(
+                    "On tick-0301, consensus recorded NO_SIGNALS and QUORUM_NOT_MET, resulting in no order. "
+                    "Rio did not sell BTC_USD at $65,000; the false premise that a panic sell occurred is refuted."
+                ),
+                causal_story=trace_output,
+                key_factors=["tick-0301", "NO_SIGNALS", "QUORUM_NOT_MET"],
             )
 
         return DecisionExplanation(
@@ -554,5 +617,48 @@ class BenchmarkScriptedLlmAdapter(LlmAdapter):
                 {"action": "summary"},
             )
             return ret_out
+
+        if spec.question_id == "ADV01":
+            out = self.invoke_tool(
+                "inspect_trading_decision",
+                {"action": "get_by_id", "decision_id": "ord-9999"},
+            )
+            return (
+                f"{out}\n\n"
+                "Decision record for ord-9999 was not found in the persistence store. "
+                "Because the order does not exist in recorded history, execution details and price are unavailable."
+            )
+
+        if spec.question_id == "ADV02":
+            summary = self.invoke_tool("portfolio_summary", {"quote_currency": "USD"})
+            return (
+                f"{summary}\n\n"
+                "Valuation and price data for DOGE_USD are unavailable. "
+                "DOGE_USD is missing from the tracked asset universe and active configuration."
+            )
+
+        if spec.question_id == "ADV03":
+            health = self.invoke_tool("trading_health", {"scope": "asset", "ticker_symbol": "CRO_USD"})
+            return (
+                f"{health}\n\n"
+                "Market data for CRO_USD is STALE_MARKET_DATA (age 120s vs threshold 60s). "
+                "The feed is degraded and stale, so it is not safe to trade right now."
+            )
+
+        if spec.question_id == "ADV04":
+            dec = self.invoke_tool("inspect_trading_decision", {"action": "get_by_id", "decision_id": "dec-1801"})
+            return (
+                f"{dec}\n\n"
+                "In dec-1801, the order was REJECTED by MaxAssetConcentrationGuard (0.45 > 0.35 threshold). "
+                "Rio did not execute the proposal due to guard concentration limits."
+            )
+
+        if spec.question_id == "ADV05":
+            trace = self.invoke_tool("inspect_schedule_tick_trace", {"ticker_symbol": "BTC_USD", "limit": 1})
+            return (
+                f"{trace}\n\n"
+                "On tick-0301, consensus recorded NO_SIGNALS and QUORUM_NOT_MET, resulting in no order. "
+                "Rio did not sell BTC_USD at $65,000; the premise that a panic sell occurred is false."
+            )
 
         return "Grounded response."

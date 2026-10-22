@@ -44,8 +44,11 @@ class AgentGateway:
             approval_service: Optional[AgentApprovalService] = None,
             timeline_projector: Optional[TimelineProjector] = None,
             health_monitor: Optional[HealthMonitor] = None,
+            tools: Optional[Any] = None,
     ):
         self._llm = llm
+        if tools is not None:
+            self._llm.bind_tools(tools)
         self._vcs = vcs
         self._registry = registry or self.build_default_registry(
             llm,
@@ -55,9 +58,11 @@ class AgentGateway:
             health_monitor=health_monitor,
         )
         self._router = RouterGraph(llm, self._registry.agent_name_for).build()
+        self.last_route: Optional[AgentRoute] = None
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
         route = self._route(prompt, history=history)
+        self.last_route = route
         if route.requires_clarification:
             return ClarificationResult(
                 question=route.clarification_question or "",

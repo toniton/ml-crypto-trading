@@ -340,9 +340,12 @@ class Application(ApplicationLoggingMixin):
             assets=self._assets,
             trading_journal=self._trading_journal,
             vcs=self._vcs,
+            timeline_projector=timeline_projector,
             backtest_service=backtest_service,
             metric_service=self._metric_service,
             db_manager=self._db_manager,
+            activity_tracker=self._activity_tracker,
+            retention_manager=self._retention_manager,
         )
         self._llm_manager = LlmRuntimeManager(
             llm_config=self._llm_config,
@@ -385,6 +388,7 @@ class Application(ApplicationLoggingMixin):
                 vcs=self._vcs,
                 approval_service=self._approval_service,
                 timeline_projector=self._timeline_projector,
+                health_monitor=self._managers.health_monitor,
             )
             self._api_server = ApiServer(
                 trading_proxy=self._trading_engine_proxy,

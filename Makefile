@@ -9,7 +9,7 @@ DEFAULT_CONFIG := examples/configurations/trading-config.yaml
 BACKTEST_CONFIG := examples/configurations/backtest-trading-config.yaml
 BACKTEST_SOURCE := examples/coinmarketcap/history
 
-.PHONY: help setup venv install install-dev clean db-up db-down db-setup migrate upgrade downgrade format lint test test-agent-20q benchmark-agent run-simulated run-backtest run-live run-headless start
+.PHONY: help setup venv install install-dev clean db-up db-down db-setup migrate upgrade downgrade format lint test test-agent-20q test-agent-adversarial benchmark-agent benchmark-agent-live run-simulated run-backtest run-live run-headless start
 
 help:
 	@echo "Available commands:"
@@ -28,7 +28,9 @@ help:
 	@echo "  make lint           - Run pylint checks"
 	@echo "  make test           - Run pytest suite with coverage"
 	@echo "  make test-agent-20q - Run Rio 20-Question Acceptance & Grounding pytest suite"
-	@echo "  make benchmark-agent - Generate Rio 20-Question benchmark report (Markdown + JSON)"
+	@echo "  make test-agent-adversarial - Run Rio Adversarial Robustness benchmark suite"
+	@echo "  make benchmark-agent - Generate Rio benchmark report with adversarial suite (Markdown + JSON)"
+	@echo "  make benchmark-agent-live - Run live model quality gate evaluation across trials and archive report"
 	@echo "  make run-simulated  - Run bot in paper trading / simulated mode"
 	@echo "  make run-backtest   - Run bot in backtesting mode"
 	@echo "  make run-live       - Run bot in live trading mode (with API server)"
@@ -86,10 +88,16 @@ test:
 	export PYTHONPATH=. && $(PYTEST) tests/ --cov --cov-branch --cov-report=xml -s
 
 test-agent-20q:
-	export PYTHONPATH=. && $(PYTEST) tests/benchmark/agent_20q/ -v
+	export PYTHONPATH=. && $(PYTEST) tests/benchmark/agent_20q/test_twenty_questions_ci.py -v
+
+test-agent-adversarial:
+	export PYTHONPATH=. && $(PYTEST) tests/benchmark/agent_20q/test_adversarial_suite.py -v
 
 benchmark-agent:
-	export PYTHONPATH=. && $(PYTHON) ./scripts/benchmark_rio_20q.py --output-md docs/benchmarks/rio-20q-baseline.md --output-json docs/benchmarks/rio-20q-baseline.json
+	export PYTHONPATH=. && $(PYTHON) ./scripts/benchmark_rio_20q.py --include-adversarial --output-md docs/benchmarks/rio-20q-baseline.md --output-json docs/benchmarks/rio-20q-baseline.json --archive
+
+benchmark-agent-live:
+	export PYTHONPATH=. && $(PYTHON) ./scripts/benchmark_rio_20q.py --mode live --include-adversarial --archive $(ARGS)
 
 run-simulated:
 	$(PYTHON) ./main.py --assets-conf=$(DEFAULT_CONFIG) --simulated=true

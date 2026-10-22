@@ -136,6 +136,48 @@ class LlmRuntimeManager(ApplicationLoggingMixin):
                 )
                 return None
 
+    def try_failover_adapter(self, failed_reason: str = "") -> Optional[LlmAdapter]:
+        """Attempts to switch to another configured model with valid credentials after a provider error."""
+        with self._lock:
+            failed_id = self._active_model_id
+            cred_map: Dict[str, LlmCredential] = {}
+            try:
+                with self._db_manager.get_unit_of_work() as uow:
+                    repo = uow.get_repository(PostgresLlmCredentialRepository)
+                    for cred in repo.get_all():
+                        if isinstance(cred, LlmCredential) and cred.api_key:
+                            cred_map[cred.model_id] = cred
+            except Exception:  # pylint: disable=broad-except
+                return None
+
+            for candidate in self._llm_config.models:
+                cid = candidate.model_id
+                if cid == failed_id or cid not in cred_map:
+                    continue
+                cred = cred_map[cid]
+                try:
+                    adapter = ModelFactory.create_model(
+                        self._llm_config,
+                        model_name=candidate.name,
+                        api_key=cred.api_key,
+                        api_base_url=cred.api_base_url,
+                    )
+                    tools_to_bind = self._bound_tools or ToolFactory.get_enabled_tools(
+                        self._tool_map, self._llm_config
+                    )
+                    if tools_to_bind:
+                        adapter.bind_tools(tools_to_bind)
+                    self._active_model_id = cid
+                    self._active_adapter = adapter
+                    self.app_logger.warning(
+                        f"Failed over active LLM from '{failed_id}' to '{cid}' ({candidate.name}) "
+                        f"due to provider error: {failed_reason}"
+                    )
+                    return adapter
+                except Exception:  # pylint: disable=broad-except
+                    continue
+            return None
+
     def switch_active_model(self, model_id: str) -> dict:
         with self._lock:
             model_config = self._llm_config.get_model(model_id)

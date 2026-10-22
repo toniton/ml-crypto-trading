@@ -1,0 +1,1102 @@
+{
+  "model_id": "groq-qwen",
+  "mode": "live",
+  "timestamp": "2026-10-21T16:36:56.702339+00:00",
+  "total_questions": 20,
+  "passed_questions": 0,
+  "pass_rate_pct": 0.0,
+  "mean_score": 0.1299,
+  "mean_route_tool_score": 0.425,
+  "mean_fact_recall": 0.0071,
+  "mean_epistemic_score": 0.0833,
+  "mean_consistency_score": 0.0071,
+  "p50_latency_ms": 27152.77,
+  "p95_latency_ms": 55152.73,
+  "question_scores": [
+    {
+      "question_id": "Q01",
+      "title": "Is Rio healthy and currently trading?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 2582.41,
+      "runs": [
+        {
+          "prompt": "Is Rio healthy and currently trading?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** Based on the current date (May 2024), here is the status of **Rio Tinto (RIO)**:\n\n### 1. **Is Rio Tinto Healthy?**\n**Yes, Rio Tinto is generally considered a financially healthy and stable company.**\n- **Financials:** Rio Tinto is one of the world\u2019s largest diversified mining companies. It has a strong balance sheet, consistent cash flow, and a history of paying dividends.\n- **Market Position:** It is a blue-chip stock with significant global operations in iron ore, copper, aluminum, and other minerals.\n- **Recent Performance:** While commodity prices fluctuate, Rio Tinto has maintained profitability and operational stability. It is not in financial distress.\n\n### 2. **Is Rio Tinto Currently Trading?**\n**Yes, Rio Tinto is actively trading.**\n- **Primary Listings:**\n  - **London Stock Exchange (LSE):** Ticker `RIO` (in GBP)\n  - **New York Stock Exchange (NYSE):** Ticker `RIO` (in USD, as an ADR)\n  - **Australian Securities Exchange (ASX):** Ticker `RIO` (in AUD)\n- **Trading Hours:** It trades during standard market hours for its respective exchanges (e.g., NYSE: 9:30 AM \u2013 4:00 PM ET; LSE: 8:00 AM \u2013 4:30 PM GMT).\n\n### \u26a0\ufe0f Important Note:\nIf you are referring to a **different company** named \"Rio\" (e.g., a smaller, private, or non-US listed entity), please specify:\n- The **full company name**\n- The **stock ticker**\n- The **exchange** where it is listed\n\nFor example:\n- **Rio Tinto** (RIO) \u2013 Major global miner.\n- **Rio Tinto plc** \u2013 Same as above.\n- **Other \"Rio\" companies** \u2013 There are smaller firms with \"Rio\" in their name (e.g., Rio Tinto\u2019s subsidiaries or unrelated companies like Rio Tinto\u2019s competitor **Rio Tinto** vs. **Rio Tinto**). If you mean a different entity, please clarify.\n\n### \u2705 Conclusion:\n**Rio Tinto (RIO) is a healthy, major global mining company and is currently trading on major stock exchanges (NYSE, LSE, ASX).**\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 2582.414583,
+          "matched_facts": [],
+          "missing_facts": [
+            "DEGRADED",
+            "STALE_MARKET_DATA",
+            "CRO_USD",
+            "120",
+            "60",
+            "2026-10-16 08:45:00 UTC"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "healthy process",
+            "not equate",
+            "last successful"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q02",
+      "title": "What are my current balances, available cash, and open orders?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 16050.22,
+      "runs": [
+        {
+          "prompt": "What are my current balances, available cash, and open orders?",
+          "routed_intent": "portfolio_review",
+          "invoked_tools": [],
+          "response_text": "### Portfolio Health & Insights (\ud83d\udfe2 **HEALTHY**)\n\n**Key Findings:**\n- No active quote portfolios currently registered in the risk manager.\n\n### Recommendations & Next Steps\n\n1. Ensure assets and exchange connections are enabled to initialize portfolio tracking.",
+          "latency_ms": 16050.216458,
+          "matched_facts": [],
+          "missing_facts": [
+            "4400",
+            "2900",
+            "1500",
+            "ord-101",
+            "ord-102",
+            "0.125"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "exchange balance",
+            "reserved",
+            "locally"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q03",
+      "title": "Why hasn't BTC_USD placed an order recently?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.1429,
+      "epistemic_guardrail_score": 0.3333,
+      "consistency_score": 0.1429,
+      "weighted_total_score": 0.2248,
+      "passed": false,
+      "avg_latency_ms": 1211.05,
+      "runs": [
+        {
+          "prompt": "Why hasn't BTC_USD placed an order recently?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** I don't have access to your trading system's internal state, logs, or order management system. I cannot diagnose why a specific trading pair like `BTC_USD` hasn't placed an order.\n\nTo diagnose this, you would typically need to check:\n\n1. **Strategy Logic**: Is the strategy's entry condition currently met? (e.g., price not at target level, indicators not aligned)\n2. **Risk Management**: Are there open positions, max drawdown limits, or daily loss limits preventing new orders?\n3. **Market Data**: Is the system receiving valid, real-time price data for `BTC_USD`?\n4. **System Health**: Are there any errors in the trading engine logs, API connection issues, or halted trading flags?\n5. **Configuration**: Is the strategy enabled for `BTC_USD`? Is the account funded?\n\nIf you have access to logs or a diagnostic tool, please share the relevant error messages or state information, and I can help interpret them.\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 1211.052791,
+          "matched_facts": [
+            "BTC_USD"
+          ],
+          "missing_facts": [
+            "tick-0301",
+            "Fresh=True",
+            "33.3%",
+            "60.0%",
+            "NO_SIGNALS",
+            "QUORUM_NOT_MET"
+          ],
+          "matched_epistemic": [
+            "market data"
+          ],
+          "missing_epistemic": [
+            "consensus",
+            "quorum"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.3333
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.3333,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q04",
+      "title": "Are orders failing, being rejected, or taking longer to execute?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 28166.23,
+      "runs": [
+        {
+          "prompt": "Are orders failing, being rejected, or taking longer to execute?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** I don't have access to your live order execution system, trading platform, or operational logs, so I cannot directly diagnose whether your orders are failing, being rejected, or experiencing latency.\n\nTo help you diagnose this, I would need specific data or context, such as:\n\n1. **Error logs or rejection reasons** (e.g., \"insufficient funds,\" \"invalid symbol,\" \"rate limit exceeded,\" \"stale quote\").\n2. **Latency metrics** (e.g., average time from order submission to fill/acknowledgment).\n3. **Order status codes** from your broker or exchange API.\n4. **Recent changes** (e.g., new API keys, network issues, market volatility, or system updates).\n\nIf you can share relevant logs, error messages, or metrics, I can help analyze them and suggest potential causes and fixes.\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 28166.229334,
+          "matched_facts": [],
+          "missing_facts": [
+            "ord-rej-1",
+            "MIN_NOTIONAL",
+            "ord-to-2",
+            "3200ms",
+            "1450ms",
+            "2026-10-16 08:00"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "exchange rejection",
+            "timeout",
+            "partial fill",
+            "local processing"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q05",
+      "title": "Why did Rio buy or sell this asset?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 2501.3,
+      "runs": [
+        {
+          "prompt": "Why did Rio buy or sell this asset?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 2501.2975,
+          "matched_facts": [],
+          "missing_facts": [
+            "dec-501",
+            "ord-501",
+            "RSIStrategy",
+            "MACDStrategy",
+            "0.05 * available_cash / close_price",
+            "0.025"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "recorded",
+            "evidence",
+            "consensus",
+            "sizing"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q06",
+      "title": "Why was a particular strategy's signal rejected?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 24779.71,
+      "runs": [
+        {
+          "prompt": "Why was a particular strategy's signal rejected?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 24779.709375,
+          "matched_facts": [],
+          "missing_facts": [
+            "dec-601",
+            "BollingerStrategy",
+            "0.25",
+            "60.0%",
+            "QUORUM_NOT_MET"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "persisted",
+            "rejection reason",
+            "quorum"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q07",
+      "title": "What changed between the current configuration and the configuration used for this order?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 28016.96,
+      "runs": [
+        {
+          "prompt": "What changed between the current configuration and the configuration used for this order?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 28016.961792,
+          "matched_facts": [],
+          "missing_facts": [
+            "min_quantity",
+            "0.001",
+            "0.005",
+            "ord-legacy-missing",
+            "unavailable"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "commit reference",
+            "unavailable",
+            "rather than substituting"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q08",
+      "title": "What configuration change do you recommend, and why?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Implemented with guardrails",
+      "route_and_tool_score": 0.0,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.04,
+      "passed": false,
+      "avg_latency_ms": 55152.73,
+      "runs": [
+        {
+          "prompt": "What configuration change do you recommend, and why?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 55152.726083,
+          "matched_facts": [],
+          "missing_facts": [
+            "ETH_USD",
+            "min_quantity",
+            "0.0001",
+            "0.001"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "hypothesis",
+            "approval",
+            "not proof"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.2,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.2,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q09",
+      "title": "How has the bot performed over the last 24 hours, 7 days, or 30 days?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.3333,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.2033,
+      "passed": false,
+      "avg_latency_ms": 28699.34,
+      "runs": [
+        {
+          "prompt": "How has the bot performed over the last 24 hours, 7 days, or 30 days?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [],
+          "response_text": "The requested performance data could not be retrieved because the metrics tool is not available. Consequently, I cannot provide specific figures for closed trades, realized P&L, fees paid, or slippage costs for the last 24 hours, 7 days, or 30 days.\n\nTo proceed, please ensure the metrics data source is connected and accessible, then re-run the query to retrieve the necessary performance indicators.",
+          "latency_ms": 28699.336375,
+          "matched_facts": [],
+          "missing_facts": [
+            "+$120.00",
+            "66.7%",
+            "UTC",
+            "24h",
+            "7d",
+            "30d"
+          ],
+          "matched_epistemic": [
+            "realized"
+          ],
+          "missing_epistemic": [
+            "UTC",
+            "mark-to-market"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.3333
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.3333,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q10",
+      "title": "Which strategies contributed most to profit or loss?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Partial \u2014 validate accounting",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 11650.48,
+      "runs": [
+        {
+          "prompt": "Which strategies contributed most to profit or loss?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [],
+          "response_text": "The requested P&L breakdown by strategy could not be retrieved because the metrics tool is unavailable. Consequently, no specific strategies, profit/loss figures, or contribution percentages can be reported.\n\n**Next Steps:**\n1. Verify the status of the metrics data source or API connection.\n2. Once the tool is operational, query for \"P&L by Strategy\" or \"Strategy Performance\" to identify top contributors to profit or loss.\n3. If historical data is stored locally, check the trading bot's logs or database for closed trade records tagged with strategy identifiers to manually aggregate P&L.",
+          "latency_ms": 11650.476166,
+          "matched_facts": [],
+          "missing_facts": [
+            "RSIStrategy",
+            "+$100.00",
+            "MACDStrategy",
+            "+$20.00",
+            "+$120.00",
+            "Reconciled: True"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "reconcile",
+            "proportional",
+            "double"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q11",
+      "title": "Has strategy performance changed by market regime?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.3333,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.2033,
+      "passed": false,
+      "avg_latency_ms": 30730.74,
+      "runs": [
+        {
+          "prompt": "Has strategy performance changed by market regime?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [],
+          "response_text": "The requested analysis cannot be performed because the metrics tool is not available and no performance data was retrieved.\n\n**Current Status:**\n*   **Data Availability:** No metrics data was found.\n*   **Impact:** It is impossible to determine if strategy performance (P&L, trade count, fees, slippage) varies by market regime without the underlying trade logs and regime classification data.\n\n**Next Steps:**\n1.  **Verify Data Source:** Ensure the database or API endpoint containing trade history and market regime labels is accessible and correctly configured.\n2.  **Retrieve Specific Metrics:** Once the tool is available, request the following data points segmented by market regime (e.g., Bull, Bear, Sideways/Choppy):\n    *   Total Net P&L\n    *   Number of Trades\n    *   Total Fees Paid\n    *   Average Slippage per Trade\n3.  **Regime Definition:** Confirm how market regimes are defined in your system (e.g., based on volatility, trend strength, or specific indicator thresholds) to ensure consistent segmentation.\n\nWithout this data, no objective conclusions about regime-dependent performance can be drawn.",
+          "latency_ms": 30730.744542,
+          "matched_facts": [],
+          "missing_facts": [
+            "TRENDING_UP",
+            "RANGING",
+            "+$150.00",
+            "-$30.00",
+            "n=2",
+            "n=1",
+            "LOW SAMPLE SIZE"
+          ],
+          "matched_epistemic": [
+            "regime"
+          ],
+          "missing_epistemic": [
+            "sample size",
+            "baseline"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.3333
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.3333,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q12",
+      "title": "Is the bot's live execution diverging from its backtest?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.3333,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.2033,
+      "passed": false,
+      "avg_latency_ms": 45946.0,
+      "runs": [
+        {
+          "prompt": "Is the bot's live execution diverging from its backtest?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [],
+          "response_text": "I cannot determine whether the bot's live execution is diverging from its backtest because the required metrics data was not retrieved.\n\n**Available Information:**\n*   **Status:** Metrics tool is not available.\n*   **Missing Data:** No live execution metrics (fills, P&L, fees, slippage, order rejection/cancel rates) or backtest baseline metrics were provided.\n\n**Next Steps:**\n1.  **Verify Data Source:** Ensure the metrics database or API endpoint is accessible and correctly configured.\n2.  **Retrieve Specific Metrics:** Once the tool is available, request the following for both live and backtest periods:\n    *   Total P&L and Sharpe Ratio\n    *   Average Slippage (bps)\n    *   Order Rejection Rate (%)\n    *   Order Cancel Rate (%)\n    *   Fill Rate (%)\n    *   Total Fees Paid\n3.  **Compare:** Calculate the delta between live and backtest values for each metric to quantify divergence.",
+          "latency_ms": 45946.004958,
+          "matched_facts": [],
+          "missing_facts": [
+            "BTC_USD",
+            "Simulated fills: 5",
+            "Live fills: 4",
+            "Partial fill legs merged: 1",
+            "395.00",
+            "-1.20",
+            "Drifted: True"
+          ],
+          "matched_epistemic": [
+            "fee"
+          ],
+          "missing_epistemic": [
+            "Aligned Window",
+            "partial fill"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.3333
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.3333,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q13",
+      "title": "Would this strategy have been profitable on historical data?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Implemented",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 26288.58,
+      "runs": [
+        {
+          "prompt": "Would this strategy have been profitable on historical data?",
+          "routed_intent": "backtest",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 26288.582084,
+          "matched_facts": [],
+          "missing_facts": [
+            "BTC_USD",
+            "2026-09-01",
+            "2026-10-01",
+            "10000",
+            "0.1%",
+            "+6.40%",
+            "-3.10%",
+            "28"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "drawdown",
+            "trades",
+            "fee",
+            "starting capital"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q14",
+      "title": "Which candidate configuration performs best in walk-forward validation?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 28829.15,
+      "runs": [
+        {
+          "prompt": "Which candidate configuration performs best in walk-forward validation?",
+          "routed_intent": "backtest",
+          "invoked_tools": [],
+          "response_text": "I can't run that backtest yet:\n- Walk-forward validation\n- No asset was specified for the backtest.\n- Please provide the execution costs for the backtest: fee rate (e.g. 0.001), slippage in ticks (e.g. 2), latency in milliseconds (e.g. 500).",
+          "latency_ms": 28829.149375,
+          "matched_facts": [],
+          "missing_facts": [
+            "cand_robust_multi",
+            "cand_exploratory_overfit",
+            "+6.80%",
+            "0.74",
+            "ROBUST",
+            "OVERFIT",
+            "4/4"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "out-of-sample",
+            "fold",
+            "exploratory",
+            "robust"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q15",
+      "title": "Why did this experiment run, and what triggered it?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 35817.81,
+      "runs": [
+        {
+          "prompt": "Why did this experiment run, and what triggered it?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 35817.808042,
+          "matched_facts": [],
+          "missing_facts": [
+            "exp_901",
+            "BACKTEST_DRIFT_DETECTED",
+            "evt_drift_77",
+            "0.62%",
+            "cand_current",
+            "cand_equal_weight"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "triggered",
+            "provenance",
+            "candidate"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q16",
+      "title": "Has the bot become inactive or drifted enough to justify a new experiment?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.0,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.3333,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.1233,
+      "passed": false,
+      "avg_latency_ms": 29567.46,
+      "runs": [
+        {
+          "prompt": "Has the bot become inactive or drifted enough to justify a new experiment?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [],
+          "response_text": "I cannot determine whether the bot has become inactive or drifted because the required performance data is unavailable.\n\n**Current Status:**\n*   **Data Availability:** The metrics tool is not available, so no specific values for order volume, trade count, P&L, fees, slippage, or decision/rejection rates could be retrieved for the last 24 hours.\n*   **Analysis:** Without this data, it is impossible to calculate trends, identify anomalies, or compare current performance against historical baselines.\n\n**Recommended Next Steps:**\n1.  **Verify Data Pipeline:** Check if the metrics database or API endpoint is accessible and functioning correctly.\n2.  **Manual Data Retrieval:** If possible, manually export the last 24 hours of trade logs and system health metrics from the bot's local storage or logging service.\n3.  **Re-run Analysis:** Once the data is available, re-submit the query to analyze:\n    *   **Activity:** Decline in order/trade volume.\n    *   **Performance:** Adverse trends in P&L, fees, and slippage.\n    *   **Logic:** Shifts in decision, consensus, and rejection rates.\n\nUntil this data is recovered, no evidence-based conclusion can be drawn regarding the need for a new experiment.",
+          "latency_ms": 29567.455042,
+          "matched_facts": [],
+          "missing_facts": [
+            "CRO_USD",
+            "NO_MARKET_DATA",
+            "DO NOT TRIGGER EXPERIMENT",
+            "BTC_USD",
+            "EXPERIMENT JUSTIFIED"
+          ],
+          "matched_epistemic": [
+            "drift"
+          ],
+          "missing_epistemic": [
+            "operational failure",
+            "strategy"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.2,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.3333
+        }
+      ],
+      "tool_selection_score": 0.2,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.3333,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q17",
+      "title": "What is my current portfolio exposure, drawdown, and concentration risk?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 22256.55,
+      "runs": [
+        {
+          "prompt": "What is my current portfolio exposure, drawdown, and concentration risk?",
+          "routed_intent": "portfolio_review",
+          "invoked_tools": [],
+          "response_text": "### Portfolio Health & Insights (\ud83d\udfe2 **HEALTHY**)\n\n**Key Findings:**\n- No active quote portfolios currently registered in the risk manager.\n\n### Recommendations & Next Steps\n\n1. Ensure assets and exchange connections are enabled to initialize portfolio tracking.",
+          "latency_ms": 22256.553917,
+          "matched_facts": [],
+          "missing_facts": [
+            "2026-10-16T09:00:00Z",
+            "USD",
+            "64.52%",
+            "50%",
+            "4.2%",
+            "10%",
+            "ord-101",
+            "SOL_USD",
+            "PRICE UNAVAILABLE"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "Valuation Timestamp",
+            "concentration",
+            "Unavailable Price Data"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q18",
+      "title": "Why did the risk manager or guard prevent a trade?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 4379.66,
+      "runs": [
+        {
+          "prompt": "Why did the risk manager or guard prevent a trade?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "### \ud83d\udd0d Decision & Proposal Investigation\n\n**Summary:** The cause of the trade prevention could not be established from the available evidence, as no persistent approval proposal record was found for the specified asset and commit.\n\n#### Causal Chain & Rationale\nThe investigation was initiated to determine why a risk manager or guard prevented a trade on a general asset. However, the evidence search returned no persistent approval proposal record matching the requested asset ('None') and base commit ('None'). Without a proposal record, there is no documented chain of parameter changes, rationales, risk assessments, or timeline events (such as starvation, anomalies, or market drift) that would explain the decision. Therefore, the specific trigger, ag\n\n\nThe cause of the trade prevention could not be established from the available evidence, as no persistent approval proposal record was found for the specified asset and commit.\n\nThe investigation was initiated to determine why a risk manager or guard prevented a trade on a general asset. However, the evidence search returned no persistent approval proposal record matching the requested asset ('None') and base commit ('None'). Without a proposal record, there is no documented chain of parameter changes, rationales, risk assessments, or timeline events (such as starvation, anomalies, or market drift) that would explain the decision. Therefore, the specific trigger, ag",
+          "latency_ms": 4379.661875,
+          "matched_facts": [],
+          "missing_facts": [
+            "dec-1801",
+            "MaxAssetConcentrationGuard",
+            "64.52%",
+            "50.00%",
+            "MaxDrawdownGuard",
+            "4.20%",
+            "10.00%"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "Observed",
+            "Limit",
+            "MaxAssetConcentrationGuard"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q19",
+      "title": "What happened during this run, from schedule tick through order execution?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Partial \u2014 important gap",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 1043.6,
+      "runs": [
+        {
+          "prompt": "What happened during this run, from schedule tick through order execution?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 1043.599458,
+          "matched_facts": [],
+          "missing_facts": [
+            "tick-1901",
+            "Market Data Check",
+            "Strategy Evaluations",
+            "Consensus Evaluation",
+            "Risk & Guard Check",
+            "ord-501",
+            "230ms",
+            "Reconciled=True",
+            "tick-0301",
+            "NO_ORDER"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "Market Data Check",
+            "Consensus Evaluation",
+            "Reconciliation",
+            "NO_ORDER"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q20",
+      "title": "What data will expire, what will be retained, and why was a record deleted or skipped?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Partial \u2014 recently added",
+      "route_and_tool_score": 0.0,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.04,
+      "passed": false,
+      "avg_latency_ms": 40604.93,
+      "runs": [
+        {
+          "prompt": "What data will expire, what will be retained, and why was a record deleted or skipped?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [],
+          "response_text": "",
+          "latency_ms": 40604.929167,
+          "matched_facts": [],
+          "missing_facts": [
+            "MARKET_DATA",
+            "30d",
+            "FINANCIAL",
+            "365d",
+            "1200",
+            "ret_run_01",
+            "800",
+            "RETENTION_HOLD",
+            "hold_audit_1",
+            "DEPENDENCY_REFERENCED"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "Configured Retention Policies",
+            "Dry-Run Expiration Preview",
+            "EXECUTED RUN",
+            "Skip Reasons"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.2,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.2,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    }
+  ],
+  "provenance": {
+    "git_commit": "4ff466d90a1fb56be07b2cc1a907100dbefa9f82",
+    "git_branch": "main",
+    "git_dirty": true,
+    "model_id": "groq-qwen",
+    "provider": "live",
+    "temperature": 0.0,
+    "suite_version": "2.0-grounded",
+    "dataset_hash": "",
+    "tool_manifest": {
+      "trading_health": "trading_health",
+      "exchange_read_api": "exchange_read_api",
+      "portfolio_summary": "portfolio_summary",
+      "get_open_orders": "get_open_orders",
+      "account_balance": "get_account_balance",
+      "inspect_trading_decision": "inspect_trading_decision",
+      "get_configuration": "get_configuration",
+      "get_configuration_history": "get_configuration_history",
+      "query_metrics": "query_metrics",
+      "get_trade_attribution": "get_trade_attribution",
+      "detect_backtest_drift": "detect_backtest_drift",
+      "backtest": "backtest",
+      "walk_forward": "walk_forward",
+      "inspect_schedule_tick_trace": "inspect_schedule_tick_trace",
+      "inspect_experiment": "inspect_experiment",
+      "inspect_retention_governance": "inspect_retention_governance"
+    },
+    "evaluated_at": "2026-10-21T16:28:52.368833+00:00",
+    "python_version": "3.12.7"
+  },
+  "num_trials": 1,
+  "mean_tool_selection_score": 0.54,
+  "mean_factual_accuracy": 0.0,
+  "mean_unsupported_claims_rate": 0.0,
+  "mean_epistemic_honesty": 0.0833,
+  "quality_gate_passed": false,
+  "quality_gate_reasons": [
+    "Failed questions (20): Q01, Q02, Q03, Q04, Q05, Q06, Q07, Q08, Q09, Q10, Q11, Q12, Q13, Q14, Q15, Q16, Q17, Q18, Q19, Q20",
+    "Mean score 0.130 below quality threshold 0.850"
+  ]
+}

@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from decimal import Decimal
+
 from src.agent.configuration.models import MarkdownBlock
 from src.agent.portfolio_insights.models import PortfolioAnalysisResult, PortfolioInsightsPresentation
 from src.agent.portfolio_insights.state import PortfolioInsightsState
@@ -14,6 +18,18 @@ class PresentInsightsNode:
         blocks = self._build_blocks(analysis)
         presentation = PortfolioInsightsPresentation(blocks=blocks)
         return {"presentation": presentation}
+
+    @staticmethod
+    def _fmt_pct(value: Decimal | float) -> str:
+        rounded = Decimal(str(value)).quantize(Decimal("0.01"))
+        return FormatHelper.format_decimal(rounded)
+
+    @staticmethod
+    def _fmt_currency(value: Decimal | float) -> str:
+        dec = Decimal(str(value))
+        if dec.as_tuple().exponent < -4:
+            dec = dec.quantize(Decimal("0.0001"))
+        return FormatHelper.format_decimal(dec)
 
     def _build_blocks(self, analysis: PortfolioAnalysisResult) -> list[MarkdownBlock]:
         blocks: list[MarkdownBlock] = []
@@ -39,9 +55,15 @@ class PresentInsightsNode:
             lines = [
                 f"#### Portfolio: `{s.exchange}` ({s.quote_currency})",
                 "",
-                f"- **Total Mark-to-Market Equity:** `${FormatHelper.format_decimal(s.total_equity)} {s.quote_currency}`",
-                f"- **Available Cash / Reserved Cash:** `${FormatHelper.format_decimal(s.available_cash)}` / `${FormatHelper.format_decimal(s.reserved_cash)}`",
-                f"- **Drawdown from Peak:** `{FormatHelper.format_decimal(s.current_drawdown_pct)}%` (Peak: `${FormatHelper.format_decimal(s.peak_equity)}`)",
+                f"- **Total Mark-to-Market Equity:** `${self._fmt_currency(s.total_equity)} {s.quote_currency}`",
+                (
+                    f"- **Available Cash / Reserved Cash:** "
+                    f"`${self._fmt_currency(s.available_cash)}` / `${self._fmt_currency(s.reserved_cash)}`"
+                ),
+                (
+                    f"- **Drawdown from Peak:** `{self._fmt_pct(s.current_drawdown_pct)}%` "
+                    f"(Peak: `${self._fmt_currency(s.peak_equity)}`)"
+                ),
                 "",
             ]
 
@@ -50,15 +72,16 @@ class PresentInsightsNode:
                 lines.append("| :--- | :--- | :--- | :--- | :--- |")
                 for a in s.allocations:
                     lines.append(
-                        f"| **{a.ticker_symbol}** | {FormatHelper.format_decimal(a.quantity)} | ${FormatHelper.format_decimal(a.mark_price)} "
-                        f"| ${FormatHelper.format_decimal(a.position_value)} | `{FormatHelper.format_decimal(a.weight_pct)}%` |"
+                        f"| **{a.ticker_symbol}** | {FormatHelper.format_decimal(a.quantity)} "
+                        f"| ${FormatHelper.format_decimal(a.mark_price)} "
+                        f"| ${self._fmt_currency(a.position_value)} | `{self._fmt_pct(a.weight_pct)}%` |"
                     )
                 lines.append("")
 
             if s.risk_warnings:
-                lines.append("> [!WARNING]")
+                lines.append("**⚠️ Risk Warnings:**")
                 for w in s.risk_warnings:
-                    lines.append(f"> - {w}")
+                    lines.append(f"- {w}")
                 lines.append("")
 
             blocks.append(MarkdownBlock(content="\n".join(lines)))
