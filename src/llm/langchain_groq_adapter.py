@@ -25,7 +25,10 @@ class LangChainGroqAdapter(BaseLangChainAdapter, LlmAdapter):
     ):
         super().__init__(max_turns=max_turns, system_prompt=system_prompt)
         request_timeout = timeout if timeout is not None else 60.0
-        extra_kwargs = {"max_tokens": max_tokens} if max_tokens is not None else {}
+        resolved_max_tokens = max_tokens
+        if resolved_max_tokens is None and "qwen3.8-27b" in model_name.lower():
+            resolved_max_tokens = 800
+        extra_kwargs = {"max_tokens": resolved_max_tokens} if resolved_max_tokens is not None else {}
         self._model = ChatOpenAI(
             model=model_name,
             api_key=api_key,

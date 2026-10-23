@@ -54,6 +54,7 @@ class ModelFactory:
                 base_url=resolved_base_url,
                 temperature=model.temperature,
                 timeout=model.timeout,
+                max_tokens=model.max_tokens,
             )
         return LangChainOllamaAdapter(
             model_name=model.model_name,

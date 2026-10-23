@@ -7,6 +7,7 @@ models:
     model_name: "qwen/qwen3.8-27b"
     temperature: 0.1
     timeout: 120
+    max_tokens: 800
     capabilities: ["tools", "reasoning"]
     requires_api_key: true
     default: true
@@ -20,7 +21,6 @@ models:
     capabilities: [ "tools", "reasoning" ]
     requires_api_key: true
     default: true
-
   - id: "gemini-3-flash"
     name: "Google Gemini 3 Flash"
     provider: "gemini"

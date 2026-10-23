@@ -43,6 +43,7 @@ class LlmModelConfig(BaseModel):
     )
     temperature: float = 0.0
     timeout: Optional[float] = Field(default=None, description="Request timeout in seconds.")
+    max_tokens: Optional[int] = Field(default=None, description="Maximum output tokens for generation.")
     keep_alive: Optional[str] = Field(
         default=None,
         description="Keep-alive window for local Ollama models.",
