@@ -68,3 +68,9 @@ class TestTradeAttributionTool(unittest.TestCase):
         tool = TradeAttributionTool(database_manager=db)
         result = tool._run(dimension="overall", ticker_symbol="BTC_USD")
         self.assertIn("Overall Performance", result)
+
+    def test_attribution_handles_none_orders_when_symbol_is_none(self):
+        db = self._setup_mock_db(None)
+        tool = TradeAttributionTool(database_manager=db)
+        result = tool._run(dimension="strategy_by_regime", ticker_symbol=None)
+        self.assertIn("No completed trades found", result)
