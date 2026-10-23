@@ -42,6 +42,7 @@ class BacktestExecutionSpec(BaseModel):
 
 
 class BacktestRunSpec(BaseModel):
+    session_id: Optional[str] = None
     ticker_symbol: str
     configuration: BacktestConfigurationSpec = Field(default_factory=BacktestConfigurationSpec)
     data_source: BacktestMarketDataSpec = Field(default_factory=BacktestMarketDataSpec)

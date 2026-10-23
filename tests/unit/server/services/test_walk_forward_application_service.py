@@ -20,6 +20,9 @@ class TestWalkForwardApplicationService:
         self.mock_uow = MagicMock()
         self.mock_db.get_unit_of_work.return_value.__enter__.return_value = self.mock_uow
         self.mock_repo = MagicMock()
+        self.mock_repo.is_run_active.return_value = False
+        self.mock_repo.acquire_run.return_value = True
+        self.mock_repo.acquire_next_queued_run.return_value = None
         self.mock_uow.get_repository.return_value = self.mock_repo
 
         self.mock_vcs = MagicMock()
@@ -73,10 +76,11 @@ class TestWalkForwardApplicationService:
         assert res["spec"]["configuration"]["vcs_commit_hash"] == "immutable_hash_abc123"
         assert res["spec"]["software_version"] == "1.0.0"
         assert res["software_version"] == "1.0.0"
+        assert res["status"] == "RUNNING"
 
         self.mock_repo.save_run.assert_called_once()
         saved_call = self.mock_repo.save_run.call_args[1]
-        assert saved_call["status"] == "RUNNING"
+        assert saved_call["status"] == "QUEUED"
         assert saved_call["spec"]["configuration"]["vcs_commit_hash"] == "immutable_hash_abc123"
         assert saved_call["spec"]["software_version"] == "1.0.0"
         mock_thread_cls.return_value.start.assert_called_once()
@@ -174,3 +178,75 @@ class TestWalkForwardApplicationService:
         assert summary["dataset_identity"] == "ds_btc_faulty"
         assert summary["software_version"] == "1.0.0"
         assert summary["strategy_weights"]["candidate"] == {"StratB": 0.7}
+
+    def test_start_run_rejects_duplicate_active_run_id(self):
+        self.mock_repo.is_run_active.return_value = True
+        spec = WalkForwardRunSpec(
+            run_id="wf_existing_active",
+            ticker_symbol="BTC_USD",
+            configuration=BacktestConfigurationSpec(
+                source_type=BacktestConfigurationSourceType.VCS,
+                vcs_commit_hash="HEAD",
+            ),
+        )
+
+        with pytest.raises(ValueError) as exc_info:
+            self.service.start_run(spec)
+
+        assert "already active" in str(exc_info.value)
+        self.mock_repo.save_run.assert_not_called()
+
+    @patch("threading.Thread")
+    def test_concurrency_limit_leaves_excess_runs_queued(self, mock_thread_cls):
+        self.service._max_concurrent_runs = 1
+        self.service._active_runs.add("wf_busy_run")
+
+        spec = WalkForwardRunSpec(
+            ticker_symbol="BTC_USD",
+            configuration=BacktestConfigurationSpec(
+                source_type=BacktestConfigurationSourceType.VCS,
+                vcs_commit_hash="HEAD",
+            ),
+        )
+
+        res = self.service.start_run(spec)
+
+        assert res["status"] == "QUEUED"
+        mock_thread_cls.return_value.start.assert_not_called()
+        self.mock_repo.save_run.assert_called_once()
+        assert self.mock_repo.save_run.call_args[1]["status"] == "QUEUED"
+
+    def test_cancel_run_queued_and_running(self):
+        self.mock_repo.mark_cancelled.return_value = True
+        self.service._active_runs.add("wf_cancel_me")
+
+        success = self.service.cancel_run("wf_cancel_me", reason="User requested cancel")
+
+        assert success is True
+        assert "wf_cancel_me" not in self.service._active_runs
+        self.mock_repo.mark_cancelled.assert_called_once_with("wf_cancel_me", reason="User requested cancel")
+        assert self.service._is_run_cancelled("wf_cancel_me") is True
+
+    def test_execute_run_handles_cancellation_interruption(self):
+        spec = WalkForwardRunSpec(
+            ticker_symbol="BTC_USD",
+            configuration=BacktestConfigurationSpec(
+                source_type=BacktestConfigurationSourceType.VCS,
+                vcs_commit_hash="resolved_commit_999",
+            ),
+        )
+        mock_runner = MagicMock()
+        mock_runner.run.side_effect = InterruptedError("Cancelled")
+
+        self.service._execute_run(mock_runner, spec, run_id="wf_cancelled_run")
+
+        self.mock_repo.mark_cancelled.assert_called_once_with("wf_cancelled_run", reason="Run cancelled by user")
+
+    def test_recover_on_startup_recovers_abandoned_runs(self):
+        self.mock_repo.recover_abandoned_runs.return_value = ["wf_recovered_1", "wf_recovered_2"]
+
+        recovered = self.service.recover_on_startup()
+
+        assert recovered == ["wf_recovered_1", "wf_recovered_2"]
+        self.mock_repo.recover_abandoned_runs.assert_called_once_with(timeout_seconds=120)
+
