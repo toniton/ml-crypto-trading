@@ -19,7 +19,13 @@ from src.agent.configuration.nodes.present_proposal import PresentProposalNode
 from src.agent.configuration.nodes.validate_proposal import ValidateProposalNode
 from src.agent.events import AIEvent
 from src.core.interfaces.conversation_store import ConversationStore
+from src.agent.operational.models import (
+    OperationalConditionSummary,
+    OperationalContext,
+    OperationalReadinessStatus,
+)
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
+from src.agent.router.nodes.operational_status import OperationalStatusNode
 from src.agent.router.nodes.route import RouteNode
 from src.agent.router.nodes.understand_goal import UnderstandGoalNode
 from src.agent.gateway import AgentGateway, AgentResult
@@ -48,6 +54,10 @@ __all__ = [
     "GeneralResult",
     "GenerateProposalNode",
     "MarkdownBlock",
+    "OperationalConditionSummary",
+    "OperationalContext",
+    "OperationalReadinessStatus",
+    "OperationalStatusNode",
     "PresentConfigurationNode",
     "PresentProposalNode",
     "ProposalDecision",

@@ -57,4 +57,9 @@ Routing Priority Rules:
    - requires_clarification: set to true ONLY when a configuration modification request is completely vague
      (e.g. "make it better") with no way to infer what to change.
    - reasoning: one short sentence justifying the chosen intent.
+6. Operational Context & Readiness:
+   - When OPERATIONAL CONTEXT indicates the engine is PAUSED, HALTED, or trading is disabled, and the user
+     asks why trading stopped, why orders were not placed, or why an asset hasn't traded, prefer "runtime_debug".
+   - Read-only inquiries (viewing configuration, running historical backtests, inspecting historical decisions)
+     must proceed to their natural intent regardless of operational health degradation.
 """

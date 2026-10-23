@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Optional
 
 from src.core.interfaces.llm_adapter import LlmAdapter
+from src.agent.operational.models import OperationalContext, OperationalReadinessStatus
 from src.agent.router.models import (
     AgentGoal,
     AgentIntent,
@@ -62,14 +63,15 @@ class UnderstandGoalNode:
     def __call__(self, state: RouterState) -> dict[str, Any]:
         prompt = state.get("user_prompt", "")
         references = state.get("references") or extract_deterministic_references(prompt)
-        llm_prompt = self._build_prompt(state, references)
+        operational_context = state.get("operational_context")
+        llm_prompt = self._build_prompt(state, references, operational_context)
 
         route: AgentRoute = self._llm.generate_structured(
             schema=AgentRoute,
             prompt=llm_prompt,
             system_prompt=ROUTER_PROMPT,
         )
-        route = self._enrich_route(prompt, route, references)
+        route = self._enrich_route(prompt, route, references, operational_context)
         return {"route": route}
 
     @classmethod
@@ -78,6 +80,7 @@ class UnderstandGoalNode:
             prompt: str,
             route: AgentRoute,
             extracted_refs: AgentReferences,
+            operational_context: Optional[OperationalContext] = None,
     ) -> AgentRoute:
         lowered = prompt.lower()
         current_refs = route.references or AgentReferences()
@@ -163,6 +166,8 @@ class UnderstandGoalNode:
                 )
         ):
             intent = AgentIntent.BACKTEST
+        elif cls._is_unhealthy_inactivity_query(lowered, operational_context):
+            intent = AgentIntent.RUNTIME_DEBUG
         elif is_decision_investigation_query(prompt, merged_refs):
             intent = AgentIntent.DECISION_INVESTIGATION
 
@@ -198,7 +203,47 @@ class UnderstandGoalNode:
         )
 
     @staticmethod
-    def _build_prompt(state: RouterState, references: AgentReferences) -> str:
+    def _is_unhealthy_inactivity_query(
+            lowered: str,
+            operational_context: Optional[OperationalContext],
+    ) -> bool:
+        if not (operational_context and operational_context.is_available):
+            return False
+        is_unhealthy = (
+                not operational_context.is_trading_allowed
+                or operational_context.status in (OperationalReadinessStatus.PAUSED, OperationalReadinessStatus.HALTED)
+        )
+        if not is_unhealthy:
+            return False
+
+        has_inactivity_trigger = any(
+            phrase in lowered
+            for phrase in (
+                "why hasn't",
+                "why has not",
+                "why haven't",
+                "why have not",
+                "why didn't",
+                "why did not",
+                "why aren't",
+                "why are not",
+                "why stopped trading",
+                "why trading stopped",
+                "why did trading stop",
+            )
+        )
+        has_trading_term = any(
+            word in lowered
+            for word in ("trade", "trading", "traded", "order", "orders", "buy", "sell")
+        )
+        return has_inactivity_trigger and has_trading_term
+
+    @staticmethod
+    def _build_prompt(
+            state: RouterState,
+            references: AgentReferences,
+            operational_context: Optional[OperationalContext] = None,
+    ) -> str:
         lines = ["USER REQUEST", state["user_prompt"]]
 
         ref_lines = []
@@ -214,6 +259,20 @@ class UnderstandGoalNode:
         if ref_lines:
             lines.append("DETECTED REFERENCES")
             lines.extend(ref_lines)
+
+        if operational_context and operational_context.is_available:
+            lines.append("OPERATIONAL CONTEXT")
+            lines.append(f"status = {operational_context.status.value}")
+            lines.append(f"health_state = {operational_context.health_state}")
+            lines.append(f"is_trading_allowed = {operational_context.is_trading_allowed}")
+            if operational_context.active_conditions:
+                cond_strs = [
+                    f"{condition.condition} ({condition.scope_type}:{condition.scope_identifier})"
+                    for condition in operational_context.active_conditions
+                ]
+                lines.append(f"active_conditions = {', '.join(cond_strs)}")
+            if operational_context.effective_permissions:
+                lines.append(f"effective_permissions = {', '.join(operational_context.effective_permissions)}")
 
         history = state.get("history", [])
         if history:

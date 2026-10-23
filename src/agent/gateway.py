@@ -57,11 +57,17 @@ class AgentGateway:
             timeline_projector=timeline_projector,
             health_monitor=health_monitor,
         )
-        self._router = RouterGraph(llm, self._registry.agent_name_for).build()
+        self._router = RouterGraph(
+            llm,
+            self._registry.agent_name_for,
+            health_monitor=health_monitor,
+        ).build()
         self.last_route: Optional[AgentRoute] = None
 
     def handle(self, prompt: str, history: Optional[List[ChatTurn]] = None) -> AgentResult:
-        route = self._route(prompt, history=history)
+        router_state = self._router.invoke({"user_prompt": prompt, "history": history or []})
+        route = router_state.get("route") or AgentRoute(intent=AgentIntent.GENERAL)
+        operational_context = router_state.get("operational_context")
         self.last_route = route
         if route.requires_clarification:
             return ClarificationResult(
@@ -73,7 +79,15 @@ class AgentGateway:
         if definition.graph is None:
             return GeneralResult()
 
-        state = definition.graph.invoke({"user_prompt": prompt, "request": route, "history": history or []})
+        downstream_state = {
+            "user_prompt": prompt,
+            "request": route,
+            "history": history or [],
+        }
+        if operational_context is not None:
+            downstream_state["operational_context"] = operational_context
+
+        state = definition.graph.invoke(downstream_state)
         if route.intent == AgentIntent.DECISION_INVESTIGATION:
             return DecisionInvestigationResult(
                 goal=route.goal,
@@ -166,8 +180,17 @@ class AgentGateway:
             return
 
         block_index = 0
+        downstream_state = {
+            "user_prompt": prompt,
+            "request": route,
+            "history": history or [],
+        }
+        operational_context = captures.get("operational_context")
+        if operational_context is not None:
+            downstream_state["operational_context"] = operational_context
+
         async for event in definition.graph.astream_events(
-            {"user_prompt": prompt, "request": route, "history": history or []},
+            downstream_state,
             version="v2",
         ):
             mapped = self._map_stream_event(
@@ -330,7 +353,9 @@ class AgentGateway:
 
         if event["event"] == "on_chain_end":
             output = event["data"].get("output") or {}
-            if node == "understand_goal":
+            if node == "operational_status":
+                captures["operational_context"] = output.get("operational_context")
+            elif node == "understand_goal":
                 captures["route"] = output.get("route")
             elif node == "route":
                 captures["agent"] = output.get("agent")
