@@ -20,10 +20,11 @@ from api.interfaces.walk_forward import (
 )
 from src.backtest.analysis.metrics_calculator import BacktestMetricsCalculator
 from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
-from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
+from src.backtest.domain.session import BacktestSession
 from src.backtest.runner.backtest_runner import BacktestRunner
 from src.configuration.strategy_config import StrategyConfig
 from src.core.interfaces.database_manager import DatabaseManager
+from src.core.interfaces.execution_status import ExecutionStatus
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.recorder.market_data_store import MarketDataStore
@@ -74,6 +75,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             spec: WalkForwardRunSpec,
             run_id: Optional[str] = None,
             on_fold_complete: Optional[Callable[[FoldMetricsSummary], None]] = None,
+            is_cancelled: Optional[Callable[[], bool]] = None,
     ) -> WalkForwardSummary:
         run_identifier = run_id or f"wf_{uuid.uuid4().hex[:12]}"
         asset = self._assets.get(spec.ticker_symbol)
@@ -117,8 +119,32 @@ class WalkForwardRunner(ApplicationLoggingMixin):
         fold_gen = WalkForwardFoldGenerator(spec.windows)
         folds = fold_gen.generate_folds(dataset.timestamps)
 
+        dataset_identity = (
+            spec.data_source.dataset_id
+            or spec.data_source.path
+            or str(spec.data_source.source_type.value)
+        )
+        execution_assumptions = spec.execution.model_dump(mode="json")
+        strategy_weights = {
+            "candidate": spec.candidate_weights,
+            "baseline": spec.baseline_weights,
+        } if (spec.candidate_weights or spec.baseline_weights) else None
+        software_version = spec.software_version or "1.0.0"
+        commit_hash = spec.configuration.vcs_commit_hash
+
         if not folds:
-            return WalkForwardAggregator.aggregate(run_identifier, spec.ticker_symbol, [])
+            return WalkForwardAggregator.aggregate(
+                run_id=run_identifier,
+                ticker_symbol=spec.ticker_symbol,
+                fold_metrics=[],
+                vcs_commit_hash=commit_hash,
+                dataset_identity=dataset_identity,
+                execution_assumptions=execution_assumptions,
+                strategy_weights=strategy_weights,
+                candidate_weights=spec.candidate_weights,
+                baseline_weights=spec.baseline_weights,
+                software_version=software_version,
+            )
 
         fold_summaries: list[FoldMetricsSummary] = []
         exec_cfg = ExecutionConfiguration(
@@ -136,6 +162,10 @@ class WalkForwardRunner(ApplicationLoggingMixin):
 
         # 4. Execute Folds sequentially with zero state leakage
         for fold in folds:
+            if is_cancelled and is_cancelled():
+                self.app_logger.info("Walk-forward run %s aborted due to cancellation", run_identifier)
+                raise InterruptedError(f"Walk-forward run '{run_identifier}' was cancelled.")
+
             self.app_logger.info(
                 "Running walk-forward fold %d [%s to %s]",
                 fold.fold_index,
@@ -218,7 +248,22 @@ class WalkForwardRunner(ApplicationLoggingMixin):
             if on_fold_complete:
                 on_fold_complete(summary)
 
-        return WalkForwardAggregator.aggregate(run_identifier, spec.ticker_symbol, fold_summaries)
+            if is_cancelled and is_cancelled():
+                self.app_logger.info("Walk-forward run %s aborted due to cancellation", run_identifier)
+                raise InterruptedError(f"Walk-forward run '{run_identifier}' was cancelled.")
+
+        return WalkForwardAggregator.aggregate(
+            run_id=run_identifier,
+            ticker_symbol=spec.ticker_symbol,
+            fold_metrics=fold_summaries,
+            vcs_commit_hash=commit_hash,
+            dataset_identity=dataset_identity,
+            execution_assumptions=execution_assumptions,
+            strategy_weights=strategy_weights,
+            candidate_weights=spec.candidate_weights,
+            baseline_weights=spec.baseline_weights,
+            software_version=software_version,
+        )
 
     def _execute_sub_session(
             self,
@@ -242,7 +287,7 @@ class WalkForwardRunner(ApplicationLoggingMixin):
         session = BacktestSession(
             ticker_symbol=asset.ticker_symbol,
             request=request,
-            status=BacktestSessionStatus.RUNNING,
+            status=ExecutionStatus.RUNNING,
             created_at=datetime.now(timezone.utc),
             started_at=datetime.now(timezone.utc),
         )

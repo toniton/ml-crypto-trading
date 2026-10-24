@@ -7,9 +7,11 @@ from src.agent.router.models import AgentReferences
 from src.agent.router.state import RouterState
 
 _COMMIT_HASH_PATTERN = re.compile(r"(?:Base:\s*|commit[:\s]+)?\b([0-9a-f]{7,40})\b", re.IGNORECASE)
-_ASSET_PATTERN = re.compile(r"\b([A-Z0-9]{2,10}[_/][A-Z0-9]{2,10})\b")
-_PROPOSAL_PATTERN = re.compile(r"\b(prop-[a-f0-9]+)\b", re.IGNORECASE)
+_ASSET_PATTERN = re.compile(r"\b([A-Z0-9]{2,6}[_/](?:USD|USDT|USDC|EUR|BTC|ETH))\b", re.IGNORECASE)
+_PROPOSAL_PATTERN = re.compile(r"\b(prop-[a-f0-9]+|ebp_[a-zA-Z0-9_-]+)\b", re.IGNORECASE)
 _APPROVAL_PATTERN = re.compile(r"\b(appr-[a-f0-9]+)\b", re.IGNORECASE)
+_EXPERIMENT_PATTERN = re.compile(r"\b(exp_[a-zA-Z0-9_-]+)\b", re.IGNORECASE)
+_CANDIDATE_PATTERN = re.compile(r"\b(cand_[a-zA-Z0-9_-]+)\b", re.IGNORECASE)
 
 
 def extract_deterministic_references(prompt: str) -> AgentReferences:
@@ -17,6 +19,8 @@ def extract_deterministic_references(prompt: str) -> AgentReferences:
     commit_hash: Optional[str] = None
     proposal_id: Optional[str] = None
     approval_id: Optional[str] = None
+    experiment_id: Optional[str] = None
+    candidate_id: Optional[str] = None
 
     asset_match = _ASSET_PATTERN.search(prompt)
     if asset_match:
@@ -34,11 +38,21 @@ def extract_deterministic_references(prompt: str) -> AgentReferences:
     if appr_match:
         approval_id = appr_match.group(1)
 
+    exp_match = _EXPERIMENT_PATTERN.search(prompt)
+    if exp_match:
+        experiment_id = exp_match.group(1)
+
+    cand_match = _CANDIDATE_PATTERN.search(prompt)
+    if cand_match:
+        candidate_id = cand_match.group(1)
+
     return AgentReferences(
         asset=asset,
         commit_hash=commit_hash,
         proposal_id=proposal_id,
         approval_id=approval_id,
+        experiment_id=experiment_id,
+        candidate_id=candidate_id,
     )
 
 

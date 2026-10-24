@@ -9,7 +9,8 @@ from api.interfaces.backtest_request import (
     ExecutionConfiguration,
 )
 from src.backtest.domain.result import BacktestResult
-from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
+from src.backtest.domain.session import BacktestSession
+from src.core.interfaces.execution_status import ExecutionStatus
 from src.database.dao.backtest_result_dao import BacktestResultDao
 from src.database.dao.backtest_session_dao import BacktestSessionDao
 from src.database.repositories.mappers.backtest_db_vs_entity_mapper import BacktestDBVSEntityMapper
@@ -36,7 +37,7 @@ def build_session() -> BacktestSession:
         id="bt_test_session_123",
         ticker_symbol="BTC_USD",
         request=request,
-        status=BacktestSessionStatus.COMPLETED,
+        status=ExecutionStatus.COMPLETED,
     )
     return session
 
@@ -63,14 +64,14 @@ class TestBacktestDBVSEntityMapper:
 
         assert dao.id == session.id
         assert dao.ticker_symbol == "BTC_USD"
-        assert dao.status == BacktestSessionStatus.COMPLETED.value
+        assert dao.status == ExecutionStatus.COMPLETED.value
         assert dao.config["data_source"]["path"] == "/data/btc.csv"
         assert dao.config["initial_balance"] == "10000.0"
 
         mapped_session = BacktestDBVSEntityMapper.dao_to_session(dao)
         assert mapped_session.id == session.id
         assert mapped_session.ticker_symbol == "BTC_USD"
-        assert mapped_session.status == BacktestSessionStatus.COMPLETED
+        assert mapped_session.status == ExecutionStatus.COMPLETED
         assert mapped_session.request.data_source.path == "/data/btc.csv"
 
     def test_result_to_dao_and_back(self):
@@ -179,3 +180,106 @@ class TestPostgresBacktestRepository:
 
         metrics = repo.get_result_metrics("bt_123")
         assert metrics == {"return_pct": "7.5"}
+
+    def test_acquire_session_success(self):
+        session_mock = MagicMock()
+        query = session_mock.query.return_value
+        filtered = query.filter.return_value
+
+        dao = BacktestSessionDao(
+            id="bt_001",
+            ticker_symbol="BTC_USD",
+            status="QUEUED",
+        )
+        filtered.first.return_value = dao
+
+        repo = PostgresBacktestRepository(database_session=session_mock)
+        acquired = repo.acquire_session("bt_001", worker_id="worker_bt", lease_duration_seconds=60)
+
+        assert acquired is True
+        assert dao.status == "RUNNING"
+        assert dao.worker_id == "worker_bt"
+        assert dao.lease_expires_at is not None
+        session_mock.flush.assert_called_once()
+
+    def test_renew_lease_success(self):
+        session_mock = MagicMock()
+        query = session_mock.query.return_value
+        filtered = query.filter.return_value
+
+        dao = BacktestSessionDao(
+            id="bt_001",
+            status="RUNNING",
+            worker_id="worker_bt",
+        )
+        filtered.first.return_value = dao
+
+        repo = PostgresBacktestRepository(database_session=session_mock)
+        renewed = repo.renew_lease("bt_001", worker_id="worker_bt", lease_duration_seconds=120)
+
+        assert renewed is True
+        assert dao.lease_expires_at is not None
+        session_mock.flush.assert_called_once()
+
+    def test_mark_completed_and_failed(self):
+        session_mock = MagicMock()
+        query = session_mock.query.return_value
+        filtered = query.filter.return_value
+
+        dao = BacktestSessionDao(id="bt_001", status="RUNNING")
+        filtered.first.return_value = dao
+
+        repo = PostgresBacktestRepository(database_session=session_mock)
+        res = build_result()
+        repo.mark_completed("bt_001", res)
+        assert dao.status == "COMPLETED"
+        assert dao.lease_expires_at is None
+
+        repo.mark_failed("bt_001", error_message="Engine failure")
+        assert dao.status == "FAILED"
+        assert dao.error_message == "Engine failure"
+
+    def test_mark_cancelled(self):
+        session_mock = MagicMock()
+        query = session_mock.query.return_value
+        filtered = query.filter.return_value
+
+        dao = BacktestSessionDao(id="bt_001", status="QUEUED")
+        filtered.first.return_value = dao
+
+        repo = PostgresBacktestRepository(database_session=session_mock)
+        cancelled = repo.mark_cancelled("bt_001", reason="User cancel")
+
+        assert cancelled is True
+        assert dao.status == "CANCELLED"
+        assert dao.error_message == "User cancel"
+
+    def test_recover_abandoned_sessions(self):
+        session_mock = MagicMock()
+        query = session_mock.query.return_value
+        filtered = query.filter.return_value
+
+        dao1 = BacktestSessionDao(id="bt_dead_1", status="RUNNING")
+        dao2 = BacktestSessionDao(id="bt_dead_2", status="RUNNING")
+        filtered.all.return_value = [dao1, dao2]
+
+        repo = PostgresBacktestRepository(database_session=session_mock)
+        recovered = repo.recover_abandoned_sessions(timeout_seconds=60)
+
+        assert recovered == ["bt_dead_1", "bt_dead_2"]
+        assert dao1.status == "FAILED"
+        assert dao2.status == "FAILED"
+        assert dao1.error_message is not None
+
+    def test_is_session_active(self):
+        session_mock = MagicMock()
+        query = session_mock.query.return_value
+        filtered = query.filter.return_value
+
+        filtered.first.return_value = ("RUNNING",)
+        repo = PostgresBacktestRepository(database_session=session_mock)
+        assert repo.is_session_active("bt_001") is True
+
+        filtered.first.return_value = ("COMPLETED",)
+        assert repo.is_session_active("bt_002") is False
+

@@ -230,3 +230,29 @@ class TestWalkForwardApi(unittest.TestCase):
         assert res_list.status_code == 200
         runs = res_list.json()
         assert len(runs) >= 1
+
+        self.app.state.walk_forward_service.wait_for_run(run_id, timeout=10.0)
+
+    def test_cancel_walk_forward_run_via_api(self):
+        payload = {
+            "ticker_symbol": "BTC_USD",
+            "windows": {
+                "train_candle_count": 15,
+                "test_candle_count": 5,
+                "step_size_candles": 5,
+                "warmup_candle_count": 2,
+                "window_mode": "rolling",
+            },
+        }
+        res = self.client.post("/api/v1/walk-forward", json=payload)
+        assert res.status_code == 201
+        run_id = res.json()["run_id"]
+
+        cancel_res = self.client.post(f"/api/v1/walk-forward/{run_id}/cancel")
+        assert cancel_res.status_code == 200
+        assert cancel_res.json()["cancelled"] is True
+
+        self.app.state.walk_forward_service.wait_for_run(run_id, timeout=5.0)
+        run_info = self.app.state.walk_forward_service.get_run(run_id)
+        assert run_info["status"] in ("CANCELLED", "COMPLETED")
+

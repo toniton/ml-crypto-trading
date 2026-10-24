@@ -1,0 +1,1834 @@
+{
+  "model_id": "groq-gpt",
+  "mode": "live",
+  "timestamp": "2026-10-21T22:35:57.637753+00:00",
+  "total_questions": 20,
+  "passed_questions": 16,
+  "pass_rate_pct": 80.0,
+  "mean_score": 0.975,
+  "mean_route_tool_score": 1.0,
+  "mean_fact_recall": 1.0,
+  "mean_epistemic_score": 0.9375,
+  "mean_consistency_score": 0.9375,
+  "p50_latency_ms": 22580.75,
+  "p95_latency_ms": 48367.38,
+  "question_scores": [
+    {
+      "question_id": "Q01",
+      "title": "Is Rio healthy and currently trading?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 2198.22,
+      "runs": [
+        {
+          "prompt": "Is Rio healthy and currently trading?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [
+            "trading_health",
+            "inspect_schedule_tick_trace"
+          ],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** **Health Assessment**  \n- **Overall Trading Health State:** **DEGRADED** (Snapshot\u202fv4, last updated\u202f2026\u201110\u201116T09:00:00+00:00).  \n- **Active health condition:** `[WARNING] market_data_stale on ASSET:CRO_USD` \u2013 measured latency\u202f120\u202fs vs limit\u202f60\u202fs, first detected\u202f2026\u201110\u201116T08:58:00+00:00.  \n- **Interpretation:** The engine is operating with non\u2011critical issues; isolated healthy scopes may continue, but the process is **not fully healthy**.\n\n**Trading Activity**  \n- **Last successful order:** `ord-501` (Decision\u202f`dec-501`) completed at **2026\u201110\u201116\u202f08:45:00\u202fUTC** (latency\u202f230\u202fms, fill\u202f0.025\u202fBTC).  \n- **Most recent tick (tick\u20110301, 2026\u201110\u201116\u202f08:50:00\u202fUTC):** Consensus quorum **not met** (vote\u202f33.3\u202f%\u202f<\u202f60\u202f% threshold). Outcome: **NO_ORDER** at stage `NO_SIGNALS` (reason\u202f`QUORUM_NOT_MET`).  \n\n**Conclusion**  \n- Rio is **degraded**, not fully healthy.  \n- It is **not currently placing trades** (the latest tick resulted in no order).  \n- A healthy process does **not** guarantee active trading across all assets; the last executed order was at **08:45:00\u202fUTC**.\n\n#### Telemetry Reference\nTrading Health State: DEGRADED\nSnapshot Version: v4\nLast Updated: 2026-10-16T09:00:00+00:00\nGlobal Effective Permissions: cancel_orders, new_orders, reduce_positions\nState Context: Engine is DEGRADED due to non-critical issues. Isolated healthy scopes can continue, while affected scopes are restricted.\nActive Health Conditions (1):\n  1. [WARNING] market_data_stale on ASSET:CRO_USD (Consecutive healthy checks: 0, Measured: 120s, Limit: 60s, first detected: 2026-10-16T08:58:00+00:00)\nOperational Health Note: Active condition STALE_MARKET_DATA (market_data_stale) on CRO_USD (Measured: 120s vs Limit: 60s). Note that a healthy process does not equate to active trading across all assets; the last successful order activity was at 2026-10-16 08:45:00 UTC.\n\n=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 2198.219916,
+          "matched_facts": [
+            "DEGRADED",
+            "STALE_MARKET_DATA",
+            "CRO_USD",
+            "120",
+            "60",
+            "2026-10-16 08:45:00 UTC"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "healthy process",
+            "not equate",
+            "last successful"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "trading_health",
+              "arguments": {
+                "include_assets": true
+              },
+              "output": "Trading Health State: DEGRADED\nSnapshot Version: v4\nLast Updated: 2026-10-16T09:00:00+00:00\nGlobal Effective Permissions: cancel_orders, new_orders, reduce_positions\nState Context: Engine is DEGRADED due to non-critical issues. Isolated healthy scopes can continue, while affected scopes are restricted.\nActive Health Conditions (1):\n  1. [WARNING] market_data_stale on ASSET:CRO_USD (Consecutive healthy checks: 0, Measured: 120s, Limit: 60s, first detected: 2026-10-16T08:58:00+00:00)",
+              "output_text": "Trading Health State: DEGRADED\nSnapshot Version: v4\nLast Updated: 2026-10-16T09:00:00+00:00\nGlobal Effective Permissions: cancel_orders, new_orders, reduce_positions\nState Context: Engine is DEGRADED due to non-critical issues. Isolated healthy scopes can continue, while affected scopes are restricted.\nActive Health Conditions (1):\n  1. [WARNING] market_data_stale on ASSET:CRO_USD (Consecutive healthy checks: 0, Measured: 120s, Limit: 60s, first detected: 2026-10-16T08:58:00+00:00)",
+              "latency_ms": 1.032208,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "inspect_schedule_tick_trace",
+              "arguments": {
+                "ticker_symbol": "BTC_USD",
+                "limit": 2
+              },
+              "output": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "output_text": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "latency_ms": 0.827916,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "ord-501",
+            "dec-501",
+            "tick-0301",
+            "$64120",
+            "33.3%",
+            "60.0%",
+            "tick-1901",
+            "$64000",
+            "100.0%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q02",
+      "title": "What are my current balances, available cash, and open orders?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 24488.95,
+      "runs": [
+        {
+          "prompt": "What are my current balances, available cash, and open orders?",
+          "routed_intent": "portfolio_review",
+          "invoked_tools": [
+            "exchange_read_api",
+            "portfolio_summary",
+            "get_open_orders"
+          ],
+          "response_text": "### Portfolio Health & Insights (\ud83d\udfe2 **HEALTHY**)\n\n**Key Findings:**\n- **Current Account Balances (CRYPTO_DOT_COM)**  \n\n- **BTC:**\u202f0.125\u202fBTC  \n- **SOL:**\u202f10\u202fSOL  \n- **USD (cash balance):**\u202f$4,400\u202fUSD  \n\n**Cash Availability**  \n\n- **Total Cash Balance:**\u202f$4,400\u202fUSD (matches the USD balance above)  \n- **Available Cash:**\u202f$2,900\u202fUSD \u2013 cash that can be used for new orders or withdrawals.  \n- **Reserved Order Cash:**\u202f$1,500\u202fUSD \u2013 cash locked in open orders.  \n\n$$\\text{Reserved Order Cash}= \\$1{,}000\\;(\\text{ord\u2011101}) + \\$500\\;(\\text{ord\u2011102}) = \\$1{,}500$$  \n\n**Open Orders (2)**  \n\n| Order ID | Symbol   | Side | Qty      | Price (USD) | Status   | Exchange |\n|----------|----------|------|----------|-------------|----------|----------|\n| ord\u2011101  | BTC_USD  | BUY  | 0.0161   | 62,000      | PENDING  | CRYPTO_DOT_COM |\n| ord\u2011102  | ETH_USD  | BUY  | 0.2000   | 2,500       | PENDING  | CRYPTO_DOT_COM |\n\n**Portfolio Valuation (as of 2026\u201110\u201116\u202f09:00\u202fUTC)**  \n\n- **Total Mark\u2011to\u2011Market Equity:**\u202f$12,400\u202fUSD  \n- **Peak Equity (HWM):**\u202f$12,943.63\u202fUSD  \n- **Current Drawdown:**\u202f4.19998\u202f% (limit\u202f10\u202f%)  \n- **Concentration Limit:**\u202f50\u202f% (no single asset exceeds this)  \n\n**Positions**  \n\n- **BTC_USD:**\u202f0.125\u202fBTC @ $64,000\u202f=\u202f$8,000\u202fUSD (\u2248\u202f64.52\u202f% of portfolio)  \n- **SOL_USD:**\u202f10\u202fSOL @ price unavailable \u2192 $0\u202fUSD (0\u202f% of portfolio)  \n\nAll figures are taken directly from the latest telemetry; no assumptions or extrapolations have been made. If you need deeper analysis (e.g., unrealized P&L, risk metrics, or order amendment options), let me know.\n- Verified Portfolio Telemetry (reconciling live exchange balance vs cash reserved locally in open orders; Current Drawdown ~4.2% / 4.20%, Concentration 64.52% vs 50%):\nLive Account Balances for CRYPTO_DOT_COM:\n  - BTC: 0.125\n  - SOL: 10\n  - USD: 4400\n\nPortfolio [CRYPTO_DOT_COM / USD]:\n  Valuation Timestamp: 2026-10-16T09:00:00Z\n  Total Mark-to-Market Equity: $12400 USD\n  Available Cash:             $2900 USD\n  Reserved Order Cash:        $1500 USD\n  Reserved Orders: ord-101 ($1000), ord-102 ($500)\n  Total Cash Balance:         $4400 USD\n  Peak Equity (HWM):          $12943.63 USD\n  Current Drawdown:           4.199980994512358588742107121% (Limit: 10%)\n  Max Concentration Limit:    50%\n  Unavailable Price Data: SOL_USD\n  Positions Breakdown:\n    \u2022 BTC_USD: 0.125 units @ $64000 = $8000 USD (64.51612903225806451612903226% of portfolio)\n    \u2022 SOL_USD: 10 units @ $0 = $0 USD (0% of portfolio) [PRICE UNAVAILABLE]\n\nOpen Orders (2):\n  Order(ord-101): BTC_USD BUY qty=0.0161 price=62000 status=PENDING exchange=CRYPTO_DOT_COM\n  Order(ord-102): ETH_USD BUY qty=0.2 price=2500 status=PENDING exchange=CRYPTO_DOT_COM\n",
+          "latency_ms": 24488.954792,
+          "matched_facts": [
+            "4400",
+            "2900",
+            "1500",
+            "ord-101",
+            "ord-102",
+            "0.125"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "exchange balance",
+            "reserved",
+            "locally"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "exchange_read_api",
+              "arguments": {
+                "operation": "get_balances",
+                "exchange": "CRYPTO_DOT_COM"
+              },
+              "output": "Live Account Balances for CRYPTO_DOT_COM:\n  - BTC: 0.125\n  - SOL: 10\n  - USD: 4400",
+              "output_text": "Live Account Balances for CRYPTO_DOT_COM:\n  - BTC: 0.125\n  - SOL: 10\n  - USD: 4400",
+              "latency_ms": 8.849292,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "portfolio_summary",
+              "arguments": {},
+              "output": "Portfolio [CRYPTO_DOT_COM / USD]:\n  Valuation Timestamp: 2026-10-16T09:00:00Z\n  Total Mark-to-Market Equity: $12400 USD\n  Available Cash:             $2900 USD\n  Reserved Order Cash:        $1500 USD\n  Reserved Orders: ord-101 ($1000), ord-102 ($500)\n  Total Cash Balance:         $4400 USD\n  Peak Equity (HWM):          $12943.63 USD\n  Current Drawdown:           4.199980994512358588742107121% (Limit: 10%)\n  Max Concentration Limit:    50%\n  Unavailable Price Data: SOL_USD\n  Positions Breakdown:\n    \u2022 BTC_USD: 0.125 units @ $64000 = $8000 USD (64.51612903225806451612903226% of portfolio)\n    \u2022 SOL_USD: 10 units @ $0 = $0 USD (0% of portfolio) [PRICE UNAVAILABLE]",
+              "output_text": "Portfolio [CRYPTO_DOT_COM / USD]:\n  Valuation Timestamp: 2026-10-16T09:00:00Z\n  Total Mark-to-Market Equity: $12400 USD\n  Available Cash:             $2900 USD\n  Reserved Order Cash:        $1500 USD\n  Reserved Orders: ord-101 ($1000), ord-102 ($500)\n  Total Cash Balance:         $4400 USD\n  Peak Equity (HWM):          $12943.63 USD\n  Current Drawdown:           4.199980994512358588742107121% (Limit: 10%)\n  Max Concentration Limit:    50%\n  Unavailable Price Data: SOL_USD\n  Positions Breakdown:\n    \u2022 BTC_USD: 0.125 units @ $64000 = $8000 USD (64.51612903225806451612903226% of portfolio)\n    \u2022 SOL_USD: 10 units @ $0 = $0 USD (0% of portfolio) [PRICE UNAVAILABLE]",
+              "latency_ms": 1.234375,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "get_open_orders",
+              "arguments": {},
+              "output": "Open Orders (2):\n  Order(ord-101): BTC_USD BUY qty=0.0161 price=62000 status=PENDING exchange=CRYPTO_DOT_COM\n  Order(ord-102): ETH_USD BUY qty=0.2 price=2500 status=PENDING exchange=CRYPTO_DOT_COM",
+              "output_text": "Open Orders (2):\n  Order(ord-101): BTC_USD BUY qty=0.0161 price=62000 status=PENDING exchange=CRYPTO_DOT_COM\n  Order(ord-102): ETH_USD BUY qty=0.2 price=2500 status=PENDING exchange=CRYPTO_DOT_COM",
+              "latency_ms": 3.073042,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$4,400",
+            "$2,900",
+            "$1,500",
+            "$1",
+            "$500",
+            "$12,400",
+            "$12,943.63",
+            "$64,000",
+            "$8,000",
+            "$0",
+            "4.2%",
+            "4.20%",
+            "64.52%",
+            "50%",
+            "$12400",
+            "$2900",
+            "$1500",
+            "ord-101",
+            "$1000",
+            "ord-102",
+            "$4400",
+            "$12943.63",
+            "4.199980994512358588742107121%",
+            "10%",
+            "$64000",
+            "$8000",
+            "64.51612903225806451612903226%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q03",
+      "title": "Why hasn't BTC_USD placed an order recently?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 15728.7,
+      "runs": [
+        {
+          "prompt": "Why hasn't BTC_USD placed an order recently?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [
+            "inspect_schedule_tick_trace",
+            "inspect_trading_decision"
+          ],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** **Operational Diagnosis \u2013 BTC_USD (CRYPTO_DOT_COM)**  \n\n1. **Process health** \u2013 The live\u2011activity stage shows fresh market data (Age\u202f\u2248\u202f2\u202fs), successful strategy evaluations, and a completed order at **2026\u201110\u201116\u202f08:45:00\u202fUTC** (ord\u2011501). The system is therefore *healthy*, but a healthy process does **not** guarantee that an order will be placed on every tick.\n\n2. **Why no recent order** \u2013 The most recent tick (tick\u20110301 at **2026\u201110\u201116\u202f08:50:00\u202fUTC**) ended with a **NO_ORDER** at stage *\u2018NO_SIGNALS\u2019*. The explicit reason is:\n\n   *`QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold)`*  \n\n   The consensus evaluation recorded a vote ratio of **33.3\u202f%**, well below the required **60.0\u202f%**. Consequently the risk/guard check was not reached and the terminal outcome was \u201cNO_ORDER\u201d.\n\n3. **Additional rejection evidence** \u2013 A separate trading decision (dec\u2011601 at **2026\u201110\u201116\u202f08:46:00\u202fUTC**) was **REJECTED** for the same internal condition:\n\n   *`QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)`*  \n\n   This rejection originates from the bot\u2019s internal quorum guard, **not** from the exchange. There is no exchange\u2011side timeout, partial fill, or network latency issue to report.\n\n4. **Summary** \u2013 BTC_USD has not placed a new order because the internal consensus quorum (minimum 60\u202f% agreement among strategies) has not been satisfied on the recent ticks. The last successful order was **ord\u2011501** at **2026\u201110\u201116\u202f08:45:00\u202fUTC**; the system remains operational, but the quorum guard is preventing further trades until strategy signals align to meet the 60\u202f% threshold.\n\n#### Telemetry Reference\n=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)\n\n=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 15728.699125,
+          "matched_facts": [
+            "tick-0301",
+            "BTC_USD",
+            "Fresh=True",
+            "33.3%",
+            "60.0%",
+            "NO_SIGNALS",
+            "QUORUM_NOT_MET"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "market data",
+            "consensus",
+            "quorum"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_schedule_tick_trace",
+              "arguments": {
+                "ticker_symbol": "BTC_USD",
+                "limit": 5
+              },
+              "output": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "output_text": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "latency_ms": 0.857875,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "inspect_trading_decision",
+              "arguments": {
+                "decision_id": "dec-601"
+              },
+              "output": "=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True",
+              "output_text": "=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True",
+              "latency_ms": 11.37825,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "33.3%",
+            "60.0%",
+            "25.0%",
+            "tick-0301",
+            "$64120",
+            "tick-1901",
+            "$64000",
+            "100.0%",
+            "ord-501",
+            "dec-501",
+            "dec-601",
+            "$64100",
+            "1.20%",
+            "75.0%",
+            "$12400.00",
+            "$2900.00",
+            "0.0%",
+            "0.00%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q04",
+      "title": "Are orders failing, being rejected, or taking longer to execute?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 0.75,
+      "consistency_score": 0.75,
+      "weighted_total_score": 0.9,
+      "passed": false,
+      "avg_latency_ms": 24441.81,
+      "runs": [
+        {
+          "prompt": "Are orders failing, being rejected, or taking longer to execute?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [
+            "query_metrics",
+            "inspect_schedule_tick_trace"
+          ],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** **Operational Diagnosis \u2013 Order Health**\n\n| Metric (last\u202f1\u202fh) | Value | Interpretation |\n|-------------------|-------|----------------|\n| **Order rejections** | **1** (ord\u2011rej\u20111: **MIN_NOTIONAL** on exchange) | The exchange refused the order because the notional amount was below the minimum required. This is an **exchange\u2011side rejection**. |\n| **Order timeouts** | **1** (ord\u2011to\u20112: **TIMEOUT after 3200\u202fms**) | The order did not receive a response within the client\u2011side timeout window. This is a **local processing timeout**, not an exchange rejection. |\n| **Order\u2011fill latency (p95)** | **1450\u202fms** (baseline **180\u202fms**) | The 95th\u2011percentile fill latency is **~8\u00d7 higher** than the expected baseline, indicating that most fills are taking considerably longer than normal. |\n\n**Recent Execution Activity**\n\n* **Last successful order:** `ord-501` (Decision `dec-501`) **COMPLETED** at **2026\u201110\u201116\u202f08:45:00\u202fUTC** with a measured latency of **230\u202fms** (well within the baseline).  \n* The most recent tick (`tick-0301` at 08:50) produced **NO_ORDER** because quorum was not met (vote ratio\u202f33.3\u202f%\u202f<\u202f60\u202f% threshold). This is a **strategy\u2011level decision**, not a failure of the order pipeline.\n\n**Summary**\n\n- Orders are **occasionally failing**: one exchange\u2011rejection (`MIN_NOTIONAL`) and one client\u2011side timeout (3200\u202fms) have been recorded in the past hour.  \n- When orders do succeed, latency can be **significantly higher** than normal; the p95 fill latency of **1450\u202fms** versus the baseline **180\u202fms** shows a systemic slowdown.  \n- The most recent successful execution (`ord-501` at 08:45) completed quickly (230\u202fms), but the overall latency distribution indicates that many fills are delayed.\n\n**Health Note:** The process is **healthy** (it is running, receiving market data, evaluating strategies, and can place orders), but a healthy process **does not guarantee active trading across all assets**. The last confirmed order activity was at **2026\u201110\u201116\u202f08:45:00\u202fUTC**.\n\n#### Telemetry Reference\nMetric Summary: metric=trading.realized_pnl_usd, window=24h / 7d / 30d UTC, realized_net_pnl_usd=+$120.00, unrealized_mtm_pnl_usd=+$12.00, win_rate_pct=66.7%, order_rejections_1h=1 (ord-rej-1: MIN_NOTIONAL on exchange), order_timeouts_1h=1 (ord-to-2: TIMEOUT after 3200ms), order_fill_latency_p95_ms=1450ms (baseline 180ms, window 2026-10-16 08:00-09:00 UTC)\n\n=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 24441.806834,
+          "matched_facts": [
+            "ord-rej-1",
+            "MIN_NOTIONAL",
+            "ord-to-2",
+            "3200ms",
+            "1450ms",
+            "2026-10-16 08:00"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "exchange rejection",
+            "timeout",
+            "local processing"
+          ],
+          "missing_epistemic": [
+            "partial fill"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "query_metrics",
+              "arguments": {
+                "metric_names": [
+                  "trading.realized_pnl_usd"
+                ],
+                "lookback_seconds": 3600
+              },
+              "output": "Metric Summary: metric=trading.realized_pnl_usd, window=24h / 7d / 30d UTC, realized_net_pnl_usd=+$120.00, unrealized_mtm_pnl_usd=+$12.00, win_rate_pct=66.7%, order_rejections_1h=1 (ord-rej-1: MIN_NOTIONAL on exchange), order_timeouts_1h=1 (ord-to-2: TIMEOUT after 3200ms), order_fill_latency_p95_ms=1450ms (baseline 180ms, window 2026-10-16 08:00-09:00 UTC)",
+              "output_text": "Metric Summary: metric=trading.realized_pnl_usd, window=24h / 7d / 30d UTC, realized_net_pnl_usd=+$120.00, unrealized_mtm_pnl_usd=+$12.00, win_rate_pct=66.7%, order_rejections_1h=1 (ord-rej-1: MIN_NOTIONAL on exchange), order_timeouts_1h=1 (ord-to-2: TIMEOUT after 3200ms), order_fill_latency_p95_ms=1450ms (baseline 180ms, window 2026-10-16 08:00-09:00 UTC)",
+              "latency_ms": 5.169708,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "inspect_schedule_tick_trace",
+              "arguments": {
+                "ticker_symbol": "BTC_USD",
+                "limit": 5
+              },
+              "output": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "output_text": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "latency_ms": 1.333167,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "ord-501",
+            "dec-501",
+            "tick-0301",
+            "$120.00",
+            "$12.00",
+            "66.7%",
+            "ord-rej-1",
+            "ord-to-2",
+            "$64120",
+            "33.3%",
+            "60.0%",
+            "tick-1901",
+            "$64000",
+            "100.0%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.75
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.75,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q05",
+      "title": "Why did Rio buy or sell this asset?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 14247.0,
+      "runs": [
+        {
+          "prompt": "Why did Rio buy or sell this asset?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [
+            "inspect_trading_decision"
+          ],
+          "response_text": "### \ud83d\udd0d Decision & Proposal Investigation\n\n**Summary:** Rio bought 0.025 BTC because a unanimous BUY consensus from RSIStrategy and MACDStrategy, a sizing formula based on 5% of available cash, and passed asset\u2011concentration and drawdown risk guards all aligned under a trending\u2011up market regime.\n\n#### Causal Chain & Rationale\nOn 2026-10-16 at 08:45:00 UTC Rio\u2019s trading engine evaluated the market snapshot for BTC_USD on CRYPTO_DOT_COM. The close price was $64,000 with a tight spread (0.015%). The market regime was identified as TRENDING_UP, volatility (ATR%) was 1.80%, and trend strength was +0.620, giving an exposure multiplier of 1.00x. \n\n**Consensus & Strategy Votes**: The consensus module recorded a quorum (100.0% vote ratio) and a consensus factor of 1.0. Two strategies voted: MACDStrategy (weight 0.4) and RSIStrategy (weight 0.6). The combined weighted vote favored a BUY action, and RSIStrategy was declared the winning strategy. \n\n**Position Sizing Formula**: With $2,900 available cash, the sizing engine applied the formula `0.05 * available_cash / close_price`. Calculation: 0.05 * 2,900 / 64,000 = 0.025 BTC. This quantity met the minimum asset quantity of 0.001, so the final order quantity was set to 0.025 BTC. \n\n**Risk Guard Evaluation**: Portfolio metrics showed total equity of $12,400, total exposure of 52.0%, and asset concentration of 48.0%. Two risk guards were evaluated: \n- MaxAssetConcentrationGuard: Observed 48.00% vs. limit 50.00% \u2192 PASSED. \n- MaxDrawdownGuard: Observed 2.00% vs. limit 10.00% \u2192 PASSED. Both guards returned true, allowing the trade to proceed. \n\n**Final Outcome**: The trading health state was TRADING and allowed. Consequently, decision `dec-501` was executed, creating order `ord-501` (configuration commit 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873) to BUY 0.025 BTC at the market price.\n\n#### Verified Decision & Governance Telemetry\n=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)\n\nRecorded Decision Evidence Summary: Decision `dec-501` executed `BTC_USD` BUY order `ord-501` based on recorded strategy consensus (`RSIStrategy` + `MACDStrategy`) and dynamic sizing formula `0.05 * available_cash / close_price` = `0.025`.\n\n\nRio bought 0.025 BTC because a unanimous BUY consensus from RSIStrategy and MACDStrategy, a sizing formula based on 5% of available cash, and passed asset\u2011concentration and drawdown risk guards all aligned under a trending\u2011up market regime.\n\nOn 2026-10-16 at 08:45:00 UTC Rio\u2019s trading engine evaluated the market snapshot for BTC_USD on CRYPTO_DOT_COM. The close price was $64,000 with a tight spread (0.015%). The market regime was identified as TRENDING_UP, volatility (ATR%) was 1.80%, and trend strength was +0.620, giving an exposure multiplier of 1.00x. \n\n**Consensus & Strategy Votes**: The consensus module recorded a quorum (100.0% vote ratio) and a consensus factor of 1.0. Two strategies voted: MACDStrategy (weight 0.4) and RSIStrategy (weight 0.6). The combined weighted vote favored a BUY action, and RSIStrategy was declared the winning strategy. \n\n**Position Sizing Formula**: With $2,900 available cash, the sizing engine applied the formula `0.05 * available_cash / close_price`. Calculation: 0.05 * 2,900 / 64,000 = 0.025 BTC. This quantity met the minimum asset quantity of 0.001, so the final order quantity was set to 0.025 BTC. \n\n**Risk Guard Evaluation**: Portfolio metrics showed total equity of $12,400, total exposure of 52.0%, and asset concentration of 48.0%. Two risk guards were evaluated: \n- MaxAssetConcentrationGuard: Observed 48.00% vs. limit 50.00% \u2192 PASSED. \n- MaxDrawdownGuard: Observed 2.00% vs. limit 10.00% \u2192 PASSED. Both guards returned true, allowing the trade to proceed. \n\n**Final Outcome**: The trading health state was TRADING and allowed. Consequently, decision `dec-501` was executed, creating order `ord-501` (configuration commit 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873) to BUY 0.025 BTC at the market price.\n\n#### Verified Decision & Governance Telemetry\n=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)\n\nRecorded Decision Evidence Summary: Decision `dec-501` executed `BTC_USD` BUY order `ord-501` based on recorded strategy consensus (`RSIStrategy` + `MACDStrategy`) and dynamic sizing formula `0.05 * available_cash / close_price` = `0.025`.",
+          "latency_ms": 14247.002542,
+          "matched_facts": [
+            "dec-501",
+            "ord-501",
+            "RSIStrategy",
+            "MACDStrategy",
+            "0.05 * available_cash / close_price",
+            "0.025"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "recorded",
+            "evidence",
+            "consensus",
+            "sizing"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_trading_decision",
+              "arguments": {
+                "decision_id": "dec-501"
+              },
+              "output": "=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)",
+              "output_text": "=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)",
+              "latency_ms": 2.777708,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "5%",
+            "$64,000",
+            "0.015%",
+            "1.80%",
+            "100.0%",
+            "$2,900",
+            "$12,400,",
+            "52.0%",
+            "48.0%",
+            "48.00%",
+            "50.00%",
+            "2.00%",
+            "10.00%",
+            "dec-501",
+            "ord-501",
+            "$64000",
+            "$63995",
+            "$64005",
+            "$12400.00",
+            "$2900.00"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q06",
+      "title": "Why was a particular strategy's signal rejected?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 23906.97,
+      "runs": [
+        {
+          "prompt": "Why was a particular strategy's signal rejected?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [
+            "inspect_trading_decision"
+          ],
+          "response_text": "### \ud83d\udd0d Decision & Proposal Investigation\n\n**Summary:** The BollingerStrategy BUY signal was rejected because the consensus vote ratio (25.0%) fell short of the required 60.0% quorum.\n\n#### Causal Chain & Rationale\nOn 2026-10-16 at 08:46:00 UTC a trading decision (dec-601) was generated for the BTC_USD pair on the CRYPTO_DOT_COM exchange. The market snapshot showed a close price of $64,100 with 100 candles, and the market regime was identified as RANGING (ATR 1.20%, Trend Strength +0.050, Exposure Multiplier 1.00x). The decision engine consulted the strategy consensus layer. The quorum requirement for any action was set at 60.0% vote ratio. The three strategies voted as follows: BollingerStrategy voted BUY with a weight of 0.25, MACDStrategy voted HOLD/REJECT with a weight of 0.35, and RSIStrategy voted HOLD/REJECT with a weight of 0.4. The combined vote ratio for BUY was only 25.0%, far below the 60.0% threshold, so the quorum was not reached (Quorum Reached: False). Consequently, the BollingerStrategy BUY signal was rejected for the specific reason QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%).\n\nBecause the consensus step failed, the engine did not proceed to calculate a position size beyond the minimum asset quantity (0.005) and did not need to evaluate risk guards for execution. The portfolio risk guard check (Total Equity $12,400, Available Cash $2,900, Total Exposure 0.0%, Asset Concentration 0.0%, Current Drawdown 0.00%) passed, but this guard is only consulted after a consensus passes. Since the consensus failed, the final outcome of the decision was REJECTED.\n\nThus, the specific strategy signal (BollingerStrategy BUY) was rejected because the overall vote ratio did not meet the required quorum of 60.0%, as recorded in the persisted decision evidence.\n\n#### Verified Decision & Governance Telemetry\n=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True\n\nPersisted Strategy Rejection Summary: On decision `dec-601`, `BollingerStrategy` BUY signal (weight `0.25`) was rejected with persisted rejection reason `QUORUM_NOT_MET` (vote ratio `25.0%` < `60.0%` quorum threshold).\n\n\nThe BollingerStrategy BUY signal was rejected because the consensus vote ratio (25.0%) fell short of the required 60.0% quorum.\n\nOn 2026-10-16 at 08:46:00 UTC a trading decision (dec-601) was generated for the BTC_USD pair on the CRYPTO_DOT_COM exchange. The market snapshot showed a close price of $64,100 with 100 candles, and the market regime was identified as RANGING (ATR 1.20%, Trend Strength +0.050, Exposure Multiplier 1.00x). The decision engine consulted the strategy consensus layer. The quorum requirement for any action was set at 60.0% vote ratio. The three strategies voted as follows: BollingerStrategy voted BUY with a weight of 0.25, MACDStrategy voted HOLD/REJECT with a weight of 0.35, and RSIStrategy voted HOLD/REJECT with a weight of 0.4. The combined vote ratio for BUY was only 25.0%, far below the 60.0% threshold, so the quorum was not reached (Quorum Reached: False). Consequently, the BollingerStrategy BUY signal was rejected for the specific reason QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%).\n\nBecause the consensus step failed, the engine did not proceed to calculate a position size beyond the minimum asset quantity (0.005) and did not need to evaluate risk guards for execution. The portfolio risk guard check (Total Equity $12,400, Available Cash $2,900, Total Exposure 0.0%, Asset Concentration 0.0%, Current Drawdown 0.00%) passed, but this guard is only consulted after a consensus passes. Since the consensus failed, the final outcome of the decision was REJECTED.\n\nThus, the specific strategy signal (BollingerStrategy BUY) was rejected because the overall vote ratio did not meet the required quorum of 60.0%, as recorded in the persisted decision evidence.\n\n#### Verified Decision & Governance Telemetry\n=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True\n\nPersisted Strategy Rejection Summary: On decision `dec-601`, `BollingerStrategy` BUY signal (weight `0.25`) was rejected with persisted rejection reason `QUORUM_NOT_MET` (vote ratio `25.0%` < `60.0%` quorum threshold).",
+          "latency_ms": 23906.971125,
+          "matched_facts": [
+            "dec-601",
+            "BollingerStrategy",
+            "0.25",
+            "60.0%",
+            "QUORUM_NOT_MET"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "persisted",
+            "rejection reason",
+            "quorum"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_trading_decision",
+              "arguments": {
+                "decision_id": "dec-601"
+              },
+              "output": "=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True",
+              "output_text": "=== Trading Decision dec-601 ===\nTimestamp: 2026-10-16 08:46:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold)\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64100\n  Candles Count: 100\n\n[Market Regime]\n  Regime: RANGING\n  Volatility (ATR%): 1.20%\n  Trend Strength: +0.050\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: False (Vote Ratio: 25.0%)\n  Consensus Factor: 0.6\n  Votes:\n    - BollingerStrategy: BUY (Weight: 0.25) [Rejected: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)]\n    - MACDStrategy: HOLD/REJECT (Weight: 0.35)\n    - RSIStrategy: HOLD/REJECT (Weight: 0.4)\n  Strategy Rejection Reasons:\n    - BollingerStrategy: QUORUM_NOT_MET (vote_ratio 25.0% < 60.0% threshold; opposing HOLD weight 75.0%)\n\n[Position Sizing]\n  Min Asset Quantity: 0.005\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 0.0%\n  Asset Concentration: 0.0%\n  Current Drawdown: 0.00%\n  Risk Guard Passed: True",
+              "latency_ms": 2.835375,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "25.0%",
+            "60.0%",
+            "dec-601",
+            "$64,100",
+            "1.20%",
+            "75.0%",
+            "$12,400,",
+            "$2,900,",
+            "0.0%",
+            "0.00%",
+            "$64100",
+            "$12400.00",
+            "$2900.00"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q07",
+      "title": "What changed between the current configuration and the configuration used for this order?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 14171.72,
+      "runs": [
+        {
+          "prompt": "What changed between the current configuration and the configuration used for this order?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [
+            "get_configuration_history",
+            "get_configuration",
+            "inspect_trading_decision"
+          ],
+          "response_text": "### \ud83d\udd0d Decision & Proposal Investigation\n\n**Summary:** The only change is BTC_USD min_quantity increased from 0.001 to 0.005 between the order's config commit and the current HEAD.\n\n#### Causal Chain & Rationale\nThe trading decision dec-501 was executed using configuration commit 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873 (the initial seed config v1). At that time, the BTC_USD configuration had `min_quantity: 0.001`. Since then, a later commit 0872234e (applied on 2026-10-21) updated the BTC_USD configuration, changing `min_quantity` from `0.001` to `0.005`. The current HEAD reflects this updated value. Therefore, the only recorded change between the configuration used for order ord-501 and the current configuration is the increase of `min_quantity` for BTC_USD from 0.001 to 0.005. No other parameters differ according to the provided configuration history.\n\n#### Verified Decision & Governance Telemetry\nConfiguration history (last 2 commits):\n- 0872234e 2026-10-21T22:27:44.349759 operator: Increase BTC_USD min_quantity from 0.001 to 0.005\n- 5fcc4874 2026-10-21T22:27:44.345876 system: Initial seed config v1\n\nConfiguration for BTC_USD:\nbase_ticker_symbol: BTC\nquote_ticker_symbol: USD\nname: Bitcoin\nexchange: CRYPTO_DOT_COM\nmin_quantity: 0.005\nquote_decimals: 2\nquantity_decimals: 4\nschedule: 1\ncandles_timeframe: MIN1\nenabled: true\n\n\n=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)\n\nConfiguration Diff Summary: Between order `ord-501` commit and current HEAD, `BTC_USD` `min_quantity` changed from `0.001` to `0.005`.\nMissing Commit Reference Policy (`ord-legacy-missing`): When an order's historical commit reference is unavailable, Rio reports that the commit reference is unavailable rather than substituting the current HEAD configuration.\n\n\nThe only change is BTC_USD min_quantity increased from 0.001 to 0.005 between the order's config commit and the current HEAD.\n\nThe trading decision dec-501 was executed using configuration commit 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873 (the initial seed config v1). At that time, the BTC_USD configuration had `min_quantity: 0.001`. Since then, a later commit 0872234e (applied on 2026-10-21) updated the BTC_USD configuration, changing `min_quantity` from `0.001` to `0.005`. The current HEAD reflects this updated value. Therefore, the only recorded change between the configuration used for order ord-501 and the current configuration is the increase of `min_quantity` for BTC_USD from 0.001 to 0.005. No other parameters differ according to the provided configuration history.\n\n#### Verified Decision & Governance Telemetry\nConfiguration history (last 2 commits):\n- 0872234e 2026-10-21T22:27:44.349759 operator: Increase BTC_USD min_quantity from 0.001 to 0.005\n- 5fcc4874 2026-10-21T22:27:44.345876 system: Initial seed config v1\n\nConfiguration for BTC_USD:\nbase_ticker_symbol: BTC\nquote_ticker_symbol: USD\nname: Bitcoin\nexchange: CRYPTO_DOT_COM\nmin_quantity: 0.005\nquote_decimals: 2\nquantity_decimals: 4\nschedule: 1\ncandles_timeframe: MIN1\nenabled: true\n\n\n=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)\n\nConfiguration Diff Summary: Between order `ord-501` commit and current HEAD, `BTC_USD` `min_quantity` changed from `0.001` to `0.005`.\nMissing Commit Reference Policy (`ord-legacy-missing`): When an order's historical commit reference is unavailable, Rio reports that the commit reference is unavailable rather than substituting the current HEAD configuration.",
+          "latency_ms": 14171.717834,
+          "matched_facts": [
+            "min_quantity",
+            "0.001",
+            "0.005",
+            "ord-legacy-missing",
+            "unavailable"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "commit reference",
+            "unavailable",
+            "rather than substituting"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "get_configuration_history",
+              "arguments": {
+                "limit": 10
+              },
+              "output": "Configuration history (last 2 commits):\n- 0872234e 2026-10-21T22:27:44.349759 operator: Increase BTC_USD min_quantity from 0.001 to 0.005\n- 5fcc4874 2026-10-21T22:27:44.345876 system: Initial seed config v1",
+              "output_text": "Configuration history (last 2 commits):\n- 0872234e 2026-10-21T22:27:44.349759 operator: Increase BTC_USD min_quantity from 0.001 to 0.005\n- 5fcc4874 2026-10-21T22:27:44.345876 system: Initial seed config v1",
+              "latency_ms": 26.737584,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "get_configuration",
+              "arguments": {
+                "ticker_symbol": "BTC_USD"
+              },
+              "output": "Configuration for BTC_USD:\nbase_ticker_symbol: BTC\nquote_ticker_symbol: USD\nname: Bitcoin\nexchange: CRYPTO_DOT_COM\nmin_quantity: 0.005\nquote_decimals: 2\nquantity_decimals: 4\nschedule: 1\ncandles_timeframe: MIN1\nenabled: true\n",
+              "output_text": "Configuration for BTC_USD:\nbase_ticker_symbol: BTC\nquote_ticker_symbol: USD\nname: Bitcoin\nexchange: CRYPTO_DOT_COM\nmin_quantity: 0.005\nquote_decimals: 2\nquantity_decimals: 4\nschedule: 1\ncandles_timeframe: MIN1\nenabled: true\n",
+              "latency_ms": 3.553041,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "inspect_trading_decision",
+              "arguments": {
+                "decision_id": "dec-501"
+              },
+              "output": "=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)",
+              "output_text": "=== Trading Decision dec-501 ===\nTimestamp: 2026-10-16 08:45:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: EXECUTED\nResulting Order ID: ord-501\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\n\n[Market Snapshot]\n  Close Price: $64000\n  Bid: $63995 | Ask: $64005\n  Spread: 0.015%\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.80%\n  Trend Strength: +0.620\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 1.0\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.025\n  Min Asset Quantity: 0.001\n  Final Order Quantity: 0.025\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 52.0%\n  Asset Concentration: 48.0%\n  Current Drawdown: 2.00%\n  Risk Guard Passed: True\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [PASSED], Observed: 48.00%, Limit: 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 2.00%, Limit: 10.00%\n\n[Trading Health]\n  State: TRADING (Allowed: True)",
+              "latency_ms": 2.209917,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "dec-501",
+            "ord-501",
+            "$64000",
+            "$63995",
+            "$64005",
+            "0.015%",
+            "1.80%",
+            "100.0%",
+            "$12400.00",
+            "$2900.00",
+            "52.0%",
+            "48.0%",
+            "2.00%",
+            "48.00%",
+            "50.00%",
+            "10.00%",
+            "ord-legacy-missing"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q08",
+      "title": "What configuration change do you recommend, and why?",
+      "category": "Decisions and configuration",
+      "baseline_readiness": "Implemented with guardrails",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 37416.22,
+      "runs": [
+        {
+          "prompt": "What configuration change do you recommend, and why?",
+          "routed_intent": "configuration",
+          "invoked_tools": [
+            "get_configuration"
+          ],
+          "response_text": "Increase ETH_USD.min_quantity from 0.0001 to 0.001 to avoid exchange notional rejections. (Note: This configuration change is a hypothesis \u2014 not proof of better performance \u2014 and requires operator approval before applying.)\n- assets.ETH_USD.min_quantity: 0.0001 -> 0.001\n    reason: Raise minimum trade quantity to meet exchange MIN_NOTIONAL requirement and stop order rejections.\nRisks:\n- Increasing the minimum trade size may limit the ability to execute very small position adjustments, potentially missing micro\u2011opportunities when capital is limited.\nExpected effect: The bot will now place ETH orders with a minimum size of 0.001 ETH, preventing MIN_NOTIONAL rejections and allowing trades to execute as intended.\nActions: Approve, Reject\n\nIncrease ETH_USD.min_quantity from 0.0001 to 0.001 to avoid exchange notional rejections. (Note: This configuration change is a hypothesis \u2014 not proof of better performance \u2014 and requires operator approval before applying.)",
+          "latency_ms": 37416.223875,
+          "matched_facts": [
+            "ETH_USD",
+            "min_quantity",
+            "0.0001",
+            "0.001"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "hypothesis",
+            "approval",
+            "not proof"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "get_configuration",
+              "arguments": {
+                "ticker_symbol": "ETH_USD"
+              },
+              "output": "Configuration for ETH_USD:\nbase_ticker_symbol: ETH\nquote_ticker_symbol: USD\nname: Ethereum\nexchange: CRYPTO_DOT_COM\nmin_quantity: 0.0001\nquote_decimals: 2\nquantity_decimals: 3\nschedule: 1\ncandles_timeframe: MIN1\nenabled: true\n",
+              "output_text": "Configuration for ETH_USD:\nbase_ticker_symbol: ETH\nquote_ticker_symbol: USD\nname: Ethereum\nexchange: CRYPTO_DOT_COM\nmin_quantity: 0.0001\nquote_decimals: 2\nquantity_decimals: 3\nschedule: 1\ncandles_timeframe: MIN1\nenabled: true\n",
+              "latency_ms": 2.401916,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q09",
+      "title": "How has the bot performed over the last 24 hours, 7 days, or 30 days?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 0.6667,
+      "consistency_score": 0.6667,
+      "weighted_total_score": 0.8667,
+      "passed": false,
+      "avg_latency_ms": 25368.12,
+      "runs": [
+        {
+          "prompt": "How has the bot performed over the last 24 hours, 7 days, or 30 days?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [
+            "query_metrics",
+            "get_trade_attribution"
+          ],
+          "response_text": "**Overall bot performance (UTC)**  \n\n- **Realized net P&L** (closed\u2011trade profit & loss) \u2013 **+\u202f$120.00** for the last **24\u202fh**, **7\u202fd**, and **30\u202fd** windows.  \n- **Unrealized mark\u2011to\u2011market P&L** (open\u2011position exposure) \u2013 **+\u202f$12.00** (30\u202fd window).  \n- **Win rate** (across all executed trades) \u2013 **66.7\u202f%**.  \n\n**Operational health (last hour)**  \n\n- **Order rejections** \u2013 **1** (reason: `MIN_NOTIONAL` on exchange, ID\u202f`ord-rej-1`).  \n- **Order timeouts** \u2013 **1** (reason: `TIMEOUT` after 3200\u202fms, ID\u202f`ord-to-2`).  \n- **Order\u2011fill latency (95th percentile)** \u2013 **1450\u202fms** (baseline target **180\u202fms**, measured during **2026\u201110\u201116\u202f08:00\u201109:00\u202fUTC**).  \n\n**Strategy\u2011level realized P&L attribution (30\u202fd window, realized closed trades)**  \n\n- **Reconciled portfolio realized net P&L** \u2013 **+\u202f$120.00** (matches the proportional sum of strategy contributions; reconciliation flag **True**; total trades reported **3**).  \n\n| Strategy | Proportional net P&L | Unadjusted participation net P&L | Trades (wins\u2011losses\u2011breakeven) | Win rate | Profit factor |\n|----------|---------------------|-----------------------------------|--------------------------------|----------|----------------|\n| **MACDStrategy** | **+\u202f$20.00** | +\u202f$70.00 (2 trades) | 4\u202f(2\u202fwins\u202f/\u202f2\u202flosses\u202f/\u202f0) | **33.3\u202f%** | **1.67** |\n| **\n\n#### Verified Performance & Attribution Telemetry\nMetric Summary: metric=trading.realized_pnl_usd, window=24h / 7d / 30d UTC, realized_net_pnl_usd=+$120.00, unrealized_mtm_pnl_usd=+$12.00, win_rate_pct=66.7%, order_rejections_1h=1 (ord-rej-1: MIN_NOTIONAL on exchange), order_timeouts_1h=1 (ord-to-2: TIMEOUT after 3200ms), order_fill_latency_p95_ms=1450ms (baseline 180ms, window 2026-10-16 08:00-09:00 UTC)\n\nTrade Attribution Breakdown by Strategy (Window: 30d UTC, Basis: Realized Closed Trades):\nReconciled Portfolio Realized Net PnL: +$120.00 (Proportional Strategy Sum: +$120.00, Reconciled: True, Total Trades: 3)\n\n[Strategy: MACDStrategy] (Proportional Net PnL: +$20.00 | Unadjusted Participation Net PnL: +$70.00 across 2 trade(s))\n  Trades: 4 (Wins: 2, Losses: 2, Break-even: 0)\n  Win Rate: 33.3%\n  Net PnL: +$20.00 (Gross: +$20.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 1.67\n  Avg Return: +0.02%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: -$15.00\n\n[Strategy: RSIStrategy] (Proportional Net PnL: +$100.00 | Unadjusted Participation Net PnL: +$150.00 across 2 trade(s))\n  Trades: 4 (Wins: 4, Losses: 0, Break-even: 0)\n  Win Rate: 100.0%\n  Net PnL: +$100.00 (Gross: +$100.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 999.99\n  Avg Return: +0.11%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: +$0.00",
+          "latency_ms": 25368.121667,
+          "matched_facts": [
+            "+$120.00",
+            "66.7%",
+            "UTC",
+            "24h",
+            "7d",
+            "30d"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "UTC",
+            "realized"
+          ],
+          "missing_epistemic": [
+            "mark-to-market"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "query_metrics",
+              "arguments": {
+                "metric_names": [
+                  "trades.closed.total",
+                  "pnl.realized.total",
+                  "fees.paid.total",
+                  "slippage.cost.total"
+                ],
+                "lookback_seconds": 2592000,
+                "interval_seconds": 86400,
+                "aggregation": "sum",
+                "labels": null
+              },
+              "output": "Metric Summary: metric=trading.realized_pnl_usd, window=24h / 7d / 30d UTC, realized_net_pnl_usd=+$120.00, unrealized_mtm_pnl_usd=+$12.00, win_rate_pct=66.7%, order_rejections_1h=1 (ord-rej-1: MIN_NOTIONAL on exchange), order_timeouts_1h=1 (ord-to-2: TIMEOUT after 3200ms), order_fill_latency_p95_ms=1450ms (baseline 180ms, window 2026-10-16 08:00-09:00 UTC)",
+              "output_text": "Metric Summary: metric=trading.realized_pnl_usd, window=24h / 7d / 30d UTC, realized_net_pnl_usd=+$120.00, unrealized_mtm_pnl_usd=+$12.00, win_rate_pct=66.7%, order_rejections_1h=1 (ord-rej-1: MIN_NOTIONAL on exchange), order_timeouts_1h=1 (ord-to-2: TIMEOUT after 3200ms), order_fill_latency_p95_ms=1450ms (baseline 180ms, window 2026-10-16 08:00-09:00 UTC)",
+              "latency_ms": 3.301542,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "get_trade_attribution",
+              "arguments": {
+                "dimension": "strategy",
+                "lookback_days": 30
+              },
+              "output": "Trade Attribution Breakdown by Strategy (Window: 30d UTC, Basis: Realized Closed Trades):\nReconciled Portfolio Realized Net PnL: +$120.00 (Proportional Strategy Sum: +$120.00, Reconciled: True, Total Trades: 3)\n\n[Strategy: MACDStrategy] (Proportional Net PnL: +$20.00 | Unadjusted Participation Net PnL: +$70.00 across 2 trade(s))\n  Trades: 4 (Wins: 2, Losses: 2, Break-even: 0)\n  Win Rate: 33.3%\n  Net PnL: +$20.00 (Gross: +$20.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 1.67\n  Avg Return: +0.02%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: -$15.00\n\n[Strategy: RSIStrategy] (Proportional Net PnL: +$100.00 | Unadjusted Participation Net PnL: +$150.00 across 2 trade(s))\n  Trades: 4 (Wins: 4, Losses: 0, Break-even: 0)\n  Win Rate: 100.0%\n  Net PnL: +$100.00 (Gross: +$100.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 999.99\n  Avg Return: +0.11%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: +$0.00",
+              "output_text": "Trade Attribution Breakdown by Strategy (Window: 30d UTC, Basis: Realized Closed Trades):\nReconciled Portfolio Realized Net PnL: +$120.00 (Proportional Strategy Sum: +$120.00, Reconciled: True, Total Trades: 3)\n\n[Strategy: MACDStrategy] (Proportional Net PnL: +$20.00 | Unadjusted Participation Net PnL: +$70.00 across 2 trade(s))\n  Trades: 4 (Wins: 2, Losses: 2, Break-even: 0)\n  Win Rate: 33.3%\n  Net PnL: +$20.00 (Gross: +$20.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 1.67\n  Avg Return: +0.02%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: -$15.00\n\n[Strategy: RSIStrategy] (Proportional Net PnL: +$100.00 | Unadjusted Participation Net PnL: +$150.00 across 2 trade(s))\n  Trades: 4 (Wins: 4, Losses: 0, Break-even: 0)\n  Win Rate: 100.0%\n  Net PnL: +$100.00 (Gross: +$100.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 999.99\n  Avg Return: +0.11%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: +$0.00",
+              "latency_ms": 2.897334,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$120.00",
+            "$12.00",
+            "ord-rej-1",
+            "ord-to-2",
+            "$20.00",
+            "$70.00",
+            "66.7%",
+            "33.3%",
+            "$0.0000",
+            "0.02%",
+            "$25.00",
+            "$15.00",
+            "$100.00",
+            "$150.00",
+            "100.0%",
+            "0.11%",
+            "$0.00"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.6667
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.6667,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q10",
+      "title": "Which strategies contributed most to profit or loss?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Partial \u2014 validate accounting",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 0.6667,
+      "consistency_score": 0.6667,
+      "weighted_total_score": 0.8667,
+      "passed": false,
+      "avg_latency_ms": 33880.14,
+      "runs": [
+        {
+          "prompt": "Which strategies contributed most to profit or loss?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [
+            "get_trade_attribution"
+          ],
+          "response_text": "**Portfolio\u2011wide realized performance (30\u202fd UTC, closed trades only)**  \n- Reconciled net PnL: **+$120.00** (proportional strategy sum matches, reconciled\u202f=\u202fTrue, total trades\u202f=\u202f3).\n\n**Strategy\u2011level contribution (proportional net PnL)**  \n\n| Strategy | Proportional Net PnL | Wins / Losses | Win\u202fRate | Profit\u202fFactor |\n|----------|----------------------|---------------|----------|---------------|\n| **RSIStrategy** | **+$100.00** | 4\u202fwins /\u202f0\u202flosses | 100.0% | 999.99 |\n| **MACDStrategy** | **+$20.00** | 2\u202fwins /\u202f2\u202flosses | 33.3% | 1.67 |\n\n- RSIStrategy generated the bulk of the profit, contributing **$100.00** (\u2248\u202f83\u202f% of the total realized PnL).  \n- MACDStrategy added a smaller positive contribution of **$20.00** (\u2248\u202f17\u202f% of the total).  \n\nBoth strategies posted **zero fees and slippage** in this window, and their proportional PnL sums reconcile exactly to the portfolio\u2019s realized net PnL.\n\n$$\\text{Total Realized PnL}_{30d} = +\\$20.00\\;(\\text{MACDStrategy})\\;+\\;+\\$100.00\\;(\\text{RSIStrategy}) = +\\$120.00$$\n\n**Key take\u2011aways**  \n- The only profit source is RSIStrategy, which achieved a perfect win record (4/4) and an exceptionally high profit factor.  \n- MACDStrategy was profitable but less consistent (2 wins, 2 losses) and contributed a modest share of the overall gain.  \n- No strategy incurred a net loss in the realized closed\u2011trade window.\n\n#### Verified Performance & Attribution Telemetry\nTrade Attribution Breakdown by Strategy (Window: 30d UTC, Basis: Realized Closed Trades):\nReconciled Portfolio Realized Net PnL: +$120.00 (Proportional Strategy Sum: +$120.00, Reconciled: True, Total Trades: 3)\n\n[Strategy: MACDStrategy] (Proportional Net PnL: +$20.00 | Unadjusted Participation Net PnL: +$70.00 across 2 trade(s))\n  Trades: 4 (Wins: 2, Losses: 2, Break-even: 0)\n  Win Rate: 33.3%\n  Net PnL: +$20.00 (Gross: +$20.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 1.67\n  Avg Return: +0.02%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: -$15.00\n\n[Strategy: RSIStrategy] (Proportional Net PnL: +$100.00 | Unadjusted Participation Net PnL: +$150.00 across 2 trade(s))\n  Trades: 4 (Wins: 4, Losses: 0, Break-even: 0)\n  Win Rate: 100.0%\n  Net PnL: +$100.00 (Gross: +$100.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 999.99\n  Avg Return: +0.11%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: +$0.00",
+          "latency_ms": 33880.140084,
+          "matched_facts": [
+            "RSIStrategy",
+            "+$100.00",
+            "MACDStrategy",
+            "+$20.00",
+            "+$120.00",
+            "Reconciled: True"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "reconcile",
+            "proportional"
+          ],
+          "missing_epistemic": [
+            "double"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "get_trade_attribution",
+              "arguments": {
+                "dimension": "strategy",
+                "lookback_days": 30
+              },
+              "output": "Trade Attribution Breakdown by Strategy (Window: 30d UTC, Basis: Realized Closed Trades):\nReconciled Portfolio Realized Net PnL: +$120.00 (Proportional Strategy Sum: +$120.00, Reconciled: True, Total Trades: 3)\n\n[Strategy: MACDStrategy] (Proportional Net PnL: +$20.00 | Unadjusted Participation Net PnL: +$70.00 across 2 trade(s))\n  Trades: 4 (Wins: 2, Losses: 2, Break-even: 0)\n  Win Rate: 33.3%\n  Net PnL: +$20.00 (Gross: +$20.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 1.67\n  Avg Return: +0.02%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: -$15.00\n\n[Strategy: RSIStrategy] (Proportional Net PnL: +$100.00 | Unadjusted Participation Net PnL: +$150.00 across 2 trade(s))\n  Trades: 4 (Wins: 4, Losses: 0, Break-even: 0)\n  Win Rate: 100.0%\n  Net PnL: +$100.00 (Gross: +$100.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 999.99\n  Avg Return: +0.11%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: +$0.00",
+              "output_text": "Trade Attribution Breakdown by Strategy (Window: 30d UTC, Basis: Realized Closed Trades):\nReconciled Portfolio Realized Net PnL: +$120.00 (Proportional Strategy Sum: +$120.00, Reconciled: True, Total Trades: 3)\n\n[Strategy: MACDStrategy] (Proportional Net PnL: +$20.00 | Unadjusted Participation Net PnL: +$70.00 across 2 trade(s))\n  Trades: 4 (Wins: 2, Losses: 2, Break-even: 0)\n  Win Rate: 33.3%\n  Net PnL: +$20.00 (Gross: +$20.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 1.67\n  Avg Return: +0.02%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: -$15.00\n\n[Strategy: RSIStrategy] (Proportional Net PnL: +$100.00 | Unadjusted Participation Net PnL: +$150.00 across 2 trade(s))\n  Trades: 4 (Wins: 4, Losses: 0, Break-even: 0)\n  Win Rate: 100.0%\n  Net PnL: +$100.00 (Gross: +$100.00, Fees: $0.0000, Slippage: $0.0000)\n  Profit Factor: 999.99\n  Avg Return: +0.11%\n  Avg Duration: 400.0s\n  Max Win: +$25.00 | Max Loss: +$0.00",
+              "latency_ms": 5.567667,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$120.00",
+            "$100.00",
+            "100.0%",
+            "$20.00",
+            "33.3%",
+            "$70.00",
+            "$0.0000",
+            "0.02%",
+            "$25.00",
+            "$15.00",
+            "$150.00",
+            "0.11%",
+            "$0.00"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.6667
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.6667,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q11",
+      "title": "Has strategy performance changed by market regime?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 23636.74,
+      "runs": [
+        {
+          "prompt": "Has strategy performance changed by market regime?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [
+            "get_trade_attribution"
+          ],
+          "response_text": "**30\u2011day regime\u2011level performance (UTC)**  \n\n- **Baseline (all regimes)** \u2013 Net\u202fPnL\u202f=\u202f+$120.00, Win\u202fRate\u202f=\u202f66.7%, Total\u202fSample\u202fSize\u202f=\u202f3 trades.  \n\n- **RANGING** \u2013 Net\u202fPnL\u202f=\u202f\u2011$30.00, Win\u202fRate\u202f=\u202f0.0%, Sample\u202fSize\u202f=\u202f1 trade **[LOW SAMPLE SIZE]**.  \n\n- **TRENDING_UP** \u2013 Net\u202fPnL\u202f=\u202f+$150.00, Win\u202fRate\u202f=\u202f100.0%, Sample\u202fSize\u202f=\u202f2 trades **[LOW SAMPLE SIZE]**.  \n\n**Strategy\u2011by\u2011strategy attribution (all within the same 30\u2011day UTC window)**  \n\n- **MACDStrategy**  \n  - RANGING: Net\u202fPnL\u202f=\u202f\u2011$30.00, Win\u202fRate\u202f=\u202f0.0%, Sample\u202fSize\u202f=\u202f2, Avg\u202fReturn\u202f=\u202f\u20110.05% **(Warning: Small Sample Size n<5)**.  \n  - TRENDING_UP: Net\u202fPnL\u202f=\u202f+$50.00, Win\u202fRate\u202f=\u202f100.0%, Sample\u202fSize\u202f=\u202f2, Avg\u202fReturn\u202f=\u202f+0.17% **(Warning: Small Sample Size n<5)**.  \n\n- **RSIStrategy**  \n  - TRENDING_UP: Net\u202fPnL\u202f=\u202f+$100.00, Win\u202fRate\u202f=\u202f100.0%, Sample\u202fSize\u202f=\u202f4, Avg\u202fReturn\u202f=\u202f+0.11% **(Warning: Small Sample Size n<5)**.  \n  - (No trades recorded for RANGING.)  \n\n**Interpretation**  \n\n- The portfolio\u2019s net result is markedly better in a **TRENDING_UP** market (+$150.00) than in a **RANGING** market (\u2011$30.00).  \n- Both MACDStrategy and RSIStrategy generated positive PnL and perfect win rates during **TRENDING_UP**, while MACDStrategy posted a loss and 0\u202f%\n\n#### Verified Performance & Attribution Telemetry\nStrategy Performance by Market Regime (Window: 30d UTC, Baseline Net PnL: +$120.00, Baseline Win Rate: 66.7%, Total Sample Size: 3 trades):\n\n=== Regime: RANGING (Sample Size: n=1, Regime Net PnL: -$30.00, Win Rate: 0.0%) [LOW SAMPLE SIZE] ===\n\n=== Regime: TRENDING_UP (Sample Size: n=2, Regime Net PnL: +$150.00, Win Rate: 100.0%) [LOW SAMPLE SIZE] ===\n\n[Strategy: MACDStrategy]\n  - Regime RANGING: Net PnL=-$30.00 | Win Rate=0.0% | Sample Size n=2 | Avg Return=-0.05% (Warning: Small Sample Size n<5)\n  - Regime TRENDING_UP: Net PnL=+$50.00 | Win Rate=100.0% | Sample Size n=2 | Avg Return=+0.17% (Warning: Small Sample Size n<5)\n\n[Strategy: RSIStrategy]\n  - Regime TRENDING_UP: Net PnL=+$100.00 | Win Rate=100.0% | Sample Size n=4 | Avg Return=+0.11% (Warning: Small Sample Size n<5)",
+          "latency_ms": 23636.735167,
+          "matched_facts": [
+            "TRENDING_UP",
+            "RANGING",
+            "+$150.00",
+            "-$30.00",
+            "n=2",
+            "n=1",
+            "LOW SAMPLE SIZE"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "sample size",
+            "regime",
+            "baseline"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "get_trade_attribution",
+              "arguments": {
+                "dimension": "strategy_by_regime",
+                "lookback_days": 30
+              },
+              "output": "Strategy Performance by Market Regime (Window: 30d UTC, Baseline Net PnL: +$120.00, Baseline Win Rate: 66.7%, Total Sample Size: 3 trades):\n\n=== Regime: RANGING (Sample Size: n=1, Regime Net PnL: -$30.00, Win Rate: 0.0%) [LOW SAMPLE SIZE] ===\n\n=== Regime: TRENDING_UP (Sample Size: n=2, Regime Net PnL: +$150.00, Win Rate: 100.0%) [LOW SAMPLE SIZE] ===\n\n[Strategy: MACDStrategy]\n  - Regime RANGING: Net PnL=-$30.00 | Win Rate=0.0% | Sample Size n=2 | Avg Return=-0.05% (Warning: Small Sample Size n<5)\n  - Regime TRENDING_UP: Net PnL=+$50.00 | Win Rate=100.0% | Sample Size n=2 | Avg Return=+0.17% (Warning: Small Sample Size n<5)\n\n[Strategy: RSIStrategy]\n  - Regime TRENDING_UP: Net PnL=+$100.00 | Win Rate=100.0% | Sample Size n=4 | Avg Return=+0.11% (Warning: Small Sample Size n<5)",
+              "output_text": "Strategy Performance by Market Regime (Window: 30d UTC, Baseline Net PnL: +$120.00, Baseline Win Rate: 66.7%, Total Sample Size: 3 trades):\n\n=== Regime: RANGING (Sample Size: n=1, Regime Net PnL: -$30.00, Win Rate: 0.0%) [LOW SAMPLE SIZE] ===\n\n=== Regime: TRENDING_UP (Sample Size: n=2, Regime Net PnL: +$150.00, Win Rate: 100.0%) [LOW SAMPLE SIZE] ===\n\n[Strategy: MACDStrategy]\n  - Regime RANGING: Net PnL=-$30.00 | Win Rate=0.0% | Sample Size n=2 | Avg Return=-0.05% (Warning: Small Sample Size n<5)\n  - Regime TRENDING_UP: Net PnL=+$50.00 | Win Rate=100.0% | Sample Size n=2 | Avg Return=+0.17% (Warning: Small Sample Size n<5)\n\n[Strategy: RSIStrategy]\n  - Regime TRENDING_UP: Net PnL=+$100.00 | Win Rate=100.0% | Sample Size n=4 | Avg Return=+0.11% (Warning: Small Sample Size n<5)",
+              "latency_ms": 8.501042,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$120.00",
+            "66.7%",
+            "$30.00",
+            "0.0%",
+            "$150.00",
+            "100.0%",
+            "0.05%",
+            "$50.00",
+            "0.17%",
+            "$100.00",
+            "0.11%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q12",
+      "title": "Is the bot's live execution diverging from its backtest?",
+      "category": "Performance and attribution",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 32082.08,
+      "runs": [
+        {
+          "prompt": "Is the bot's live execution diverging from its backtest?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [
+            "detect_backtest_drift"
+          ],
+          "response_text": "**Live\u2011vs\u2011Backtest Execution Drift (BTC_USD)**  \n\n- **Aligned evaluation window:**\u202f2026\u201110\u201116T00:00:00Z\u202f\u2192\u202f2026\u201110\u201116T06:00:00Z (UTC)  \n- **Fill counts:**\u202fSimulated\u202f=\u202f5\u202fvs\u202fLive\u202f=\u202f4 (1 partial\u2011fill leg merged) \u2192 **Fill\u2011count drift**\u202f=\u202f1  \n- **Quantities:**\u202fSimulated\u202f=\u202f0.125\u202fBTC\u202fvs\u202fLive\u202f=\u202f0.100\u202fBTC \u2192 **Quantity drift**\u202f=\u202f0.025\u202fBTC  \n- **Average prices:**\u202fSimulated\u202f=\u202f\\$64,395.00\u202fvs\u202fLive\u202f=\u202f\\$64,000.00 \u2192 **Price drift**\u202f=\u202f\\$395.00 (live price lower)  \n- **Fees:**\u202fSimulated\u202f=\u202f\\$3.20\u202fvs\u202fLive\u202f=\u202f\\$4.40 \u2192 **Fee drift**\u202f=\u202f\\$\\-1.20 (live execution incurred higher fees)  \n- **Drift flag:**\u202fTrue (the bot\u2019s live execution diverged from its backtest for this window)\n\n**Interpretation**  \nThe live run executed one fewer fill (with a partial\u2011fill leg merged), purchased 0.025\u202fBTC less, and did so at a price \\$395 lower than the simulated fill price. However, the higher realized fee (\\$1.20 more) offsets part of the price advantage. The \u201cDrifted: True\u201d flag confirms that, for the 6\u2011hour aligned window, the live execution deviated from the backtest expectations. No additional windows or assets are provided, so the assessment is limited to this BTC_USD segment.\n\n#### Verified Performance & Attribution Telemetry\nDrift BTC_USD:\n  Aligned Window: 2026-10-16T00:00:00Z -> 2026-10-16T06:00:00Z\n  Simulated fills: 5\n  Live fills: 4 (Partial fill legs merged: 1)\n  Fill count drift: 1\n  Simulated quantity: 0.125 | Live quantity: 0.100\n  Quantity drift: 0.025\n  Simulated avg price: 64395.00 | Live avg price: 64000.00\n  Price drift: 395.00\n  Simulated fees: $3.20 | Live fees: $4.40 (Fee drift: $-1.20)\n  Drifted: True",
+          "latency_ms": 32082.078084,
+          "matched_facts": [
+            "BTC_USD",
+            "Simulated fills: 5",
+            "Live fills: 4",
+            "Partial fill legs merged: 1",
+            "395.00",
+            "-1.20",
+            "Drifted: True"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "Aligned Window",
+            "partial fill",
+            "fee"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "detect_backtest_drift",
+              "arguments": {
+                "ticker_symbol": "BTC_USD"
+              },
+              "output": "Drift BTC_USD:\n  Aligned Window: 2026-10-16T00:00:00Z -> 2026-10-16T06:00:00Z\n  Simulated fills: 5\n  Live fills: 4 (Partial fill legs merged: 1)\n  Fill count drift: 1\n  Simulated quantity: 0.125 | Live quantity: 0.100\n  Quantity drift: 0.025\n  Simulated avg price: 64395.00 | Live avg price: 64000.00\n  Price drift: 395.00\n  Simulated fees: $3.20 | Live fees: $4.40 (Fee drift: $-1.20)\n  Drifted: True",
+              "output_text": "Drift BTC_USD:\n  Aligned Window: 2026-10-16T00:00:00Z -> 2026-10-16T06:00:00Z\n  Simulated fills: 5\n  Live fills: 4 (Partial fill legs merged: 1)\n  Fill count drift: 1\n  Simulated quantity: 0.125 | Live quantity: 0.100\n  Quantity drift: 0.025\n  Simulated avg price: 64395.00 | Live avg price: 64000.00\n  Price drift: 395.00\n  Simulated fees: $3.20 | Live fees: $4.40 (Fee drift: $-1.20)\n  Drifted: True",
+              "latency_ms": 15.039,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$64,395.00",
+            "$64,000.00",
+            "$395.00",
+            "$3.20",
+            "$4.40",
+            "$395",
+            "$1.20"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q13",
+      "title": "Would this strategy have been profitable on historical data?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Implemented",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 21443.55,
+      "runs": [
+        {
+          "prompt": "Would this strategy have been profitable on historical data?",
+          "routed_intent": "backtest",
+          "invoked_tools": [
+            "backtest"
+          ],
+          "response_text": "Backtest BTC_USD (session bt-session-btc-01):\n- Status: COMPLETED\n- Data points: 720\n- Time range: 2026-09-01 00:00:00 UTC to 2026-10-01 00:00:00 UTC\n- Return: 6.4000%\n- PnL: 640.0000\n- Max drawdown: -3.1000%\n- Round trips: 28\n- Fills: 56\n- Cancelled: 0\n\nExecution Assumptions: Starting Capital: 10000, Fee rate: <MagicMock name='mock.backtest_service.run().execution.fee_rate' id='4637917264'>, Slippage ticks: <MagicMock name='mock.backtest_service.run().execution.slippage_ticks' id='4637793584'>\n\n=== Historical Backtest Report (BTC_USD) ===\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nPeriod: 2026-09-01T00:00:00Z to 2026-10-01T00:00:00Z (UTC)\nStarting Capital: $10000.00 USD | Fee Assumption: 0.1% taker/maker | Slippage Model: 2 bps\nTotal Return: +6.40% (+$640.00 Net Profit)\nMax Drawdown: -3.10%\nTotal Trades: 28 (Win Rate: 64.3%, Profit Factor: 1.85)",
+          "latency_ms": 21443.546541,
+          "matched_facts": [
+            "BTC_USD",
+            "2026-09-01",
+            "2026-10-01",
+            "10000",
+            "0.1%",
+            "+6.40%",
+            "-3.10%",
+            "28"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "drawdown",
+            "trades",
+            "fee",
+            "starting capital"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "backtest",
+              "arguments": {
+                "args": [
+                  {
+                    "ticker_symbol": "BTC_USD",
+                    "start_time": "2026-10-21 22:33:01.716448+00:00",
+                    "end_time": "2026-10-21 22:33:01.716448+00:00",
+                    "data_source": {
+                      "source_type": "market_data",
+                      "source_id": null,
+                      "path": null
+                    },
+                    "initial_balance": "10000.0",
+                    "execution": {
+                      "latency_ms": 100.0,
+                      "slippage_ticks": 2,
+                      "fee_rate": "0.001"
+                    },
+                    "warmup_start_time": null
+                  }
+                ]
+              },
+              "output": "<MagicMock name='mock.backtest_service.run()' id='4623179104'>",
+              "output_text": "=== Historical Backtest Report (BTC_USD) ===\nConfiguration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nPeriod: 2026-09-01T00:00:00Z to 2026-10-01T00:00:00Z (UTC)\nStarting Capital: $10000.00 USD | Fee Assumption: 0.1% taker/maker | Slippage Model: 2 bps\nTotal Return: +6.40% (+$640.00 Net Profit)\nMax Drawdown: -3.10%\nTotal Trades: 28 (Win Rate: 64.3%, Profit Factor: 1.85)",
+              "latency_ms": 0.514916,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "6.4000%",
+            "3.1000%",
+            "$10000.00",
+            "0.1%",
+            "6.40%",
+            "$640.00",
+            "3.10%",
+            "64.3%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q14",
+      "title": "Which candidate configuration performs best in walk-forward validation?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 35219.58,
+      "runs": [
+        {
+          "prompt": "Which candidate configuration performs best in walk-forward validation?",
+          "routed_intent": "performance_analysis",
+          "invoked_tools": [
+            "walk_forward",
+            "inspect_experiment"
+          ],
+          "response_text": "**Walk\u2011forward validation result (BTC_USD)**  \n\n| Candidate | Classification | In\u2011sample (IS) Return | Out\u2011of\u2011sample (OOS) Return | Walk\u2011forward Efficiency (WFE) | Max OOS Drawdown | Profitable Folds (out of 4) | Fold OOS Range Spread |\n|-----------|----------------|----------------------|----------------------------|------------------------------|------------------|-----------------------------|-----------------------|\n| `cand_exploratory_overfit` (run `wf_cand_a`) | **OVERFIT** | +18.40% | +1.20% | 0.07 | -8.90% | 1/4 | 9.30% |\n| `cand_robust_multi` (run `wf_cand_b`) | **ROBUST** | +9.20% | +6.80% | 0.74 | -2.40% | 4/4 | 0.40% |\n\n**Best performing candidate** \u2013 `cand_robust_multi`  \n\n- OOS return of **+6.80%** (substantially higher than the overfit candidate\u2019s +1.20%).  \n- High Walk\u2011forward Efficiency of **0.74**, indicating strong alignment between IS and OOS performance.  \n- Consistently profitable across **all 4 folds** (4/4).  \n- Low OOS drawdown (**\u20112.40%**) and minimal fold\u2011to\u2011fold variability (**0.40% spread**).\n\n**Recommendation** \u2013 The experiment summary explicitly recommends `cand_robust_multi` as the **Robust Candidate** for deployment. The exploratory candidate `cand_exploratory_overfit` shows a high IS return (+18.40%) but poor OOS behavior and is classified as **OVERFIT**; it should not be promoted.\n\n#### Verified Performance & Attribution Telemetry\n### \ud83c\udfc6 Walk-Forward Candidate Comparison (BTC_USD)\n\nComparing candidates across out-of-sample folds, untouched test windows, WFE, and fold variability:\n\n- **Candidate `cand_exploratory_overfit`** (Run `wf_cand_a`): Classification=**OVERFIT** | IS Return=+18.40% | OOS Return=+1.20% | WFE=0.07 | Max OOS DD=-8.90% | Profitable Folds=1/4 | Fold OOS Range Spread=9.30%\n- **Candidate `cand_robust_multi`** (Run `wf_cand_b`): Classification=**ROBUST** | IS Return=+9.20% | OOS Return=+6.80% | WFE=0.74 | Max OOS DD=-2.40% | Profitable Folds=4/4 | Fold OOS Range Spread=0.40%\n\n**Recommended Robust Candidate**: `cand_robust_multi` (OOS Return +6.80%, WFE 0.74, consistent across untouched folds).\n**Exploratory / In-Sample Winner Warning**: `cand_exploratory_overfit` had the highest in-sample return (+18.40%) but degraded out-of-sample (+1.20%) \u2014 do NOT promote based on in-sample return alone.\n\n=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).",
+          "latency_ms": 35219.579083,
+          "matched_facts": [
+            "cand_robust_multi",
+            "cand_exploratory_overfit",
+            "+6.80%",
+            "0.74",
+            "ROBUST",
+            "OVERFIT",
+            "4/4"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "out-of-sample",
+            "fold",
+            "exploratory",
+            "robust"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "walk_forward",
+              "arguments": {
+                "action": "compare_candidates",
+                "ticker_symbol": "BTC_USD"
+              },
+              "output": "### \ud83c\udfc6 Walk-Forward Candidate Comparison (BTC_USD)\n\nComparing candidates across out-of-sample folds, untouched test windows, WFE, and fold variability:\n\n- **Candidate `cand_exploratory_overfit`** (Run `wf_cand_a`): Classification=**OVERFIT** | IS Return=+18.40% | OOS Return=+1.20% | WFE=0.07 | Max OOS DD=-8.90% | Profitable Folds=1/4 | Fold OOS Range Spread=9.30%\n- **Candidate `cand_robust_multi`** (Run `wf_cand_b`): Classification=**ROBUST** | IS Return=+9.20% | OOS Return=+6.80% | WFE=0.74 | Max OOS DD=-2.40% | Profitable Folds=4/4 | Fold OOS Range Spread=0.40%\n\n**Recommended Robust Candidate**: `cand_robust_multi` (OOS Return +6.80%, WFE 0.74, consistent across untouched folds).\n**Exploratory / In-Sample Winner Warning**: `cand_exploratory_overfit` had the highest in-sample return (+18.40%) but degraded out-of-sample (+1.20%) \u2014 do NOT promote based on in-sample return alone.",
+              "output_text": "### \ud83c\udfc6 Walk-Forward Candidate Comparison (BTC_USD)\n\nComparing candidates across out-of-sample folds, untouched test windows, WFE, and fold variability:\n\n- **Candidate `cand_exploratory_overfit`** (Run `wf_cand_a`): Classification=**OVERFIT** | IS Return=+18.40% | OOS Return=+1.20% | WFE=0.07 | Max OOS DD=-8.90% | Profitable Folds=1/4 | Fold OOS Range Spread=9.30%\n- **Candidate `cand_robust_multi`** (Run `wf_cand_b`): Classification=**ROBUST** | IS Return=+9.20% | OOS Return=+6.80% | WFE=0.74 | Max OOS DD=-2.40% | Profitable Folds=4/4 | Fold OOS Range Spread=0.40%\n\n**Recommended Robust Candidate**: `cand_robust_multi` (OOS Return +6.80%, WFE 0.74, consistent across untouched folds).\n**Exploratory / In-Sample Winner Warning**: `cand_exploratory_overfit` had the highest in-sample return (+18.40%) but degraded out-of-sample (+1.20%) \u2014 do NOT promote based on in-sample return alone.",
+              "latency_ms": 29.766459,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "inspect_experiment",
+              "arguments": {
+                "action": "get",
+                "experiment_id": "exp_901"
+              },
+              "output": "=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).",
+              "output_text": "=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).",
+              "latency_ms": 1.256041,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "18.40%",
+            "1.20%",
+            "8.90%",
+            "9.30%",
+            "9.20%",
+            "6.80%",
+            "2.40%",
+            "0.40%",
+            "$395.00",
+            "0.62%",
+            "0.50%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q15",
+      "title": "Why did this experiment run, and what triggered it?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 13873.85,
+      "runs": [
+        {
+          "prompt": "Why did this experiment run, and what triggered it?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [
+            "inspect_experiment"
+          ],
+          "response_text": "### \ud83d\udd0d Decision & Proposal Investigation\n\n**Summary:** Experiment exp_901 was triggered by a detected price and fill\u2011count drift exceeding tolerance, leading to backtest and walk\u2011forward evaluation of three candidates, with cand_robust_multi recommended for its strong out\u2011of\u2011sample performance.\n\n#### Causal Chain & Rationale\nThe experiment exp_901 (BTC_USD Drift Recovery Study) was launched because the system detected a market drift condition. The trigger type was BACKTEST_DRIFT_DETECTED, sourced from event ID evt_drift_77. The causal evidence recorded that the BTC_USD live average fill price had drifted upward by $395.00, which represented a 0.62% deviation\u2014exceeding the configured tolerance of 0.50%\u2014and that the fill count drifted (5 simulated fills versus 4 live fills) during the window 2026-10-16 00:00\u201106:00 UTC. The drift was detected at 2026-10-16T06:05:00Z.\n\nUpon this trigger, the experiment framework instantiated three candidate runs bound to the base configuration commit 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873 on branch branch_exp_901:\n- cand_current (completed, backtest session bt_901_cur, walk\u2011forward run wf_cand_a)\n- cand_equal_weight (completed, backtest session bt_901_eq, walk\u2011forward run wf_cand_eq)\n- cand_robust_multi (completed, backtest session bt_901_rob, walk\u2011forward run wf_cand_b)\n\nAll three candidates were executed as backtests and walk\u2011forward evaluations. The experiment evaluation summary recorded that the robust candidate cand_robust_multi was recommended, achieving an out\u2011of\u2011sample (OOS) return of +6.80% with a Walk\u2011Forward Efficiency (WFE) of 0.74 across 4 folds, all of which were profitable (4/4). The exploratory in\u2011sample winner was cand_exploratory_overfit, but the final recommendation favored the robust multi\u2011strategy candidate due to its superior OOS performance and consistency.\n\nThus, the experiment ran because a drift detection trigger (evt_drift_77) indicated that live market execution metrics had moved beyond tolerance thresholds, prompting the system to evaluate alternative strategy configurations via backtest and walk\u2011forward analysis, ultimately recommending cand_robust_multi.\n\n#### Verified Decision & Governance Telemetry\n=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).\n\n\nExperiment exp_901 was triggered by a detected price and fill\u2011count drift exceeding tolerance, leading to backtest and walk\u2011forward evaluation of three candidates, with cand_robust_multi recommended for its strong out\u2011of\u2011sample performance.\n\nThe experiment exp_901 (BTC_USD Drift Recovery Study) was launched because the system detected a market drift condition. The trigger type was BACKTEST_DRIFT_DETECTED, sourced from event ID evt_drift_77. The causal evidence recorded that the BTC_USD live average fill price had drifted upward by $395.00, which represented a 0.62% deviation\u2014exceeding the configured tolerance of 0.50%\u2014and that the fill count drifted (5 simulated fills versus 4 live fills) during the window 2026-10-16 00:00\u201106:00 UTC. The drift was detected at 2026-10-16T06:05:00Z.\n\nUpon this trigger, the experiment framework instantiated three candidate runs bound to the base configuration commit 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873 on branch branch_exp_901:\n- cand_current (completed, backtest session bt_901_cur, walk\u2011forward run wf_cand_a)\n- cand_equal_weight (completed, backtest session bt_901_eq, walk\u2011forward run wf_cand_eq)\n- cand_robust_multi (completed, backtest session bt_901_rob, walk\u2011forward run wf_cand_b)\n\nAll three candidates were executed as backtests and walk\u2011forward evaluations. The experiment evaluation summary recorded that the robust candidate cand_robust_multi was recommended, achieving an out\u2011of\u2011sample (OOS) return of +6.80% with a Walk\u2011Forward Efficiency (WFE) of 0.74 across 4 folds, all of which were profitable (4/4). The exploratory in\u2011sample winner was cand_exploratory_overfit, but the final recommendation favored the robust multi\u2011strategy candidate due to its superior OOS performance and consistency.\n\nThus, the experiment ran because a drift detection trigger (evt_drift_77) indicated that live market execution metrics had moved beyond tolerance thresholds, prompting the system to evaluate alternative strategy configurations via backtest and walk\u2011forward analysis, ultimately recommending cand_robust_multi.\n\n#### Verified Decision & Governance Telemetry\n=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).",
+          "latency_ms": 13873.850792,
+          "matched_facts": [
+            "exp_901",
+            "BACKTEST_DRIFT_DETECTED",
+            "evt_drift_77",
+            "0.62%",
+            "cand_current",
+            "cand_equal_weight"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "triggered",
+            "provenance",
+            "candidate"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_experiment",
+              "arguments": {
+                "action": "get",
+                "experiment_id": "exp_901"
+              },
+              "output": "=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).",
+              "output_text": "=== Experiment exp_901 (BTC_USD Drift Recovery Study) ===\nAsset: BTC_USD\nStatus: COMPLETED\nBase Configuration Commit: 5fcc487448b6e468f709e6bc3a1db7fd161b5bdbf984abf6cf84998fbe2c7873\nExperiment Branch ID: branch_exp_901\n\n[Trigger & Provenance]\n  Trigger Type: BACKTEST_DRIFT_DETECTED\n  Source Event ID: evt_drift_77\n  Causal Evidence: BTC_USD live average fill price drifted by +$395.00 (0.62% > 0.50% tolerance) and fill count drifted (5 simulated vs 4 live) over 2026-10-16 00:00-06:00 UTC\n  Detected At: 2026-10-16T06:05:00Z\n\n[Candidate Run Bindings (3)]\n  - Candidate `cand_current`: Status=COMPLETED, Backtest Session=bt_901_cur, Walk-Forward Run=wf_cand_a\n  - Candidate `cand_equal_weight`: Status=COMPLETED, Backtest Session=bt_901_eq, Walk-Forward Run=wf_cand_eq\n  - Candidate `cand_robust_multi`: Status=COMPLETED, Backtest Session=bt_901_rob, Walk-Forward Run=wf_cand_b\n\n[Experiment Evaluation Summary]\n  Recommended Robust Candidate: cand_robust_multi\n  Exploratory (In-Sample) Winner: cand_exploratory_overfit\n  Conclusion: cand_robust_multi achieved +6.80% OOS return (WFE 0.74, 4/4 profitable folds).",
+              "latency_ms": 2.337666,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$395.00",
+            "0.62%",
+            "0.50%",
+            "6.80%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q16",
+      "title": "Has the bot become inactive or drifted enough to justify a new experiment?",
+      "category": "Backtesting and experiments",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 0.6667,
+      "consistency_score": 0.6667,
+      "weighted_total_score": 0.8667,
+      "passed": false,
+      "avg_latency_ms": 13743.22,
+      "runs": [
+        {
+          "prompt": "Has the bot become inactive or drifted enough to justify a new experiment?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [
+            "inspect_experiment",
+            "trading_health",
+            "detect_backtest_drift"
+          ],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** **Operational Diagnosis**\n\n| Asset | Operational Health | Activity Stage | Data\u2011feed Status | Drift (Back\u2011test vs Live) | Experiment Recommendation |\n|-------|--------------------|----------------|------------------|---------------------------|----------------------------|\n| **CRO_USD** | DEGRADED | **NO_MARKET_DATA** \u2013 market\u2011data feed stalled (measured\u202f=\u202f120\u202fs, limit\u202f=\u202f60\u202fs) | **Stale** (first detected\u202f2026\u201110\u201116T08:58:00Z) | Drifted\u202f=\u202fTrue (Fill\u202fDrift\u202f=\u202f1, Qty\u202fDrift\u202f=\u202f0.025, Price\u202fDrift\u202f=\u202f395.00) | **DO NOT TRIGGER EXPERIMENT** \u2013 inactivity is caused by an operational/data\u2011feed issue, not by strategy decay. |\n| **BTC_USD** | DEGRADED | **ACTIVE_PIPELINE** \u2013 data, signals, and orders are flowing | **Healthy** (no market\u2011data warnings) | Drifted\u202f=\u202fTrue (Fill\u202fDrift\u202f=\u202f1, Qty\u202fDrift\u202f=\u202f0.025, Price\u202fDrift\u202f=\u202f395.00; Live fills\u202f=\u202f4, Simulated fills\u202f=\u202f5; one partial\u2011fill leg merged) | **EXPERIMENT JUSTIFIED** \u2013 the pipeline is operational, but live execution has drifted significantly from back\u2011test expectations. |\n\n**Key Points**\n\n1. **Inactivity vs. Drift**  \n   - The bot is **inactive only for CRO_USD** because the market\u2011data feed is stale (120\u202fs > 60\u202fs limit). No orders have been generated for this pair.  \n   - **BTC_USD remains active**; orders are being processed (4 live fills, including one partial fill). The last known activity is reflected in the telemetry snapshot timestamp **2026\u201110\u201116T09:00:00+00:00**. A healthy process does **not** imply that *all* assets are\n\n#### Telemetry Reference\n=== Experiment Justification Triage for CRO_USD ===\n1. Operational Health State: DEGRADED\n   Active Operational Conditions: market_data_stale (measured=120s, limit=60s)\n2. Activity Stage Classification: NO_MARKET_DATA (Operational data feed stall)\n3. Backtest vs Live Drift: Drifted=True (Fill Drift=1, Qty Drift=0.025, Price Drift=395.00)\n\nConclusion: DO NOT TRIGGER EXPERIMENT. Inactivity is caused by an operational/data-feed issue (e.g. NO_MARKET_DATA or unhealthy runtime condition), NOT strategy decay.\n\n=== Experiment Justification Triage for BTC_USD ===\n1. Operational Health State: DEGRADED\n2. Activity Stage Classification: ACTIVE_PIPELINE (Data, signals, and orders flowing)\n3. Backtest vs Live Drift: Drifted=True (Fill Drift=1, Qty Drift=0.025, Price Drift=395.00)\n\nConclusion: EXPERIMENT JUSTIFIED. Operational pipeline is healthy, but live execution/performance has significantly drifted from backtest expectations.\n\nTrading Health State: DEGRADED\nSnapshot Version: v4\nLast Updated: 2026-10-16T09:00:00+00:00\nGlobal Effective Permissions: cancel_orders, new_orders, reduce_positions\nState Context: Engine is DEGRADED due to non-critical issues. Isolated healthy scopes can continue, while affected scopes are restricted.\nActive Health Conditions (1):\n  1. [WARNING] market_data_stale on ASSET:CRO_USD (Consecutive healthy checks: 0, Measured: 120s, Limit: 60s, first detected: 2026-10-16T08:58:00+00:00)\n\nDrift BTC_USD:\n  Aligned Window: 2026-10-16T00:00:00Z -> 2026-10-16T06:00:00Z\n  Simulated fills: 5\n  Live fills: 4 (Partial fill legs merged: 1)\n  Fill count drift: 1\n  Simulated quantity: 0.125 | Live quantity: 0.100\n  Quantity drift: 0.025\n  Simulated avg price: 64395.00 | Live avg price: 64000.00\n  Price drift: 395.00\n  Simulated fees: $3.20 | Live fees: $4.40 (Fee drift: $-1.20)\n  Drifted: True\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 13743.224375,
+          "matched_facts": [
+            "CRO_USD",
+            "NO_MARKET_DATA",
+            "DO NOT TRIGGER EXPERIMENT",
+            "BTC_USD",
+            "EXPERIMENT JUSTIFIED"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "strategy",
+            "drift"
+          ],
+          "missing_epistemic": [
+            "operational failure"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_experiment",
+              "arguments": {
+                "action": "evaluate_justification",
+                "ticker_symbol": "CRO_USD"
+              },
+              "output": "=== Experiment Justification Triage for CRO_USD ===\n1. Operational Health State: DEGRADED\n   Active Operational Conditions: market_data_stale (measured=120s, limit=60s)\n2. Activity Stage Classification: NO_MARKET_DATA (Operational data feed stall)\n3. Backtest vs Live Drift: Drifted=True (Fill Drift=1, Qty Drift=0.025, Price Drift=395.00)\n\nConclusion: DO NOT TRIGGER EXPERIMENT. Inactivity is caused by an operational/data-feed issue (e.g. NO_MARKET_DATA or unhealthy runtime condition), NOT strategy decay.",
+              "output_text": "=== Experiment Justification Triage for CRO_USD ===\n1. Operational Health State: DEGRADED\n   Active Operational Conditions: market_data_stale (measured=120s, limit=60s)\n2. Activity Stage Classification: NO_MARKET_DATA (Operational data feed stall)\n3. Backtest vs Live Drift: Drifted=True (Fill Drift=1, Qty Drift=0.025, Price Drift=395.00)\n\nConclusion: DO NOT TRIGGER EXPERIMENT. Inactivity is caused by an operational/data-feed issue (e.g. NO_MARKET_DATA or unhealthy runtime condition), NOT strategy decay.",
+              "latency_ms": 8.250041,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "inspect_experiment",
+              "arguments": {
+                "action": "evaluate_justification",
+                "ticker_symbol": "BTC_USD"
+              },
+              "output": "=== Experiment Justification Triage for BTC_USD ===\n1. Operational Health State: DEGRADED\n2. Activity Stage Classification: ACTIVE_PIPELINE (Data, signals, and orders flowing)\n3. Backtest vs Live Drift: Drifted=True (Fill Drift=1, Qty Drift=0.025, Price Drift=395.00)\n\nConclusion: EXPERIMENT JUSTIFIED. Operational pipeline is healthy, but live execution/performance has significantly drifted from backtest expectations.",
+              "output_text": "=== Experiment Justification Triage for BTC_USD ===\n1. Operational Health State: DEGRADED\n2. Activity Stage Classification: ACTIVE_PIPELINE (Data, signals, and orders flowing)\n3. Backtest vs Live Drift: Drifted=True (Fill Drift=1, Qty Drift=0.025, Price Drift=395.00)\n\nConclusion: EXPERIMENT JUSTIFIED. Operational pipeline is healthy, but live execution/performance has significantly drifted from backtest expectations.",
+              "latency_ms": 0.48825,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "trading_health",
+              "arguments": {
+                "include_assets": true
+              },
+              "output": "Trading Health State: DEGRADED\nSnapshot Version: v4\nLast Updated: 2026-10-16T09:00:00+00:00\nGlobal Effective Permissions: cancel_orders, new_orders, reduce_positions\nState Context: Engine is DEGRADED due to non-critical issues. Isolated healthy scopes can continue, while affected scopes are restricted.\nActive Health Conditions (1):\n  1. [WARNING] market_data_stale on ASSET:CRO_USD (Consecutive healthy checks: 0, Measured: 120s, Limit: 60s, first detected: 2026-10-16T08:58:00+00:00)",
+              "output_text": "Trading Health State: DEGRADED\nSnapshot Version: v4\nLast Updated: 2026-10-16T09:00:00+00:00\nGlobal Effective Permissions: cancel_orders, new_orders, reduce_positions\nState Context: Engine is DEGRADED due to non-critical issues. Isolated healthy scopes can continue, while affected scopes are restricted.\nActive Health Conditions (1):\n  1. [WARNING] market_data_stale on ASSET:CRO_USD (Consecutive healthy checks: 0, Measured: 120s, Limit: 60s, first detected: 2026-10-16T08:58:00+00:00)",
+              "latency_ms": 2.688917,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "detect_backtest_drift",
+              "arguments": {
+                "ticker_symbol": "BTC_USD"
+              },
+              "output": "Drift BTC_USD:\n  Aligned Window: 2026-10-16T00:00:00Z -> 2026-10-16T06:00:00Z\n  Simulated fills: 5\n  Live fills: 4 (Partial fill legs merged: 1)\n  Fill count drift: 1\n  Simulated quantity: 0.125 | Live quantity: 0.100\n  Quantity drift: 0.025\n  Simulated avg price: 64395.00 | Live avg price: 64000.00\n  Price drift: 395.00\n  Simulated fees: $3.20 | Live fees: $4.40 (Fee drift: $-1.20)\n  Drifted: True",
+              "output_text": "Drift BTC_USD:\n  Aligned Window: 2026-10-16T00:00:00Z -> 2026-10-16T06:00:00Z\n  Simulated fills: 5\n  Live fills: 4 (Partial fill legs merged: 1)\n  Fill count drift: 1\n  Simulated quantity: 0.125 | Live quantity: 0.100\n  Quantity drift: 0.025\n  Simulated avg price: 64395.00 | Live avg price: 64000.00\n  Price drift: 395.00\n  Simulated fees: $3.20 | Live fees: $4.40 (Fee drift: $-1.20)\n  Drifted: True",
+              "latency_ms": 1.404375,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$3.20",
+            "$4.40"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.6667
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.6667,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q17",
+      "title": "What is my current portfolio exposure, drawdown, and concentration risk?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 48367.38,
+      "runs": [
+        {
+          "prompt": "What is my current portfolio exposure, drawdown, and concentration risk?",
+          "routed_intent": "portfolio_review",
+          "invoked_tools": [
+            "exchange_read_api",
+            "portfolio_summary"
+          ],
+          "response_text": "### Portfolio Health & Insights (\ud83d\udfe2 **HEALTHY**)\n\n**Key Findings:**\n- **Current Portfolio Exposure**\n\nThe only position with a known market price is **BTC_USD**:\n\n$$\\text{BTC Exposure} = 0.125\\;\\text{BTC} \\times \\$64{,}000/\\text{BTC} = \\$8{,}000$$  \n\nSince the price for **SOL_USD** is unavailable, its market value cannot be included in the exposure calculation. Therefore, the *known* exposure is **\\$8,000**, which represents the portion of the portfolio that is currently at market risk.\n\n**Total Mark\u2011to\u2011Market Equity**\n\nThe platform reports a total MTM equity of **\\$12,400** (including cash). The cash component is:\n\n$$\\text{Cash} = \\text{Available Cash} + \\text{Reserved Order Cash} = \\$2{,}900 + \\$1{,}500 = \\$4{,}400$$  \n\nThus the *unknown* portion of equity (potentially SOL value) is:\n\n$$\\text{Unaccounted Equity} = \\text{Total MTM Equity} - \\text{Cash} - \\text{BTC Exposure} = \\$12{,}400 - \\$4{,}400 - \\$8{,}000 = \\$0$$  \n\nGiven the zero remainder, the missing SOL valuation is implicitly treated as **\\$0** until price data becomes available.\n\n---\n\n**Current Drawdown**\n\nThe platform provides a drawdown figure relative to the high\u2011water mark (HWM):\n\n$$\\text{Drawdown} = 4.199980994512358588742107121\\%$$  \n\nThe drawdown limit set for the account is **10\u202f%**. The current drawdown is therefore **well below** the limit.\n\n---\n\n**Concentration Risk**\n\nConcentration is measured as the share of each asset\u2019s market value relative to total equity (excluding cash). Using the known values:\n\n$$\\text{BTC Concentration} = \\frac{\\$8{,}000}{\\$8{,}000 + \\$0}\\times 100\\% = 64.51612903225806451612903226\\%$$  \n\nThe platform\u2019s **Max Concentration Limit** is **50\u202f%**. Because **BTC** accounts for **\u2248\u202f64.52\u202f%** of the known risky assets, the portfolio **exceeds** the concentration limit.\n\n*Note:* The concentration for **SOL** cannot be computed because its price is unavailable; once price data is restored, the overall concentration metric should be recomputed.\n\n---\n\n### Summary\n\n| Metric | Value | Comment |\n|--------|-------|---------|\n| **Known Market Exposure** | **\\$8,000** (BTC) | SOL value unavailable |\n| **Total MTM Equity** | **\\$12,400** | Includes cash |\n| **Current Drawdown** | **4.20\u202f%** (limit 10\u202f%) | Within risk limits |\n| **BTC Concentration** | **64.52\u202f%** | Exceeds 50\u202f% limit |\n| **Overall Concentration Risk** | **Exceeded\n- Verified Portfolio Telemetry (reconciling live exchange balance vs cash reserved locally in open orders; Current Drawdown ~4.2% / 4.20%, Concentration 64.52% vs 50%):\nLive Account Balances for CRYPTO_DOT_COM:\n  - BTC: 0.125\n  - SOL: 10\n  - USD: 4400\n\nPortfolio [CRYPTO_DOT_COM / USD]:\n  Valuation Timestamp: 2026-10-16T09:00:00Z\n  Total Mark-to-Market Equity: $12400 USD\n  Available Cash:             $2900 USD\n  Reserved Order Cash:        $1500 USD\n  Reserved Orders: ord-101 ($1000), ord-102 ($500)\n  Total Cash Balance:         $4400 USD\n  Peak Equity (HWM):          $12943.63 USD\n  Current Drawdown:           4.199980994512358588742107121% (Limit: 10%)\n  Max Concentration Limit:    50%\n  Unavailable Price Data: SOL_USD\n  Positions Breakdown:\n    \u2022 BTC_USD: 0.125 units @ $64000 = $8000 USD (64.51612903225806451612903226% of portfolio)\n    \u2022 SOL_USD: 10 units @ $0 = $0 USD (0% of portfolio) [PRICE UNAVAILABLE]\n",
+          "latency_ms": 48367.38475,
+          "matched_facts": [
+            "2026-10-16T09:00:00Z",
+            "USD",
+            "64.52%",
+            "50%",
+            "4.2%",
+            "10%",
+            "ord-101",
+            "SOL_USD",
+            "PRICE UNAVAILABLE"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "Valuation Timestamp",
+            "concentration",
+            "Unavailable Price Data"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "exchange_read_api",
+              "arguments": {
+                "operation": "get_balances",
+                "exchange": "CRYPTO_DOT_COM"
+              },
+              "output": "Live Account Balances for CRYPTO_DOT_COM:\n  - BTC: 0.125\n  - SOL: 10\n  - USD: 4400",
+              "output_text": "Live Account Balances for CRYPTO_DOT_COM:\n  - BTC: 0.125\n  - SOL: 10\n  - USD: 4400",
+              "latency_ms": 25.36275,
+              "status": "success",
+              "error_message": null
+            },
+            {
+              "tool_name": "portfolio_summary",
+              "arguments": {},
+              "output": "Portfolio [CRYPTO_DOT_COM / USD]:\n  Valuation Timestamp: 2026-10-16T09:00:00Z\n  Total Mark-to-Market Equity: $12400 USD\n  Available Cash:             $2900 USD\n  Reserved Order Cash:        $1500 USD\n  Reserved Orders: ord-101 ($1000), ord-102 ($500)\n  Total Cash Balance:         $4400 USD\n  Peak Equity (HWM):          $12943.63 USD\n  Current Drawdown:           4.199980994512358588742107121% (Limit: 10%)\n  Max Concentration Limit:    50%\n  Unavailable Price Data: SOL_USD\n  Positions Breakdown:\n    \u2022 BTC_USD: 0.125 units @ $64000 = $8000 USD (64.51612903225806451612903226% of portfolio)\n    \u2022 SOL_USD: 10 units @ $0 = $0 USD (0% of portfolio) [PRICE UNAVAILABLE]",
+              "output_text": "Portfolio [CRYPTO_DOT_COM / USD]:\n  Valuation Timestamp: 2026-10-16T09:00:00Z\n  Total Mark-to-Market Equity: $12400 USD\n  Available Cash:             $2900 USD\n  Reserved Order Cash:        $1500 USD\n  Reserved Orders: ord-101 ($1000), ord-102 ($500)\n  Total Cash Balance:         $4400 USD\n  Peak Equity (HWM):          $12943.63 USD\n  Current Drawdown:           4.199980994512358588742107121% (Limit: 10%)\n  Max Concentration Limit:    50%\n  Unavailable Price Data: SOL_USD\n  Positions Breakdown:\n    \u2022 BTC_USD: 0.125 units @ $64000 = $8000 USD (64.51612903225806451612903226% of portfolio)\n    \u2022 SOL_USD: 10 units @ $0 = $0 USD (0% of portfolio) [PRICE UNAVAILABLE]",
+              "latency_ms": 3.476625,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$64",
+            "$8",
+            "$8,000",
+            "$12,400",
+            "$2",
+            "$1",
+            "$4",
+            "$12",
+            "$0",
+            "4.2%",
+            "4.20%",
+            "64.52%",
+            "50%",
+            "$12400",
+            "$2900",
+            "$1500",
+            "ord-101",
+            "$1000",
+            "ord-102",
+            "$500",
+            "$4400",
+            "$12943.63",
+            "4.199980994512358588742107121%",
+            "10%",
+            "$64000",
+            "$8000",
+            "64.51612903225806451612903226%"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q18",
+      "title": "Why did the risk manager or guard prevent a trade?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Partial",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 21524.76,
+      "runs": [
+        {
+          "prompt": "Why did the risk manager or guard prevent a trade?",
+          "routed_intent": "decision_investigation",
+          "invoked_tools": [
+            "inspect_trading_decision"
+          ],
+          "response_text": "### \ud83d\udd0d Decision & Proposal Investigation\n\n**Summary:** The trade was blocked because the portfolio's asset concentration would exceed the 50% limit set by MaxAssetConcentrationGuard.\n\n#### Causal Chain & Rationale\nOn 2026-10-16 at 08:47:00 UTC the trading engine evaluated a BUY signal for BTC_USD on CRYPTO_DOT_COM (Decision ID dec-1801). The market snapshot showed a close price of $64,000 with 100 candles, and the market regime was identified as TRENDING_UP with low volatility (ATR 1.90%) and a positive trend strength (+0.550). The strategy consensus module reached quorum (100.0% vote ratio) and applied a consensus factor of 0.6. The RSIStrategy won with a weight of 0.6, while MACDStrategy also voted BUY with weight 0.4, resulting in a unanimous BUY consensus.\n\nThe position sizing formula defined in the configuration (Formula: 0.05 * available_cash / close_price) was applied using the available cash of $2,900. This yielded a calculated quantity of 0.010 BTC, which met the minimum asset quantity of 0.005, so the final order quantity was set to 0.010 BTC.\n\nBefore the order could be sent, the portfolio risk guard layer evaluated the current portfolio state: total equity $12,400, available cash $2,900, total exposure 64.5%, and asset concentration 64.5%. The MaxAssetConcentrationGuard checked the observed asset concentration (64.52%) against its configured limit of 50.00% and found a violation. Because the guard failed, the overall risk guard result was False, and the decision was rejected. The MaxDrawdownGuard passed (observed 4.20% < limit 10.00%), but the single failure of MaxAssetConcentrationGuard was sufficient to block the trade.\n\nThus, the risk manager prevented the trade because the portfolio would have exceeded the maximum allowed concentration for a single asset, violating the MaxAssetConcentrationGuard rule.\n\n#### Verified Decision & Governance Telemetry\n=== Trading Decision dec-1801 ===\nTimestamp: 2026-10-16 08:47:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64000\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.90%\n  Trend Strength: +0.550\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 0.6\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.010\n  Min Asset Quantity: 0.005\n  Final Order Quantity: 0.010\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 64.5%\n  Asset Concentration: 64.5%\n  Current Drawdown: 4.20%\n  Risk Guard Passed: False\n  Guard Violation: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [REJECTED], Observed: 64.52%, Limit: 50.00%, Reason: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 4.20%, Limit: 10.00%\n\n\nThe trade was blocked because the portfolio's asset concentration would exceed the 50% limit set by MaxAssetConcentrationGuard.\n\nOn 2026-10-16 at 08:47:00 UTC the trading engine evaluated a BUY signal for BTC_USD on CRYPTO_DOT_COM (Decision ID dec-1801). The market snapshot showed a close price of $64,000 with 100 candles, and the market regime was identified as TRENDING_UP with low volatility (ATR 1.90%) and a positive trend strength (+0.550). The strategy consensus module reached quorum (100.0% vote ratio) and applied a consensus factor of 0.6. The RSIStrategy won with a weight of 0.6, while MACDStrategy also voted BUY with weight 0.4, resulting in a unanimous BUY consensus.\n\nThe position sizing formula defined in the configuration (Formula: 0.05 * available_cash / close_price) was applied using the available cash of $2,900. This yielded a calculated quantity of 0.010 BTC, which met the minimum asset quantity of 0.005, so the final order quantity was set to 0.010 BTC.\n\nBefore the order could be sent, the portfolio risk guard layer evaluated the current portfolio state: total equity $12,400, available cash $2,900, total exposure 64.5%, and asset concentration 64.5%. The MaxAssetConcentrationGuard checked the observed asset concentration (64.52%) against its configured limit of 50.00% and found a violation. Because the guard failed, the overall risk guard result was False, and the decision was rejected. The MaxDrawdownGuard passed (observed 4.20% < limit 10.00%), but the single failure of MaxAssetConcentrationGuard was sufficient to block the trade.\n\nThus, the risk manager prevented the trade because the portfolio would have exceeded the maximum allowed concentration for a single asset, violating the MaxAssetConcentrationGuard rule.\n\n#### Verified Decision & Governance Telemetry\n=== Trading Decision dec-1801 ===\nTimestamp: 2026-10-16 08:47:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64000\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.90%\n  Trend Strength: +0.550\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 0.6\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.010\n  Min Asset Quantity: 0.005\n  Final Order Quantity: 0.010\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 64.5%\n  Asset Concentration: 64.5%\n  Current Drawdown: 4.20%\n  Risk Guard Passed: False\n  Guard Violation: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [REJECTED], Observed: 64.52%, Limit: 50.00%, Reason: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 4.20%, Limit: 10.00%",
+          "latency_ms": 21524.756042,
+          "matched_facts": [
+            "dec-1801",
+            "MaxAssetConcentrationGuard",
+            "64.52%",
+            "50.00%",
+            "MaxDrawdownGuard",
+            "4.20%",
+            "10.00%"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "Observed",
+            "Limit",
+            "MaxAssetConcentrationGuard"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_trading_decision",
+              "arguments": {
+                "decision_id": "dec-1801"
+              },
+              "output": "=== Trading Decision dec-1801 ===\nTimestamp: 2026-10-16 08:47:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64000\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.90%\n  Trend Strength: +0.550\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 0.6\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.010\n  Min Asset Quantity: 0.005\n  Final Order Quantity: 0.010\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 64.5%\n  Asset Concentration: 64.5%\n  Current Drawdown: 4.20%\n  Risk Guard Passed: False\n  Guard Violation: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [REJECTED], Observed: 64.52%, Limit: 50.00%, Reason: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 4.20%, Limit: 10.00%",
+              "output_text": "=== Trading Decision dec-1801 ===\nTimestamp: 2026-10-16 08:47:00 UTC\nAsset / Exchange: BTC_USD on CRYPTO_DOT_COM\nAction: BUY\nStatus: REJECTED\nRejection Reason: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\nConfiguration Commit: 0872234e0a327287126b36edbff172ba7d33684789dd0c1c9e66dafb3a2c724c\n\n[Market Snapshot]\n  Close Price: $64000\n  Candles Count: 100\n\n[Market Regime]\n  Regime: TRENDING_UP\n  Volatility (ATR%): 1.90%\n  Trend Strength: +0.550\n  Exposure Multiplier: 1.00x\n\n[Strategy Consensus]\n  Quorum Reached: True (Vote Ratio: 100.0%)\n  Consensus Factor: 0.6\n  Winning Strategy: RSIStrategy\n  Votes:\n    - MACDStrategy: BUY (Weight: 0.4)\n    - RSIStrategy: BUY (Weight: 0.6)\n\n[Position Sizing]\n  Formula: 0.05 * available_cash / close_price\n  Calculated Quantity: 0.010\n  Min Asset Quantity: 0.005\n  Final Order Quantity: 0.010\n\n[Portfolio & Risk Guard]\n  Total Equity: $12400.00\n  Available Cash: $2900.00\n  Total Exposure: 64.5%\n  Asset Concentration: 64.5%\n  Current Drawdown: 4.20%\n  Risk Guard Passed: False\n  Guard Violation: MaxAssetConcentrationGuard: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n  Guard Evaluations:\n    - MaxAssetConcentrationGuard [REJECTED], Observed: 64.52%, Limit: 50.00%, Reason: Asset concentration 64.52% exceeds max_per_asset limit 50.00%\n    - MaxDrawdownGuard [PASSED], Observed: 4.20%, Limit: 10.00%",
+              "latency_ms": 9.435166,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "50%",
+            "dec-1801",
+            "$64,000",
+            "1.90%",
+            "100.0%",
+            "$2,900",
+            "$12,400,",
+            "$2,900,",
+            "64.5%",
+            "64.52%",
+            "50.00%",
+            "4.20%",
+            "10.00%",
+            "$64000",
+            "$12400.00",
+            "$2900.00"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q19",
+      "title": "What happened during this run, from schedule tick through order execution?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Partial \u2014 important gap",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 12995.12,
+      "runs": [
+        {
+          "prompt": "What happened during this run, from schedule tick through order execution?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [
+            "inspect_schedule_tick_trace"
+          ],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** **Operational timeline (BTC_USD on\u202fCRYPTO_DOT_COM)**  \n\n| Step | Timestamp (UTC) | Action & Telemetry Details |\n|------|-----------------|----------------------------|\n| 1 | **08:45:00** \u2013 Schedule tick **tick\u20111901** (EVERY_MINUTE) | \u2022 **Market Data Check** \u2013 Fresh data (age\u202f1.2\u202fs), Close\u202f$64\u202f000.<br>\u2022 **Strategy Evaluations** \u2013 MACDStrategy\u202f=\u202fBUY (weight\u202f0.4, 15\u202fms), RSIStrategy\u202f=\u202fBUY (weight\u202f0.6, 12\u202fms).<br>\u2022 **Consensus Evaluation** \u2013 Quorum\u202f=\u202fTrue (Vote\u202fRatio\u202f100\u202f%\u202f>\u202f60\u202f% threshold), Winner\u202f=\u202fRSIStrategy.<br>\u2022 **Risk & Guard Check** \u2013 Passed (MaxAssetConcentrationGuard\u202fPASS, MaxDrawdownGuard\u202fPASS). |\n| 2 | **08:45:00** \u2013 **Order Execution** (same tick) | \u2022 Order ID **ord\u2011501**, Decision ID **dec\u2011501**.<br>\u2022 **Status**\u202f=\u202fCOMPLETED.<br>\u2022 **Latency**\u202f=\u202f230\u202fms (local processing + exchange round\u2011trip).<br>\u2022 **Reconciliation** \u2013 Reconciled\u202f=\u202fTrue; fill quantity\u202f0.025 matched the exchange execution report (full fill of the requested amount). |\n| 3 | **08:50:00** \u2013 Schedule tick **tick\u20110301** (EVERY_MINUTE) | \u2022 **Market Data Check** \u2013 Fresh data (age\u202f2.1\u202fs), Close\u202f$64\u202f120.<br>\u2022 **Strategy Evaluations** \u2013 BollingerStrategy\u202f=\u202fBUY (weight\u202f0.333, 10\u202fms), MACDStrategy\u202f=\u202fHOLD (weight\u202f0.334, 14\u202fms), RSIStrategy\u202f=\u202fHOLD (weight\u202f0.333, 11\u202fms).<br>\u2022 **Consensus Evaluation** \u2013 Quorum\u202f=\u202f\n\n#### Telemetry Reference\n=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 12995.124166,
+          "matched_facts": [
+            "tick-1901",
+            "Market Data Check",
+            "Strategy Evaluations",
+            "Consensus Evaluation",
+            "Risk & Guard Check",
+            "ord-501",
+            "230ms",
+            "Reconciled=True",
+            "tick-0301",
+            "NO_ORDER"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "Market Data Check",
+            "Consensus Evaluation",
+            "Reconciliation",
+            "NO_ORDER"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_schedule_tick_trace",
+              "arguments": {
+                "ticker_symbol": "BTC_USD",
+                "limit": 5
+              },
+              "output": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "output_text": "=== Live Activity Stage Summary (BTC_USD) ===\n  Last Market Data:         2026-10-16 08:45:00 UTC\n  Last Strategy Evaluation: 2026-10-16 08:45:00 UTC\n  Last Signal Generated:    2026-10-16 08:45:00 UTC\n  Last Order Submitted:     2026-10-16 08:45:00 UTC\n  Last Order Executed:      2026-10-16 08:45:00 UTC\n\n=== Schedule Tick Traces (2 found) ===\n\n[Tick Trace tick-0301] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:50:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 2.1s, Close: $64120)\n  2. Strategy Evaluations: BollingerStrategy=BUY (weight=0.333, 10ms), MACDStrategy=HOLD (weight=0.334, 14ms), RSIStrategy=HOLD (weight=0.333, 11ms)\n  3. Consensus Evaluation: Quorum=False (Vote Ratio: 33.3% vs Threshold: 60.0%, Winner: None)\n  4. Risk & Guard Check: Not reached\n  5. Terminal Outcome: NO_ORDER at stage 'NO_SIGNALS' (Reason: QUORUM_NOT_MET (vote_ratio 33.3% < 60.0% quorum threshold))\n\n[Tick Trace tick-1901] (BTC_USD on CRYPTO_DOT_COM @ 2026-10-16 08:45:00 UTC, Schedule: EVERY_MINUTE)\n  1. Market Data Check: Fresh=True (Age: 1.2s, Close: $64000)\n  2. Strategy Evaluations: MACDStrategy=BUY (weight=0.4, 15ms), RSIStrategy=BUY (weight=0.6, 12ms)\n  3. Consensus Evaluation: Quorum=True (Vote Ratio: 100.0% vs Threshold: 60.0%, Winner: RSIStrategy)\n  4. Risk & Guard Check: Passed=True (MaxAssetConcentrationGuard:PASS, MaxDrawdownGuard:PASS)\n  5. Order Execution: Order=ord-501 (Decision=dec-501, Status=COMPLETED, Latency: 230ms)\n  6. Reconciliation: Reconciled=True (Order ord-501 fill qty 0.025 matched exchange execution report)",
+              "latency_ms": 4.531292,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [
+            "$64",
+            "tick-0301",
+            "$64120",
+            "33.3%",
+            "60.0%",
+            "tick-1901",
+            "$64000",
+            "100.0%",
+            "ord-501",
+            "dec-501"
+          ],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    },
+    {
+      "question_id": "Q20",
+      "title": "What data will expire, what will be retained, and why was a record deleted or skipped?",
+      "category": "Risk, system behavior, and data governance",
+      "baseline_readiness": "Partial \u2014 recently added",
+      "route_and_tool_score": 1.0,
+      "fact_recall_score": 1.0,
+      "epistemic_guardrail_score": 1.0,
+      "consistency_score": 1.0,
+      "weighted_total_score": 1.0,
+      "passed": true,
+      "avg_latency_ms": 14126.3,
+      "runs": [
+        {
+          "prompt": "What data will expire, what will be retained, and why was a record deleted or skipped?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [
+            "inspect_retention_governance"
+          ],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** **Data that will expire (be deleted)**  \n\n- **Category:** `MARKET_DATA` (policy\u202f`pol_market_data`) \u2013\u202fPeriod\u202f30\u202fdays, Mode\u202f`DELETE`, Enabled.  \n- **Dry\u2011run preview (run\u202f`ret_preview_99`):**  \n  - Examined\u202f15\u202f000 records.  \n  - **Eligible for deletion:**\u202f1\u202f200 records.  \n  - **Will actually be deleted:**\u202f1\u202f200\u202f\u2013\u202f2\u202f(skipped)\u202f=\u202f**1\u202f198** records (no records are deleted in the preview because it is a DRY\u2011RUN).  \n\n**Data that will be retained**  \n\n- **Category:** `FINANCIAL` (policy\u202f`pol_financial`) \u2013\u202fPeriod\u202f365\u202fdays, Mode\u202f`KEEP`, Enabled.  \n  - All **420** records are retained.  \n- Within `MARKET_DATA`, any record that is **not eligible** (the remainder of the 15\u202f000 examined) or that is **skipped** remains retained.\n\n**Why records were deleted**  \n\n- In the **actual execution run** (`ret_run_01`), `MARKET_DATA` records that satisfied the 30\u2011day retention period and had no holds were removed:  \n  - Examined\u202f14\u202f600, Eligible\u202f802, **Deleted\u202f800**.  \n  - These deletions occurred because the records met the `DELETE` policy and were not blocked by any hold or dependency.\n\n**Why records were skipped**  \n\nBoth the preview and the executed run skipped **2** `MARKET_DATA` records for the same reasons:  \n\n| Skip Reason | Count | Detail (exact identifier) |\n|-------------|-------|---------------------------|\n| `RETENTION_HOLD` | 1 | Active hold **`hold_audit_1`** on **order\u201188** |\n| `DEPENDENCY_REFERENCED` | 1 | Commit **`commit-a1`** referenced by an active order |\n\nThese identifiers (`hold_audit_1`, `order-88`, `commit-a1`) prevented the two records from being deleted, so they remain in storage.\n\n#### Telemetry Reference\n=== Data Retention Governance Report ===\nGlobal Enabled: True | Schedule: DAILY | Default Dry-Run Mode: False | Grace Period: 7d\n\n1. [Configured Retention Policies (What is Retained vs Expired by Rule)]\n  - MARKET_DATA (policy_id=pol_market_data): Period=30d, Mode=DELETE, Enabled=True, Records=15000\n  - FINANCIAL (policy_id=pol_financial): Period=365d, Mode=KEEP, Enabled=True, Records=420\n\n2. [Dry-Run Expiration Preview (What WILL Expire \u2014 Not Yet Deleted)]\n  Run ID: ret_preview_99 | Status: COMPLETED | Trigger: PREVIEW | Mode: DRY-RUN PREVIEW (No records modified)\n  - Category MARKET_DATA (DELETE): Examined=15000, Eligible=1200, Deleted=0, Archived=0, Skipped=2 | Skip Reasons: RETENTION_HOLD (count=1, detail=Active hold hold_audit_1 on order-88), DEPENDENCY_REFERENCED (count=1, detail=Commit commit-a1 referenced by active order)\n\n3. [Last Completed Execution Run (Actual Deletions / Archivals & Skipped Records)]\n  Run ID: ret_run_01 | Status: COMPLETED | Trigger: SCHEDULED | Mode: EXECUTED RUN (Completed changes)\n  - Category MARKET_DATA (DELETE): Examined=14600, Eligible=802, Deleted=800, Archived=0, Skipped=2 | Skip Reasons: RETENTION_HOLD (count=1, detail=Active hold hold_audit_1 on order-88), DEPENDENCY_REFERENCED (count=1, detail=Commit commit-a1 referenced by active order)\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 14126.297833,
+          "matched_facts": [
+            "MARKET_DATA",
+            "30d",
+            "FINANCIAL",
+            "365d",
+            "1200",
+            "ret_run_01",
+            "800",
+            "RETENTION_HOLD",
+            "hold_audit_1",
+            "DEPENDENCY_REFERENCED"
+          ],
+          "missing_facts": [],
+          "matched_epistemic": [
+            "Configured Retention Policies",
+            "Dry-Run Expiration Preview",
+            "EXECUTED RUN",
+            "Skip Reasons"
+          ],
+          "missing_epistemic": [],
+          "triggered_hallucinations": [],
+          "tool_records": [
+            {
+              "tool_name": "inspect_retention_governance",
+              "arguments": {
+                "action": "summary"
+              },
+              "output": "=== Data Retention Governance Report ===\nGlobal Enabled: True | Schedule: DAILY | Default Dry-Run Mode: False | Grace Period: 7d\n\n1. [Configured Retention Policies (What is Retained vs Expired by Rule)]\n  - MARKET_DATA (policy_id=pol_market_data): Period=30d, Mode=DELETE, Enabled=True, Records=15000\n  - FINANCIAL (policy_id=pol_financial): Period=365d, Mode=KEEP, Enabled=True, Records=420\n\n2. [Dry-Run Expiration Preview (What WILL Expire \u2014 Not Yet Deleted)]\n  Run ID: ret_preview_99 | Status: COMPLETED | Trigger: PREVIEW | Mode: DRY-RUN PREVIEW (No records modified)\n  - Category MARKET_DATA (DELETE): Examined=15000, Eligible=1200, Deleted=0, Archived=0, Skipped=2 | Skip Reasons: RETENTION_HOLD (count=1, detail=Active hold hold_audit_1 on order-88), DEPENDENCY_REFERENCED (count=1, detail=Commit commit-a1 referenced by active order)\n\n3. [Last Completed Execution Run (Actual Deletions / Archivals & Skipped Records)]\n  Run ID: ret_run_01 | Status: COMPLETED | Trigger: SCHEDULED | Mode: EXECUTED RUN (Completed changes)\n  - Category MARKET_DATA (DELETE): Examined=14600, Eligible=802, Deleted=800, Archived=0, Skipped=2 | Skip Reasons: RETENTION_HOLD (count=1, detail=Active hold hold_audit_1 on order-88), DEPENDENCY_REFERENCED (count=1, detail=Commit commit-a1 referenced by active order)",
+              "output_text": "=== Data Retention Governance Report ===\nGlobal Enabled: True | Schedule: DAILY | Default Dry-Run Mode: False | Grace Period: 7d\n\n1. [Configured Retention Policies (What is Retained vs Expired by Rule)]\n  - MARKET_DATA (policy_id=pol_market_data): Period=30d, Mode=DELETE, Enabled=True, Records=15000\n  - FINANCIAL (policy_id=pol_financial): Period=365d, Mode=KEEP, Enabled=True, Records=420\n\n2. [Dry-Run Expiration Preview (What WILL Expire \u2014 Not Yet Deleted)]\n  Run ID: ret_preview_99 | Status: COMPLETED | Trigger: PREVIEW | Mode: DRY-RUN PREVIEW (No records modified)\n  - Category MARKET_DATA (DELETE): Examined=15000, Eligible=1200, Deleted=0, Archived=0, Skipped=2 | Skip Reasons: RETENTION_HOLD (count=1, detail=Active hold hold_audit_1 on order-88), DEPENDENCY_REFERENCED (count=1, detail=Commit commit-a1 referenced by active order)\n\n3. [Last Completed Execution Run (Actual Deletions / Archivals & Skipped Records)]\n  Run ID: ret_run_01 | Status: COMPLETED | Trigger: SCHEDULED | Mode: EXECUTED RUN (Completed changes)\n  - Category MARKET_DATA (DELETE): Examined=14600, Eligible=802, Deleted=800, Archived=0, Skipped=2 | Skip Reasons: RETENTION_HOLD (count=1, detail=Active hold hold_audit_1 on order-88), DEPENDENCY_REFERENCED (count=1, detail=Commit commit-a1 referenced by active order)",
+              "latency_ms": 5.345459,
+              "status": "success",
+              "error_message": null
+            }
+          ],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 1.0,
+          "factual_accuracy_score": 1.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 1.0
+        }
+      ],
+      "tool_selection_score": 1.0,
+      "factual_accuracy_score": 1.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 1.0,
+      "trial_variance": 0.0
+    }
+  ],
+  "provenance": {
+    "git_commit": "4ff466d90a1fb56be07b2cc1a907100dbefa9f82",
+    "git_branch": "main",
+    "git_dirty": true,
+    "model_id": "groq-gpt",
+    "provider": "live",
+    "temperature": 0.0,
+    "suite_version": "2.0-grounded",
+    "dataset_hash": "",
+    "tool_manifest": {
+      "trading_health": "trading_health",
+      "exchange_read_api": "exchange_read_api",
+      "portfolio_summary": "portfolio_summary",
+      "get_open_orders": "get_open_orders",
+      "account_balance": "get_account_balance",
+      "inspect_trading_decision": "inspect_trading_decision",
+      "get_configuration": "get_configuration",
+      "get_configuration_history": "get_configuration_history",
+      "query_metrics": "query_metrics",
+      "get_trade_attribution": "get_trade_attribution",
+      "detect_backtest_drift": "detect_backtest_drift",
+      "backtest": "backtest",
+      "walk_forward": "walk_forward",
+      "inspect_schedule_tick_trace": "inspect_schedule_tick_trace",
+      "inspect_experiment": "inspect_experiment",
+      "inspect_retention_governance": "inspect_retention_governance"
+    },
+    "evaluated_at": "2026-10-21T22:27:44.671235+00:00",
+    "python_version": "3.12.7"
+  },
+  "num_trials": 1,
+  "mean_tool_selection_score": 1.0,
+  "mean_factual_accuracy": 1.0,
+  "mean_unsupported_claims_rate": 0.0,
+  "mean_epistemic_honesty": 0.9375,
+  "quality_gate_passed": false,
+  "quality_gate_reasons": [
+    "Failed questions (4): Q04, Q09, Q10, Q16"
+  ]
+}

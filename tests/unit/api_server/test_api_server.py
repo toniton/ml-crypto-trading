@@ -163,8 +163,8 @@ class TestApiServerApp(unittest.TestCase):
         started = [data["payload"]["node"] for name, data in events if name == "node_started"]
         completed = [data["payload"]["node"] for name, data in events if name == "node_completed"]
         self.assertEqual(started, completed)
-        # router (extract_references, understand_goal, route) + configuration graph (4 nodes)
-        self.assertEqual(len(started), 7)
+        # router (extract_references, operational_status, understand_goal, route) + configuration graph (4 nodes)
+        self.assertEqual(len(started), 8)
         self.assertEqual(len(set(started)), len(started))
         # message_id correlated on every event
         message_ids = {data["message_id"] for _, data in events}

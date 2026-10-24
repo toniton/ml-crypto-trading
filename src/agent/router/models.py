@@ -17,6 +17,7 @@ class AgentIntent(str, Enum):
     SYSTEM_HELP = "system_help"
     BACKTEST = "backtest"
     RUNTIME_DEBUG = "runtime_debug"
+    EVIDENCE_PROPOSAL = "evidence_proposal"
     GENERAL = "general"
 
 
@@ -45,6 +46,14 @@ class AgentReferences(BaseModel):
     timeline_event_id: Optional[str] = Field(
         default=None,
         description="Timeline event identifier referenced in the request.",
+    )
+    experiment_id: Optional[str] = Field(
+        default=None,
+        description="Experiment identifier (e.g. exp_...) referenced in the request.",
+    )
+    candidate_id: Optional[str] = Field(
+        default=None,
+        description="Experiment candidate identifier (e.g. cand_...) referenced in the request.",
     )
 
     @property

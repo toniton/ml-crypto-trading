@@ -27,9 +27,10 @@ class UnderstandBacktestRequestNode:
             lines.append(f"objective: {route.goal.objective}")
             if route.goal.target_asset:
                 lines.append(f"target_asset: {route.goal.target_asset}")
-        history = state.get("history", [])
-        if history:
+        if route and route.references and route.references.asset:
+            lines.append(f"referenced_asset: {route.references.asset}")
+        history_turns = state.get("history") or []
+        if history_turns:
             lines.append("CONVERSATION HISTORY")
-            for turn in history:
-                lines.append(f"{turn.role}: {turn.content}")
+            lines.extend(f"{turn.role}: {turn.content}" for turn in history_turns)
         return "\n".join(lines)

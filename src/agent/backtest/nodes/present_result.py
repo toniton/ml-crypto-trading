@@ -34,6 +34,11 @@ class PresentResultNode:
         quality: BacktestQuality | None = state.get("quality")
         result = state.get("result")
         parts: list[str] = []
+        if quality is not None and not quality.sufficient_evidence:
+            parts.append(
+                "**Inconclusive Result**: The backtest did not produce sufficient evidence "
+                "to evaluate strategy profitability."
+            )
         if summary is not None:
             parts.append(PresentResultNode._format_summary(summary))
         if result is not None and isinstance(getattr(result, "initial_balance", None), (int, float, Decimal)):

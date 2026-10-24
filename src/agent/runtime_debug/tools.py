@@ -4,6 +4,7 @@ from typing import Any, Optional
 from uuid import UUID
 
 from api.interfaces.order import Order
+from src.agent.runtime.system_context import collect_machine_snapshot
 from src.agent.runtime_debug.models import RuntimeErrorEvent, RuntimeIncident
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
@@ -25,6 +26,10 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
         self._database_manager = database_manager
         self._vcs = vcs
         self._health_monitor = health_monitor
+
+    @staticmethod
+    def get_machine_snapshot() -> dict[str, Any]:
+        return collect_machine_snapshot()
 
     def get_trading_health_snapshot(self) -> Optional[dict[str, Any]]:
         if not self._health_monitor:

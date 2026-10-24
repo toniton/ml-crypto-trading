@@ -1,9 +1,9 @@
 -r requirements.txt
 
 mock-alchemy~=0.2.6
-pre-commit~=4.6.2
+pre-commit~=4.7.0
 pytest~=9.1.1
 pytest-cov~=7.1.0
 pytest-mock~=3.16.0
-pylint~=4.1.1
+pylint~=4.1.3
 testcontainers~=4.15.0

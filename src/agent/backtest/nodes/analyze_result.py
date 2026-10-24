@@ -16,16 +16,24 @@ class AnalyzeResultNode:
             }
 
         notes: list[str] = []
-        if len(result.market_series) == 0:
+        market_series = getattr(result, "market_series", [])
+        fills = getattr(result, "fills", [])
+        if len(market_series) == 0:
             notes.append("No market data was available for the requested window.")
-        if len(result.fills) == 0:
-            notes.append("No orders were filled.")
-        if len(result.market_series) < 20:
+        elif len(market_series) <= 1:
+            notes.append(
+                "Insufficient historical market observations (1 data point); "
+                "cannot establish historical performance."
+            )
+        elif len(market_series) < 20:
             notes.append("Few market observations; treat conclusions with caution.")
+
+        if len(fills) == 0:
+            notes.append("No orders were filled.")
 
         return {
             "quality": BacktestQuality(
-                sufficient_evidence=len(result.fills) > 0,
+                sufficient_evidence=len(fills) > 0 and len(market_series) > 1,
                 notes=notes,
             )
         }

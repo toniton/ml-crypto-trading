@@ -4,6 +4,7 @@ import random
 import threading
 import time
 import uuid
+from enum import Enum
 from typing import Any, Optional
 
 from api.interfaces.backtest_run_spec import (
@@ -273,8 +274,14 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 return False
             bindings = exp.get("run_bindings", [])
             for b in bindings:
-                if b.get("status") == "RUNNING":
+                if b.get("status") in ("QUEUED", "RUNNING"):
                     b["status"] = "CANCELLED"
+                wf_id = b.get("walk_forward_run_id")
+                if wf_id and self._walk_forward_app_service:
+                    try:
+                        self._walk_forward_app_service.cancel_run(wf_id, reason="Cancelled via experiment")
+                    except Exception:
+                        pass
             repo.update_bindings(experiment_id, bindings)
             repo.update_status(experiment_id, ExperimentStatus.CANCELLED.value)
             return True
@@ -335,7 +342,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         if cand.candidate_type == CandidateType.RANDOM_CONTROL:
             rng = random.Random(cand.random_seed or 42)
-            enabled_strats = [s for s in strategies if getattr(s, "enabled", True)]
+            enabled_strats = [s for s in strategies if s.enabled]
             raw_weights = [rng.uniform(0.1, 1.0) for _ in enabled_strats]
             total = sum(raw_weights) or 1.0
             norm_weights = [round(w / total, 4) for w in raw_weights]
@@ -363,7 +370,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 return {
                     s.name: float(s.weight)
                     for s in matched.strategies
-                    if s.name and getattr(s, "enabled", True)
+                    if s.name and s.enabled
                 }
         except Exception:  # pylint: disable=broad-except
             pass
@@ -547,14 +554,17 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             if bt_session:
                 status_str = (
                     bt_session.status.value
-                    if hasattr(bt_session.status, "value")
+                    if isinstance(bt_session.status, Enum)
                     else str(bt_session.status)
                 )
-                if status_str == "RUNNING":
+                if status_str in ("QUEUED", "RUNNING"):
                     bt_done = False
                 elif status_str == "FAILED":
                     b_failed = True
                     error_msg = bt_session.error_message or "Backtest run failed"
+                elif status_str == "CANCELLED":
+                    b_failed = True
+                    error_msg = bt_session.error_message or "Backtest run was cancelled"
             else:
                 bt_done = False
 
@@ -563,11 +573,14 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             wf_run = wf_repo.get_run(b["walk_forward_run_id"])
             if wf_run:
                 wf_status = wf_run.get("status")
-                if wf_status == "RUNNING":
+                if wf_status in ("QUEUED", "RUNNING"):
                     wf_done = False
                 elif wf_status == "FAILED":
                     b_failed = True
                     error_msg = wf_run.get("error_message") or "Walk-forward run failed"
+                elif wf_status == "CANCELLED":
+                    b_failed = True
+                    error_msg = wf_run.get("error_message") or "Walk-forward run was cancelled"
             else:
                 wf_done = False
 
@@ -734,8 +747,8 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 )
                 if matched and matched.strategies:
                     for s in matched.strategies:
-                        if s.name and getattr(s, "enabled", True):
-                            action_val = s.action.value if hasattr(s.action, "value") else str(s.action or "BUY")
+                        if s.name and s.enabled:
+                            action_val = s.action.value if s.action else "BUY"
                             strat_actions[s.name] = action_val
                             strat_weights[s.name] = float(s.weight)
             except Exception:  # pylint: disable=broad-except

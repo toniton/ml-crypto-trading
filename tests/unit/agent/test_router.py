@@ -1,9 +1,30 @@
+from unittest.mock import MagicMock
+from datetime import datetime, timezone
+
+from src.agent.operational.models import (
+    OperationalConditionSummary,
+    OperationalContext,
+    OperationalReadinessStatus,
+)
 from src.agent.router.graph import RouterGraph
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.agent.router.nodes.operational_status import OperationalStatusNode
 from src.agent import RouteNode
 from src.agent import UnderstandGoalNode
 from src.core.interfaces.llm_adapter import ChatTurn
 from tests.unit.agent.fakes import FakeLlmAdapter
+
+
+class TestOperationalStatusNode:
+    def test_node_collects_context_and_populates_state(self):
+        collector = MagicMock()
+        expected_context = OperationalContext.unavailable("testing")
+        collector.collect.return_value = expected_context
+
+        node = OperationalStatusNode(collector)
+        result = node({"user_prompt": "hello"})
+
+        assert result["operational_context"] == expected_context
 
 
 class TestUnderstandGoalNode:
@@ -106,3 +127,102 @@ class TestRouterGraph:
         route = result["route"]
         assert route.intent == AgentIntent.DECISION_INVESTIGATION
         assert route.references.commit_hash == "235f666"
+
+    def test_paused_bot_routes_inactivity_query_to_runtime_debug(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(intent=AgentIntent.GENERAL),
+        ])
+        paused_context = OperationalContext(
+            status=OperationalReadinessStatus.PAUSED,
+            health_state="PAUSED",
+            is_trading_allowed=False,
+            active_conditions=(),
+            effective_permissions=(),
+            observed_at=datetime.now(timezone.utc),
+            snapshot_version=1,
+            is_available=True,
+        )
+        collector = MagicMock()
+        collector.collect.return_value = paused_context
+
+        graph = RouterGraph(llm, collector=collector).build()
+        state = graph.invoke({"user_prompt": "Why hasn't BTC traded today?"})
+
+        assert state["route"].intent == AgentIntent.RUNTIME_DEBUG
+
+    def test_healthy_bot_routes_inactivity_query_to_decision_investigation(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(intent=AgentIntent.DECISION_INVESTIGATION),
+        ])
+        healthy_context = OperationalContext(
+            status=OperationalReadinessStatus.READY,
+            health_state="TRADING",
+            is_trading_allowed=True,
+            active_conditions=(),
+            effective_permissions=("new_orders",),
+            observed_at=datetime.now(timezone.utc),
+            snapshot_version=1,
+            is_available=True,
+        )
+        collector = MagicMock()
+        collector.collect.return_value = healthy_context
+
+        graph = RouterGraph(llm, collector=collector).build()
+        state = graph.invoke({"user_prompt": "Why hasn't BTC traded today?"})
+
+        assert state["route"].intent == AgentIntent.DECISION_INVESTIGATION
+
+    def test_degraded_bot_preserves_configuration_view_intent(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(intent=AgentIntent.CONFIGURATION),
+        ])
+        degraded_context = OperationalContext(
+            status=OperationalReadinessStatus.DEGRADED,
+            health_state="DEGRADED",
+            is_trading_allowed=False,
+            active_conditions=(),
+            effective_permissions=(),
+            observed_at=datetime.now(timezone.utc),
+            snapshot_version=1,
+            is_available=True,
+        )
+        collector = MagicMock()
+        collector.collect.return_value = degraded_context
+
+        graph = RouterGraph(llm, collector=collector).build()
+        state = graph.invoke({"user_prompt": "Show current BTC configuration"})
+
+        assert state["route"].intent == AgentIntent.CONFIGURATION
+
+    def test_router_includes_operational_context_in_prompt(self):
+        llm = FakeLlmAdapter([
+            AgentRoute(intent=AgentIntent.GENERAL),
+        ])
+        active_cond = OperationalConditionSummary(
+            condition="order_rejection_spike",
+            scope_type="exchange",
+            scope_identifier="BINANCE",
+            severity="critical",
+            first_detected_at=datetime.now(timezone.utc),
+            last_observed_at=datetime.now(timezone.utc),
+        )
+        paused_context = OperationalContext(
+            status=OperationalReadinessStatus.PAUSED,
+            health_state="PAUSED",
+            is_trading_allowed=False,
+            active_conditions=(active_cond,),
+            effective_permissions=("cancel_orders",),
+            observed_at=datetime.now(timezone.utc),
+            snapshot_version=2,
+            is_available=True,
+        )
+        collector = MagicMock()
+        collector.collect.return_value = paused_context
+
+        graph = RouterGraph(llm, collector=collector).build()
+        graph.invoke({"user_prompt": "Are orders failing?"})
+
+        prompt = llm.structured_calls[0][1]
+        assert "OPERATIONAL CONTEXT" in prompt
+        assert "status = paused" in prompt
+        assert "order_rejection_spike" in prompt

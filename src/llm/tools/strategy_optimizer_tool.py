@@ -6,18 +6,24 @@ from typing import Any, Optional, Type
 from langchain_core.tools import BaseTool
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.interfaces.evidence_proposal import EvidenceBasedProposal
 from api.interfaces.order import Order
 from api.interfaces.trade import Trade
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_evidence_proposal_repository import (
+    PostgresEvidenceProposalRepository,
+)
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.proposals.optimizer_proposal_builder import OptimizerProposalBuilder
 from src.server.services.asset_performance_service import AssetPerformanceService
 from src.trading.analytics.strategy_optimizer import (
     BaselineComparisonResult,
     StrategyOptimizer,
 )
+from src.vcs.domain.diff import ConfigChange, ConfigurationProposal
 
 
 class StrategyOptimizerInput(BaseModel):
@@ -159,8 +165,59 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             )
         return "\n".join(lines)
 
+    def _persist_evidence_proposal(self, proposal: EvidenceBasedProposal) -> None:
+        try:
+            with self.database_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresEvidenceProposalRepository)
+                if isinstance(repo, PostgresEvidenceProposalRepository):
+                    repo.save(proposal)
+                    uow.commit()
+        except Exception as exc:  # pylint: disable=broad-exception-caught
+            self.app_logger.warning(f"Could not persist optimizer evidence proposal: {exc}")
+
     @staticmethod
-    def _run_proposal(
+    def _format_proposal_changes(changes: list[ConfigChange]) -> str:
+        if not changes:
+            return "_No changes proposed (current weights and schedules are already optimal)._"
+        return "\n".join(
+            f"- `{c.path}`: `{c.old_value}` -> `{c.new_value}` ({c.reason})" for c in changes
+        )
+
+    @classmethod
+    def _format_proposal_output(
+            cls,
+            sym: str,
+            prop: ConfigurationProposal,
+            evidence_prop: EvidenceBasedProposal,
+    ) -> str:
+        changes_list = list(prop.changes or [])
+        changes_str = cls._format_proposal_changes(changes_list)
+        all_risks = list(prop.risks or [])
+        for lim in evidence_prop.limitations:
+            if lim not in all_risks:
+                all_risks.append(lim)
+        risks_str = "\n".join(f"- {r}" for r in all_risks)
+        plan_str = "\n".join(f"- {step}" for step in evidence_prop.validation_plan)
+        commit_line = f"**Base Commit**: `{prop.base_commit_hash}`\n\n" if prop.base_commit_hash else ""
+
+        return (
+            f"### 📋 Optimization Proposal Generated for {sym}\n\n"
+            f"**Proposal ID**: `{evidence_prop.id}` | "
+            f"**Evidence Status**: `{evidence_prop.evidence_status.value}` | "
+            f"**Recommendation**: `{evidence_prop.recommendation.value}`\n\n"
+            f"**Summary**: {prop.summary}\n\n"
+            f"{commit_line}"
+            f"**Expected Effect**: {prop.expected_effect}\n\n"
+            f"**Proposed Changes ({len(changes_list)})**:\n"
+            f"{changes_str}\n\n"
+            f"**Risks & Limitations**:\n"
+            f"{risks_str}\n\n"
+            f"**Validation Plan**:\n"
+            f"{plan_str}"
+        )
+
+    def _run_proposal(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            self,
             trades: list[Trade],
             ticker_symbol: Optional[str],
             target_tz: str,
@@ -168,27 +225,15 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             base_commit_hash: Optional[str] = None,
     ) -> str:
         sym = ticker_symbol.strip() if ticker_symbol else "PORTFOLIO"
-        prop = StrategyOptimizer.generate_optimization_proposal(
+        prop, evidence_prop = OptimizerProposalBuilder.build_evidence_proposal(
             sym,
             asset_config,
             trades,
             timezone_str=target_tz,
             base_commit_hash=base_commit_hash,
         )
-        base_commit_str = f"**Base Commit**: `{prop.base_commit_hash}`\n\n" if prop.base_commit_hash else ""
-        changes = list(prop.changes)
-        changes_str = (
-            "\n".join(f"- `{c.path}`: `{c.old_value}` -> `{c.new_value}` ({c.reason})" for c in changes)
-            if changes else "_No changes proposed (current weights and schedules are already optimal)._"
-        )
-        return (
-            f"### 📋 Optimization Proposal Generated for {sym}\n\n"
-            f"**Summary**: {prop.summary}\n\n"
-            f"{base_commit_str}"
-            f"**Expected Effect**: {prop.expected_effect}\n\n"
-            f"**Proposed Changes ({len(prop.changes)})**:\n"
-            f"{changes_str}"
-        )
+        self._persist_evidence_proposal(evidence_prop)
+        return self._format_proposal_output(sym, prop, evidence_prop)
 
     @staticmethod
     def _extract_active_weights(
@@ -212,24 +257,28 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         p = eval_res.proposed_metrics
         e = eval_res.equal_weight_metrics
         return [
-            "### 📊 Out-of-Sample Walk-Forward Baseline Comparison",
+            "### 📊 Out-of-Sample Walk-Forward Baseline Comparison (Preliminary Attribution Diagnostic)",
             (
-                f"- **Sample Split**: {eval_res.in_sample_trades_count} in-sample / "
-                f"{eval_res.out_of_sample_trades_count} out-of-sample trades"
+                f"- **Sample Split**: {eval_res.in_sample_trades_count} in-sample (calibration) / "
+                f"{eval_res.out_of_sample_trades_count} out-of-sample (evaluation) trades"
             ),
             (
                 f"- **Unchanged Baseline**: Net P&L = {b.net_pnl:.2f}, "
-                f"PF = {b.profit_factor:.2f}, Win Rate = {b.win_rate_pct:.1f}%"
+                f"PF = {b.profit_factor:.2f}, Win Rate = {b.win_rate_pct:.1f}%, "
+                f"Max Drawdown = {b.max_drawdown:.2f}"
             ),
             (
                 f"- **Proposed Calibrated**: Net P&L = {p.net_pnl:.2f}, "
-                f"PF = {p.profit_factor:.2f}, Win Rate = {p.win_rate_pct:.1f}%"
+                f"PF = {p.profit_factor:.2f}, Win Rate = {p.win_rate_pct:.1f}%, "
+                f"Max Drawdown = {p.max_drawdown:.2f}"
             ),
             (
                 f"- **Equal-Weight Benchmark**: Net P&L = {e.net_pnl:.2f}, "
-                f"PF = {e.profit_factor:.2f}, Win Rate = {e.win_rate_pct:.1f}%"
+                f"PF = {e.profit_factor:.2f}, Win Rate = {e.win_rate_pct:.1f}%, "
+                f"Max Drawdown = {e.max_drawdown:.2f}"
             ),
             f"- **Net P&L Delta vs Baseline**: {eval_res.pnl_delta:+.2f} ({eval_res.pnl_improvement_pct:+.1f}%)",
+            f"- **Max Drawdown Delta vs Baseline**: {eval_res.drawdown_delta:+.2f}",
             f"- **Verdict**: {eval_res.verdict}",
             (
                 "- **Multi-Fold Walk-Forward Validation**: Run the `walk_forward` tool "
@@ -248,16 +297,22 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         if err is not None or active_weights is None:
             return err or "Error extracting strategy weights."
 
-        recommendations = StrategyOptimizer.calibrate_strategy_weights(trades, active_weights)
+        if len(trades) >= 4:
+            in_sample, _ = StrategyOptimizer._split_trades_chronologically(trades, 0.7)  # pylint: disable=protected-access
+        else:
+            in_sample = trades
+
+        recommendations = StrategyOptimizer.calibrate_strategy_weights(in_sample, active_weights)
         lines = [
             f"### ⚖️ Strategy Weight Calibration Recommendations for {ticker_symbol}\n"
-            f"*(Empirical heuristic based on historical trade attribution; validation required before live use)*\n"
+            f"*(Empirical heuristic fitted on in-sample trade attribution; full walk-forward validation required)*\n"
         ]
         for rec in recommendations:
             metrics_desc = (
-                f"(Confidence: {rec.confidence_level}, Win Rate: {rec.win_rate_pct:.1f}% ± "
-                f"{rec.sample_margin_of_error_pct:.1f}%, PF: {rec.profit_factor:.2f}, "
-                f"Trades: {rec.total_trades})"
+                f"(Evidence: {rec.evidence_status}, Confidence: {rec.confidence_level}, "
+                f"Win Rate: {rec.win_rate_pct:.1f}% ± {rec.sample_margin_of_error_pct:.1f}%, "
+                f"PF: {rec.profit_factor:.2f}, Trades: {rec.total_trades}, "
+                f"Windows: {rec.independent_windows})"
             )
             lines.append(
                 f"- **{rec.strategy_name}**: Current={rec.current_weight:.2f} -> "
@@ -284,9 +339,9 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         if err is not None or active_weights is None:
             return err or "Error extracting strategy weights."
 
-        recs = StrategyOptimizer.calibrate_strategy_weights(trades, active_weights)
-        proposed_w = {rec.strategy_name: rec.recommended_weight for rec in recs}
-        baseline_eval = StrategyOptimizer.evaluate_split_sample_baseline(trades, active_weights, proposed_w)
+        baseline_eval = StrategyOptimizer.evaluate_split_sample_baseline(
+            trades, active_weights, proposed_weights=None
+        )
         if baseline_eval is None:
             return (
                 f"Insufficient trade history ({len(trades)} trades) to perform split-sample "
@@ -295,7 +350,7 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
 
         lines = [
             f"### 📊 Walk-Forward Baseline Comparison for {ticker_symbol}\n"
-            f"*(Out-of-sample evaluation comparing proposed weights against the unchanged baseline)*\n"
+            f"*(Out-of-sample evaluation comparing in-sample calibrated weights against the unchanged baseline)*\n"
         ]
         lines.extend(cls._format_baseline_comparison(baseline_eval))
         return "\n".join(lines)
