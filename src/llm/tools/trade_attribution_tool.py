@@ -100,10 +100,10 @@ class TradeAttributionTool(BaseTool, ApplicationLoggingMixin):
                     ticker_symbol=ticker_symbol.strip(),
                     start=start,
                     end=now,
-                )
+                ) or []
                 symbols = [ticker_symbol.strip()]
             else:
-                orders = repo.get_all()
+                orders = repo.get_completed_by_executed_range(start=start, end=now) or []
                 completed = [o for o in orders if o.status is not None and o.status.value == "COMPLETED"]
                 symbols = list({o.ticker_symbol for o in completed})
 

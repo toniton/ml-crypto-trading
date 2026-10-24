@@ -3,8 +3,10 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
+from api.interfaces.evidence_proposal import EvidenceStatus, ProposalRecommendation
 from api.interfaces.trade import Trade
 from src.core.weekday import Weekday
+from src.proposals.optimizer_proposal_builder import OptimizerProposalBuilder
 from src.trading.analytics.strategy_optimizer import (
     StrategyOptimizer,
 )
@@ -345,7 +347,7 @@ def test_strategy_schedule_without_evidence_is_not_given_asset_windows_by_defaul
 
 def test_calibrate_strategy_weights_uncertainty_and_shrinkage():
     # StratA has 4 winning trades (LOW confidence < 5)
-    # StratB has 25 losing trades (HIGH confidence >= 20)
+    # StratB has 25 losing trades across 5 independent days (HIGH confidence >= 20 and >= 3 windows)
     base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
     trades = []
     for i in range(4):
@@ -357,10 +359,11 @@ def test_calibrate_strategy_weights_uncertainty_and_shrinkage():
             exit_price=Decimal("120"),
         ))
     for i in range(25):
+        day_offset = (i % 5) * 86400
         trades.append(_make_trade(
             winning_strategy="StratB",
             entry_strategy_attributions={"StratB": 1.0},
-            entry_timestamp=base_ts + (i + 10) * 60,
+            entry_timestamp=base_ts + day_offset + (i + 10) * 60,
             entry_price=Decimal("100"),
             exit_price=Decimal("90"),
         ))
@@ -369,12 +372,36 @@ def test_calibrate_strategy_weights_uncertainty_and_shrinkage():
     rec_map = {r.strategy_name: r for r in recs}
 
     assert rec_map["StratA"].confidence_level == "LOW"
+    assert rec_map["StratA"].evidence_status == "INSUFFICIENT"
     assert rec_map["StratA"].sample_margin_of_error_pct >= 0.0
     # StratA ratio is shrunk because total_trades < 10
     assert rec_map["StratA"].recommended_weight > 1.0
 
     assert rec_map["StratB"].confidence_level == "HIGH"
+    assert rec_map["StratB"].evidence_status == "SUFFICIENT"
+    assert rec_map["StratB"].independent_windows == 5
     assert rec_map["StratB"].total_trades == 25
+
+
+def test_calibrate_strategy_weights_marks_clustered_single_window_insufficient():
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    trades = [
+        _make_trade(
+            winning_strategy="BurstStrat",
+            entry_strategy_attributions={"BurstStrat": 1.0},
+            entry_timestamp=base_ts + i * 60,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("115"),
+        )
+        for i in range(25)
+    ]
+
+    recs = StrategyOptimizer.calibrate_strategy_weights(trades, {"BurstStrat": 1.0})
+    assert len(recs) == 1
+    assert recs[0].total_trades == 25
+    assert recs[0].independent_windows == 1
+    assert recs[0].confidence_level == "LOW"
+    assert recs[0].evidence_status == "INSUFFICIENT"
 
 
 def test_evaluate_split_sample_baseline_demonstrates_improvement():
@@ -501,3 +528,206 @@ def test_evaluate_split_sample_baseline_detects_underperformance():
         trades=regime_shift_trades,
     )
     assert any("Out-of-sample validation caution" in r for r in proposal.risks or [])
+
+
+def test_changing_held_out_outcomes_does_not_alter_candidate_calibration():
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    in_sample_trades = []
+    for i in range(7):
+        in_sample_trades.append(
+            _make_trade(
+                winning_strategy="StratA" if i % 2 == 0 else "StratB",
+                entry_strategy_attributions={"StratA": 1.0} if i % 2 == 0 else {"StratB": 1.0},
+                entry_timestamp=base_ts + i * 3600,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("130") if i % 2 == 0 else Decimal("80"),
+            )
+        )
+
+    held_out_winning = [
+        _make_trade(
+            winning_strategy="StratB",
+            entry_strategy_attributions={"StratB": 1.0},
+            entry_timestamp=base_ts + (7 + j) * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("200"),
+        )
+        for j in range(3)
+    ]
+    held_out_losing = [
+        _make_trade(
+            winning_strategy="StratB",
+            entry_strategy_attributions={"StratB": 1.0},
+            entry_timestamp=base_ts + (7 + j) * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("20"),
+        )
+        for j in range(3)
+    ]
+
+    current_config = {
+        "strategies": [
+            {"name": "StratA", "weight": 1.0, "schedule": {"timezone": "UTC", "windows": []}},
+            {"name": "StratB", "weight": 1.0, "schedule": {"timezone": "UTC", "windows": []}},
+        ]
+    }
+
+    prop_a = StrategyOptimizer.generate_optimization_proposal(
+        ticker_symbol="BTC_USD",
+        current_asset_config=current_config,
+        trades=in_sample_trades + held_out_winning,
+        train_ratio=0.7,
+    )
+    prop_b = StrategyOptimizer.generate_optimization_proposal(
+        ticker_symbol="BTC_USD",
+        current_asset_config=current_config,
+        trades=in_sample_trades + held_out_losing,
+        train_ratio=0.7,
+    )
+
+    assert prop_a.changes == prop_b.changes
+
+
+def test_candidate_schedule_and_weight_changes_evaluated_together_out_of_sample():
+    # In-sample: StratA wins at 10:00 UTC; out-of-sample has a StratA loss at 18:00 UTC (outside 10:00 window)
+    wed_10 = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    wed_18 = datetime(2026, 6, 10, 18, 0, 0, tzinfo=timezone.utc).timestamp()
+
+    trades = [
+        _make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=wed_10 + i * 60,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("125"),
+        )
+        for i in range(7)
+    ]
+    # Out-of-sample: 1 win at 10:15 UTC, 2 losses at 18:00 UTC (outside discovered 10:00-11:00 window)
+    trades.append(
+        _make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=wed_10 + 900,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("120"),
+        )
+    )
+    for j in range(2):
+        trades.append(
+            _make_trade(
+                winning_strategy="StratA",
+                entry_strategy_attributions={"StratA": 1.0},
+                entry_timestamp=wed_18 + j * 60,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("60"),
+            )
+        )
+
+    windows = StrategyOptimizer.optimize_strategy_trading_windows(trades[:7], "StratA")
+    res = StrategyOptimizer.evaluate_split_sample_baseline(
+        trades=trades,
+        current_weights={"StratA": 1.0},
+        proposed_weights={"StratA": 1.0},
+        train_ratio=0.7,
+        strategy_windows={"StratA": windows},
+        timezone_str="UTC",
+    )
+
+    assert res is not None
+    assert res.baseline_metrics.trades_count == 3
+    assert res.proposed_metrics.trades_count == 1
+    assert res.proposed_metrics.net_pnl > res.baseline_metrics.net_pnl
+
+
+def test_candidate_earns_more_but_materially_higher_drawdown_rejects_improvement():
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    in_sample = [
+        _make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + i * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("110"),
+        )
+        for i in range(7)
+    ]
+    # Out-of-sample: StratA has a huge win (+100), then a huge drawdown (-90), whereas StratB is steady (+10, -2)
+    oos = [
+        _make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + 8 * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("125"),
+        ),
+        _make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + 9 * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("82"),
+        ),
+        _make_trade(
+            winning_strategy="StratB",
+            entry_strategy_attributions={"StratB": 1.0},
+            entry_timestamp=base_ts + 10 * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("102"),
+        ),
+    ]
+
+    res = StrategyOptimizer.evaluate_split_sample_baseline(
+        trades=in_sample + oos,
+        current_weights={"StratA": 1.0, "StratB": 1.0},
+        proposed_weights={"StratA": 2.0, "StratB": 0.1},
+        train_ratio=0.7,
+    )
+    assert res is not None
+    assert res.pnl_delta > Decimal(0)
+    assert res.drawdown_delta > Decimal(0)
+    assert res.risk_increased is True
+    assert res.demonstrates_improvement is False
+    assert "materially increased max drawdown" in res.verdict
+
+
+def test_optimizer_proposal_builder_builds_typed_evidence_proposal():
+    base_ts = datetime(2026, 6, 10, 10, 0, 0, tzinfo=timezone.utc).timestamp()
+    trades = [
+        _make_trade(
+            winning_strategy="StratA",
+            entry_strategy_attributions={"StratA": 1.0},
+            entry_timestamp=base_ts + i * 3600,
+            entry_price=Decimal("100"),
+            exit_price=Decimal("120") if i < 7 else Decimal("70"),
+        )
+        for i in range(10)
+    ]
+    trades.extend(
+        [
+            _make_trade(
+                winning_strategy="StratB",
+                entry_strategy_attributions={"StratB": 1.0},
+                entry_timestamp=base_ts + i * 3600 + 1800,
+                entry_price=Decimal("100"),
+                exit_price=Decimal("85") if i < 7 else Decimal("135"),
+            )
+            for i in range(10)
+        ]
+    )
+    cfg = {
+        "strategies": [
+            {"name": "StratA", "weight": 1.0},
+            {"name": "StratB", "weight": 1.0},
+        ]
+    }
+    _, evidence_prop = OptimizerProposalBuilder.build_evidence_proposal(
+        ticker_symbol="BTC_USD",
+        current_asset_config=cfg,
+        trades=trades,
+        base_commit_hash="commit-123",
+    )
+    assert evidence_prop.baseline_commit == "commit-123"
+    assert evidence_prop.recommendation == ProposalRecommendation.REJECT
+    assert evidence_prop.evidence_status == EvidenceStatus.WEAK
+    assert evidence_prop.risk_changes.max_drawdown_pct_delta is not None

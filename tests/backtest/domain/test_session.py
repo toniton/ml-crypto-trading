@@ -9,7 +9,8 @@ from api.interfaces.backtest_request import (
     ExecutionConfiguration,
 )
 from src.backtest.domain.result import BacktestResult
-from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
+from src.backtest.domain.session import BacktestSession
+from src.core.interfaces.execution_status import ExecutionStatus
 
 
 def _make_request(**overrides) -> BacktestRequest:
@@ -39,7 +40,7 @@ class TestBacktestSession:
         session = BacktestSession(ticker_symbol="BTC_USD", request=_make_request())
 
         assert session.ticker_symbol == "BTC_USD"
-        assert session.status == BacktestSessionStatus.CREATED
+        assert session.status == ExecutionStatus.QUEUED
         assert session.started_at is None
         assert session.completed_at is None
 
@@ -53,11 +54,11 @@ class TestBacktestSession:
         session = BacktestSession(ticker_symbol="BTC_USD", request=_make_request())
 
         session.start()
-        assert session.status == BacktestSessionStatus.RUNNING
+        assert session.status == ExecutionStatus.RUNNING
         assert session.started_at is not None
 
         session.complete()
-        assert session.status == BacktestSessionStatus.COMPLETED
+        assert session.status == ExecutionStatus.COMPLETED
         assert session.completed_at is not None
         assert session.duration is not None
         assert session.duration >= 0
@@ -67,7 +68,7 @@ class TestBacktestSession:
 
         session.initialize()
 
-        assert session.status == BacktestSessionStatus.INITIALIZING
+        assert session.status == ExecutionStatus.INITIALIZING
 
     def test_result_is_none_by_default(self):
         session = BacktestSession(ticker_symbol="BTC_USD", request=_make_request())
@@ -80,7 +81,7 @@ class TestBacktestSession:
 
         session.complete(result)
 
-        assert session.status == BacktestSessionStatus.COMPLETED
+        assert session.status == ExecutionStatus.COMPLETED
         assert session.result is result
 
     def test_attach_result(self):
@@ -90,14 +91,14 @@ class TestBacktestSession:
         session.attach_result(result)
 
         assert session.result is result
-        assert session.status == BacktestSessionStatus.CREATED
+        assert session.status == ExecutionStatus.QUEUED
 
     def test_fail_records_error(self):
         session = BacktestSession(ticker_symbol="BTC_USD", request=_make_request())
 
         session.fail("boom")
 
-        assert session.status == BacktestSessionStatus.FAILED
+        assert session.status == ExecutionStatus.FAILED
         assert session.error == "boom"
         assert session.completed_at is not None
 
@@ -106,7 +107,7 @@ class TestBacktestSession:
 
         session.cancel()
 
-        assert session.status == BacktestSessionStatus.CANCELLED
+        assert session.status == ExecutionStatus.CANCELLED
 
     def test_duration_none_before_completion(self):
         session = BacktestSession(ticker_symbol="BTC_USD", request=_make_request())

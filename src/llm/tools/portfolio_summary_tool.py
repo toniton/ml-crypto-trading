@@ -35,6 +35,13 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
     def __init__(self, portfolio_risk_manager: PortfolioRiskManager):
         super().__init__(portfolio_risk_manager=portfolio_risk_manager)
 
+    @staticmethod
+    def _normalize_pct_limit(limit: Optional[Decimal]) -> Optional[Decimal]:
+        if not limit:
+            return None
+        val = Decimal(str(limit))
+        return val * Decimal("100") if val <= Decimal("1") else val
+
     def _run(  # pylint: disable=arguments-differ,too-many-locals
             self,
             quote_currency: Optional[str] = None,
@@ -64,7 +71,7 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
             for ticker, qty in p.asset_positions.items():
                 price = p.asset_mark_prices.get(ticker, Decimal("0"))
                 val = qty * price
-                conc = p.get_asset_concentration(ticker) * Decimal("100")
+                conc = (p.get_asset_concentration(ticker) * Decimal("100")).quantize(Decimal("0.01"))
                 price_note = " [PRICE UNAVAILABLE]" if qty > Decimal("0") and price <= Decimal("0") else ""
                 pos_lines.append(
                     f"    • {ticker}: {FormatHelper.format_decimal(qty)} units @ "
@@ -73,15 +80,17 @@ class PortfolioSummaryTool(BaseTool, ApplicationLoggingMixin):
                 )
             pos_text = "\n".join(pos_lines) if pos_lines else "    • (No open base asset positions)"
 
+            dd_limit_pct = self._normalize_pct_limit(p_mgr.max_portfolio_drawdown)
             dd_limit_str = (
-                f"{FormatHelper.format_decimal(p_mgr.max_portfolio_drawdown)}%"
-                if p_mgr.max_portfolio_drawdown else "Not set"
+                f"{FormatHelper.format_decimal(dd_limit_pct)}%"
+                if dd_limit_pct is not None else "Not set"
             )
+            conc_limit_pct = self._normalize_pct_limit(p_mgr.max_asset_concentration)
             conc_limit_str = (
-                f"{FormatHelper.format_decimal(p_mgr.max_asset_concentration)}%"
-                if p_mgr.max_asset_concentration else "Not set"
+                f"{FormatHelper.format_decimal(conc_limit_pct)}%"
+                if conc_limit_pct is not None else "Not set"
             )
-            current_dd_pct = abs(p.get_drawdown()) * Decimal("100")
+            current_dd_pct = (abs(p.get_drawdown()) * Decimal("100")).quantize(Decimal("0.01"))
             val_ts = getattr(p, "valuation_timestamp", None) or "Live"
             reserved_orders_str = (
                 ", ".join(

@@ -1,12 +1,13 @@
 import asyncio
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
-from src.agent import AgentGateway
-from src.agent import (
-    ConfigChange,
-    ConfigurationProposal,
-)
+from src.agent import AgentGateway, ConfigChange, ConfigurationProposal
 from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute, ConfigurationAction
 from src.core.interfaces.llm_adapter import ChatTurn
+from src.trading.health.enums import TradingHealthState, TradingPermission
+from src.trading.health.health_monitor import HealthMonitor
+from src.trading.health.models import TradingHealthSnapshot
 from tests.unit.agent.fakes import FakeLlmAdapter
 
 
@@ -164,3 +165,44 @@ class TestAgentGateway:
         assert any(block.type == "configuration_view" for block in result.presentation.blocks)
         # only the router ran; no proposal LLM call was made
         assert len(llm.structured_calls) == 1
+
+    def test_gateway_stream_emits_operational_status_events(self, vcs):
+        monitor = MagicMock(spec=HealthMonitor)
+        monitor.get_snapshot.return_value = TradingHealthSnapshot(
+            state=TradingHealthState.TRADING,
+            active_conditions=(),
+            effective_permissions=frozenset({TradingPermission.NEW_ORDERS}),
+            version=1,
+            updated_at=datetime.now(timezone.utc),
+        )
+        llm = FakeLlmAdapter([AgentRoute(intent=AgentIntent.GENERAL)], chunks=["ok"])
+        gateway = AgentGateway(llm, vcs, health_monitor=monitor)
+
+        async def collect():
+            return [event async for event in gateway.stream("hello")]
+
+        events = asyncio.run(collect())
+        node_events = [e.payload.get("node") for e in events if e.type in ("node_started", "node_completed")]
+        assert "operational_status" in node_events
+
+    def test_gateway_handle_propagates_operational_context(self, vcs):
+        monitor = MagicMock(spec=HealthMonitor)
+        monitor.get_snapshot.return_value = TradingHealthSnapshot(
+            state=TradingHealthState.TRADING,
+            active_conditions=(),
+            effective_permissions=frozenset({TradingPermission.NEW_ORDERS}),
+            version=5,
+            updated_at=datetime.now(timezone.utc),
+        )
+        llm = FakeLlmAdapter([
+            self._config_route(),
+            ConfigurationProposal(
+                summary="less conservative",
+                changes=[ConfigChange(path="assets.BTC_USD.consensus.buy", old_value=1.3, new_value=1.1, reason="more trades")],
+            ),
+        ])
+        gateway = AgentGateway(llm, vcs, health_monitor=monitor)
+        result = gateway.handle("make the strategy less conservative")
+        assert result.kind == "configuration"
+        assert gateway.last_route is not None
+

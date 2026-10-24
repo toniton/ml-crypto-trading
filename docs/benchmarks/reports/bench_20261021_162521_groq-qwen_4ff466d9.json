@@ -1,0 +1,108 @@
+{
+  "model_id": "groq-qwen",
+  "mode": "live",
+  "timestamp": "2026-10-21T16:25:21.140338+00:00",
+  "total_questions": 1,
+  "passed_questions": 0,
+  "pass_rate_pct": 0.0,
+  "mean_score": 0.12,
+  "mean_route_tool_score": 0.5,
+  "mean_fact_recall": 0.0,
+  "mean_epistemic_score": 0.0,
+  "mean_consistency_score": 0.0,
+  "p50_latency_ms": 4143.88,
+  "p95_latency_ms": 4143.88,
+  "question_scores": [
+    {
+      "question_id": "Q01",
+      "title": "Is Rio healthy and currently trading?",
+      "category": "Live operations and account state",
+      "baseline_readiness": "Good foundation",
+      "route_and_tool_score": 0.5,
+      "fact_recall_score": 0.0,
+      "epistemic_guardrail_score": 0.0,
+      "consistency_score": 0.0,
+      "weighted_total_score": 0.12,
+      "passed": false,
+      "avg_latency_ms": 4143.88,
+      "runs": [
+        {
+          "prompt": "Is Rio healthy and currently trading?",
+          "routed_intent": "runtime_debug",
+          "invoked_tools": [],
+          "response_text": "### \ud83d\udd34 Runtime Incident Diagnosis & Suggested Fix\n\n#### Diagnosis (CONFIRMED)\n**Summary:** To determine if \"Rio\" is healthy and currently trading, I need to clarify which entity you are referring to, as \"Rio\" is a common name for several major companies and assets. The most likely candidates are:\n\n1. **Rio Tinto (RIO)** \u2013 A major global mining company listed on the London Stock Exchange (LSE), New York Stock Exchange (NYSE), and Australian Securities Exchange (ASX).\n2. **Rio Tinto (RIO.L)** \u2013 Specifically on the LSE.\n3. **Rio Tinto (RIO.AX)** \u2013 Specifically on the ASX.\n4. **Other entities** \u2013 Such as Rio Tinto Group, or possibly a different company named \"Rio\" (e.g., Rio Tinto vs. Rio Tinto plc).\n\nAssuming you mean **Rio Tinto (RIO)**, here is the current status based on general market knowledge (as of my last update):\n\n### 1. **Is Rio Tinto Currently Trading?**\n- **Yes**, Rio Tinto is a publicly traded company and is actively trading on major exchanges:\n  - **NYSE**: Ticker `RIO`\n  - **LSE**: Ticker `RIO.L`\n  - **ASX**: Ticker `RIO.AX`\n- Trading occurs during standard market hours for each exchange. If it is currently within market hours for any of these exchanges, the stock is trading.\n\n### 2. **Is Rio Tinto \"Healthy\"?**\n\"Healthy\" can refer to several aspects:\n- **Financial Health**: Rio Tinto is a large-cap, blue-chip company with significant revenue, assets, and market capitalization. It is generally considered financially stable, though its performance is tied to commodity prices (iron ore, copper, aluminum, etc.).\n- **Operational Health**: The company operates globally and has faced challenges such as environmental incidents, labor issues, and geopolitical risks, but it remains a major player in the mining sector.\n- **Stock Performance**: The stock price fluctuates based on commodity markets, macroeconomic conditions, and company-specific news. For a real-time assessment, you would need to check the current stock price, recent earnings reports, and analyst ratings.\n\n### How to Verify Current Status:\n1. **Check a Financial News Source**: Visit websites like Bloomberg, Reuters, CNBC, or Yahoo Finance to see the latest stock price and trading status.\n2. **Check the Exchange Website**: Visit the NYSE, LSE, or ASX website for real-time trading data.\n3. **Review Recent News**: Look for any recent announcements, earnings reports, or regulatory issues that might affect the company's health.\n\nIf you meant a different \"Rio,\" please specify the full name or ticker symbol for a more accurate response.\n**Suspected Component:** `runtime`\n**Root Cause:** Grounded runtime and trace inspection.\n\n#### Suggested Remediation (Human Approval Required)\n**Proposed Change:** Review error stack trace and component state.\n**Rationale:** Manual review recommended for unclassified error.\n**Type:** Code Change | **Risk Level:** `HIGH`",
+          "latency_ms": 4143.878125,
+          "matched_facts": [],
+          "missing_facts": [
+            "DEGRADED",
+            "STALE_MARKET_DATA",
+            "CRO_USD",
+            "120",
+            "60",
+            "2026-10-16 08:45:00 UTC"
+          ],
+          "matched_epistemic": [],
+          "missing_epistemic": [
+            "healthy process",
+            "not equate",
+            "last successful"
+          ],
+          "triggered_hallucinations": [],
+          "tool_records": [],
+          "grounded_claims": [],
+          "unsupported_claims": [],
+          "contradicted_claims": [],
+          "tool_selection_score": 0.6,
+          "factual_accuracy_score": 0.0,
+          "unsupported_claims_rate": 0.0,
+          "epistemic_honesty_score": 0.0
+        }
+      ],
+      "tool_selection_score": 0.6,
+      "factual_accuracy_score": 0.0,
+      "unsupported_claims_rate": 0.0,
+      "epistemic_honesty_score": 0.0,
+      "trial_variance": 0.0
+    }
+  ],
+  "provenance": {
+    "git_commit": "4ff466d90a1fb56be07b2cc1a907100dbefa9f82",
+    "git_branch": "main",
+    "git_dirty": true,
+    "model_id": "groq-qwen",
+    "provider": "live",
+    "temperature": 0.0,
+    "suite_version": "2.0-grounded",
+    "dataset_hash": "",
+    "tool_manifest": {
+      "trading_health": "trading_health",
+      "exchange_read_api": "exchange_read_api",
+      "portfolio_summary": "portfolio_summary",
+      "get_open_orders": "get_open_orders",
+      "account_balance": "get_account_balance",
+      "inspect_trading_decision": "inspect_trading_decision",
+      "get_configuration": "get_configuration",
+      "get_configuration_history": "get_configuration_history",
+      "query_metrics": "query_metrics",
+      "get_trade_attribution": "get_trade_attribution",
+      "detect_backtest_drift": "detect_backtest_drift",
+      "backtest": "backtest",
+      "walk_forward": "walk_forward",
+      "inspect_schedule_tick_trace": "inspect_schedule_tick_trace",
+      "inspect_experiment": "inspect_experiment",
+      "inspect_retention_governance": "inspect_retention_governance"
+    },
+    "evaluated_at": "2026-10-21T16:25:15.490203+00:00",
+    "python_version": "3.12.7"
+  },
+  "num_trials": 1,
+  "mean_tool_selection_score": 0.6,
+  "mean_factual_accuracy": 0.0,
+  "mean_unsupported_claims_rate": 0.0,
+  "mean_epistemic_honesty": 0.0,
+  "quality_gate_passed": false,
+  "quality_gate_reasons": [
+    "Failed questions (1): Q01",
+    "Mean score 0.120 below quality threshold 0.850"
+  ]
+}

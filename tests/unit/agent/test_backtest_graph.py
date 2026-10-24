@@ -19,7 +19,7 @@ from src.agent.backtest.nodes.run_backtest import RunBacktestNode
 from src.agent.backtest.nodes.validate_request import ValidateBacktestRequestNode
 
 from src.agent.gateway import AgentGateway
-from src.agent.router.models import AgentGoal, AgentIntent, AgentRoute
+from src.agent.router.models import AgentGoal, AgentIntent, AgentReferences, AgentRoute
 from src.backtest.domain.metrics import BacktestSummary
 from tests.unit.agent.fakes import FakeLlmAdapter
 
@@ -73,6 +73,25 @@ class TestBuildBacktestRequestNode:
         })
         assert out["resolved_request"].ticker_symbol == "DOGE_USD"
 
+    def test_falls_back_to_route_references_asset(self):
+        node = BuildBacktestRequestNode()
+        route = AgentRoute(
+            intent=AgentIntent.BACKTEST,
+            references=AgentReferences(asset="ETH_USD"),
+        )
+        out = node({
+            "backtest_request": _agent_request(ticker_symbol=None),
+            "request": route,
+        })
+        assert out["resolved_request"].ticker_symbol == "ETH_USD"
+
+    def test_unspecified_relative_duration_resolves_to_none_time(self):
+        node = BuildBacktestRequestNode()
+        agent_req = _agent_request(time_range=BacktestTimeRange(mode="relative", duration_seconds=None))
+        out = node({"backtest_request": agent_req, "request": None})
+        assert out["resolved_request"].start_time is None
+        assert out["resolved_request"].end_time is None
+
     def test_returns_none_without_asset(self):
         node = BuildBacktestRequestNode()
         out = node({"backtest_request": _agent_request(ticker_symbol=None), "request": None})
@@ -110,6 +129,28 @@ class TestValidateBacktestRequestNode:
         assert validation.valid is False
         assert any("asset" in error.lower() for error in validation.errors)
 
+    def test_missing_time_range_is_invalid(self):
+        node = ValidateBacktestRequestNode()
+        agent_req = _agent_request(time_range=BacktestTimeRange(mode="relative", duration_seconds=None))
+        resolved = Mock(ticker_symbol="BTC_USD", start_time=None, end_time=None)
+        out = node({"backtest_request": agent_req, "resolved_request": resolved})
+        assert out["validation"].valid is False
+        assert any("time range" in error.lower() for error in out["validation"].errors)
+
+    def test_inverted_time_range_is_invalid(self):
+        node = ValidateBacktestRequestNode()
+        start = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        end = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        agent_req = _agent_request(time_range=BacktestTimeRange(mode="absolute", start_time=start, end_time=end))
+        resolved = Mock(
+            ticker_symbol="BTC_USD",
+            start_time=start,
+            end_time=end,
+        )
+        out = node({"backtest_request": agent_req, "resolved_request": resolved})
+        assert out["validation"].valid is False
+        assert any("invalid" in error.lower() for error in out["validation"].errors)
+
     def test_short_window_warns(self):
         node = ValidateBacktestRequestNode()
         agent_request = _agent_request(
@@ -144,6 +185,14 @@ class TestAnalyzeResultNode:
         out = AnalyzeResultNode()({"result": result})
         assert out["quality"].sufficient_evidence is False
         assert any("No orders" in note for note in out["quality"].notes)
+
+    def test_single_observation_marks_insufficient_evidence(self):
+        result = Mock()
+        result.fills = [Mock()]
+        result.market_series = [Mock()]
+        out = AnalyzeResultNode()({"result": result})
+        assert out["quality"].sufficient_evidence is False
+        assert any("Insufficient historical" in note for note in out["quality"].notes)
 
     def test_missing_result(self):
         out = AnalyzeResultNode()({})
@@ -209,6 +258,14 @@ class TestPresentResultNode:
         assert "BTC_USD" in content
         assert "Fills: 5" in content
         assert "few fills" in content
+
+    def test_presents_inconclusive_result_warning_when_insufficient_evidence(self):
+        out = PresentResultNode()({
+            "summary": _summary(),
+            "quality": BacktestQuality(sufficient_evidence=False, notes=["few fills"]),
+        })
+        content = out["presentation"].blocks[0].content
+        assert "Inconclusive Result" in content
 
     def test_presents_summary_with_time_range(self):
         summary = BacktestSummary(
@@ -279,6 +336,27 @@ class TestBacktestGraph:
 
         assert state["validation"].valid is False
         assert "asset" in state["presentation"].blocks[0].content.lower()
+        service.run.assert_not_called()
+
+    def test_vague_historical_backtest_query_clarifies_missing_asset_and_time(self):
+        service = Mock()
+        tool = Mock(name="run_backtest", backtest_service=service)
+        llm = FakeLlmAdapter(
+            [
+                BacktestAgentRequest(
+                    requires_clarification=True,
+                    clarification_question="Which asset and time window would you like to backtest?",
+                )
+            ],
+            tools=[tool],
+        )
+        graph = BacktestGraph(llm).build()
+        state = graph.invoke({
+            "user_prompt": "Would this strategy have been profitable on historical data?",
+            "request": AgentRoute(intent=AgentIntent.BACKTEST),
+        })
+        assert state["validation"].valid is False
+        assert "Which asset and time window" in state["presentation"].blocks[0].content
         service.run.assert_not_called()
 
 

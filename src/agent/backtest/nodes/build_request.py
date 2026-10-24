@@ -19,6 +19,8 @@ class BuildBacktestRequestNode:
         ticker = agent_request.ticker_symbol or (
             route.goal.target_asset if route and route.goal else None
         )
+        if not ticker and route and route.references and route.references.asset:
+            ticker = route.references.asset
         if not ticker:
             return {"resolved_request": None}
 
@@ -52,7 +54,8 @@ class BuildBacktestRequestNode:
     def _resolve_time(time_range: BacktestTimeRange) -> tuple[datetime | None, datetime | None]:
         if time_range.mode == "absolute":
             return time_range.start_time, time_range.end_time
+        if not time_range.duration_seconds or time_range.duration_seconds <= 0:
+            return None, None
         end = datetime.now(timezone.utc)
-        duration = time_range.duration_seconds or 0
-        start = end - timedelta(seconds=duration)
+        start = end - timedelta(seconds=time_range.duration_seconds)
         return start, end

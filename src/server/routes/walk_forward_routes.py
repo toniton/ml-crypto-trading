@@ -45,4 +45,15 @@ def create_walk_forward_router() -> APIRouter:
             )
         return run
 
+    @router.post("/{run_id}/cancel")
+    async def cancel_walk_forward_run_endpoint(run_id: str, req: Request):
+        srv: WalkForwardApplicationService = req.app.state.walk_forward_service
+        success = await asyncio.to_thread(srv.cancel_run, run_id)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Walk-forward run '{run_id}' not found or already finished.",
+            )
+        return {"run_id": run_id, "cancelled": True}
+
     return router

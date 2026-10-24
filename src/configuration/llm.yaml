@@ -7,6 +7,7 @@ models:
     model_name: "qwen/qwen3.8-27b"
     temperature: 0.1
     timeout: 120
+    max_tokens: 800
     capabilities: ["tools", "reasoning"]
     requires_api_key: true
     default: true
@@ -20,7 +21,6 @@ models:
     capabilities: [ "tools", "reasoning" ]
     requires_api_key: true
     default: true
-
   - id: "gemini-3-flash"
     name: "Google Gemini 3 Flash"
     provider: "gemini"
@@ -135,3 +135,31 @@ tools:
       enabled: true
       category: "portfolio"
       description: "Comprehensive portfolio risk and exposure summary."
+    - name: "trading_health"
+      enabled: true
+      category: "session"
+      description: "Inspects global, exchange, and per-asset operational health and degraded states."
+    - name: "inspect_trading_decision"
+      enabled: true
+      category: "analysis"
+      description: "Inspects persisted trading decisions, strategy rejections, and risk guard blocks."
+    - name: "inspect_schedule_tick_trace"
+      enabled: true
+      category: "analysis"
+      description: "Traces schedule ticks end-to-end across market data, consensus, sizing, and orders."
+    - name: "inspect_experiment"
+      enabled: true
+      category: "backtest"
+      description: "Inspects research experiment provenance, candidate runs, and justification."
+    - name: "inspect_retention_governance"
+      enabled: true
+      category: "session"
+      description: "Inspects data retention policies, audit runs, and protected governance records."
+    - name: "walk_forward"
+      enabled: true
+      category: "backtest"
+      description: "Evaluates out-of-sample walk-forward robustness across candidate configurations."
+    - name: "strategy_optimizer"
+      enabled: true
+      category: "strategy"
+      description: "Computes attribution-driven strategy weight optimization proposals."

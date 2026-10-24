@@ -62,6 +62,10 @@ from src.server.routes.llm_routes import create_llm_router
 from src.server.routes.reconciliation_routes import create_reconciliation_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
+from src.server.routes.evidence_proposal_routes import create_evidence_proposal_router
+from src.server.services.evidence_proposal_application_service import (
+    EvidenceProposalApplicationService,
+)
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
@@ -144,6 +148,20 @@ class ChatApp:
     ) -> FastAPI:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
+        dataset_service = DatasetService()
+
+        backtest_service = BacktestApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            market_data_store=trading_proxy.get_market_data_store(),
+            dataset_service=dataset_service,
+        )
+        walk_forward_service = WalkForwardApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            market_data_store=trading_proxy.get_market_data_store(),
+            dataset_service=dataset_service,
+        )
 
         metric_service = MetricService(db_manager)
         request_collector = RequestMetricsCollector(metric_service)
@@ -156,6 +174,8 @@ class ChatApp:
                 await runtime_collector.start_monitoring()
             except RuntimeError:
                 pass
+            await asyncio.to_thread(walk_forward_service.recover_on_startup)
+            await asyncio.to_thread(backtest_service.recover_on_startup)
             yield
             runtime_collector.stop_monitoring()
             timeline_projector.close()
@@ -361,23 +381,8 @@ class ChatApp:
                 "commit_attribution": perf.commit_attribution,
             }
 
-        dataset_service = DatasetService()
         app.state.dataset_service = dataset_service
-
-        backtest_service = BacktestApplicationService(
-            db_manager=db_manager,
-            vcs_service=vcs,
-            market_data_store=trading_proxy.get_market_data_store(),
-            dataset_service=dataset_service,
-        )
         app.state.backtest_service = backtest_service
-
-        walk_forward_service = WalkForwardApplicationService(
-            db_manager=db_manager,
-            vcs_service=vcs,
-            market_data_store=trading_proxy.get_market_data_store(),
-            dataset_service=dataset_service,
-        )
         app.state.walk_forward_service = walk_forward_service
         app.include_router(create_walk_forward_router())
 
@@ -393,6 +398,14 @@ class ChatApp:
         )
         app.state.experiment_service = experiment_service
         app.include_router(create_experiment_router())
+
+        evidence_proposal_service = EvidenceProposalApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            proposal_store=app.state.proposal_store,
+        )
+        app.state.evidence_proposal_service = evidence_proposal_service
+        app.include_router(create_evidence_proposal_router())
 
         @app.get("/api/v1/backtests/branches")
         async def list_backtest_branches_endpoint():
@@ -647,6 +660,16 @@ class ChatApp:
                 "metrics": metrics,
             }
 
+        @app.post("/api/v1/backtests/{session_id}/cancel")
+        async def cancel_backtest_endpoint(session_id: str, req: Request):
+            srv: BacktestApplicationService = req.app.state.backtest_service
+            success = await asyncio.to_thread(srv.cancel_session, session_id)
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Backtest session '{session_id}' not found or already finished.",
+                )
+            return {"session_id": session_id, "cancelled": True}
 
         @app.post("/api/v1/chat")
         async def chat_endpoint(chat_req: ChatRequest, req: Request) -> StreamingResponse:

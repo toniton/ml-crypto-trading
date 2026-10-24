@@ -13,7 +13,8 @@ from api.interfaces.backtest_request import (
 )
 from src.backtest.domain.metrics import BacktestMetrics
 from src.backtest.domain.result import BacktestResult
-from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
+from src.backtest.domain.session import BacktestSession
+from src.core.interfaces.execution_status import ExecutionStatus
 from src.database.dao.backtest_result_dao import BacktestResultDao
 from src.database.dao.backtest_session_dao import BacktestSessionDao
 from src.trading.analytics.trade_attribution_service import (
@@ -54,6 +55,12 @@ class BacktestDBVSEntityMapper:
             ticker_symbol=session.ticker_symbol,
             status=status_str,
             config=config_dict,
+            worker_id=session.worker_id,
+            started_at=session.started_at,
+            completed_at=session.completed_at,
+            heartbeat_at=session.heartbeat_at,
+            lease_expires_at=session.lease_expires_at,
+            error_message=session.error,
             created_at=session.created_at,
             updated_at=session.completed_at or session.started_at or session.created_at,
         )
@@ -99,9 +106,9 @@ class BacktestDBVSEntityMapper:
             execution=execution,
         )
         try:
-            status = BacktestSessionStatus(dao.status)
+            status = ExecutionStatus(dao.status)
         except ValueError:
-            status = BacktestSessionStatus.COMPLETED
+            status = ExecutionStatus.COMPLETED
 
         return BacktestSession(
             id=dao.id,
@@ -109,8 +116,12 @@ class BacktestDBVSEntityMapper:
             request=request,
             status=status,
             created_at=dao.created_at,
-            started_at=start_time,
-            completed_at=end_time or dao.updated_at,
+            started_at=dao.started_at or start_time,
+            completed_at=dao.completed_at or end_time or dao.updated_at,
+            worker_id=dao.worker_id,
+            heartbeat_at=dao.heartbeat_at,
+            lease_expires_at=dao.lease_expires_at,
+            error=dao.error_message,
         )
 
     @staticmethod

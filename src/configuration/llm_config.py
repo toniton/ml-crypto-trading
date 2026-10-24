@@ -43,6 +43,7 @@ class LlmModelConfig(BaseModel):
     )
     temperature: float = 0.0
     timeout: Optional[float] = Field(default=None, description="Request timeout in seconds.")
+    max_tokens: Optional[int] = Field(default=None, description="Maximum output tokens for generation.")
     keep_alive: Optional[str] = Field(
         default=None,
         description="Keep-alive window for local Ollama models.",
@@ -110,6 +111,8 @@ class LlmConfig(BaseSettings):
         for model in self.models:
             if identifier in (model.id, model.name):
                 return model
+        if not self.models and identifier == "default":
+            return self.default_model
         raise ValueError(f"Model '{identifier}' not registered in the LLM configuration.")
 
     def is_tool_enabled(self, tool_name: str) -> bool:

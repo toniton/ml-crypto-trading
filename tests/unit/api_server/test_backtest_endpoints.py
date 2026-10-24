@@ -13,7 +13,8 @@ from api.interfaces.backtest_request import (
 )
 from src.agent import AgentGateway
 from src.backtest.domain.result import BacktestResult
-from src.backtest.domain.session import BacktestSession, BacktestSessionStatus
+from src.backtest.domain.session import BacktestSession
+from src.core.interfaces.execution_status import ExecutionStatus
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.events.message_event_bus import MessageEventBus
@@ -67,7 +68,7 @@ class TestBacktestEndpoints(unittest.TestCase):
             id="bt_101",
             ticker_symbol="BTC_USD",
             request=request,
-            status=BacktestSessionStatus.COMPLETED,
+            status=ExecutionStatus.COMPLETED,
             created_at=datetime(2026, 9, 10, 0, 0, 0, tzinfo=timezone.utc),
         )
         result = BacktestResult(
@@ -105,7 +106,7 @@ class TestBacktestEndpoints(unittest.TestCase):
             id="bt_101",
             ticker_symbol="BTC_USD",
             request=request,
-            status=BacktestSessionStatus.COMPLETED,
+            status=ExecutionStatus.COMPLETED,
             created_at=datetime(2026, 9, 10, 0, 0, 0, tzinfo=timezone.utc),
         )
         result = BacktestResult(
@@ -143,7 +144,11 @@ class TestBacktestEndpoints(unittest.TestCase):
         db_manager, _ = self._setup_db_manager()
         client = TestClient(build_app(db_manager))
 
-        csv_content = b"timestamp,open,high,low,close,volume\n2026-01-01T00:00:00,100,105,95,102,1000\n2026-01-01T01:00:00,102,108,101,107,1500\n"
+        csv_content = (
+            b"timestamp,open,high,low,close,volume\n"
+            b"2026-01-01T00:00:00,100,105,95,102,1000\n"
+            b"2026-01-01T01:00:00,102,108,101,107,1500\n"
+        )
         response = client.post(
             "/api/v1/backtests/datasets",
             files={"file": ("test.csv", csv_content, "text/csv")},
@@ -166,7 +171,8 @@ class TestBacktestEndpoints(unittest.TestCase):
         csv_content = (
             b"timeOpen;timeClose;timeHigh;timeLow;name;open;high;low;close;volume;marketCap;timestamp\n"
             b"2026-01-01T00:00:00;2026-01-01T00:01:00;105;95;Bitcoin;100;105;95;102;1000;2000000;2026-01-01T00:00:00Z\n"
-            b"2026-01-01T00:01:00;2026-01-01T00:02:00;108;101;Bitcoin;102;108;101;107;1500;2000000;2026-01-01T00:01:00Z\n"
+            b"2026-01-01T00:01:00;2026-01-01T00:02:00;108;101;Bitcoin;102;108;101;107;1500;2000000;"
+            b"2026-01-01T01:00:00Z\n"
         )
         response = client.post(
             "/api/v1/backtests/datasets",
@@ -178,9 +184,19 @@ class TestBacktestEndpoints(unittest.TestCase):
         self.assertEqual(data["row_count"], 2)
         self.assertTrue(bool(data["sha256"]))
 
+    def test_cancel_backtest_endpoint(self):
+        db_manager, _ = self._setup_db_manager()
+        app = build_app(db_manager)
+        mock_bt_service = MagicMock()
+        mock_bt_service.cancel_session.return_value = True
+        app.state.backtest_service = mock_bt_service
+        client = TestClient(app)
+
+        res = client.post("/api/v1/backtests/bt_123/cancel")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.json(), {"session_id": "bt_123", "cancelled": True})
+        mock_bt_service.cancel_session.assert_called_once_with("bt_123")
 
 
 if __name__ == "__main__":
     unittest.main()
-
-

@@ -51,6 +51,16 @@ class TestModelFactory(unittest.TestCase):
         model = ModelFactory.create_model(config)
         self.assertIsInstance(model, LangChainGroqAdapter)
 
+    @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")
+    def test_create_groq_model_passes_max_tokens(self, _mock_key):
+        config = _config(LlmModelConfig(
+            name="default", provider=LlmProvider.GROQ, model_name="qwen/qwen3.8-27b", max_tokens=800,
+        ))
+        with patch.object(LangChainGroqAdapter, "__init__", return_value=None) as mock_init:
+            ModelFactory.create_model(config)
+        mock_init.assert_called_once()
+        _, kwargs = mock_init.call_args
+        self.assertEqual(kwargs["max_tokens"], 800)
 
     @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")
     def test_selects_model_by_name(self, _mock_key):

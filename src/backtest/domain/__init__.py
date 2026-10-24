@@ -11,9 +11,9 @@ from src.backtest.domain.result import (
 )
 from src.backtest.domain.session import (
     BacktestSession,
-    BacktestSessionStatus,
     generate_session_id,
 )
+from src.core.interfaces.execution_status import ExecutionStatus
 
 __all__ = [
     "BacktestDataSourceRequest",
@@ -24,6 +24,6 @@ __all__ = [
     "BacktestResult",
     "PortfolioSnapshot",
     "BacktestSession",
-    "BacktestSessionStatus",
+    "ExecutionStatus",
     "generate_session_id",
 ]
