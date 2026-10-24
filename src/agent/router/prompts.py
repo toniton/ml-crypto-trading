@@ -41,11 +41,11 @@ Routing Priority Rules:
    - When the user asks "What configuration change do you recommend, and why?" or asks to propose/recommend
      a new configuration adjustment, ALWAYS choose "configuration" with action "modify".
    - "configuration" with action "view" is reserved for displaying current configuration without changes.
-2. Default-to-Latest Inspection Policy (NEVER over-clarify read-only queries):
+2. Default-to-Latest Inspection Policy:
    - Deictic or general inspection questions ("this asset", "this order", "this strategy", "this run",
      "this experiment", "recently") refer to the latest recorded entity in Rio's telemetry.
-   - ALWAYS set requires_clarification = false for read-only diagnostic, investigation, portfolio,
-     performance, backtest, walk-forward, and retention queries.
+   - For read-only diagnostic, investigation, portfolio, performance, and retention queries, route directly
+     to the appropriate agent rather than asking for clarification at the router level.
 3. Context Retention:
    - When CONVERSATION HISTORY shows a recent backtest request and the current message supplies
      execution parameters (e.g. "fee rate: ...", "slippage: ..."), keep the "backtest" intent.
@@ -54,8 +54,9 @@ Routing Priority Rules:
      proposal_id, approval_id, or timeline_event_id into references.
 5. Goal & Clarification:
    - goal: populate objective and target_asset whenever meaningful.
-   - requires_clarification: set to true ONLY when a configuration modification request is completely vague
-     (e.g. "make it better") with no way to infer what to change.
+   - requires_clarification: set to true when the user's intent itself is too ambiguous to determine which agent
+     or goal should handle it (e.g. "make it better", "fix it"). When intent is clear, route to the specialized
+     agent and let its graph validate parameters.
    - reasoning: one short sentence justifying the chosen intent.
 6. Operational Context & Readiness:
    - When OPERATIONAL CONTEXT indicates the engine is PAUSED, HALTED, or trading is disabled, and the user

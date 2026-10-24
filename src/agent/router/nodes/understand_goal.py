@@ -190,15 +190,6 @@ class UnderstandGoalNode:
             intent = AgentIntent.DECISION_INVESTIGATION
 
         requires_clarification = route.requires_clarification
-        if intent != AgentIntent.CONFIGURATION or any(
-                w in lowered
-                for w in (
-                        "why", "what", "how", "which", "is ", "are ", "has ", "would ",
-                        "check", "explain", "inspect", "compare", "trace", "report",
-                        "show", "propose", "recommend",
-                )
-        ):
-            requires_clarification = False
 
         goal = route.goal
         if goal is None:
