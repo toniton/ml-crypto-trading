@@ -35,6 +35,8 @@ _EXPLANATION_TRIGGERS = (
     "guard prevent a trade",
     "what changed between the current configuration",
     "why did this experiment run",
+    "trigger provenance",
+    "what event triggered",
     "ord-501",
     "dec-501",
     "dec-601",
@@ -109,7 +111,7 @@ class UnderstandGoalNode:
                 )
         ) or (
                 merged_refs.experiment_id is not None
-                and any(w in lowered for w in ("proposal", "propose", "recommend", "evidence"))
+                and any(w in lowered for w in ("proposal", "propose"))
         ):
             intent = AgentIntent.EVIDENCE_PROPOSAL
         elif any(

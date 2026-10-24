@@ -997,6 +997,7 @@ def build_seeded_environment(tmp_db_path: str | None = None) -> SeededBenchmarkE
     mock_uow = MagicMock()
     mock_order_repo = MagicMock()
     mock_order_repo.get_completed_by_ticker_and_executed_range.return_value = seeded_orders
+    mock_order_repo.get_completed_by_executed_range.return_value = seeded_orders
     mock_order_repo.get_all.return_value = seeded_orders
     mock_uow.get_repository.return_value = mock_order_repo
     mock_uow.__enter__.return_value = mock_uow
