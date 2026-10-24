@@ -91,12 +91,28 @@ class UnderstandGoalNode:
             proposal_id=current_refs.proposal_id or extracted_refs.proposal_id,
             approval_id=current_refs.approval_id or extracted_refs.approval_id,
             timeline_event_id=current_refs.timeline_event_id or extracted_refs.timeline_event_id,
+            experiment_id=current_refs.experiment_id or extracted_refs.experiment_id,
+            candidate_id=current_refs.candidate_id or extracted_refs.candidate_id,
         )
 
         intent = route.intent
         action = route.action
 
         if any(
+                phrase in lowered
+                for phrase in (
+                        "evidence-based proposal",
+                        "evidence proposal",
+                        "generate an evidence-based proposal",
+                        "proposal from experiment",
+                        "evaluate candidate against baseline",
+                )
+        ) or (
+                merged_refs.experiment_id is not None
+                and any(w in lowered for w in ("proposal", "propose", "recommend", "evidence"))
+        ):
+            intent = AgentIntent.EVIDENCE_PROPOSAL
+        elif any(
                 phrase in lowered
                 for phrase in (
                         "what configuration change do you recommend",

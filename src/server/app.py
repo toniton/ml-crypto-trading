@@ -62,6 +62,10 @@ from src.server.routes.llm_routes import create_llm_router
 from src.server.routes.reconciliation_routes import create_reconciliation_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
+from src.server.routes.evidence_proposal_routes import create_evidence_proposal_router
+from src.server.services.evidence_proposal_application_service import (
+    EvidenceProposalApplicationService,
+)
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
@@ -394,6 +398,14 @@ class ChatApp:
         )
         app.state.experiment_service = experiment_service
         app.include_router(create_experiment_router())
+
+        evidence_proposal_service = EvidenceProposalApplicationService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            proposal_store=app.state.proposal_store,
+        )
+        app.state.evidence_proposal_service = evidence_proposal_service
+        app.include_router(create_evidence_proposal_router())
 
         @app.get("/api/v1/backtests/branches")
         async def list_backtest_branches_endpoint():

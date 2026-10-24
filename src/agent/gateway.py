@@ -16,6 +16,9 @@ from src.agent.configuration.models import (
     ValidationResult,
 )
 from src.agent.decision_investigation.graph import DecisionInvestigationGraph
+from src.agent.decision_investigation.models import DecisionInvestigationResult
+from src.agent.evidence_proposal.graph import EvidenceProposalGraph
+from src.agent.evidence_proposal.models import EvidenceProposalResult
 from src.agent.portfolio_insights.graph import PortfolioInsightsGraph
 from src.agent.performance_analysis.graph import PerformanceAnalysisGraph
 from src.agent.router.graph import RouterGraph
@@ -24,7 +27,6 @@ from src.agent.runtime.agent import AgentDefinition
 from src.agent.runtime.registry import AgentRegistry
 from src.agent.runtime_debug.graph import RuntimeDebugGraph
 from src.agent.runtime_debug.tools import RuntimeDebugToolbox
-from src.agent.decision_investigation.models import DecisionInvestigationResult
 from src.agent.events import AIEvent
 from src.llm.math_normalizer import DelimiterStream
 from src.server.timeline_projector import TimelineProjector
@@ -32,7 +34,13 @@ from src.vcs.application.service import VCSService
 
 from src.trading.health.health_monitor import HealthMonitor
 
-AgentResult = Union[ConfigurationResult, DecisionInvestigationResult, ClarificationResult, GeneralResult]
+AgentResult = Union[
+    ConfigurationResult,
+    DecisionInvestigationResult,
+    EvidenceProposalResult,
+    ClarificationResult,
+    GeneralResult,
+]
 
 
 class AgentGateway:
@@ -93,6 +101,12 @@ class AgentGateway:
                 goal=route.goal,
                 evidence=state.get("evidence"),
                 explanation=state.get("explanation"),
+                presentation=state["presentation"],
+            )
+        if route.intent == AgentIntent.EVIDENCE_PROPOSAL:
+            return EvidenceProposalResult(
+                goal=route.goal,
+                evidence_proposal=state.get("evidence_proposal"),
                 presentation=state["presentation"],
             )
 
@@ -318,6 +332,22 @@ class AgentGateway:
                     {"runtime_errors.read", "trading_config.read", "orders.read", "vcs.read", "exchange_metadata.read"}
                 ),
             ),
+            AgentDefinition(
+                name="evidence_proposal",
+                description=(
+                    "Generates evidence-based strategy proposals backed by deterministic backtest, "
+                    "walk-forward, sample size, uncertainty, and risk evaluations"
+                ),
+                graph=EvidenceProposalGraph(
+                    llm=llm,
+                    db_manager=vcs.db_manager,
+                    vcs=vcs,
+                ).build(),
+                presentation_node="present_proposal",
+                capabilities=frozenset(
+                    {"reports.read", "trading_config.read", "vcs.read", "config.propose"}
+                ),
+            ),
         ]
 
         registry = AgentRegistry(definitions)
@@ -333,6 +363,7 @@ class AgentGateway:
                 (AgentIntent.GENERAL, "general"),
                 (AgentIntent.BACKTEST, "backtest"),
                 (AgentIntent.RUNTIME_DEBUG, "runtime_debug"),
+                (AgentIntent.EVIDENCE_PROPOSAL, "evidence_proposal"),
         ):
             registry.register(intent, name)
         return registry

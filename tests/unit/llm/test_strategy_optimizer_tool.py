@@ -8,6 +8,9 @@ from api.interfaces.trade import Trade
 from api.interfaces.trade_action import OrderStatus, TradeAction
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_evidence_proposal_repository import (
+    PostgresEvidenceProposalRepository,
+)
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.llm.tools.strategy_optimizer_tool import StrategyOptimizerTool
@@ -157,12 +160,26 @@ class TestStrategyOptimizerTool(unittest.TestCase):
             orders.extend([buy, sell])
 
         db = self._setup_mock_db(orders)
+        proposal_repo = MagicMock(spec=PostgresEvidenceProposalRepository)
+        uow = db.get_unit_of_work.return_value
+        orig_side_effect = uow.get_repository.side_effect
+
+        def get_repo_with_proposals(repo_cls):
+            if repo_cls is PostgresEvidenceProposalRepository:
+                return proposal_repo
+            return orig_side_effect(repo_cls)
+
+        uow.get_repository.side_effect = get_repo_with_proposals
         config = self._setup_mock_config(commit_hash="commit-hash-vcs-xyz")
         tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
         result = tool._run(action="proposal", ticker_symbol="BTC_USD")
         self.assertIn("Optimization Proposal Generated for BTC_USD", result)
         self.assertIn("Base Commit", result)
         self.assertIn("commit-hash-vcs-xyz", result)
+        self.assertIn("Evidence Status", result)
+        self.assertIn("Risks & Limitations", result)
+        self.assertIn("Validation Plan", result)
+        proposal_repo.save.assert_called_once()
 
     def test_fetch_db_trades_pads_history_and_filters_completed(self):
         now = datetime.now(timezone.utc)
