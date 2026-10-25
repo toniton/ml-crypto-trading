@@ -173,13 +173,14 @@ class TestStrategyOptimizerTool(unittest.TestCase):
         config = self._setup_mock_config(commit_hash="commit-hash-vcs-xyz")
         tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
         result = tool._run(action="proposal", ticker_symbol="BTC_USD")
-        self.assertIn("Optimization Proposal Generated for BTC_USD", result)
+        self.assertIn("Preliminary Optimization Diagnostic for BTC_USD", result)
+        self.assertIn("Preliminary Diagnostic Only", result)
         self.assertIn("Base Commit", result)
         self.assertIn("commit-hash-vcs-xyz", result)
         self.assertIn("Evidence Status", result)
         self.assertIn("Risks & Limitations", result)
         self.assertIn("Validation Plan", result)
-        proposal_repo.save.assert_called_once()
+        proposal_repo.save.assert_not_called()
 
     def test_fetch_db_trades_pads_history_and_filters_completed(self):
         now = datetime.now(timezone.utc)

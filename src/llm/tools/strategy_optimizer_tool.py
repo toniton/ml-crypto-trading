@@ -11,9 +11,6 @@ from api.interfaces.order import Order
 from api.interfaces.trade import Trade
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.database_manager import DatabaseManager
-from src.database.repositories.providers.postgres_evidence_proposal_repository import (
-    PostgresEvidenceProposalRepository,
-)
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -49,7 +46,7 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
     name: str = "strategy_optimizer"
     description: str = (
         "Empirically optimizes strategy weights, discovers profitable trading windows, "
-        "detects redundant co-voting strategies, and generates configuration proposals."
+        "detects redundant co-voting strategies, and generates preliminary candidate optimization diagnostics."
     )
     args_schema: Type[BaseModel] = StrategyOptimizerInput
 
@@ -165,16 +162,6 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             )
         return "\n".join(lines)
 
-    def _persist_evidence_proposal(self, proposal: EvidenceBasedProposal) -> None:
-        try:
-            with self.database_manager.get_unit_of_work() as uow:
-                repo = uow.get_repository(PostgresEvidenceProposalRepository)
-                if isinstance(repo, PostgresEvidenceProposalRepository):
-                    repo.save(proposal)
-                    uow.commit()
-        except Exception as exc:  # pylint: disable=broad-exception-caught
-            self.app_logger.warning(f"Could not persist optimizer evidence proposal: {exc}")
-
     @staticmethod
     def _format_proposal_changes(changes: list[ConfigChange]) -> str:
         if not changes:
@@ -201,10 +188,14 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
         commit_line = f"**Base Commit**: `{prop.base_commit_hash}`\n\n" if prop.base_commit_hash else ""
 
         return (
-            f"### 📋 Optimization Proposal Generated for {sym}\n\n"
-            f"**Proposal ID**: `{evidence_prop.id}` | "
-            f"**Evidence Status**: `{evidence_prop.evidence_status.value}` | "
-            f"**Recommendation**: `{evidence_prop.recommendation.value}`\n\n"
+            f"### 🧪 Preliminary Optimization Diagnostic for {sym}\n\n"
+            "> ⚠️ **Preliminary Diagnostic Only**: This candidate was generated via historical trade "
+            "attribution rescaling. It has not yet been validated through full consensus, order "
+            "execution, sizing, and portfolio simulation. To claim validated improvement and seek "
+            "configuration approval, run a comparative experiment or backtest.\n\n"
+            f"**Candidate ID**: `{evidence_prop.id}` | "
+            f"**Status**: `PRELIMINARY_DIAGNOSTIC (Requires Validation)` | "
+            f"**Evidence Status**: `{evidence_prop.evidence_status.value}`\n\n"
             f"**Summary**: {prop.summary}\n\n"
             f"{commit_line}"
             f"**Expected Effect**: {prop.expected_effect}\n\n"
@@ -232,7 +223,6 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             timezone_str=target_tz,
             base_commit_hash=base_commit_hash,
         )
-        self._persist_evidence_proposal(evidence_prop)
         return self._format_proposal_output(sym, prop, evidence_prop)
 
     @staticmethod

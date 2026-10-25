@@ -52,17 +52,23 @@ class OptimizerProposalBuilder:
         sample_size = cls._build_sample_size(trades, baseline_eval)
         uncertainty = cls._build_uncertainty(calibrations, baseline_eval, sample_size)
         risk_changes = cls._build_risk_changes(baseline_eval)
-        status, recommendation = cls._determine_verdict(
-            config_proposal.changes, baseline_eval, sample_size, risk_changes
-        )
+        status, recommendation = cls._determine_verdict()
         limitations = cls._build_limitations(
             calibrations, baseline_eval, sample_size, risk_changes
         )
-        validation_plan = cls._build_validation_plan(status, recommendation, risk_changes)
+        validation_plan = cls._build_validation_plan(risk_changes)
+
+        comparability = ep.ComparabilityReport(
+            is_comparable=False,
+            discrepancies=[
+                "Preliminary diagnostic only: Complete order execution, consensus, "
+                "and portfolio constraints not simulated."
+            ],
+        )
 
         evidence_proposal = ep.EvidenceBasedProposal(
-            id=proposal_id or f"ebp_{uuid.uuid4().hex[:12]}",
-            title=f"Calibrate {ticker_symbol} strategy weights and active trading windows",
+            id=proposal_id or f"ebp_diag_{uuid.uuid4().hex[:10]}",
+            title=f"Preliminary Diagnostic: Calibrate {ticker_symbol} strategy weights and trading windows",
             ticker_symbol=ticker_symbol,
             hypothesis=config_proposal.summary,
             proposed_changes_summary=cls._summarize_changes(list(config_proposal.changes)),
@@ -73,7 +79,7 @@ class OptimizerProposalBuilder:
             evaluation_period=cls._extract_period(trades),
             market_data_provenance="historical_trade_attribution",
             execution_assumptions={"diagnostic_mode": "split_sample_attribution_rescaling"},
-            comparability=ep.ComparabilityReport(is_comparable=True),
+            comparability=comparability,
             expected_benefit=benefit,
             sample_size=sample_size,
             uncertainty=uncertainty,
@@ -83,7 +89,7 @@ class OptimizerProposalBuilder:
             recommendation=recommendation,
             validation_plan=validation_plan,
             narrative_summary=config_proposal.expected_effect or config_proposal.summary,
-            triggered_by={"source": "strategy_optimizer"},
+            triggered_by={"source": "strategy_optimizer", "diagnostic_mode": "preliminary"},
         )
         evidence_proposal.narrative_summary = ProposalMarkdownFormatter.format_proposal(
             evidence_proposal
@@ -222,22 +228,12 @@ class OptimizerProposalBuilder:
 
     @staticmethod
     def _determine_verdict(
-            changes: Any,
-            baseline_eval: Optional[BaselineComparisonResult],
-            sample_size: ep.SampleSizeSummary,
-            risk_changes: ep.RiskDeltaSummary,
+            _changes: Any = None,
+            _baseline_eval: Optional[BaselineComparisonResult] = None,
+            _sample_size: Optional[ep.SampleSizeSummary] = None,
+            _risk_changes: Optional[ep.RiskDeltaSummary] = None,
     ) -> tuple[ep.EvidenceStatus, ep.ProposalRecommendation]:
-        if not changes or baseline_eval is None:
-            return ep.EvidenceStatus.INSUFFICIENT, ep.ProposalRecommendation.INSUFFICIENT_EVIDENCE
-        if baseline_eval.pnl_delta < Decimal(0):
-            return ep.EvidenceStatus.WEAK, ep.ProposalRecommendation.REJECT
-        if risk_changes.risk_increased:
-            return ep.EvidenceStatus.INCONCLUSIVE, ep.ProposalRecommendation.REJECT
-        if not baseline_eval.demonstrates_improvement:
-            return ep.EvidenceStatus.INSUFFICIENT, ep.ProposalRecommendation.INSUFFICIENT_EVIDENCE
-        if len(sample_size.regimes_covered) < 2 or sample_size.candidate_trades < 3:
-            return ep.EvidenceStatus.INSUFFICIENT, ep.ProposalRecommendation.INSUFFICIENT_EVIDENCE
-        return ep.EvidenceStatus.WEAK, ep.ProposalRecommendation.ACCEPT_FOR_TESTING
+        return ep.EvidenceStatus.INSUFFICIENT, ep.ProposalRecommendation.INSUFFICIENT_EVIDENCE
 
     @staticmethod
     def _build_limitations(
@@ -247,8 +243,10 @@ class OptimizerProposalBuilder:
             risk_changes: ep.RiskDeltaSummary,
     ) -> list[str]:
         limitations = [
-            "Preliminary diagnostic only: weighted P&L rescaling does not execute full consensus, "
-            "sizing, order, and portfolio constraints.",
+            "Preliminary diagnostic only: weighted trade attribution rescaling does not execute full consensus, "
+            "sizing, order execution, or portfolio constraints.",
+            "Not a validated proposal: Requires comparative multi-fold backtest or walk-forward experiment "
+            "to evaluate true edge.",
         ]
         if len(sample_size.regimes_covered) < 2:
             limitations.append(
@@ -268,24 +266,16 @@ class OptimizerProposalBuilder:
 
     @staticmethod
     def _build_validation_plan(
-            status: ep.EvidenceStatus,
-            recommendation: ep.ProposalRecommendation,
             risk_changes: ep.RiskDeltaSummary,
+            _status: Optional[ep.EvidenceStatus] = None,
+            _recommendation: Optional[ep.ProposalRecommendation] = None,
     ) -> list[str]:
-        if recommendation == ep.ProposalRecommendation.REJECT:
-            return [
-                "Do not promote candidate weights or schedules; out-of-sample diagnostic "
-                "showed degradation or unacceptable drawdown increase."
-            ]
         plan = [
             "Execute a full experiment with baseline and candidate configuration commits through "
             "the backtest and multi-fold walk-forward runner.",
+            "Collect simulated execution metrics across full order lifecycle, slippage, and portfolio limits.",
+            "Evaluate candidate via the authoritative ProposalValidator before seeking configuration approval.",
         ]
-        if status == ep.EvidenceStatus.INSUFFICIENT:
-            plan.append(
-                "Accumulate additional completed trades across multiple independent market windows "
-                "before re-running calibration."
-            )
         if risk_changes.downside_uncertainty_high:
             plan.append("Verify drawdown and exposure limits on multi-fold out-of-sample runs.")
         plan.append("Require explicit human approval before live configuration activation.")

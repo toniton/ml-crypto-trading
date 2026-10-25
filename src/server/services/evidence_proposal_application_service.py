@@ -103,9 +103,13 @@ class EvidenceProposalApplicationService(ApplicationLoggingMixin):
                 f"'{proposal.recommendation.value}'."
             )
 
-        if not proposal.candidate_commit:
+        if (
+                not proposal.candidate_commit
+                or proposal.market_data_provenance == "historical_trade_attribution"
+        ):
             raise ValueError(
-                f"Proposal '{proposal_id}' has no candidate commit to prepare for approval."
+                f"Proposal '{proposal_id}' is a preliminary diagnostic without a validated candidate commit "
+                f"and cannot be prepared for configuration approval. Run a validation experiment first."
             )
 
         changes = []

@@ -728,6 +728,7 @@ def test_optimizer_proposal_builder_builds_typed_evidence_proposal():
         base_commit_hash="commit-123",
     )
     assert evidence_prop.baseline_commit == "commit-123"
-    assert evidence_prop.recommendation == ProposalRecommendation.REJECT
-    assert evidence_prop.evidence_status == EvidenceStatus.WEAK
+    assert evidence_prop.recommendation == ProposalRecommendation.INSUFFICIENT_EVIDENCE
+    assert evidence_prop.evidence_status == EvidenceStatus.INSUFFICIENT
+    assert not evidence_prop.comparability.is_comparable
     assert evidence_prop.risk_changes.max_drawdown_pct_delta is not None

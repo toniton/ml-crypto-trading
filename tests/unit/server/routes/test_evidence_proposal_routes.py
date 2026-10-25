@@ -83,6 +83,33 @@ class TestEvidenceProposalRoutes:  # pylint: disable=attribute-defined-outside-i
         assert res.status_code == 400
         assert "INSUFFICIENT" in res.json()["detail"]
 
+    def test_prepare_approval_rejects_preliminary_diagnostic(self):
+        mock_db = MagicMock()
+        mock_uow = MagicMock()
+        mock_db.get_unit_of_work.return_value.__enter__.return_value = mock_uow
+        mock_repo = MagicMock()
+        mock_uow.get_repository.return_value = mock_repo
+
+        diag_proposal = EvidenceBasedProposal(
+            id="ebp_diag_1",
+            title="Preliminary Diagnostic",
+            ticker_symbol="BTC_USD",
+            hypothesis="Test",
+            baseline_commit="base_1",
+            candidate_commit=None,
+            market_data_provenance="historical_trade_attribution",
+            evidence_status=EvidenceStatus.SUFFICIENT,
+            recommendation=ProposalRecommendation.PROMOTE_TO_APPROVAL,
+        )
+        mock_repo.get_proposal.return_value = diag_proposal
+
+        srv = EvidenceProposalApplicationService(db_manager=mock_db)
+        self.app.state.evidence_proposal_service = srv
+
+        res = self.client.post("/api/v1/proposals/evidence/ebp_diag_1/prepare-approval")
+        assert res.status_code == 400
+        assert "preliminary diagnostic" in res.json()["detail"].lower()
+
     def test_prepare_approval_registers_configuration_proposal_when_sufficient(self):
         mock_db = MagicMock()
         mock_uow = MagicMock()
