@@ -27,3 +27,5 @@ class EvidenceProposalResult(BaseModel):
     presentation: ConfigurationPresentation = Field(
         default_factory=ConfigurationPresentation.empty
     )
+    resolution_status: Optional[str] = None
+    status_message: Optional[str] = None

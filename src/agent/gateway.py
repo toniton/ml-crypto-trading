@@ -108,6 +108,8 @@ class AgentGateway:
                 goal=route.goal,
                 evidence_proposal=state.get("evidence_proposal"),
                 presentation=state["presentation"],
+                resolution_status=state.get("resolution_status"),
+                status_message=state.get("status_message"),
             )
 
         raw_presentation = state["presentation"]

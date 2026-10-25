@@ -22,6 +22,27 @@ class PresentProposalNode:
         self._db_manager = db_manager
 
     def __call__(self, state: EvidenceProposalState) -> dict[str, Any]:
+        resolution_status = state.get("resolution_status")
+        status_message = state.get("status_message")
+
+        if resolution_status == "NEEDS_CLARIFICATION":
+            msg = status_message or "Please specify the target asset and experiment ID or candidate commit to evaluate."
+            return {
+                "presentation": ConfigurationPresentation(
+                    blocks=[MarkdownBlock.from_text(f"### ❓ Clarification Needed\n\n{msg}")]
+                ),
+                "evidence_proposal": None,
+            }
+
+        if resolution_status == "EVIDENCE_UNAVAILABLE":
+            msg = status_message or "Requested evidence was unavailable."
+            return {
+                "presentation": ConfigurationPresentation(
+                    blocks=[MarkdownBlock.from_text(f"### ⚠️ Evidence Unavailable\n\n{msg}")]
+                ),
+                "evidence_proposal": None,
+            }
+
         proposal = state.get("evidence_proposal")
         collected = state.get("collected_evidence")
         if proposal is None:

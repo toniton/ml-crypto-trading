@@ -18,6 +18,9 @@ class EvidenceProposalState(TypedDict, total=False):
     ticker_symbol: str
     baseline_commit: str
     candidate_commit: Optional[str]
+    resolution_status: Optional[str]
+    status_message: Optional[str]
+    missing_fields: Optional[list[str]]
     collected_evidence: CollectedEvidence
     evidence_proposal: EvidenceBasedProposal
     presentation: ConfigurationPresentation

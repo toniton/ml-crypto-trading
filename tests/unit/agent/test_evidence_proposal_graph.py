@@ -49,9 +49,10 @@ class TestEvidenceProposalGraph:
 
         state = graph.invoke(
             {
-                "user_prompt": "Generate an evidence-based proposal for BTC_USD",
+                "user_prompt": "Generate an evidence-based proposal for BTC_USD with cand_1",
                 "request": route,
                 "ticker_symbol": "BTC_USD",
+                "candidate_id": "cand_1",
                 "baseline_commit": "1111aaaa",
             }
         )
@@ -63,3 +64,51 @@ class TestEvidenceProposalGraph:
         assert proposal.hypothesis == "Adjusting BTC trading window may reduce low-liquidity exposure."
         assert "Pending out-of-sample validation" in proposal.narrative_summary
         assert len(state["presentation"].blocks) == 1
+
+    def test_resolve_context_missing_asset_prompts_clarification(self):
+        graph = EvidenceProposalGraph(llm=None, db_manager=None, vcs=None).build()
+        route = AgentRoute(intent=AgentIntent.EVIDENCE_PROPOSAL)
+
+        state = graph.invoke(
+            {
+                "user_prompt": "Generate an evidence-based proposal",
+                "request": route,
+            }
+        )
+
+        assert state["resolution_status"] == "NEEDS_CLARIFICATION"
+        assert state.get("evidence_proposal") is None
+        assert "Clarification Needed" in state["presentation"].blocks[0].content
+
+    def test_resolve_context_missing_experiment_prompts_clarification(self):
+        graph = EvidenceProposalGraph(llm=None, db_manager=None, vcs=None).build()
+        route = AgentRoute(intent=AgentIntent.EVIDENCE_PROPOSAL)
+
+        state = graph.invoke(
+            {
+                "user_prompt": "Generate an evidence-based proposal for BTC_USD",
+                "request": route,
+                "ticker_symbol": "BTC_USD",
+            }
+        )
+
+        assert state["resolution_status"] == "NEEDS_CLARIFICATION"
+        assert state.get("evidence_proposal") is None
+        assert "Clarification Needed" in state["presentation"].blocks[0].content
+
+    def test_collect_and_evaluate_missing_db_reports_evidence_unavailable(self):
+        graph = EvidenceProposalGraph(llm=None, db_manager=None, vcs=None).build()
+        route = AgentRoute(intent=AgentIntent.EVIDENCE_PROPOSAL)
+
+        state = graph.invoke(
+            {
+                "user_prompt": "Generate an evidence-based proposal for BTC_USD from exp_123",
+                "request": route,
+                "ticker_symbol": "BTC_USD",
+                "experiment_id": "exp_123",
+            }
+        )
+
+        assert state["resolution_status"] == "EVIDENCE_UNAVAILABLE"
+        assert state.get("evidence_proposal") is None
+        assert "Evidence Unavailable" in state["presentation"].blocks[0].content

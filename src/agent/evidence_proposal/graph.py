@@ -17,6 +17,18 @@ from src.core.interfaces.llm_adapter import LlmAdapter
 from src.vcs.application.service import VCSService
 
 
+def _route_after_context(state: EvidenceProposalState) -> str:
+    if state.get("resolution_status") == "NEEDS_CLARIFICATION":
+        return "present_proposal"
+    return "collect_and_evaluate"
+
+
+def _route_after_collection(state: EvidenceProposalState) -> str:
+    if state.get("resolution_status") == "EVIDENCE_UNAVAILABLE":
+        return "present_proposal"
+    return "synthesize_narrative"
+
+
 class EvidenceProposalGraph:
     def __init__(
             self,
@@ -49,8 +61,22 @@ class EvidenceProposalGraph:
         )
 
         builder.add_edge(START, "resolve_context")
-        builder.add_edge("resolve_context", "collect_and_evaluate")
-        builder.add_edge("collect_and_evaluate", "synthesize_narrative")
+        builder.add_conditional_edges(
+            "resolve_context",
+            _route_after_context,
+            {
+                "present_proposal": "present_proposal",
+                "collect_and_evaluate": "collect_and_evaluate",
+            },
+        )
+        builder.add_conditional_edges(
+            "collect_and_evaluate",
+            _route_after_collection,
+            {
+                "present_proposal": "present_proposal",
+                "synthesize_narrative": "synthesize_narrative",
+            },
+        )
         builder.add_edge("synthesize_narrative", "present_proposal")
         builder.add_edge("present_proposal", END)
 
