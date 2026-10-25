@@ -18,6 +18,8 @@ class CollectedEvidence(BaseModel):
     experiment_id: Optional[str] = None
     experiment_name: Optional[str] = None
     total_candidates_tested: int = 1
+    candidate_search_history: list[dict[str, Any]] = Field(default_factory=list)
+    holdout_validated: bool = False
     dataset_id: Optional[str] = None
     baseline_backtest_id: Optional[str] = None
     baseline_walk_forward_id: Optional[str] = None

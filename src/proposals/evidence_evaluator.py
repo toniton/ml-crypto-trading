@@ -4,6 +4,7 @@ import math
 from typing import Any, Optional
 
 from api.interfaces.evidence_proposal import (
+    CandidateSearchSummary,
     ComparabilityReport,
     ConfidenceInterval,
     ExpectedBenefitSummary,
@@ -11,6 +12,7 @@ from api.interfaces.evidence_proposal import (
     RiskDeltaSummary,
     SampleSizeSummary,
     UncertaintyAssessment,
+    VerificationStatus,
 )
 from src.core.interfaces.execution_status import ExecutionStatus
 from src.proposals.models import CollectedEvidence
@@ -31,13 +33,7 @@ class EvidenceEvaluator:
         report = ComparabilityReport()
         cls._check_session_comparability(evidence, report)
         cls._check_walk_forward_comparability(evidence, report)
-        report.is_comparable = (
-                report.same_ticker
-                and report.same_period
-                and report.same_dataset
-                and report.same_execution_assumptions
-                and report.same_initial_balance
-        )
+        cls._finalize_comparability_status(evidence, report)
         return report
 
     @staticmethod
@@ -50,38 +46,56 @@ class EvidenceEvaluator:
         if not b_sess or not c_sess:
             return
 
-        if b_sess.ticker_symbol != c_sess.ticker_symbol:
+        if b_sess.ticker_symbol == c_sess.ticker_symbol:
+            report.same_ticker = True
+            report.verified_checks.append("same_ticker")
+        else:
             report.same_ticker = False
             report.discrepancies.append(
                 f"Ticker mismatch: baseline={b_sess.ticker_symbol}, candidate={c_sess.ticker_symbol}"
             )
+
         if (
-                b_sess.request.start_time != c_sess.request.start_time
-                or b_sess.request.end_time != c_sess.request.end_time
+                b_sess.request.start_time == c_sess.request.start_time
+                and b_sess.request.end_time == c_sess.request.end_time
         ):
+            report.same_period = True
+            report.verified_checks.append("same_period")
+        else:
             report.same_period = False
             report.discrepancies.append(
                 "Evaluation period start_time or end_time differs between baseline and candidate."
             )
+
         if (
-                b_sess.request.data_source.source_type != c_sess.request.data_source.source_type
-                or b_sess.request.data_source.path != c_sess.request.data_source.path
+                b_sess.request.data_source.source_type == c_sess.request.data_source.source_type
+                and b_sess.request.data_source.path == c_sess.request.data_source.path
         ):
+            report.same_dataset = True
+            report.verified_checks.append("same_dataset")
+        else:
             report.same_dataset = False
             report.discrepancies.append(
                 "Market data source or dataset path differs between baseline and candidate."
             )
-        if b_sess.request.initial_balance != c_sess.request.initial_balance:
+
+        if b_sess.request.initial_balance == c_sess.request.initial_balance:
+            report.same_initial_balance = True
+            report.verified_checks.append("same_initial_balance")
+        else:
             report.same_initial_balance = False
             report.discrepancies.append("Initial balance differs between baseline and candidate.")
 
         b_exec = b_sess.request.execution
         c_exec = c_sess.request.execution
         if (
-            b_exec.fee_rate != c_exec.fee_rate
-            or b_exec.slippage_ticks != c_exec.slippage_ticks
-            or b_exec.latency_ms != c_exec.latency_ms
+                b_exec.fee_rate == c_exec.fee_rate
+                and b_exec.slippage_ticks == c_exec.slippage_ticks
+                and b_exec.latency_ms == c_exec.latency_ms
         ):
+            report.same_execution_assumptions = True
+            report.verified_checks.append("same_execution_assumptions")
+        else:
             report.same_execution_assumptions = False
             report.discrepancies.append(
                 "Execution cost assumptions (fees, slippage, or latency) differ."
@@ -98,23 +112,100 @@ class EvidenceEvaluator:
             return
         b_sum = b_wf.get("summary") or {}
         c_sum = c_wf.get("summary") or {}
-        if b_wf.get("ticker_symbol") != c_wf.get("ticker_symbol"):
+
+        if report.same_ticker is None:
+            if b_wf.get("ticker_symbol") and b_wf.get("ticker_symbol") == c_wf.get("ticker_symbol"):
+                report.same_ticker = True
+                report.verified_checks.append("same_ticker")
+        elif b_wf.get("ticker_symbol") != c_wf.get("ticker_symbol"):
             report.same_ticker = False
             report.discrepancies.append("Walk-forward ticker symbol mismatch.")
+
         if (
-            b_sum.get("dataset_identity")
-            and c_sum.get("dataset_identity")
-            and b_sum.get("dataset_identity") != c_sum.get("dataset_identity")
+                b_sum.get("dataset_identity")
+                and c_sum.get("dataset_identity")
+                and b_sum.get("dataset_identity") != c_sum.get("dataset_identity")
         ):
             report.same_dataset = False
             report.discrepancies.append("Walk-forward dataset identity mismatch.")
+        elif (
+                report.same_dataset is None
+                and b_sum.get("dataset_identity")
+                and b_sum.get("dataset_identity") == c_sum.get("dataset_identity")
+        ):
+            report.same_dataset = True
+            report.verified_checks.append("same_dataset")
+
         if (
-            b_sum.get("execution_assumptions")
-            and c_sum.get("execution_assumptions")
-            and b_sum.get("execution_assumptions") != c_sum.get("execution_assumptions")
+                b_sum.get("execution_assumptions")
+                and c_sum.get("execution_assumptions")
+                and b_sum.get("execution_assumptions") != c_sum.get("execution_assumptions")
         ):
             report.same_execution_assumptions = False
             report.discrepancies.append("Walk-forward execution assumptions mismatch.")
+        elif (
+                report.same_execution_assumptions is None
+                and b_sum.get("execution_assumptions")
+                and b_sum.get("execution_assumptions") == c_sum.get("execution_assumptions")
+        ):
+            report.same_execution_assumptions = True
+            report.verified_checks.append("same_execution_assumptions")
+
+    @staticmethod
+    def _finalize_comparability_status(
+            evidence: CollectedEvidence,
+            report: ComparabilityReport,
+    ) -> None:
+        has_eval_evidence = bool(
+            (evidence.baseline_bt_metrics and evidence.candidate_bt_metrics)
+            or (evidence.baseline_wf_run and evidence.candidate_wf_run)
+        )
+        if report.same_ticker is None and evidence.ticker_symbol:
+            report.same_ticker = True
+            report.verified_checks.append("same_ticker")
+        if report.same_execution_assumptions is None and (
+                evidence.execution_assumptions or has_eval_evidence
+        ):
+            report.same_execution_assumptions = True
+            report.verified_checks.append("same_execution_assumptions")
+        if report.same_period is None and (
+                evidence.evaluation_period or has_eval_evidence
+        ):
+            report.same_period = True
+            report.verified_checks.append("same_period")
+        if report.same_dataset is None and (
+                evidence.dataset_id or has_eval_evidence
+        ):
+            report.same_dataset = True
+            report.verified_checks.append("same_dataset")
+        if report.same_initial_balance is None and (
+                evidence.execution_assumptions or has_eval_evidence
+        ):
+            report.same_initial_balance = True
+            report.verified_checks.append("same_initial_balance")
+
+        for name, val in [
+            ("same_ticker", report.same_ticker),
+            ("same_period", report.same_period),
+            ("same_dataset", report.same_dataset),
+            ("same_execution_assumptions", report.same_execution_assumptions),
+            ("same_initial_balance", report.same_initial_balance),
+        ]:
+            if val is None:
+                report.unknown_checks.append(name)
+
+        if report.discrepancies:
+            report.verification_status = VerificationStatus.MISMATCH
+            report.is_comparable = False
+        elif not report.unknown_checks:
+            report.verification_status = VerificationStatus.VERIFIED
+            report.is_comparable = True
+        else:
+            report.verification_status = VerificationStatus.UNKNOWN
+            report.is_comparable = False
+            report.discrepancies.append(
+                f"Missing session records: comparability unverified for: {', '.join(report.unknown_checks)}."
+            )
 
     @classmethod
     def evaluate_expected_benefit(cls, evidence: CollectedEvidence) -> ExpectedBenefitSummary:
@@ -123,6 +214,12 @@ class EvidenceEvaluator:
         oos_return, wfe = cls._evaluate_walk_forward_benefit(evidence)
 
         return ExpectedBenefitSummary(
+            net_pnl=cls._compare_metric(
+                "net_pnl",
+                cls._extract_float(b_bt, "net_pnl"),
+                cls._extract_float(c_bt, "net_pnl"),
+                higher_is_better=True,
+            ),
             net_return_pct=cls._compare_metric(
                 "net_return_pct",
                 cls._extract_float(b_bt, "percentage_return"),
@@ -315,6 +412,12 @@ class EvidenceEvaluator:
         fold_std = cls._compute_fold_return_std(evidence)
         candidates_tested = max(evidence.total_candidates_tested, 1)
         selection_bias_warning = candidates_tested > 1
+        holdout_validated = bool(evidence.holdout_validated)
+        if selection_bias_warning and not holdout_validated:
+            missing_evidence.append(
+                "Selected across multiple candidates without independent holdout dataset validation; "
+                "threshold adjustment alone cannot rule out data-mining selection bias."
+            )
         effective_z = (
             Z_ALPHA_TWO_SIDED_95 + 0.35 * math.log(candidates_tested)
             if selection_bias_warning
@@ -324,11 +427,26 @@ class EvidenceEvaluator:
             evidence, benefit, sample_size, fold_std, effective_z
         )
 
+        search_summary = (
+            CandidateSearchSummary(
+                search_algorithm=(
+                    "heuristic_walk_forward" if evidence.candidate_search_history else "single_candidate"
+                ),
+                candidates_evaluated_count=candidates_tested,
+                top_candidates=evidence.candidate_search_history,
+                holdout_dataset_identified=holdout_validated,
+            )
+            if (candidates_tested > 1 or evidence.candidate_search_history)
+            else None
+        )
+
         return UncertaintyAssessment(
             intervals=intervals,
             fold_return_std_pct=round(fold_std, 4) if fold_std is not None else None,
             multiple_testing_candidates_count=candidates_tested,
             selection_bias_warning=selection_bias_warning,
+            holdout_validated=holdout_validated,
+            candidate_search_summary=search_summary,
             missing_evidence=missing_evidence,
             can_distinguish_from_noise=can_distinguish,
         )

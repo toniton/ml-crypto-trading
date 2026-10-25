@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 import uuid
 from typing import Any, Optional
 
@@ -122,6 +123,7 @@ class EvidenceProposalApplicationService(ApplicationLoggingMixin):
             risks=list(proposal.limitations),
             expected_effect=proposal.proposed_changes_summary,
             base_commit_hash=proposal.baseline_commit,
+            created_at=time.time(),
         )
 
         approval_proposal_id = f"cfg_{proposal.id}_{uuid.uuid4().hex[:6]}"

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from api.interfaces.order import Order
 from api.interfaces.trade import Trade
@@ -272,3 +272,25 @@ class TestStrategyOptimizerTool(unittest.TestCase):
         tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
         result = tool._run(action="compare", ticker_symbol="BTC_USD")
         self.assertIn("Insufficient trade history", result)
+
+    def test_proposal_action_persists_evidence_proposal(self):
+        orders = []
+        for i in range(4):
+            buy = self._make_order(uuid=f"pb{i}", action=TradeAction.BUY, price="100.0")
+            sell = self._make_order(uuid=f"ps{i}", action=TradeAction.SELL, price="115.0")
+            orders.extend([buy, sell])
+
+        db = self._setup_mock_db(orders)
+        config = self._setup_mock_config(
+            strategies=[{"name": "TrendFollower", "weight": 1.5, "enabled": True}]
+        )
+        tool = StrategyOptimizerTool(database_manager=db, configuration_service=config)
+        with patch(
+            "src.llm.tools.strategy_optimizer_tool.PostgresEvidenceProposalRepository.save_proposal"
+        ) as mock_save:
+            result = tool._run(action="proposal", ticker_symbol="BTC_USD")
+            self.assertIn("Preliminary Optimization Diagnostic", result)
+            self.assertEqual(mock_save.call_count, 1)
+            saved_proposal = mock_save.call_args[0][0]
+            self.assertTrue(saved_proposal.id.startswith("prop_diag_"))
+            self.assertEqual(saved_proposal.calculation_version, "1.0.0")

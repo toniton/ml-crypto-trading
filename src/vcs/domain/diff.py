@@ -23,3 +23,11 @@ class ConfigurationProposal(BaseModel):
         default=None,
         description="The VCS commit hash this proposal was generated against.",
     )
+    created_at: Optional[float] = Field(
+        default=None,
+        description="Unix timestamp when this proposal was generated.",
+    )
+    ttl_seconds: Optional[int] = Field(
+        default=86400,
+        description="Time-to-live in seconds before the proposal expires (default: 24h).",
+    )

@@ -67,7 +67,7 @@ class OptimizerProposalBuilder:
         )
 
         evidence_proposal = ep.EvidenceBasedProposal(
-            id=proposal_id or f"ebp_diag_{uuid.uuid4().hex[:10]}",
+            id=proposal_id or f"prop_diag_{uuid.uuid4().hex[:10]}",
             title=f"Preliminary Diagnostic: Calibrate {ticker_symbol} strategy weights and trading windows",
             ticker_symbol=ticker_symbol,
             hypothesis=config_proposal.summary,
@@ -78,6 +78,7 @@ class OptimizerProposalBuilder:
             evidence_refs=ep.EvidenceReference(),
             evaluation_period=cls._extract_period(trades),
             market_data_provenance="historical_trade_attribution",
+            calculation_version=ep.CALCULATION_VERSION,
             execution_assumptions={"diagnostic_mode": "split_sample_attribution_rescaling"},
             comparability=comparability,
             expected_benefit=benefit,
@@ -105,8 +106,8 @@ class OptimizerProposalBuilder:
         base_m = baseline_eval.baseline_metrics
         prop_m = baseline_eval.proposed_metrics
         return ep.ExpectedBenefitSummary(
-            net_return_pct=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
-                "net_return_pct", float(base_m.net_pnl), float(prop_m.net_pnl), higher_is_better=True
+            net_pnl=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
+                "net_pnl", float(base_m.net_pnl), float(prop_m.net_pnl), higher_is_better=True
             ),
             profit_factor=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
                 "profit_factor", base_m.profit_factor, prop_m.profit_factor, higher_is_better=True
@@ -114,17 +115,11 @@ class OptimizerProposalBuilder:
             win_rate_pct=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
                 "win_rate_pct", base_m.win_rate_pct, prop_m.win_rate_pct, higher_is_better=True
             ),
-            trade_frequency_per_day=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
-                "trade_frequency_per_day",
+            trade_frequency_round_trips=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
+                "trade_frequency_round_trips",
                 float(base_m.trades_count),
                 float(prop_m.trades_count),
                 higher_is_better=None,
-            ),
-            out_of_sample_return_pct=EvidenceEvaluator._compare_metric(  # pylint: disable=protected-access
-                "out_of_sample_return_pct",
-                float(base_m.net_pnl),
-                float(prop_m.net_pnl),
-                higher_is_better=True,
             ),
         )
 

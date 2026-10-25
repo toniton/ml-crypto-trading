@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from typing import Optional
 import uuid
 
 from api.interfaces.evidence_proposal import (
+    CALCULATION_VERSION,
     ComparabilityReport,
     EvidenceBasedProposal,
     EvidenceReference,
@@ -12,6 +14,7 @@ from api.interfaces.evidence_proposal import (
     RiskDeltaSummary,
     SampleSizeSummary,
     UncertaintyAssessment,
+    VerificationStatus,
 )
 from src.proposals.evidence_evaluator import (
     EvidenceEvaluator,
@@ -39,7 +42,7 @@ class ProposalValidator:
         )
 
         proposal = EvidenceBasedProposal(
-            id=proposal_id or f"ebp_{uuid.uuid4().hex[:12]}",
+            id=proposal_id or f"prop_val_{uuid.uuid4().hex[:10]}",
             title=evidence.title or cls._default_title(evidence),
             ticker_symbol=evidence.ticker_symbol,
             hypothesis=evidence.hypothesis or cls._default_hypothesis(evidence),
@@ -51,6 +54,7 @@ class ProposalValidator:
             evaluation_period=evidence.evaluation_period,
             market_data_provenance=evidence.market_data_provenance,
             execution_assumptions=evidence.execution_assumptions,
+            calculation_version=CALCULATION_VERSION,
             comparability=comparability,
             expected_benefit=benefit,
             sample_size=sample_size,
@@ -153,8 +157,33 @@ class ProposalValidator:
 
         return limitations
 
-    @staticmethod
+    @classmethod
+    def _evaluate_oos_sample_verdict(
+            cls,
+            sample_size: SampleSizeSummary,
+            uncertainty: UncertaintyAssessment,
+            bt_delta: Optional[float],
+            oos_delta: Optional[float],
+    ) -> tuple[EvidenceStatus, ProposalRecommendation]:
+        if sample_size.independent_oos_windows < MIN_INDEPENDENT_OOS_FOLDS:
+            narrow_period = bool(
+                sample_size.evaluation_duration_days is not None
+                and 0.0 < sample_size.evaluation_duration_days < 2.0
+            )
+            if not narrow_period and bt_delta is not None and bt_delta > 0.0 and sample_size.candidate_trades >= 15:
+                return EvidenceStatus.WEAK, ProposalRecommendation.ACCEPT_FOR_TESTING
+            return EvidenceStatus.INSUFFICIENT, ProposalRecommendation.INSUFFICIENT_EVIDENCE
+
+        if not sample_size.is_sample_sufficient or not uncertainty.can_distinguish_from_noise:
+            if (oos_delta or 0.0) > 0.0 and (bt_delta or 0.0) > 0.0:
+                return EvidenceStatus.WEAK, ProposalRecommendation.ACCEPT_FOR_TESTING
+            return EvidenceStatus.INSUFFICIENT, ProposalRecommendation.INSUFFICIENT_EVIDENCE
+
+        return EvidenceStatus.SUFFICIENT, ProposalRecommendation.PROMOTE_TO_APPROVAL
+
+    @classmethod
     def _determine_verdict(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-return-statements
+            cls,
             evidence: CollectedEvidence,
             comparability: ComparabilityReport,
             benefit: ExpectedBenefitSummary,
@@ -162,7 +191,7 @@ class ProposalValidator:
             uncertainty: UncertaintyAssessment,
             risk_changes: RiskDeltaSummary,
     ) -> tuple[EvidenceStatus, ProposalRecommendation]:
-        if not comparability.is_comparable:
+        if comparability.verification_status == VerificationStatus.MISMATCH:
             return EvidenceStatus.INCOMPARABLE, ProposalRecommendation.INSUFFICIENT_EVIDENCE
 
         if EvidenceEvaluator.detect_incomplete_or_failed_runs(evidence):
@@ -175,6 +204,9 @@ class ProposalValidator:
                 else EvidenceStatus.WEAK
             )
             return status, ProposalRecommendation.REJECT
+
+        if not comparability.is_comparable or comparability.verification_status == VerificationStatus.UNKNOWN:
+            return EvidenceStatus.INSUFFICIENT, ProposalRecommendation.INSUFFICIENT_EVIDENCE
 
         if not evidence.baseline_bt_metrics or not evidence.candidate_bt_metrics:
             return EvidenceStatus.INSUFFICIENT, ProposalRecommendation.INSUFFICIENT_EVIDENCE
@@ -194,29 +226,10 @@ class ProposalValidator:
         if oos_delta is not None and oos_delta < 0.0:
             return EvidenceStatus.WEAK, ProposalRecommendation.REJECT
 
-        if sample_size.independent_oos_windows < MIN_INDEPENDENT_OOS_FOLDS:
-            narrow_period = (
-                sample_size.evaluation_duration_days is not None
-                and 0.0 < sample_size.evaluation_duration_days < 2.0
-            )
-            if (
-                not narrow_period
-                and bt_delta is not None
-                and bt_delta > 0.0
-                and sample_size.candidate_trades >= 15
-            ):
-                return EvidenceStatus.WEAK, ProposalRecommendation.ACCEPT_FOR_TESTING
-            return EvidenceStatus.INSUFFICIENT, ProposalRecommendation.INSUFFICIENT_EVIDENCE
-
-        if not sample_size.is_sample_sufficient or not uncertainty.can_distinguish_from_noise:
-            if (oos_delta or 0.0) > 0.0 and (bt_delta or 0.0) > 0.0:
-                return EvidenceStatus.WEAK, ProposalRecommendation.ACCEPT_FOR_TESTING
-            return EvidenceStatus.INSUFFICIENT, ProposalRecommendation.INSUFFICIENT_EVIDENCE
-
-        if risk_changes.risk_increased:
+        if risk_changes.risk_increased or (uncertainty.selection_bias_warning and not uncertainty.holdout_validated):
             return EvidenceStatus.WEAK, ProposalRecommendation.ACCEPT_FOR_TESTING
 
-        return EvidenceStatus.SUFFICIENT, ProposalRecommendation.PROMOTE_TO_APPROVAL
+        return cls._evaluate_oos_sample_verdict(sample_size, uncertainty, bt_delta, oos_delta)
 
     @staticmethod
     def _build_validation_plan(

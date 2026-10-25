@@ -377,3 +377,24 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
 
         with pytest.raises(VcsError, match="Configuration has diverged from base commit"):
             service.apply_proposal_to_vcs(proposal)
+
+    def test_apply_proposal_to_vcs_raises_value_error_on_expired_proposal(self, vcs):
+        service = ConfigurationService(vcs)
+        head_commit = vcs.resolve_commit_hash("HEAD")
+        proposal = ConfigurationProposal(
+            summary="Expired proposal.",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3,
+                    new_value=1.1,
+                    reason="more signals",
+                )
+            ],
+            base_commit_hash=head_commit,
+            created_at=1000.0,
+            ttl_seconds=3600,
+        )
+
+        with pytest.raises(ValueError, match="has expired"):
+            service.apply_proposal_to_vcs(proposal)

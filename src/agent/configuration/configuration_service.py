@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import time
 from typing import Any, List, Optional, Tuple
 
 from pydantic import ValidationError
@@ -467,6 +468,13 @@ class ConfigurationService(AgentLoggingMixin):
     ) -> Tuple[Any, List[str]]:
         if self._vcs is None:
             raise RuntimeError("ConfigurationService has no VCS backend configured.")
+
+        if proposal.created_at and proposal.ttl_seconds:
+            if time.time() - proposal.created_at > proposal.ttl_seconds:
+                raise ValueError(
+                    f"Configuration proposal '{proposal.summary}' has expired. "
+                    f"Evidence must be refreshed against current market conditions."
+                )
 
         if proposal.base_commit_hash:
             current_head = self._vcs.resolve_commit_hash(ref)

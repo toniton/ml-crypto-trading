@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Optional
+
 from api.interfaces.evidence_proposal import (
     EvidenceBasedProposal,
     EvidenceStatus,
@@ -77,12 +79,13 @@ class ProposalMarkdownFormatter:
     @classmethod
     def _format_expected_benefit_section(cls, benefit: ExpectedBenefitSummary) -> list[str]:
         has_any_benefit = (
-            benefit.net_return_pct.candidate_value is not None
-            or benefit.expectancy_per_trade.candidate_value is not None
-            or (
-                benefit.out_of_sample_return_pct is not None
-                and benefit.out_of_sample_return_pct.candidate_value is not None
-            )
+                benefit.net_return_pct.candidate_value is not None
+                or (benefit.net_pnl is not None and benefit.net_pnl.candidate_value is not None)
+                or benefit.expectancy_per_trade.candidate_value is not None
+                or (
+                        benefit.out_of_sample_return_pct is not None
+                        and benefit.out_of_sample_return_pct.candidate_value is not None
+                )
         )
         if not has_any_benefit:
             return [
@@ -95,9 +98,13 @@ class ProposalMarkdownFormatter:
 
         lines = [
             f"- Net return: {cls._format_metric(benefit.net_return_pct, unit='%')}",
+        ]
+        if benefit.net_pnl is not None and benefit.net_pnl.candidate_value is not None:
+            lines.append(f"- Net PnL: {cls._format_metric(benefit.net_pnl, unit=' USD')}")
+        lines.extend([
             f"- Net expectancy: {cls._format_metric(benefit.expectancy_per_trade, unit='')}",
             f"- Drawdown improvement: {cls._format_metric(benefit.max_drawdown_pct, unit='%')}",
-        ]
+        ])
         if benefit.out_of_sample_return_pct is not None:
             lines.append(
                 f"- Out-of-sample return: "
@@ -110,30 +117,47 @@ class ProposalMarkdownFormatter:
         return lines
 
     @staticmethod
+    def _format_sample_size_line(ss: SampleSizeSummary) -> str:
+        if ss.candidate_trades == 0 and ss.baseline_trades == 0:
+            return "- Sample size: not yet calculated"
+        unit_str = f" {ss.statistical_unit}" if ss.statistical_unit else ""
+        req_str = (
+            f" (estimated minimum required: {ss.estimated_required_sample_size}{unit_str})"
+            if ss.estimated_required_sample_size
+            else ""
+        )
+        duration_parts = []
+        if ss.evaluation_duration_days:
+            duration_parts.append(f"{ss.evaluation_duration_days} days")
+        if ss.calendar_days_observed:
+            duration_parts.append(f"{ss.calendar_days_observed} sessions")
+        span_str = f" across {', '.join(duration_parts)}" if duration_parts else ""
+        return (
+            f"- Sample size: {ss.candidate_trades} candidate trades vs. "
+            f"{ss.baseline_trades} baseline trades{span_str}{req_str}"
+        )
+
+    @staticmethod
+    def _format_selection_bias_line(unc: UncertaintyAssessment) -> Optional[str]:
+        if not unc.selection_bias_warning:
+            return None
+        if not unc.holdout_validated:
+            return (
+                f"- Selection bias: elevated ({unc.multiple_testing_candidates_count} candidates evaluated; "
+                f"holdout validation required)"
+            )
+        return (
+            f"- Selection bias: controlled ({unc.multiple_testing_candidates_count} candidates evaluated, "
+            f"validated on holdout dataset)"
+        )
+
+    @classmethod
     def _format_evidence_quality_section(
+            cls,
             ss: SampleSizeSummary,
             unc: UncertaintyAssessment,
     ) -> list[str]:
-        lines: list[str] = []
-        if ss.candidate_trades == 0 and ss.baseline_trades == 0:
-            lines.append("- Sample size: not yet calculated")
-        else:
-            unit_str = f" {ss.statistical_unit}" if ss.statistical_unit else ""
-            req_str = (
-                f" (estimated minimum required: {ss.estimated_required_sample_size}{unit_str})"
-                if ss.estimated_required_sample_size
-                else ""
-            )
-            duration_parts = []
-            if ss.evaluation_duration_days:
-                duration_parts.append(f"{ss.evaluation_duration_days} days")
-            if ss.calendar_days_observed:
-                duration_parts.append(f"{ss.calendar_days_observed} sessions")
-            span_str = f" across {', '.join(duration_parts)}" if duration_parts else ""
-            lines.append(
-                f"- Sample size: {ss.candidate_trades} candidate trades vs. "
-                f"{ss.baseline_trades} baseline trades{span_str}{req_str}"
-            )
+        lines: list[str] = [cls._format_sample_size_line(ss)]
 
         if ss.independent_oos_windows == 0:
             lines.append("- Independent test windows: not yet established")
@@ -161,6 +185,11 @@ class ProposalMarkdownFormatter:
             lines.append(
                 f"- Out-of-sample validation: completed across {ss.independent_oos_windows} windows"
             )
+
+        bias_line = cls._format_selection_bias_line(unc)
+        if bias_line:
+            lines.append(bias_line)
+
         return lines
 
     @staticmethod

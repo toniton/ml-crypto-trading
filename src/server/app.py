@@ -1,5 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
+import time
 import uuid
 from datetime import date, datetime, timedelta, timezone
 from typing import AsyncGenerator, List, Literal, Optional
@@ -11,6 +12,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from api.interfaces.backtest_run_spec import BacktestRunSpec
 from src.configuration.trading_config import TradingConfig
+from src.vcs.domain.diff import ConfigurationProposal
 from src.agent import AgentGateway, ProposalDecision
 from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.events import AIEvent
@@ -806,6 +808,8 @@ class ChatApp:
                     detail={"errors": validation.errors},
                 )
 
+            ChatApp._revalidate_live_approval_guardrails(req, proposal)
+
             commit, warnings = await asyncio.to_thread(
                 configuration_service.apply_proposal_to_vcs, proposal
             )
@@ -892,6 +896,39 @@ class ChatApp:
                 ) from exc
 
         return app
+
+    @staticmethod
+    def _revalidate_live_approval_guardrails(
+            req: Request,
+            proposal: ConfigurationProposal,
+    ) -> None:
+        if proposal.created_at and proposal.ttl_seconds:
+            if time.time() - proposal.created_at > proposal.ttl_seconds:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Configuration proposal '{proposal.summary}' has expired. "
+                           f"Evidence must be refreshed against current market conditions.",
+                )
+        proxy: Optional[TradingEngineProxy] = getattr(req.app.state, "trading_proxy", None)
+        if proxy is not None:
+            engine_status = proxy.get_status()
+            if engine_status and engine_status.state in ("PAUSED", "STOPPED"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Trading engine is currently in '{engine_status.state}' state. "
+                           f"Cannot activate new configuration until engine is RUNNING.",
+                )
+            health = proxy.get_health_snapshot()
+            if health and health.get("status") in (
+                    "CIRCUIT_BREAKER_TRIPPED",
+                    "CRITICAL",
+                    "EMERGENCY_STOP",
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"Trading engine health is {health.get('status')}. "
+                           f"Configuration activation is blocked by active risk guardrails.",
+                )
 
     @staticmethod
     def _sync_trading_proxy_config(

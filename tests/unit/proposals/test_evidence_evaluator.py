@@ -15,6 +15,7 @@ from api.interfaces.evidence_proposal import (
     ExpectedBenefitSummary,
     MetricComparison,
     SampleSizeSummary,
+    VerificationStatus,
 )
 from src.backtest.domain.session import BacktestSession
 from src.proposals.evidence_evaluator import EvidenceEvaluator
@@ -61,6 +62,7 @@ class TestEvidenceEvaluator:
         report = EvidenceEvaluator.evaluate_comparability(evidence)
 
         assert report.is_comparable is True
+        assert report.verification_status == VerificationStatus.VERIFIED
         assert report.discrepancies == []
 
     def test_comparability_detects_fee_and_period_mismatch(self):
@@ -74,9 +76,23 @@ class TestEvidenceEvaluator:
         report = EvidenceEvaluator.evaluate_comparability(evidence)
 
         assert report.is_comparable is False
+        assert report.verification_status == VerificationStatus.MISMATCH
         assert report.same_period is False
         assert report.same_execution_assumptions is False
         assert len(report.discrepancies) == 2
+
+    def test_comparability_reports_unknown_status_when_evidence_is_missing(self):
+        evidence = CollectedEvidence(
+            ticker_symbol="",
+            baseline_commit="aaa1111",
+            candidate_commit="bbb2222",
+        )
+        report = EvidenceEvaluator.evaluate_comparability(evidence)
+
+        assert report.is_comparable is False
+        assert report.verification_status == VerificationStatus.UNKNOWN
+        assert len(report.unknown_checks) == 5
+        assert any("Missing session records" in d for d in report.discrepancies)
 
     def test_expected_benefit_computes_absolute_and_relative_deltas(self):
         evidence = CollectedEvidence(

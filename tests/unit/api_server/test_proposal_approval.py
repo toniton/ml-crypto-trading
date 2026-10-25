@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import MagicMock
 
 import pytest
 import yaml
@@ -195,6 +196,64 @@ class TestProposalDecisionEndpoint:
 
         assert response.status_code == 409
         assert "errors" in response.json()["detail"]
+
+    def test_approve_expired_proposal_returns_conflict(self, config_file, db_manager):
+        app = _build_app(config_file, db_manager)
+        conversations = app.state.conversation_service
+        sid = conversations.get_or_create(None)
+        expired = ConfigurationProposal(
+            summary="stale change",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3,
+                    new_value=1.2,
+                    reason="small tweak",
+                ),
+            ],
+            created_at=1000.0,
+            ttl_seconds=3600,
+        )
+        conversations.append(
+            sid,
+            _assistant_message("m_expired", {"proposal": expired.model_dump(mode="json")}),
+        )
+        client = TestClient(app)
+
+        response = client.post("/api/v1/proposals/m_expired/decision", json={"action": "approve"})
+
+        assert response.status_code == 409
+        assert "expired" in response.json()["detail"].lower()
+
+    def test_approve_when_engine_is_paused_returns_conflict(self, config_file, db_manager):
+        app = _build_app(config_file, db_manager)
+        mock_proxy = MagicMock()
+        mock_proxy.get_status.return_value = MagicMock(state="PAUSED")
+        app.state.trading_proxy = mock_proxy
+
+        conversations = app.state.conversation_service
+        sid = conversations.get_or_create(None)
+        proposal = ConfigurationProposal(
+            summary="valid tweak",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3,
+                    new_value=1.2,
+                    reason="fine tune",
+                ),
+            ],
+        )
+        conversations.append(
+            sid,
+            _assistant_message("m_paused", {"proposal": proposal.model_dump(mode="json")}),
+        )
+        client = TestClient(app)
+
+        response = client.post("/api/v1/proposals/m_paused/decision", json={"action": "approve"})
+
+        assert response.status_code == 409
+        assert "PAUSED" in response.json()["detail"]
 
 
 class TestCachedProposalStore:

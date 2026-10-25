@@ -11,6 +11,9 @@ from api.interfaces.order import Order
 from api.interfaces.trade import Trade
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.providers.postgres_evidence_proposal_repository import (
+    PostgresEvidenceProposalRepository,
+)
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
 from src.database.repositories.providers.postgres_trade_repository import PostgresTradeRepository
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
@@ -223,7 +226,19 @@ class StrategyOptimizerTool(BaseTool, ApplicationLoggingMixin):
             timezone_str=target_tz,
             base_commit_hash=base_commit_hash,
         )
+        self._persist_evidence_proposal(evidence_prop)
         return self._format_proposal_output(sym, prop, evidence_prop)
+
+    def _persist_evidence_proposal(self, proposal: EvidenceBasedProposal) -> None:
+        if not self.database_manager:
+            return
+        try:
+            repo = PostgresEvidenceProposalRepository(self.database_manager)
+            repo.save_proposal(proposal)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                "Failed to persist optimizer evidence proposal %s: %s", proposal.id, exc
+            )
 
     @staticmethod
     def _extract_active_weights(

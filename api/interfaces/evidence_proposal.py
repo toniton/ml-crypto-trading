@@ -49,13 +49,22 @@ class EvidenceReference(BaseModel):
         return refs
 
 
+class VerificationStatus(str, Enum):
+    VERIFIED = "VERIFIED"
+    MISMATCH = "MISMATCH"
+    UNKNOWN = "UNKNOWN"
+
+
 class ComparabilityReport(BaseModel):
-    is_comparable: bool = True
-    same_ticker: bool = True
-    same_period: bool = True
-    same_dataset: bool = True
-    same_execution_assumptions: bool = True
-    same_initial_balance: bool = True
+    is_comparable: bool = False
+    verification_status: VerificationStatus = VerificationStatus.UNKNOWN
+    same_ticker: Optional[bool] = None
+    same_period: Optional[bool] = None
+    same_dataset: Optional[bool] = None
+    same_execution_assumptions: Optional[bool] = None
+    same_initial_balance: Optional[bool] = None
+    verified_checks: list[str] = Field(default_factory=list)
+    unknown_checks: list[str] = Field(default_factory=list)
     discrepancies: list[str] = Field(default_factory=list)
 
 
@@ -69,6 +78,7 @@ class MetricComparison(BaseModel):
 
 
 class ExpectedBenefitSummary(BaseModel):
+    net_pnl: Optional[MetricComparison] = None
     net_return_pct: MetricComparison = MetricComparison(metric_name="net_return_pct")
     expectancy_per_trade: MetricComparison = MetricComparison(
         metric_name="expectancy_per_trade"
@@ -112,11 +122,21 @@ class ConfidenceInterval(BaseModel):
     method: str = "paired_t_approx"
 
 
+class CandidateSearchSummary(BaseModel):
+    search_algorithm: str = "single_candidate"
+    candidates_evaluated_count: int = 1
+    search_space: dict[str, Any] = Field(default_factory=dict)
+    top_candidates: list[dict[str, Any]] = Field(default_factory=list)
+    holdout_dataset_identified: bool = False
+
+
 class UncertaintyAssessment(BaseModel):
     intervals: list[ConfidenceInterval] = Field(default_factory=list)
     fold_return_std_pct: Optional[float] = None
     multiple_testing_candidates_count: int = 1
     selection_bias_warning: bool = False
+    holdout_validated: bool = False
+    candidate_search_summary: Optional[CandidateSearchSummary] = None
     missing_evidence: list[str] = Field(default_factory=list)
     can_distinguish_from_noise: bool = False
 
