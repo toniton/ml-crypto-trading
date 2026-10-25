@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from decimal import Decimal
+import math
 
 from api.interfaces.backtest_request import (
     BacktestDataSourceRequest,
@@ -10,6 +11,11 @@ from api.interfaces.backtest_request import (
     ExecutionConfiguration,
 )
 from api.interfaces.backtest_run_spec import BacktestPeriodSpec
+from api.interfaces.evidence_proposal import (
+    ExpectedBenefitSummary,
+    MetricComparison,
+    SampleSizeSummary,
+)
 from src.backtest.domain.session import BacktestSession
 from src.proposals.evidence_evaluator import EvidenceEvaluator
 from src.proposals.models import CollectedEvidence
@@ -191,12 +197,61 @@ class TestEvidenceEvaluator:
         assert sample_size.candidate_trades == 75
         assert sample_size.independent_oos_windows == 4
         assert sample_size.evaluation_duration_days == 60.0
+        assert sample_size.calendar_days_observed == 60
+        assert sample_size.statistical_unit == "independent_oos_windows"
+        assert sample_size.is_heuristic is True
+        assert sample_size.regimes_covered == ["TRENDING_DOWN", "TRENDING_UP"]
         assert sample_size.is_sample_sufficient is True
         assert uncertainty.selection_bias_warning is True
         assert uncertainty.multiple_testing_candidates_count == 6
         assert len(uncertainty.intervals) == 1
         assert uncertainty.intervals[0].lower_bound > 0.0
         assert uncertainty.can_distinguish_from_noise is True
+
+    def test_normal_interval_uses_independent_degrees_of_freedom(self):
+        ss = SampleSizeSummary(
+            candidate_trades=1000,
+            independent_oos_windows=4,
+            is_sample_sufficient=True,
+        )
+        benefit = ExpectedBenefitSummary(
+            net_return_pct=MetricComparison(
+                metric_name="net_return_pct",
+                baseline_value=5.0,
+                candidate_value=10.0,
+                absolute_delta=5.0,
+            )
+        )
+        intervals, _ = EvidenceEvaluator._build_normal_interval(  # pylint: disable=protected-access
+            benefit=benefit,
+            sample_size=ss,
+            fold_std=4.0,
+            effective_z=1.96,
+        )
+        assert len(intervals) == 1
+        ci = intervals[0]
+        # With sigma=4.0 and df=4 (independent_oos_windows), margin = 1.96 * (4.0 / sqrt(4)) = 1.96 * 2 = 3.92
+        # NOT deflated by sqrt(1000) ~ 31.62
+        expected_margin = round(1.96 * (4.0 / math.sqrt(4)), 4)
+        assert round(ci.upper_bound - ci.point_estimate, 4) == expected_margin
+
+    def test_extract_covered_regimes_excludes_calendar_day_strings(self):
+        b_bt = {
+            "regime_attribution": {
+                "day_2026_01_01": {"total_trades": 10},
+                "TRENDING_UP": {"total_trades": 15},
+            }
+        }
+        c_bt = {
+            "regime_attribution": {
+                "day_2026_01_02": {"total_trades": 12},
+                "RANGING": {"total_trades": 8},
+            }
+        }
+        regimes = EvidenceEvaluator._extract_covered_regimes(b_bt, c_bt)  # pylint: disable=protected-access
+        assert "day_2026_01_01" not in regimes
+        assert "day_2026_01_02" not in regimes
+        assert regimes == ["RANGING", "TRENDING_UP"]
 
     def test_risk_changes_flags_increased_drawdown_and_limit_breach(self):
         evidence = CollectedEvidence(

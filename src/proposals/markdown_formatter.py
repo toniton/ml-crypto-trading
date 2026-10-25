@@ -118,14 +118,21 @@ class ProposalMarkdownFormatter:
         if ss.candidate_trades == 0 and ss.baseline_trades == 0:
             lines.append("- Sample size: not yet calculated")
         else:
+            unit_str = f" {ss.statistical_unit}" if ss.statistical_unit else ""
             req_str = (
-                f" (estimated minimum required: {ss.estimated_required_sample_size})"
+                f" (estimated minimum required: {ss.estimated_required_sample_size}{unit_str})"
                 if ss.estimated_required_sample_size
                 else ""
             )
+            duration_parts = []
+            if ss.evaluation_duration_days:
+                duration_parts.append(f"{ss.evaluation_duration_days} days")
+            if ss.calendar_days_observed:
+                duration_parts.append(f"{ss.calendar_days_observed} sessions")
+            span_str = f" across {', '.join(duration_parts)}" if duration_parts else ""
             lines.append(
                 f"- Sample size: {ss.candidate_trades} candidate trades vs. "
-                f"{ss.baseline_trades} baseline trades{req_str}"
+                f"{ss.baseline_trades} baseline trades{span_str}{req_str}"
             )
 
         if ss.independent_oos_windows == 0:
@@ -135,6 +142,9 @@ class ProposalMarkdownFormatter:
                 f"- Independent test windows: {ss.independent_oos_windows} walk-forward folds "
                 f"({ss.profitable_oos_windows} profitable)"
             )
+
+        if ss.regimes_covered:
+            lines.append(f"- Market regimes covered: {', '.join(ss.regimes_covered)}")
 
         if not unc.intervals:
             lines.append("- Uncertainty interval: unavailable")

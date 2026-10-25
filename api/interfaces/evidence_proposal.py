@@ -94,8 +94,12 @@ class SampleSizeSummary(BaseModel):
     independent_oos_windows: int = 0
     profitable_oos_windows: int = 0
     evaluation_duration_days: float = 0.0
+    calendar_days_observed: int = 0
     regimes_covered: list[str] = Field(default_factory=list)
     estimated_required_sample_size: Optional[int] = None
+    statistical_unit: str = "independent_oos_windows"
+    is_heuristic: bool = True
+    sufficiency_rationale: str = ""
     is_sample_sufficient: bool = False
 
 

@@ -145,13 +145,15 @@ class OptimizerProposalBuilder:
             duration_days = round(max(0.0, (max_ts - min_ts) / 86400.0), 2)
 
         oos_count = baseline_eval.out_of_sample_trades_count if baseline_eval else 0
-        sigma = baseline_eval.proposed_metrics.return_volatility if baseline_eval else 5.0
-        delta = abs(float(baseline_eval.pnl_delta)) / max(oos_count, 1) if baseline_eval else 0.0
-        req_n = EvidenceEvaluator.estimate_required_sample_size(sigma=sigma, delta=delta)
-        sufficient = (
-            len(trades) >= max(req_n, MIN_TRADES_BASELINE_FLOOR)
+        sufficient = bool(
+            len(trades) >= MIN_TRADES_BASELINE_FLOOR
             and len(days) >= 3
             and oos_count >= 5
+        )
+        rationale = (
+            "Heuristic trade count and calendar span satisfied for preliminary attribution diagnostic."
+            if sufficient
+            else "Insufficient trade observations or calendar span for reliable attribution calibration."
         )
         return ep.SampleSizeSummary(
             baseline_trades=len(trades),
@@ -163,8 +165,12 @@ class OptimizerProposalBuilder:
                 else 0
             ),
             evaluation_duration_days=duration_days,
-            regimes_covered=[f"day_{y}_{m:02d}_{d:02d}" for y, m, d in sorted(days)],
-            estimated_required_sample_size=req_n,
+            calendar_days_observed=len(days),
+            regimes_covered=[],
+            estimated_required_sample_size=MIN_TRADES_BASELINE_FLOOR,
+            statistical_unit="trades",
+            is_heuristic=True,
+            sufficiency_rationale=rationale,
             is_sample_sufficient=sufficient,
         )
 

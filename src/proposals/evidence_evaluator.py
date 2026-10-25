@@ -207,18 +207,19 @@ class EvidenceEvaluator:
         c_trades = cls._extract_trade_count(c_bt)
         oos_windows, profitable_windows = cls._extract_oos_window_counts(evidence)
         regimes_covered = cls._extract_covered_regimes(b_bt, c_bt)
+        duration_days = cls._compute_duration_days(evidence)
 
         fold_std = cls._compute_fold_return_std(evidence)
-        sigma = fold_std if fold_std and fold_std > 0 else DEFAULT_FALLBACK_RETURN_STD_PCT
-        required_n = cls.estimate_required_sample_size(
-            sigma=sigma, delta=DEFAULT_MIN_MEANINGFUL_RETURN_DELTA_PCT
+        required_windows = cls.estimate_required_sample_size(
+            sigma=fold_std if fold_std and fold_std > 0 else DEFAULT_FALLBACK_RETURN_STD_PCT,
+            delta=DEFAULT_MIN_MEANINGFUL_RETURN_DELTA_PCT,
         )
 
-        min_trades = min(b_trades, c_trades) if (b_trades > 0 and c_trades > 0) else 0
-        is_sufficient = bool(
-            min_trades >= max(required_n, MIN_TRADES_BASELINE_FLOOR)
-            and oos_windows >= MIN_INDEPENDENT_OOS_FOLDS
-            and (len(regimes_covered) >= 2 or oos_windows >= MIN_INDEPENDENT_OOS_FOLDS)
+        is_sufficient, rationale = cls._determine_sample_sufficiency(
+            min(b_trades, c_trades) if (b_trades > 0 and c_trades > 0) else 0,
+            oos_windows,
+            duration_days,
+            regimes_covered,
         )
 
         return SampleSizeSummary(
@@ -226,11 +227,52 @@ class EvidenceEvaluator:
             candidate_trades=c_trades,
             independent_oos_windows=oos_windows,
             profitable_oos_windows=profitable_windows,
-            evaluation_duration_days=cls._compute_duration_days(evidence),
+            evaluation_duration_days=duration_days,
+            calendar_days_observed=int(math.ceil(duration_days)) if duration_days > 0 else 0,
             regimes_covered=regimes_covered,
-            estimated_required_sample_size=required_n,
+            estimated_required_sample_size=required_windows,
+            statistical_unit="independent_oos_windows",
+            is_heuristic=True,
+            sufficiency_rationale=rationale,
             is_sample_sufficient=is_sufficient,
         )
+
+    @staticmethod
+    def _determine_sample_sufficiency(
+            min_trades: int,
+            oos_windows: int,
+            duration_days: float,
+            regimes_covered: list[str],
+    ) -> tuple[bool, str]:
+        is_narrow_duration = bool(0.0 < duration_days < 2.0)
+        is_sufficient = bool(
+            min_trades >= MIN_TRADES_BASELINE_FLOOR
+            and oos_windows >= MIN_INDEPENDENT_OOS_FOLDS
+            and not is_narrow_duration
+            and (len(regimes_covered) >= 2 or oos_windows >= MIN_INDEPENDENT_OOS_FOLDS)
+        )
+        reasons: list[str] = []
+        if min_trades < MIN_TRADES_BASELINE_FLOOR:
+            reasons.append(
+                f"Completed trade count ({min_trades}) is below minimum floor ({MIN_TRADES_BASELINE_FLOOR})."
+            )
+        if oos_windows < MIN_INDEPENDENT_OOS_FOLDS:
+            reasons.append(
+                f"Independent test windows ({oos_windows}) below minimum ({MIN_INDEPENDENT_OOS_FOLDS})."
+            )
+        if is_narrow_duration:
+            reasons.append(
+                f"Evaluation duration ({duration_days:.1f}d) is narrow (<2d); trades may be correlated."
+            )
+        if len(regimes_covered) < 2 and oos_windows < MIN_INDEPENDENT_OOS_FOLDS:
+            reasons.append("Fewer than 2 distinct market regimes observed.")
+
+        rationale = (
+            "Sample satisfies heuristic thresholds across trade count, out-of-sample folds, and evaluation duration."
+            if is_sufficient
+            else "; ".join(reasons)
+        )
+        return is_sufficient, rationale
 
     @classmethod
     def _extract_trade_count(cls, bt_metrics: dict[str, Any]) -> int:
@@ -389,7 +431,8 @@ class EvidenceEvaluator:
     ) -> tuple[list[ConfidenceInterval], bool]:
         pt = benefit.net_return_pct.absolute_delta or 0.0
         sigma = fold_std if fold_std and fold_std > 0 else DEFAULT_FALLBACK_RETURN_STD_PCT
-        margin = effective_z * (sigma / math.sqrt(max(sample_size.candidate_trades, 2)))
+        degrees_of_freedom = max(sample_size.independent_oos_windows, 2)
+        margin = effective_z * (sigma / math.sqrt(degrees_of_freedom))
         lower = round(pt - margin, 4)
         interval = ConfidenceInterval(
             metric_name="net_return_delta_pct",
@@ -642,6 +685,8 @@ class EvidenceEvaluator:
         for bt in (b_bt, c_bt):
             reg_map = bt.get("regime_attribution") or {}
             for reg_name, metrics in reg_map.items():
+                if not reg_name or reg_name.startswith("day_"):
+                    continue
                 if isinstance(metrics, dict) and int(metrics.get("total_trades") or 0) > 0:
                     covered.add(reg_name)
         return sorted(covered)

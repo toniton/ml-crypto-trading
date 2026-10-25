@@ -105,10 +105,12 @@ class ProposalValidator:
             )
 
         if not sample_size.is_sample_sufficient:
+            unit_str = f" {sample_size.statistical_unit}" if sample_size.statistical_unit else ""
             req_n = sample_size.estimated_required_sample_size or 15
             limitations.append(
-                f"Sample size ({sample_size.candidate_trades} candidate trades) is below the estimated "
-                f"threshold ({req_n}) needed to distinguish the expected improvement from noise."
+                f"Sample size ({sample_size.candidate_trades} candidate trades across "
+                f"{sample_size.independent_oos_windows} windows) is below the estimated "
+                f"threshold ({req_n}{unit_str}) needed to distinguish the expected improvement from noise."
             )
 
         if len(sample_size.regimes_covered) < 2:

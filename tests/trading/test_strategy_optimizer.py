@@ -731,4 +731,8 @@ def test_optimizer_proposal_builder_builds_typed_evidence_proposal():
     assert evidence_prop.recommendation == ProposalRecommendation.INSUFFICIENT_EVIDENCE
     assert evidence_prop.evidence_status == EvidenceStatus.INSUFFICIENT
     assert not evidence_prop.comparability.is_comparable
+    assert evidence_prop.sample_size.statistical_unit == "trades"
+    assert evidence_prop.sample_size.regimes_covered == []
+    assert evidence_prop.sample_size.calendar_days_observed >= 1
+    assert evidence_prop.sample_size.is_heuristic is True
     assert evidence_prop.risk_changes.max_drawdown_pct_delta is not None
