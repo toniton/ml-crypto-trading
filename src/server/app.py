@@ -65,9 +65,14 @@ from src.server.routes.reconciliation_routes import create_reconciliation_router
 from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
 from src.server.routes.evidence_proposal_routes import create_evidence_proposal_router
+from src.server.routes.promotion_routes import create_promotion_router
 from src.server.services.evidence_proposal_application_service import (
     EvidenceProposalApplicationService,
 )
+from src.server.services.main_promotion_service import MainPromotionService
+from src.server.services.promotion_policy import PromotionPolicy
+from src.server.services.simulation_orchestrator import SimulationOrchestrator
+from src.server.services.simulation_report_service import SimulationReportService
 from src.agent.runtime_debug.service import RuntimeDebugService
 from src.vcs.application.service import VCSService
 from src.vcs.domain.exceptions import InvalidReferenceError, VcsError
@@ -408,6 +413,28 @@ class ChatApp:
         )
         app.state.evidence_proposal_service = evidence_proposal_service
         app.include_router(create_evidence_proposal_router())
+
+        promotion_policy = PromotionPolicy()
+        simulation_report_service = SimulationReportService(
+            db_manager=db_manager,
+            policy=promotion_policy,
+        )
+        simulation_orchestrator = SimulationOrchestrator(
+            db_manager=db_manager,
+            report_service=simulation_report_service,
+            vcs_service=vcs,
+            policy=promotion_policy,
+        )
+        main_promotion_service = MainPromotionService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            policy=promotion_policy,
+        )
+        app.state.promotion_policy = promotion_policy
+        app.state.simulation_report_service = simulation_report_service
+        app.state.simulation_orchestrator = simulation_orchestrator
+        app.state.main_promotion_service = main_promotion_service
+        app.include_router(create_promotion_router())
 
         @app.get("/api/v1/backtests/branches")
         async def list_backtest_branches_endpoint():
