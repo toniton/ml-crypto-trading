@@ -6,10 +6,32 @@ updates:
       interval: "weekly"
       day: "monday"
       time: "06:00"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 25
     commit-message:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
     labels:
       - "dependencies"
     rebase-strategy: "auto"
+    groups:
+      patch-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 25
+    commit-message:
+      prefix: "ci(deps)"
+    labels:
+      - "dependencies"
+    groups:
+      patch-dependencies:
+        patterns:
+          - "*"
+        update-types:
+          - "patch"
