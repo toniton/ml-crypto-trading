@@ -22,8 +22,76 @@ jobs:
         with:
           compat-lookup: true
 
+      - name: Evaluate update type from git diff
+        id: eval-diff
+        run: |
+          python3 - << 'EOF'
+          import os, subprocess, re
+
+          pr_url = os.environ.get("PR_URL", "")
+          meta_type = os.environ.get("META_UPDATE_TYPE", "")
+
+          def get_diff_update_type(url):
+              try:
+                  diff_text = subprocess.check_output(["gh", "pr", "diff", url], text=True)
+              except Exception as e:
+                  print(f"Error getting diff: {e}")
+                  return "unknown"
+
+              ver_regex = re.compile(r'(?:[~=^><]=?|@|:\s*\"?[\^~>=<]*)v?(\d+)(?:\.(\d+))?(?:\.(\d+))?')
+              rank = {"unknown": 0, "patch": 1, "minor": 2, "major": 3}
+              overall = "unknown"
+
+              lines = diff_text.splitlines()
+              for i, line in enumerate(lines):
+                  if line.startswith("-") and not line.startswith("---"):
+                      for j in range(i + 1, min(i + 6, len(lines))):
+                          if lines[j].startswith("+") and not lines[j].startswith("+++"):
+                              m_old = ver_regex.search(line)
+                              m_new = ver_regex.search(lines[j])
+                              if m_old and m_new:
+                                  old_v = [int(x) if x is not None else 0 for x in m_old.groups()]
+                                  new_v = [int(x) if x is not None else 0 for x in m_new.groups()]
+                                  if new_v[0] > old_v[0]:
+                                      t = "major"
+                                  elif new_v[1] > old_v[1]:
+                                      t = "minor"
+                                  elif new_v[2] > old_v[2]:
+                                      t = "patch"
+                                  else:
+                                      t = "unknown"
+                                  if rank[t] > rank[overall]:
+                                      overall = t
+                              break
+              return overall
+
+          diff_type = get_diff_update_type(pr_url)
+
+          effective = diff_type
+          if effective == "unknown" and meta_type:
+              if "semver-major" in meta_type:
+                  effective = "major"
+              elif "semver-minor" in meta_type:
+                  effective = "minor"
+              elif "semver-patch" in meta_type:
+                  effective = "patch"
+
+          print(f"Diff update type: {diff_type}")
+          print(f"Metadata update type: {meta_type}")
+          print(f"Effective update type: {effective}")
+
+          github_output = os.environ.get("GITHUB_OUTPUT")
+          if github_output:
+              with open(github_output, "a") as f:
+                  f.write(f"update-type={effective}\n")
+          EOF
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          META_UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Auto-merge patch updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
+        if: steps.eval-diff.outputs.update-type == 'patch'
         run: |
           gh pr review --approve -b "Auto-approved patch update." "$PR_URL" || true
           gh pr merge --auto --squash "$PR_URL"
@@ -32,7 +100,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Bot approval & auto-merge for minor updates
-        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        if: steps.eval-diff.outputs.update-type == 'minor'
         run: |
           gh pr review --approve -b "🤖 Automated Bot Approval: Minor dependency update approved. Will auto-merge once all CI checks pass." "$PR_URL"
           gh pr merge --auto --squash "$PR_URL"
@@ -41,7 +109,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Flag major updates for manual review
-        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        if: steps.eval-diff.outputs.update-type == 'major'
         run: |
           gh pr comment "$PR_URL" -b "⚠️ **Major Update Detected**: This pull request contains major version updates with potential breaking changes. Manual testing and approval are required."
         env:
