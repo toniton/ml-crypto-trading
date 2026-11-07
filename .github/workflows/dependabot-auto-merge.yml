@@ -22,7 +22,7 @@ jobs:
         with:
           compat-lookup: true
 
-      - name: Evaluate update type from git diff
+      - name: Evaluate update type from metadata and git diff
         id: eval-diff
         run: |
           python3 - << 'EOF'
@@ -31,52 +31,70 @@ jobs:
           pr_url = os.environ.get("PR_URL", "")
           meta_type = os.environ.get("META_UPDATE_TYPE", "")
 
-          def get_diff_update_type(url):
+          def determine_update_type(meta, url):
+              # If Dependabot metadata specifies the semver level, trust it
+              if meta:
+                  if "semver-major" in meta:
+                      return "major"
+                  if "semver-minor" in meta:
+                      return "minor"
+                  if "semver-patch" in meta:
+                      return "patch"
+
+              # Fallback to git diff analysis of manifest files (ignore lockfiles)
               try:
                   diff_text = subprocess.check_output(["gh", "pr", "diff", url], text=True)
               except Exception as e:
                   print(f"Error getting diff: {e}")
                   return "unknown"
 
-              ver_regex = re.compile(r'(?:[~=^><]=?|@|:\s*\"?[\^~>=<]*)v?(\d+)(?:\.(\d+))?(?:\.(\d+))?')
+              line_re = re.compile(r'^[+-]\s*(?:uses:\s*)?[\"\'\s]*([a-zA-Z0-9_\-\.\/\[\]]+)[\"\'\s]*(?:[~=^><]=?|@|:\s*\"?[\^~>=<]*)v?(\d+)(?:\.(\d+))?(?:\.(\d+))?')
+              old_pkgs = {}
+              new_pkgs = {}
+              in_manifest = False
+
+              for line in diff_text.splitlines():
+                  if line.startswith("diff --git"):
+                      path = line.split()[-1]
+                      in_manifest = not any(lock in path for lock in ["package-lock.json", "yarn.lock", "pnpm-lock.yaml", "poetry.lock"])
+                      continue
+
+                  if not in_manifest:
+                      continue
+
+                  if line.startswith("-") and not line.startswith("---"):
+                      m = line_re.search(line)
+                      if m:
+                          pkg = m.group(1).lower()
+                          v = tuple(int(x) if x is not None else 0 for x in m.groups()[1:])
+                          old_pkgs[pkg] = v
+                  elif line.startswith("+") and not line.startswith("+++"):
+                      m = line_re.search(line)
+                      if m:
+                          pkg = m.group(1).lower()
+                          v = tuple(int(x) if x is not None else 0 for x in m.groups()[1:])
+                          new_pkgs[pkg] = v
+
               rank = {"unknown": 0, "patch": 1, "minor": 2, "major": 3}
               overall = "unknown"
 
-              lines = diff_text.splitlines()
-              for i, line in enumerate(lines):
-                  if line.startswith("-") and not line.startswith("---"):
-                      for j in range(i + 1, min(i + 6, len(lines))):
-                          if lines[j].startswith("+") and not lines[j].startswith("+++"):
-                              m_old = ver_regex.search(line)
-                              m_new = ver_regex.search(lines[j])
-                              if m_old and m_new:
-                                  old_v = [int(x) if x is not None else 0 for x in m_old.groups()]
-                                  new_v = [int(x) if x is not None else 0 for x in m_new.groups()]
-                                  if new_v[0] > old_v[0]:
-                                      t = "major"
-                                  elif new_v[1] > old_v[1]:
-                                      t = "minor"
-                                  elif new_v[2] > old_v[2]:
-                                      t = "patch"
-                                  else:
-                                      t = "unknown"
-                                  if rank[t] > rank[overall]:
-                                      overall = t
-                              break
+              for pkg in set(old_pkgs.keys()) & set(new_pkgs.keys()):
+                  old_v = old_pkgs[pkg]
+                  new_v = new_pkgs[pkg]
+                  if new_v[0] > old_v[0]:
+                      t = "major"
+                  elif new_v[1] > old_v[1]:
+                      t = "minor"
+                  elif len(new_v) > 2 and len(old_v) > 2 and new_v[2] > old_v[2]:
+                      t = "patch"
+                  else:
+                      t = "unknown"
+                  if rank[t] > rank[overall]:
+                      overall = t
+
               return overall
 
-          diff_type = get_diff_update_type(pr_url)
-
-          effective = diff_type
-          if effective == "unknown" and meta_type:
-              if "semver-major" in meta_type:
-                  effective = "major"
-              elif "semver-minor" in meta_type:
-                  effective = "minor"
-              elif "semver-patch" in meta_type:
-                  effective = "patch"
-
-          print(f"Diff update type: {diff_type}")
+          effective = determine_update_type(meta_type, pr_url)
           print(f"Metadata update type: {meta_type}")
           print(f"Effective update type: {effective}")
 
