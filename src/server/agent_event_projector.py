@@ -110,8 +110,6 @@ class AgentEventProjector(ApplicationLoggingMixin):
     def _on_agent_approval_requested(self, event: AgentApprovalRequestedEvent) -> None:
         payload = event.approval_payload or {}
         payload["status"] = payload.get("status") or "PENDING"
-        with self._lock:
-            self._approvals[event.approval_id] = payload
 
         conversation_id = self._resolve_conversation(event)
         self._conversation_store.append(
@@ -138,28 +136,21 @@ class AgentEventProjector(ApplicationLoggingMixin):
                 conversation_id=conversation_id,
             ),
         )
+        with self._lock:
+            self._approvals[event.approval_id] = payload
 
     def _on_agent_approval_resolved(self, event: AgentApprovalResolvedEvent) -> None:
         with self._lock:
-            approval = self._approvals.get(event.approval_id)
-            if approval is None:
-                approval = {"approval_id": event.approval_id}
-                self._approvals[event.approval_id] = approval
-            if event.error_code:
-                approval["status"] = "ERROR"
-                approval["error_code"] = event.error_code
-                approval["error_message"] = event.error_message
-            else:
-                approval["status"] = event.decision.upper()
-                approval.pop("error_code", None)
-                approval.pop("error_message", None)
-            if event.approval_payload:
-                approval.update(event.approval_payload)
+            existing = self._approvals.get(event.approval_id)
+            title = (
+                (event.approval_payload or {}).get("title")
+                or (existing or {}).get("title")
+                or "configuration change"
+            )
 
         if not event.error_code:
             conversation_id = self._resolve_conversation(event)
             decision_label = "Approved" if event.decision.lower() == "approve" else "Rejected"
-            title = approval.get("title") or "configuration change"
             decision_data = {
                 "action": event.decision.lower(),
                 "approval_id": event.approval_id,
@@ -177,6 +168,22 @@ class AgentEventProjector(ApplicationLoggingMixin):
                     conversation_id=conversation_id,
                 ),
             )
+
+        with self._lock:
+            approval = self._approvals.get(event.approval_id)
+            if approval is None:
+                approval = {"approval_id": event.approval_id}
+                self._approvals[event.approval_id] = approval
+            if event.error_code:
+                approval["status"] = "ERROR"
+                approval["error_code"] = event.error_code
+                approval["error_message"] = event.error_message
+            else:
+                approval["status"] = event.decision.upper()
+                approval.pop("error_code", None)
+                approval.pop("error_message", None)
+            if event.approval_payload:
+                approval.update(event.approval_payload)
 
     def _upsert_action(self, action_id: str, payload: dict) -> None:
         with self._lock:

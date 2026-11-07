@@ -227,3 +227,30 @@ def test_approval_resolved_records_decision_in_store():
     assert len(messages) == 1
     assert "Approved configuration change" in messages[0].content
     assert messages[0].payload["decision"]["commit_hash"] == "commit-123"
+
+
+def test_approval_resolved_persists_message_before_exposing_resolved_status():
+    bus = MessageEventBus()
+    observed_status_during_append = []
+
+    class InspectingStore(FakeConversationStore):
+        def append(self, session_id: str, message: ConversationMessage) -> None:
+            current = projector.get_approval("ap-order")
+            observed_status_during_append.append(current["status"] if current else None)
+            super().append(session_id, message)
+
+    store = InspectingStore()
+    projector = AgentEventProjector(event_bus=bus, conversation_store=store)
+    projector.subscribe()
+
+    bus.publish(AgentApprovalRequestedEvent(
+        approval_id="ap-order",
+        approval_payload={"approval_id": "ap-order", "title": "Pause BTC_USD", "status": "PENDING"},
+    ))
+    bus.publish(AgentApprovalResolvedEvent(
+        approval_id="ap-order",
+        decision="approve",
+        approval_payload={"approval_id": "ap-order", "title": "Pause BTC_USD", "status": "APPROVED"},
+    ))
+
+    assert observed_status_during_append == [None, "PENDING"]

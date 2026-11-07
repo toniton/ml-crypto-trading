@@ -114,6 +114,7 @@ def test_agent_proposes_and_user_approves_e2e(e2e_stack):
         return approval if approval["status"] == "APPROVED" else None
 
     approval = wait_for(approval_resolved)
+    wait_for(lambda: len(resolved) == 1)
     assert len(resolved) == 1
     assert resolved[0].decision == "approve"
 
