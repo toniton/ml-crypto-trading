@@ -1,6 +1,6 @@
 name: Dependabot auto-merge
 
-on:
+'on':
   pull_request:
     types: [ opened, synchronize, reopened ]
 
@@ -22,9 +22,28 @@ jobs:
         with:
           compat-lookup: true
 
-      - name: Enable auto-merge for patch updates
+      - name: Auto-merge patch updates
         if: steps.metadata.outputs.update-type == 'version-update:semver-patch'
-        run: gh pr merge --auto --squash "$PR_URL"
+        run: |
+          gh pr review --approve -b "Auto-approved patch update." "$PR_URL" || true
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bot approval & auto-merge for minor updates
+        if: steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: |
+          gh pr review --approve -b "🤖 Automated Bot Approval: Minor dependency update approved. Will auto-merge once all CI checks pass." "$PR_URL"
+          gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Flag major updates for manual review
+        if: steps.metadata.outputs.update-type == 'version-update:semver-major'
+        run: |
+          gh pr comment "$PR_URL" -b "⚠️ **Major Update Detected**: This pull request contains major version updates with potential breaking changes. Manual testing and approval are required."
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
