@@ -26,6 +26,8 @@ class PostgresSimulatedRunRepository(SimulatedRunRepository):
             status=entity.status,
             market_data_spec=entity.market_data_spec or {},
             execution_spec=entity.execution_spec or {},
+            effective_config=entity.effective_config,
+            baseline_run_id=entity.baseline_run_id,
             error_message=entity.error_message,
         )
         return entity
@@ -63,6 +65,8 @@ class PostgresSimulatedRunRepository(SimulatedRunRepository):
             status: str,
             market_data_spec: dict[str, Any],
             execution_spec: dict[str, Any],
+            effective_config: Optional[dict[str, Any]] = None,
+            baseline_run_id: Optional[str] = None,
             error_message: Optional[str] = None,
     ) -> None:
         existing = (
@@ -78,6 +82,10 @@ class PostgresSimulatedRunRepository(SimulatedRunRepository):
             existing.status = status
             existing.market_data_spec = market_data_spec
             existing.execution_spec = execution_spec
+            if effective_config is not None:
+                existing.effective_config = effective_config
+            if baseline_run_id is not None:
+                existing.baseline_run_id = baseline_run_id
             existing.error_message = error_message
         else:
             self.database_session.add(
@@ -90,6 +98,8 @@ class PostgresSimulatedRunRepository(SimulatedRunRepository):
                     status=status,
                     market_data_spec=market_data_spec,
                     execution_spec=execution_spec,
+                    effective_config=effective_config,
+                    baseline_run_id=baseline_run_id,
                     error_message=error_message,
                 )
             )
@@ -154,6 +164,8 @@ class PostgresSimulatedRunRepository(SimulatedRunRepository):
             "candidate_commit": row.candidate_commit,
             "config_hash": row.config_hash,
             "status": row.status,
+            "effective_config": row.effective_config or {},
+            "baseline_run_id": row.baseline_run_id,
             "market_data_spec": row.market_data_spec or {},
             "execution_spec": row.execution_spec or {},
             "error_message": row.error_message,
@@ -275,6 +287,9 @@ class PostgresPromotionRecordRepository(PromotionRecordRepository):
             gate_results=entity.gate_results or {},
             approval_notes=entity.approval_notes,
             merge_commit_hash=entity.merge_commit_hash,
+            report_id=entity.report_id,
+            run_id=entity.run_id,
+            config_hash=entity.config_hash,
         )
         return entity
 
@@ -314,6 +329,9 @@ class PostgresPromotionRecordRepository(PromotionRecordRepository):
             gate_results: dict[str, Any],
             approval_notes: Optional[str] = None,
             merge_commit_hash: Optional[str] = None,
+            report_id: Optional[str] = None,
+            run_id: Optional[str] = None,
+            config_hash: Optional[str] = None,
     ) -> None:
         existing = (
             self.database_session.query(PromotionRecordDao)
@@ -327,6 +345,12 @@ class PostgresPromotionRecordRepository(PromotionRecordRepository):
             existing.gate_results = gate_results
             if merge_commit_hash:
                 existing.merge_commit_hash = merge_commit_hash
+            if report_id:
+                existing.report_id = report_id
+            if run_id:
+                existing.run_id = run_id
+            if config_hash:
+                existing.config_hash = config_hash
         else:
             self.database_session.add(
                 PromotionRecordDao(
@@ -337,6 +361,9 @@ class PostgresPromotionRecordRepository(PromotionRecordRepository):
                     source_commit=source_commit,
                     target_ref=target_ref,
                     merge_commit_hash=merge_commit_hash,
+                    report_id=report_id,
+                    run_id=run_id,
+                    config_hash=config_hash,
                     status=status,
                     approver=approver,
                     approval_notes=approval_notes,
@@ -393,6 +420,9 @@ class PostgresPromotionRecordRepository(PromotionRecordRepository):
             "source_commit": row.source_commit,
             "target_ref": row.target_ref,
             "merge_commit_hash": row.merge_commit_hash,
+            "report_id": row.report_id,
+            "run_id": row.run_id,
+            "config_hash": row.config_hash,
             "status": row.status,
             "approver": row.approver,
             "approval_notes": row.approval_notes,

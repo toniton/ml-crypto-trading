@@ -55,6 +55,7 @@ class SimulationReportService(ApplicationLoggingMixin):
         gate_b_result = self._policy.evaluate_gate_b(
             metrics=summary.model_dump(mode="json"),
             baseline_metrics=baseline_summary.model_dump(mode="json") if baseline_summary else None,
+            operational_diagnostics=operational_diagnostics,
         )
 
         config_hash = run.get("config_hash") or hashlib.sha256(

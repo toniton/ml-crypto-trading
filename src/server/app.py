@@ -183,11 +183,14 @@ class ChatApp:
                 pass
             await asyncio.to_thread(walk_forward_service.recover_on_startup)
             await asyncio.to_thread(backtest_service.recover_on_startup)
+            if hasattr(_app_instance.state, "simulation_orchestrator"):
+                await asyncio.to_thread(_app_instance.state.simulation_orchestrator.recover_interrupted_runs)
             yield
             runtime_collector.stop_monitoring()
             timeline_projector.close()
 
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0", lifespan=lifespan)
+        app.state.db_manager = db_manager
         app.state.agent = agent
         app.state.vcs = vcs
         app.state.trading_proxy = trading_proxy
@@ -293,7 +296,7 @@ class ChatApp:
         order_by_day_service = OrderByDayService(db_manager)
         order_week_service = OrderWeekService(db_manager)
         order_latency_service = OrderLatencyService(db_manager)
-        asset_performance_service = AssetPerformanceService(db_manager)
+        asset_performance_service = AssetPerformanceService(db_manager, trading_proxy=trading_proxy)
 
         @app.get("/api/v1/orders/latency/{year}/{month}")
         async def order_latency_endpoint(year: int, month: int):

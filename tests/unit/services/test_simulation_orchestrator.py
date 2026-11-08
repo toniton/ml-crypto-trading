@@ -56,7 +56,7 @@ class TestSimulationOrchestrator:
                 name="BTC Strategy Experiment",
                 ticker_symbol="BTC_USD",
                 branch_id="exp-branch-01",
-                base_commit_hash="commit_head_123",
+                base_commit_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
                 status="DRAFT",
                 spec={
                     "candidates": [
@@ -64,7 +64,7 @@ class TestSimulationOrchestrator:
                             "candidate_id": "cand_trend",
                             "name": "Trend Candidate",
                             "strategy_weights": {"TrendBreakout": 1.5},
-                            "candidate_commit_hash": "commit_head_123",
+                            "candidate_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
                         },
                         {
                             "candidate_id": "cand_invalid",
@@ -152,7 +152,7 @@ class TestSimulationOrchestrator:
 
         report = self.report_service.get_report_by_run(run_id)
         assert report is not None
-        assert report["decision"] == "PASS"
+        assert report["decision"] == "INCONCLUSIVE"
 
     def test_cancel_simulated_run(self):
         req = CreateSimulatedRunRequest(

@@ -12,10 +12,10 @@ class TestPromotionPolicy:
         candidate = {
             "candidate_id": "cand_1",
             "strategy_weights": {"TrendFollowing": 1.2, "RsiOversold": 0.8},
-            "candidate_commit_hash": "commit_123456",
+            "candidate_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6",
         }
         experiment = {
-            "base_commit_hash": "base_commit_111",
+            "base_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6",
             "run_bindings": [{"run_id": "bt_01"}],
         }
 
@@ -27,10 +27,10 @@ class TestPromotionPolicy:
         candidate = {
             "candidate_id": "cand_empty",
             "strategy_weights": {},
-            "candidate_commit_hash": "commit_123456",
+            "candidate_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6",
         }
         experiment = {
-            "base_commit_hash": "base_commit_111",
+            "base_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6",
             "run_bindings": [{"run_id": "bt_01"}],
         }
 
@@ -47,22 +47,40 @@ class TestPromotionPolicy:
             "runtime_errors_count": 0,
         }
         baseline = {"net_return_pct": 2.0}
+        diagnostics = {"telemetry_available": True, "runtime_errors_count": 0, "missed_ticks": 0}
 
-        result = self.policy.evaluate_gate_b(metrics, baseline)
+        result = self.policy.evaluate_gate_b(metrics, baseline, operational_diagnostics=diagnostics)
         assert result.decision == GateDecision.PASS
 
-    def test_gate_b_inconclusive_when_trades_below_minimum(self):
+    def test_gate_b_inconclusive_when_baseline_missing(self):
         metrics = {
-            "executed_trades": 3,
+            "executed_trades": 8,
             "max_drawdown_pct": 4.0,
             "net_return_pct": 10.0,
             "runtime_errors_count": 0,
         }
+        diagnostics = {"telemetry_available": True}
 
-        result = self.policy.evaluate_gate_b(metrics)
+        result = self.policy.evaluate_gate_b(metrics, baseline_metrics=None, operational_diagnostics=diagnostics)
         assert result.decision == GateDecision.INCONCLUSIVE
-        check = next(c for c in result.checks if c.name == "minimum_executed_trades")
+        check = next(c for c in result.checks if c.name == "return_vs_baseline")
         assert check.status == GateCheckStatus.FAILED
+        assert "Mandatory baseline" in check.message
+
+    def test_gate_b_inconclusive_when_telemetry_missing(self):
+        metrics = {
+            "executed_trades": 8,
+            "max_drawdown_pct": 4.0,
+            "net_return_pct": 10.0,
+            "runtime_errors_count": 0,
+        }
+        baseline = {"net_return_pct": 2.0}
+
+        result = self.policy.evaluate_gate_b(metrics, baseline_metrics=baseline, operational_diagnostics=None)
+        assert result.decision == GateDecision.INCONCLUSIVE
+        check = next(c for c in result.checks if c.name == "runtime_stability")
+        assert check.status == GateCheckStatus.FAILED
+        assert "Diagnostic telemetry missing" in check.message
 
     def test_gate_b_fails_when_drawdown_exceeds_limit(self):
         metrics = {
@@ -71,8 +89,10 @@ class TestPromotionPolicy:
             "net_return_pct": 12.0,
             "runtime_errors_count": 0,
         }
+        baseline = {"net_return_pct": 2.0}
+        diagnostics = {"telemetry_available": True}
 
-        result = self.policy.evaluate_gate_b(metrics)
+        result = self.policy.evaluate_gate_b(metrics, baseline, operational_diagnostics=diagnostics)
         assert result.decision == GateDecision.FAIL
         check = next(c for c in result.checks if c.name == "maximum_drawdown_limit")
         assert check.status == GateCheckStatus.FAILED
@@ -85,8 +105,9 @@ class TestPromotionPolicy:
             "runtime_errors_count": 0,
         }
         baseline = {"net_return_pct": 3.0}
+        diagnostics = {"telemetry_available": True}
 
-        result = self.policy.evaluate_gate_b(metrics, baseline)
+        result = self.policy.evaluate_gate_b(metrics, baseline, operational_diagnostics=diagnostics)
         assert result.decision == GateDecision.FAIL
         check = next(c for c in result.checks if c.name == "return_vs_baseline")
         assert check.status == GateCheckStatus.FAILED
@@ -98,27 +119,37 @@ class TestPromotionPolicy:
             "net_return_pct": 8.0,
             "runtime_errors_count": 2,
         }
+        baseline = {"net_return_pct": 2.0}
+        diagnostics = {"telemetry_available": True, "runtime_errors_count": 2}
 
-        result = self.policy.evaluate_gate_b(metrics)
+        result = self.policy.evaluate_gate_b(metrics, baseline, operational_diagnostics=diagnostics)
         assert result.decision == GateDecision.FAIL
         check = next(c for c in result.checks if c.name == "runtime_stability")
         assert check.status == GateCheckStatus.FAILED
 
     def test_gate_c_passes_with_approver_and_no_conflicts(self):
         preview = {"conflicts": [], "can_fast_forward": True}
-        result = self.policy.evaluate_gate_c("operator_alice", preview)
+        result = self.policy.evaluate_gate_c(
+            approver="alice@rio.trade",
+            merge_preview=preview,
+            config_hash_match=True,
+        )
         assert result.decision == GateDecision.PASS
 
-    def test_gate_c_fails_with_missing_approver(self):
-        preview = {"conflicts": []}
-        result = self.policy.evaluate_gate_c("", preview)
+    def test_gate_c_fails_with_placeholder_approver(self):
+        preview = {"conflicts": [], "can_fast_forward": True}
+        result = self.policy.evaluate_gate_c(
+            approver="anonymous",
+            merge_preview=preview,
+            config_hash_match=True,
+        )
         assert result.decision == GateDecision.FAIL
-        check = next(c for c in result.checks if c.name == "authorized_approver")
-        assert check.status == GateCheckStatus.FAILED
 
-    def test_gate_c_fails_with_merge_conflicts(self):
-        preview = {"conflicts": [{"path": "assets.BTC_USD.strategies"}]}
-        result = self.policy.evaluate_gate_c("operator_alice", preview)
+    def test_gate_c_fails_when_config_hash_mismatches(self):
+        preview = {"conflicts": [], "can_fast_forward": True}
+        result = self.policy.evaluate_gate_c(
+            approver="alice@rio.trade",
+            merge_preview=preview,
+            config_hash_match=False,
+        )
         assert result.decision == GateDecision.FAIL
-        check = next(c for c in result.checks if c.name == "merge_conflict_free")
-        assert check.status == GateCheckStatus.FAILED

@@ -54,6 +54,7 @@ class SimulatedRunMarketDataSpec(BaseModel):
     started_at: Optional[datetime] = None
     planned_end_at: Optional[datetime] = None
     real_time: bool = True
+    simulation_mode: str = "FORWARD_PAPER"
 
 
 class SimulatedRunExecutionSpec(BaseModel):
@@ -77,6 +78,8 @@ class SimulatedRunRecord(BaseModel):
     candidate_commit: str
     config_hash: str
     status: PromotionLifecycleState
+    effective_config: dict[str, Any] = Field(default_factory=dict)
+    baseline_run_id: Optional[str] = None
     market_data_spec: dict[str, Any] = Field(default_factory=dict)
     execution_spec: dict[str, Any] = Field(default_factory=dict)
     error_message: Optional[str] = None
@@ -108,6 +111,8 @@ class PromoteToMainRequest(BaseModel):
     idempotency_key: str
     experiment_id: str
     candidate_id: str
+    report_id: str
+    run_id: str
     approver: str
     approval_notes: Optional[str] = None
     target_ref: str = "refs/heads/main"
@@ -121,6 +126,9 @@ class PromotionRecord(BaseModel):
     source_commit: str
     target_ref: str
     merge_commit_hash: Optional[str] = None
+    report_id: Optional[str] = None
+    run_id: Optional[str] = None
+    config_hash: Optional[str] = None
     status: PromotionLifecycleState
     approver: str
     approval_notes: Optional[str] = None

@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
+from src.core.interfaces.trading_engine_proxy import AssetRuntimeSnapshot
 from src.server.services.asset_performance_service import AssetPerformanceService
 
 
@@ -184,3 +185,78 @@ def test_extract_trades_with_audit_detects_unmatched_exits():
     assert not extraction.trades
     assert extraction.unmatched_exit_quantity == Decimal("5")
     assert extraction.unmatched_exit_orders == 1
+
+
+def test_equity_curve_tracks_cumulative_pnl_and_drawdown():
+    dt1 = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+    dt2 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+    dt3 = datetime(2026, 9, 2, 10, 0, 0, tzinfo=timezone.utc)
+    dt4 = datetime(2026, 9, 2, 12, 0, 0, tzinfo=timezone.utc)
+
+    orders = [
+        make_order("o1", TradeAction.BUY, 100.0, "10.0", dt1, fees=2.0),
+        make_order("o2", TradeAction.SELL, 120.0, "10.0", dt2),
+        make_order("o3", TradeAction.BUY, 100.0, "10.0", dt3),
+        make_order("o4", TradeAction.SELL, 89.8, "10.0", dt4),
+    ]
+
+    res = AssetPerformanceService.compute_metrics(
+        "BTC_USD",
+        datetime(2026, 9, 1, tzinfo=timezone.utc),
+        datetime(2026, 9, 10, tzinfo=timezone.utc),
+        orders,
+    )
+
+    assert [
+        (pt.equity, pt.cumulative_pnl, pt.drawdown_pct)
+        for pt in res.equity_curve
+    ] == [
+        ("1002.00", "+0.00", 0.0),
+        ("1000.00", "-2.00", 0.2),
+        ("1200.00", "+198.00", 0.0),
+        ("1200.00", "+198.00", 0.0),
+        ("1098.00", "+96.00", 8.5),
+    ]
+
+
+def test_equity_curve_uses_real_runtime_snapshot_balance_and_mark_to_market():
+    dt1 = datetime(2026, 9, 1, 10, 0, 0, tzinfo=timezone.utc)
+    dt2 = datetime(2026, 9, 1, 12, 0, 0, tzinfo=timezone.utc)
+    dt3 = datetime(2026, 9, 2, 10, 0, 0, tzinfo=timezone.utc)
+
+    orders = [
+        make_order("o1", TradeAction.BUY, 100.0, "10.0", dt1),
+        make_order("o2", TradeAction.SELL, 110.0, "10.0", dt2),
+        make_order("o3", TradeAction.BUY, 110.0, "5.0", dt3),
+    ]
+    snapshot = AssetRuntimeSnapshot(
+        ticker_symbol="BTC_USD",
+        starting_balance=2500.0,
+        available_balance=2050.0,
+        position_quantity=5.0,
+        latest_price=120.0,
+    )
+
+    res = AssetPerformanceService.compute_metrics(
+        "BTC_USD",
+        datetime(2026, 9, 1, tzinfo=timezone.utc),
+        datetime(2026, 9, 10, tzinfo=timezone.utc),
+        orders,
+        runtime_snapshot=snapshot,
+    )
+
+    assert (
+        res.starting_balance,
+        res.current_equity,
+        [(pt.equity, pt.cumulative_pnl) for pt in res.equity_curve],
+    ) == (
+        "2500.00",
+        "2650.00",
+        [
+            ("2500.00", "+0.00"),
+            ("2500.00", "+0.00"),
+            ("2600.00", "+100.00"),
+            ("2600.00", "+100.00"),
+            ("2650.00", "+150.00"),
+        ],
+    )

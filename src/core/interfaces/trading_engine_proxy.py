@@ -25,6 +25,12 @@ class AssetRuntimeSnapshot(BaseModel):
     total_trades_count: int = Field(default=0, description="Total executed trades count")
     position_quantity: float = Field(default=0.0, description="Current held position quantity")
     latest_price: Optional[float] = Field(default=None, description="Latest market price")
+    starting_balance: Optional[float] = Field(
+        default=None, description="Starting quote balance for the asset"
+    )
+    available_balance: Optional[float] = Field(
+        default=None, description="Current available quote balance for the asset"
+    )
 
 
 class RecordedMarketDataSummary(BaseModel):
@@ -96,4 +102,3 @@ class TradingEngineProxy(ABC):
     def resume_trading(self) -> Optional[dict[str, Any]]:
         """Manually initiates recovery or resumes trading."""
         return None
-

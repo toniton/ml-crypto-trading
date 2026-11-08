@@ -9,6 +9,7 @@ from api.interfaces.promotion import (
     GateDecision,
     GateEvaluationResult,
 )
+from src.server.services.canonical_config import validate_commit_hash
 
 
 class PromotionPolicy:
@@ -17,10 +18,12 @@ class PromotionPolicy:
             min_trades: int = 5,
             max_drawdown_pct: float = 15.0,
             require_prior_backtest: bool = True,
+            authorized_approvers: Optional[set[str]] = None,
     ) -> None:
         self.min_trades = min_trades
         self.max_drawdown_pct = max_drawdown_pct
         self.require_prior_backtest = require_prior_backtest
+        self.authorized_approvers = authorized_approvers
 
     def evaluate_gate_a(
             self,
@@ -32,29 +35,32 @@ class PromotionPolicy:
         checks: list[GateCheckItem] = []
 
         # 1. Configuration schema check
-        weights = candidate.get("strategy_weights")
+        weights = candidate.get("strategy_weights") or {}
+        strategies = candidate.get("strategies") or []
         has_weights = isinstance(weights, dict) and len(weights) > 0
+        has_strategies = isinstance(strategies, list) and len(strategies) > 0
+        has_config = has_weights or has_strategies
         checks.append(
             GateCheckItem(
                 name="configuration_valid",
-                status=GateCheckStatus.PASSED if has_weights else GateCheckStatus.FAILED,
+                status=GateCheckStatus.PASSED if has_config else GateCheckStatus.FAILED,
                 message="Candidate contains valid strategy configuration."
-                if has_weights
+                if has_config
                 else "Candidate strategy configuration is missing or empty.",
-                value=len(weights) if isinstance(weights, dict) else 0,
+                value=len(weights) if weights else len(strategies),
             )
         )
 
-        # 2. Source commit traceability
+        # 2. Source commit traceability (reject "HEAD" or invalid hashes)
         source_commit = candidate.get("candidate_commit_hash") or base_commit or experiment.get("base_commit_hash")
-        has_commit = bool(source_commit and len(str(source_commit)) >= 6)
+        valid_commit = validate_commit_hash(source_commit)
         checks.append(
             GateCheckItem(
                 name="source_commit_traceable",
-                status=GateCheckStatus.PASSED if has_commit else GateCheckStatus.FAILED,
-                message=f"Tied to source commit {str(source_commit)[:8]}."
-                if has_commit
-                else "Source commit is unknown or uncommitted.",
+                status=GateCheckStatus.PASSED if valid_commit else GateCheckStatus.FAILED,
+                message=f"Tied to immutable source commit {str(source_commit)[:8]}."
+                if valid_commit
+                else f"Source commit '{source_commit}' is invalid, uncommitted, or unpinned HEAD.",
                 value=source_commit,
             )
         )
@@ -62,10 +68,11 @@ class PromotionPolicy:
         # 3. Prior backtest verification
         bindings = run_bindings or experiment.get("run_bindings", [])
         has_backtest = bool(bindings and len(bindings) > 0)
+        backtest_passed = has_backtest or not self.require_prior_backtest
         checks.append(
             GateCheckItem(
                 name="prior_backtest_exists",
-                status=GateCheckStatus.PASSED if (has_backtest or not self.require_prior_backtest) else GateCheckStatus.FAILED,
+                status=GateCheckStatus.PASSED if backtest_passed else GateCheckStatus.FAILED,
                 message=f"Found {len(bindings)} prior test run(s)."
                 if has_backtest
                 else "No prior backtest run bindings found for candidate.",
@@ -87,16 +94,13 @@ class PromotionPolicy:
             self,
             metrics: dict[str, Any],
             baseline_metrics: Optional[dict[str, Any]] = None,
+            operational_diagnostics: Optional[dict[str, Any]] = None,
     ) -> GateEvaluationResult:
         checks: list[GateCheckItem] = []
 
         trades = int(metrics.get("executed_trades", 0))
         max_dd = float(metrics.get("max_drawdown_pct", 0.0))
-        runtime_errors = int(metrics.get("runtime_errors_count", 0))
         net_return = float(metrics.get("net_return_pct", 0.0))
-
-        baseline_return = float(baseline_metrics.get("net_return_pct", 0.0)) if baseline_metrics else 0.0
-        return_diff = net_return - baseline_return
 
         # 1. Minimum trades check
         trades_passed = trades >= self.min_trades
@@ -126,35 +130,56 @@ class PromotionPolicy:
             )
         )
 
-        # 3. Return vs Main baseline
-        return_passed = return_diff >= 0.0
-        checks.append(
-            GateCheckItem(
-                name="return_vs_baseline",
-                status=GateCheckStatus.PASSED if return_passed else GateCheckStatus.FAILED,
-                message=f"Net return delta vs baseline is {return_diff:+.2f}%."
-                if return_passed
-                else f"Candidate underperformed baseline by {abs(return_diff):.2f}%.",
-                value=return_diff,
-                threshold=0.0,
+        # 3. Return vs Baseline check (Mandatory baseline requirement)
+        if baseline_metrics is not None and "net_return_pct" in baseline_metrics:
+            baseline_return = float(baseline_metrics["net_return_pct"])
+            return_diff = net_return - baseline_return
+            return_passed = return_diff >= 0.0
+            checks.append(
+                GateCheckItem(
+                    name="return_vs_baseline",
+                    status=GateCheckStatus.PASSED if return_passed else GateCheckStatus.FAILED,
+                    message=f"Net return delta vs baseline is {return_diff:+.2f}%."
+                    if return_passed
+                    else f"Candidate underperformed baseline by {abs(return_diff):.2f}%.",
+                    value=return_diff,
+                    threshold=0.0,
+                )
             )
-        )
+        else:
+            return_passed = False
+            checks.append(
+                GateCheckItem(
+                    name="return_vs_baseline",
+                    status=GateCheckStatus.FAILED,
+                    message="Mandatory baseline comparison metrics are missing.",
+                    value=None,
+                    threshold=0.0,
+                )
+            )
 
-        # 4. Zero runtime errors
-        errors_passed = runtime_errors == 0
+        # 4. Operational Stability & Diagnostic Telemetry
+        has_diagnostics = operational_diagnostics is not None
+        runtime_errors = int((operational_diagnostics or {}).get("runtime_errors_count", 0))
+        errors_passed = has_diagnostics and runtime_errors == 0
+        if errors_passed:
+            stability_msg = "Zero runtime errors verified by active telemetry."
+        elif not has_diagnostics:
+            stability_msg = "Diagnostic telemetry missing."
+        else:
+            stability_msg = f"Encountered {runtime_errors} runtime error(s)."
+
         checks.append(
             GateCheckItem(
                 name="runtime_stability",
                 status=GateCheckStatus.PASSED if errors_passed else GateCheckStatus.FAILED,
-                message="Zero runtime errors or balance discrepancies."
-                if errors_passed
-                else f"Encountered {runtime_errors} runtime error(s) during simulation.",
-                value=runtime_errors,
+                message=stability_msg,
+                value=runtime_errors if has_diagnostics else None,
                 threshold=0,
             )
         )
 
-        if not trades_passed:
+        if not trades_passed or baseline_metrics is None or not has_diagnostics:
             decision = GateDecision.INCONCLUSIVE
         elif dd_passed and return_passed and errors_passed:
             decision = GateDecision.PASS
@@ -172,18 +197,37 @@ class PromotionPolicy:
             self,
             approver: str,
             merge_preview: dict[str, Any],
+            config_hash_match: bool = True,
     ) -> GateEvaluationResult:
         checks: list[GateCheckItem] = []
 
-        has_approver = bool(approver and approver.strip())
+        clean_approver = (approver or "").strip()
+        invalid_approvers = {"anonymous", "unknown", "none"}
+        is_known = len(clean_approver) >= 3 and clean_approver.lower() not in invalid_approvers
+        if self.authorized_approvers is not None:
+            is_authorized = clean_approver in self.authorized_approvers
+        else:
+            is_authorized = is_known
+
         checks.append(
             GateCheckItem(
                 name="authorized_approver",
-                status=GateCheckStatus.PASSED if has_approver else GateCheckStatus.FAILED,
-                message=f"Approved by operator: {approver.strip()}."
-                if has_approver
-                else "Operator signature / identity is missing.",
-                value=approver,
+                status=GateCheckStatus.PASSED if is_authorized else GateCheckStatus.FAILED,
+                message=f"Authorized operator approval verified: {clean_approver}."
+                if is_authorized
+                else f"Operator '{clean_approver}' is not authorized to promote to main.",
+                value=clean_approver,
+            )
+        )
+
+        checks.append(
+            GateCheckItem(
+                name="evidence_hash_match",
+                status=GateCheckStatus.PASSED if config_hash_match else GateCheckStatus.FAILED,
+                message="Simulation report config hash matches candidate canonical snapshot."
+                if config_hash_match
+                else "Candidate configuration was modified after simulation report was generated.",
+                value=config_hash_match,
             )
         )
 

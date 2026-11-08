@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from unittest.mock import MagicMock
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from api.interfaces.promotion import GateDecision, PromoteToMainRequest, PromotionLifecycleState
 from src.database.dao.experiment_dao import ExperimentDao
@@ -19,6 +22,11 @@ from src.database.repositories.providers.postgres_promotion_repository import (
     PostgresSimulationReportRepository,
 )
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
+from src.server.routes.promotion_routes import create_promotion_router
+from src.server.services.canonical_config import (
+    build_canonical_effective_config,
+    compute_canonical_config_hash,
+)
 from src.server.services.main_promotion_service import MainPromotionService
 from src.server.services.promotion_policy import PromotionPolicy
 
@@ -34,7 +42,11 @@ class DummyDbManager:
 
 class TestMainPromotionService:
     def setup_method(self):
-        self.engine = create_engine("sqlite:///:memory:")
+        self.engine = create_engine(
+            "sqlite:///:memory:",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
         SqlAlchemyDatabaseManager.BaseTableModel.metadata.create_all(
             self.engine,
             tables=[
@@ -48,6 +60,15 @@ class TestMainPromotionService:
         self.session_factory = sessionmaker(bind=self.engine)
         self.db_manager = DummyDbManager(self.session_factory)
 
+        self.candidate_config = {
+            "candidate_id": "cand_trend",
+            "name": "Trend Candidate",
+            "strategy_weights": {"TrendBreakout": 1.5},
+            "candidate_commit_hash": "commit_head_123",
+        }
+        self.effective_config = build_canonical_effective_config(self.candidate_config, {})
+        self.config_hash = compute_canonical_config_hash(self.effective_config)
+
         # Seed experiment
         with self.db_manager.get_unit_of_work() as uow:
             exp_repo = uow.get_repository(PostgresExperimentRepository)
@@ -59,14 +80,7 @@ class TestMainPromotionService:
                 base_commit_hash="commit_head_123",
                 status="DRAFT",
                 spec={
-                    "candidates": [
-                        {
-                            "candidate_id": "cand_trend",
-                            "name": "Trend Candidate",
-                            "strategy_weights": {"TrendBreakout": 1.5},
-                            "candidate_commit_hash": "commit_head_123",
-                        }
-                    ]
+                    "candidates": [self.candidate_config]
                 },
                 run_bindings=[],
             )
@@ -77,17 +91,18 @@ class TestMainPromotionService:
                 experiment_id="exp_btc",
                 candidate_id="cand_trend",
                 candidate_commit="commit_head_123",
-                config_hash="hash_111",
+                config_hash=self.config_hash,
                 status=PromotionLifecycleState.REPORT_READY.value,
                 market_data_spec={},
                 execution_spec={},
+                effective_config=self.effective_config,
             )
 
             report_repo = uow.get_repository(PostgresSimulationReportRepository)
             report_repo.save_report(
                 report_id="rep_pass_01",
                 run_id="run_pass_01",
-                config_hash="hash_111",
+                config_hash=self.config_hash,
                 decision=GateDecision.PASS.value,
                 summary_metrics={"net_return_pct": 5.0, "executed_trades": 8},
                 report_payload={},
@@ -99,6 +114,7 @@ class TestMainPromotionService:
         mock_preview.conflicts = []
         mock_preview.merge_base_hash = "base_123"
         self.mock_vcs.preview_merge.return_value = mock_preview
+        self.mock_vcs.checkout.return_value = {}
 
         mock_result = MagicMock()
         mock_result.merge_commit_hash = "merge_commit_999"
@@ -118,6 +134,8 @@ class TestMainPromotionService:
             idempotency_key="key_001",
             experiment_id="exp_btc",
             candidate_id="cand_trend",
+            report_id="rep_pass_01",
+            run_id="run_pass_01",
             approver="alice@rio.trade",
         )
 
@@ -131,6 +149,8 @@ class TestMainPromotionService:
             idempotency_key="key_002",
             experiment_id="exp_btc",
             candidate_id="cand_trend",
+            report_id="rep_pass_01",
+            run_id="run_pass_01",
             approver="alice@rio.trade",
             approval_notes="Reviewed paper trading report.",
         )
@@ -147,6 +167,8 @@ class TestMainPromotionService:
             idempotency_key="key_idempotent_01",
             experiment_id="exp_btc",
             candidate_id="cand_trend",
+            report_id="rep_pass_01",
+            run_id="run_pass_01",
             approver="alice@rio.trade",
         )
 
@@ -164,8 +186,33 @@ class TestMainPromotionService:
             idempotency_key="key_003",
             experiment_id="exp_btc",
             candidate_id="cand_nonexistent",
+            report_id="rep_missing",
+            run_id="run_missing",
             approver="alice@rio.trade",
         )
 
         with pytest.raises(ValueError, match="not found"):
             self.service.promote_to_main(req)
+
+    def test_promotion_audit_endpoint_returns_recorded_events(self):
+        req = PromoteToMainRequest(
+            idempotency_key="key_audit_01",
+            experiment_id="exp_btc",
+            candidate_id="cand_trend",
+            report_id="rep_pass_01",
+            run_id="run_pass_01",
+            approver="alice@rio.trade",
+        )
+        promoted = self.service.promote_to_main(req)
+
+        app = FastAPI()
+        app.state.main_promotion_service = self.service
+        app.include_router(create_promotion_router())
+        client = TestClient(app)
+
+        res = client.get(
+            "/api/v1/promotions/audit",
+            params={"promotion_id": promoted["promotion_id"]},
+        )
+
+        assert res.json()[0]["event_type"] == "PROMOTED_TO_MAIN"
