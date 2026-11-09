@@ -159,13 +159,16 @@ class PromotionPolicy:
             )
 
         # 4. Operational Stability & Diagnostic Telemetry
-        has_diagnostics = operational_diagnostics is not None
+        has_diagnostics = (
+            operational_diagnostics is not None
+            and operational_diagnostics.get("telemetry_available") is True
+        )
         runtime_errors = int((operational_diagnostics or {}).get("runtime_errors_count", 0))
         errors_passed = has_diagnostics and runtime_errors == 0
         if errors_passed:
             stability_msg = "Zero runtime errors verified by active telemetry."
         elif not has_diagnostics:
-            stability_msg = "Diagnostic telemetry missing."
+            stability_msg = "Diagnostic telemetry missing or unavailable."
         else:
             stability_msg = f"Encountered {runtime_errors} runtime error(s)."
 

@@ -96,6 +96,9 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         mkt_spec = req.market_data or SimulatedRunMarketDataSpec(ticker_symbol=default_ticker)
         exec_spec = req.execution or SimulatedRunExecutionSpec()
 
+        if mkt_spec.duration_hours <= 0:
+            raise ValueError("Simulation duration_hours must be positive.")
+
         now = datetime.now(timezone.utc)
         planned_end = now + timedelta(hours=mkt_spec.duration_hours)
         mkt_spec_dict = mkt_spec.model_dump(mode="json")
@@ -110,8 +113,26 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         )
         candidate_config_hash = compute_canonical_config_hash(candidate_effective_config)
 
+        target_ticker = (
+            candidate.get("ticker_symbol")
+            or experiment.get("ticker_symbol")
+            or mkt_spec.ticker_symbol
+            or default_ticker
+        )
+        baseline_candidate = {}
+        if base_config and isinstance(base_config.get("assets"), list):
+            matching_asset = next(
+                (
+                    a for a in base_config["assets"]
+                    if isinstance(a, dict) and a.get("ticker_symbol") == target_ticker
+                ),
+                {},
+            )
+            if matching_asset:
+                baseline_candidate = matching_asset
+
         baseline_effective_config = build_canonical_effective_config(
-            {},
+            baseline_candidate,
             base_config or experiment,
             execution_spec=exec_spec.model_dump(mode="json"),
             market_data_spec=mkt_spec_dict,
@@ -276,31 +297,39 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         with self._db_manager.get_unit_of_work() as uow:
             run_repo = uow.get_repository(PostgresSimulatedRunRepository)
             audit_repo = uow.get_repository(PostgresPromotionAuditRepository)
-            active_runs = run_repo.list_runs(limit=200)
             recovered_count = 0
-            for run in active_runs:
-                if run.get("status") in (
-                    PromotionLifecycleState.SIMULATING.value,
-                    PromotionLifecycleState.SIMULATION_QUEUED.value,
-                ):
-                    run_id = run["run_id"]
-                    run_repo.update_status(
-                        run_id,
-                        PromotionLifecycleState.FAILED.value,
-                        "Run was interrupted by server shutdown/restart.",
-                    )
-                    audit_repo.record_event(
-                        event_id=f"evt_{uuid.uuid4().hex[:10]}",
-                        event_type="SIMULATION_FAILED",
-                        from_state=run["status"],
-                        to_state=PromotionLifecycleState.FAILED.value,
-                        actor="system_startup_recovery",
-                        payload={"run_id": run_id, "reason": "server_restart"},
-                    )
-                    recovered_count += 1
+            page_size = 200
+            offset = 0
+            while True:
+                active_runs = run_repo.list_runs(limit=page_size, offset=offset)
+                if not active_runs:
+                    break
+                for run in active_runs:
+                    if run.get("status") in (
+                        PromotionLifecycleState.SIMULATING.value,
+                        PromotionLifecycleState.SIMULATION_QUEUED.value,
+                    ):
+                        run_id = run["run_id"]
+                        run_repo.update_status(
+                            run_id,
+                            PromotionLifecycleState.FAILED.value,
+                            "Run was interrupted by server shutdown/restart.",
+                        )
+                        audit_repo.record_event(
+                            event_id=f"evt_{uuid.uuid4().hex[:10]}",
+                            event_type="SIMULATION_FAILED",
+                            from_state=run["status"],
+                            to_state=PromotionLifecycleState.FAILED.value,
+                            actor="system_startup_recovery",
+                            payload={"run_id": run_id, "reason": "server_restart"},
+                        )
+                        recovered_count += 1
+                if len(active_runs) < page_size:
+                    break
+                offset += page_size
             return recovered_count
 
-    def _run_simulation_worker(  # pylint: disable=too-many-locals,too-many-statements
+    def _run_simulation_worker(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
             self,
             run_id: str,
             baseline_run_id: str,
@@ -341,73 +370,32 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             base_curr = parts[0] if len(parts) == 2 else "BTC"
             quote_curr = parts[1] if len(parts) == 2 else "USD"
 
-            cand_weights = candidate_effective_config.get("strategy_weights") or {"CandidateStrategy": 1.0}
-            base_weights = baseline_effective_config.get("strategy_weights") or {"BaselineStrategy": 1.0}
+            cand_weights = self._extract_strategy_weights(candidate_effective_config, "CandidateStrategy")
+            base_weights = self._extract_strategy_weights(baseline_effective_config, "BaselineStrategy")
 
             cand_strats = list(cand_weights.keys())
             base_strats = list(base_weights.keys())
 
-            slippage_ticks = getattr(exec_spec, "slippage_ticks", 1) or 1
+            raw_ticks = getattr(exec_spec, "slippage_ticks", 1)
+            slippage_ticks = 1 if raw_ticks is None else raw_ticks
             slippage = float(slippage_ticks) * 0.0001
-            target_trades = max(6, int(mkt_spec.duration_hours * 2))
+
+            raw_fee = getattr(exec_spec, "fee_rate", 0.001)
+            fee_rate = 0.001 if raw_fee is None else float(raw_fee)
+
+            effective_duration = max(0.1, float(mkt_spec.duration_hours))
+            target_trades = max(6, int(effective_duration * 2))
 
             cand_equity_curve: list[float] = [float(exec_spec.initial_balance)]
             base_equity_curve: list[float] = [float(exec_spec.initial_balance)]
             cand_trades: list[dict[str, Any]] = []
             base_trades: list[dict[str, Any]] = []
+            cand_lots: list[tuple[float, float]] = []
+            base_lots: list[tuple[float, float]] = []
 
             base_mkt_price = 50000.0
             step_idx = 0
-            planned_end = datetime.now(timezone.utc) + timedelta(hours=mkt_spec.duration_hours)
-
-            while True:
-                if cancel_event.is_set():
-                    self._mark_cancelled(run_id, baseline_run_id)
-                    return
-                if conclude_event.is_set():
-                    break
-                if mkt_spec.real_time and mkt_spec.duration_hours > 0 and datetime.now(timezone.utc) >= planned_end:
-                    break
-                if not mkt_spec.real_time and step_idx >= target_trades:
-                    break
-
-                tick_price = self._fetch_tick_price(cand_rest, ticker, base_mkt_price, step_idx)
-
-                self._execute_simulated_step(
-                    step_idx=step_idx,
-                    ticker=ticker,
-                    base_curr=base_curr,
-                    quote_curr=quote_curr,
-                    tick_price=tick_price,
-                    slippage=slippage,
-                    strats=cand_strats,
-                    weights=cand_weights,
-                    rest_manager=cand_rest,
-                    account=cand_account,
-                    trades_out=cand_trades,
-                    equity_out=cand_equity_curve,
-                    prefix="cand",
-                )
-
-                self._execute_simulated_step(
-                    step_idx=step_idx,
-                    ticker=ticker,
-                    base_curr=base_curr,
-                    quote_curr=quote_curr,
-                    tick_price=tick_price,
-                    slippage=slippage,
-                    strats=base_strats,
-                    weights=base_weights,
-                    rest_manager=base_rest,
-                    account=base_account,
-                    trades_out=base_trades,
-                    equity_out=base_equity_curve,
-                    prefix="base",
-                )
-
-                step_idx += 1
-                if mkt_spec.real_time and mkt_spec.duration_hours > 0:
-                    cancel_event.wait(timeout=1.0)
+            planned_end = datetime.now(timezone.utc) + timedelta(hours=effective_duration)
 
             diagnostics = {
                 "missed_ticks": 0,
@@ -415,6 +403,68 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                 "runtime_errors_count": 0,
                 "telemetry_available": True,
             }
+
+            while True:
+                if cancel_event.is_set():
+                    self._mark_cancelled(run_id, baseline_run_id)
+                    return
+                if conclude_event.is_set():
+                    break
+                if mkt_spec.real_time and datetime.now(timezone.utc) >= planned_end:
+                    break
+                if not mkt_spec.real_time and step_idx >= target_trades:
+                    break
+
+                tick_price = self._fetch_tick_price(
+                    cand_rest,
+                    ticker,
+                    base_mkt_price,
+                    step_idx,
+                    mkt_spec.real_time,
+                    diagnostics,
+                )
+
+                self._execute_simulated_step(
+                    step_idx=step_idx,
+                    ticker=ticker,
+                    base_curr=base_curr,
+                    quote_curr=quote_curr,
+                    tick_price=tick_price,
+                    slippage=slippage,
+                    fee_rate=fee_rate,
+                    strats=cand_strats,
+                    weights=cand_weights,
+                    rest_manager=cand_rest,
+                    account=cand_account,
+                    inventory_lots=cand_lots,
+                    trades_out=cand_trades,
+                    equity_out=cand_equity_curve,
+                    prefix="cand",
+                    diagnostics=diagnostics,
+                )
+
+                self._execute_simulated_step(
+                    step_idx=step_idx,
+                    ticker=ticker,
+                    base_curr=base_curr,
+                    quote_curr=quote_curr,
+                    tick_price=tick_price,
+                    slippage=slippage,
+                    fee_rate=fee_rate,
+                    strats=base_strats,
+                    weights=base_weights,
+                    rest_manager=base_rest,
+                    account=base_account,
+                    inventory_lots=base_lots,
+                    trades_out=base_trades,
+                    equity_out=base_equity_curve,
+                    prefix="base",
+                    diagnostics=diagnostics,
+                )
+
+                step_idx += 1
+                if mkt_spec.real_time:
+                    cancel_event.wait(timeout=1.0)
 
             self._report_service.generate_and_save_report(
                 run_id=run_id,
@@ -464,6 +514,18 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                 if baseline_run_id:
                     self._active_accounts.pop(baseline_run_id, None)
 
+    @staticmethod
+    def _extract_strategy_weights(config: dict[str, Any], default_name: str) -> dict[str, float]:
+        strategies = config.get("strategies") or []
+        weights: dict[str, float] = {}
+        if isinstance(strategies, list):
+            for s in strategies:
+                if isinstance(s, dict) and s.get("name"):
+                    weights[s["name"]] = float(s.get("weight", 1.0))
+        if not weights and config.get("strategy_weights"):
+            weights = {str(k): float(v) for k, v in config["strategy_weights"].items()}
+        return weights or {default_name: 1.0}
+
     def _mark_cancelled(self, run_id: str, baseline_run_id: Optional[str]) -> None:
         with self._db_manager.get_unit_of_work() as uow:
             run_repo = uow.get_repository(PostgresSimulatedRunRepository)
@@ -485,6 +547,8 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             ticker: str,
             base_mkt_price: float,
             step_idx: int,
+            is_real_time: bool,
+            diagnostics: dict[str, Any],
     ) -> float:
         try:
             mkt = rest_manager.get_market_data("BINANCE", ticker)
@@ -492,23 +556,29 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                 return float(mkt.close_price)
         except Exception:
             pass
+        if is_real_time:
+            diagnostics["missed_ticks"] = int(diagnostics.get("missed_ticks", 0)) + 1
+            diagnostics["telemetry_available"] = False
         return round(base_mkt_price * (1.0 + 0.002 * ((step_idx % 7) - 3)), 2)
 
     @staticmethod
-    def _execute_simulated_step(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    def _execute_simulated_step(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
             step_idx: int,
             ticker: str,
             base_curr: str,
             quote_curr: str,
             tick_price: float,
             slippage: float,
+            fee_rate: float,
             strats: list[str],
             weights: dict[str, float],
             rest_manager: SimulatedRestManager,
             account: SimulatedAccount,
+            inventory_lots: list[tuple[float, float]],
             trades_out: list[dict[str, Any]],
             equity_out: list[float],
             prefix: str,
+            diagnostics: dict[str, Any],
     ) -> None:
         strat = strats[step_idx % len(strats)]
         weight = float(weights.get(strat, 1.0))
@@ -530,8 +600,7 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             if available_base > Decimal("0.001"):
                 qty = Decimal(str(round(float(available_base) * 0.5, 4)))
             else:
-                qty = Decimal("0.01")
-                account.set_balance(base_curr, Decimal("0.05"))
+                qty = Decimal("0.0")
 
         if qty > Decimal("0.0"):
             try:
@@ -544,7 +613,27 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                     trade_action=action,
                     metadata={"winning_strategy": strat},
                 )
-                pnl = round((25.0 * weight) - (float(qty) * 2.0), 2)
+                fee = Decimal(str(round(float(qty) * float(order_price) * fee_rate, 4)))
+                account.update_balance(quote_curr, -fee)
+
+                if is_buy:
+                    inventory_lots.append((float(qty), float(order_price)))
+                    pnl = -round(float(fee), 2)
+                else:
+                    remaining_to_sell = float(qty)
+                    cost_basis = 0.0
+                    while remaining_to_sell > 1e-6 and inventory_lots:
+                        lot_qty, lot_price = inventory_lots[0]
+                        matched_qty = min(remaining_to_sell, lot_qty)
+                        cost_basis += matched_qty * lot_price
+                        remaining_to_sell -= matched_qty
+                        if lot_qty <= matched_qty + 1e-6:
+                            inventory_lots.pop(0)
+                        else:
+                            inventory_lots[0] = (lot_qty - matched_qty, lot_price)
+                    gross_proceeds = float(qty) * float(order_price)
+                    pnl = round(gross_proceeds - cost_basis - float(fee), 2)
+
                 trades_out.append({
                     "trade_id": order_uuid,
                     "strategy_name": strat,
@@ -553,8 +642,13 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                     "side": action.value,
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 })
-            except Exception:
-                pass
+            except Exception:  # pylint: disable=broad-except
+                diagnostics["order_simulation_failures"] = (
+                    int(diagnostics.get("order_simulation_failures", 0)) + 1
+                )
+                diagnostics["runtime_errors_count"] = (
+                    int(diagnostics.get("runtime_errors_count", 0)) + 1
+                )
 
         cash = float(account.get_balance(quote_curr))
         crypto = float(account.get_balance(base_curr))

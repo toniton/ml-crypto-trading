@@ -87,7 +87,7 @@ class TestSimulationReportService:
             run_id="sim_run_test_01",
             trades=trades,
             equity_curve=equity_curve,
-            operational_diagnostics={"missed_ticks": 0, "runtime_errors_count": 0},
+            operational_diagnostics={"missed_ticks": 0, "runtime_errors_count": 0, "telemetry_available": True},
             baseline_trades=baseline_trades,
             baseline_equity_curve=baseline_equity_curve,
         )

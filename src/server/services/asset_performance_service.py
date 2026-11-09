@@ -190,7 +190,9 @@ class AssetPerformanceService:
             end: datetime,
     ) -> AssetPerformanceResponse:
         orders = self._fetch_completed_orders(ticker_symbol, start, end)
-        runtime_snapshot = self._fetch_runtime_snapshot(ticker_symbol)
+        now_utc = datetime.now(timezone.utc)
+        is_near_present = abs((now_utc - end).total_seconds()) <= 300 or end >= now_utc
+        runtime_snapshot = self._fetch_runtime_snapshot(ticker_symbol) if is_near_present else None
         return self.compute_metrics(
             ticker_symbol,
             start,
@@ -246,21 +248,23 @@ class AssetPerformanceService:
                 if not decisions:
                     return None
                 latest = decisions[0]
-                total_eq = getattr(latest.portfolio_snapshot, "total_equity", Decimal("0"))
-                if not isinstance(total_eq, (int, float, Decimal)) or Decimal(str(total_eq)) <= Decimal("0"):
-                    return None
                 close_p = getattr(latest.market_snapshot, "close_price", None)
                 latest_price = (
                     float(close_p)
                     if isinstance(close_p, (int, float, Decimal)) and float(close_p) > 0
                     else None
                 )
+                avail_cash = getattr(latest.portfolio_snapshot, "available_cash", None)
+                available_balance = (
+                    float(avail_cash)
+                    if isinstance(avail_cash, (int, float, Decimal)) and Decimal(str(avail_cash)) > Decimal("0")
+                    else None
+                )
                 return AssetRuntimeSnapshot(
                     ticker_symbol=ticker_symbol,
                     position_quantity=0.0,
                     latest_price=latest_price,
-                    starting_balance=float(total_eq),
-                    available_balance=float(total_eq),
+                    available_balance=available_balance,
                 )
         except Exception:  # pylint: disable=broad-except
             return None

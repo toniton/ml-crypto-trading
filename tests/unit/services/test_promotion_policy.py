@@ -127,6 +127,21 @@ class TestPromotionPolicy:
         check = next(c for c in result.checks if c.name == "runtime_stability")
         assert check.status == GateCheckStatus.FAILED
 
+    def test_gate_b_inconclusive_when_telemetry_missing_or_false(self):
+        metrics = {
+            "executed_trades": 8,
+            "max_drawdown_pct": 5.0,
+            "net_return_pct": 5.0,
+            "runtime_errors_count": 0,
+        }
+        baseline = {"net_return_pct": 2.0}
+        result = self.policy.evaluate_gate_b(
+            metrics, baseline, operational_diagnostics={"telemetry_available": False, "runtime_errors_count": 0}
+        )
+        assert result.decision == GateDecision.INCONCLUSIVE
+        check = next(c for c in result.checks if c.name == "runtime_stability")
+        assert check.status == GateCheckStatus.FAILED
+
     def test_gate_c_passes_with_approver_and_no_conflicts(self):
         preview = {"conflicts": [], "can_fast_forward": True}
         result = self.policy.evaluate_gate_c(

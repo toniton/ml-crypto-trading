@@ -44,6 +44,7 @@ class MainPromotionService(ApplicationLoggingMixin):
         report = self._get_and_validate_report(
             experiment=exp,
             candidate=candidate,
+            source_commit=source_commit,
             report_id=req.report_id,
             run_id=req.run_id,
         )
@@ -96,6 +97,7 @@ class MainPromotionService(ApplicationLoggingMixin):
         report = self._get_and_validate_report(
             experiment=exp,
             candidate=candidate,
+            source_commit=source_commit,
             report_id=req.report_id,
             run_id=req.run_id,
         )
@@ -117,6 +119,24 @@ class MainPromotionService(ApplicationLoggingMixin):
         if conflict_check and conflict_check.get("status") != "PASSED":
             if not resolved_config:
                 raise ValueError(f"Promotion blocked: {conflict_check.get('message')}")
+
+        if resolved_config:
+            with self._db_manager.get_unit_of_work() as uow:
+                run_repo = uow.get_repository(PostgresSimulatedRunRepository)
+                run_data = run_repo.get_run(req.run_id)
+            resolved_effective = build_canonical_effective_config(
+                candidate=resolved_config,
+                experiment=exp,
+                execution_spec=run_data.get("execution_spec") if run_data else {},
+                market_data_spec=run_data.get("market_data_spec") if run_data else {},
+            )
+            resolved_hash = compute_canonical_config_hash(resolved_effective)
+            if resolved_hash != report.get("config_hash"):
+                raise ValueError(
+                    f"Resolved configuration hash '{resolved_hash}' does not match "
+                    f"simulation report evidence hash '{report.get('config_hash')}'. "
+                    "Simulation evidence is required for resolved configuration before promotion."
+                )
 
         merge_message = (
             f"Promote candidate '{candidate.get('name', req.candidate_id)}' "
@@ -234,6 +254,7 @@ class MainPromotionService(ApplicationLoggingMixin):
             self,
             experiment: dict[str, Any],
             candidate: dict[str, Any],
+            source_commit: str,
             report_id: str,
             run_id: str,
     ) -> dict[str, Any]:
@@ -259,19 +280,31 @@ class MainPromotionService(ApplicationLoggingMixin):
                 f"'{report.get('decision')}', must be 'PASS'."
             )
 
+        if run.get("experiment_id") != experiment.get("experiment_id"):
+            raise ValueError(
+                f"Simulation run belongs to experiment '{run.get('experiment_id')}', "
+                f"not '{experiment.get('experiment_id')}'."
+            )
+
         if run.get("candidate_id") != candidate.get("candidate_id"):
             raise ValueError(
                 f"Simulation report belongs to candidate '{run.get('candidate_id')}', "
                 f"not '{candidate.get('candidate_id')}'."
             )
 
-        effective_config = run.get("effective_config") or build_canonical_effective_config(
+        if run.get("candidate_commit") != source_commit:
+            raise ValueError(
+                f"Simulation run commit '{run.get('candidate_commit')}' "
+                f"does not match candidate source commit '{source_commit}'."
+            )
+
+        current_effective_config = build_canonical_effective_config(
             candidate=candidate,
             experiment=experiment,
             execution_spec=run.get("execution_spec"),
             market_data_spec=run.get("market_data_spec"),
         )
-        current_hash = compute_canonical_config_hash(effective_config)
+        current_hash = compute_canonical_config_hash(current_effective_config)
         if report.get("config_hash") != current_hash:
             raise ValueError(
                 f"Candidate configuration hash mismatch: report hash '{report.get('config_hash')}' "
