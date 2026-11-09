@@ -23,10 +23,7 @@ from src.database.repositories.providers.postgres_promotion_repository import (
 )
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
 from src.server.routes.promotion_routes import create_promotion_router
-from src.server.services.canonical_config import (
-    build_canonical_effective_config,
-    compute_canonical_config_hash,
-)
+from src.server.services.canonical_config import CanonicalConfigService
 from src.server.services.main_promotion_service import MainPromotionService
 from src.server.services.promotion_policy import PromotionPolicy
 
@@ -66,8 +63,8 @@ class TestMainPromotionService:
             "strategy_weights": {"TrendBreakout": 1.5},
             "candidate_commit_hash": "commit_head_123",
         }
-        self.effective_config = build_canonical_effective_config(self.candidate_config, {})
-        self.config_hash = compute_canonical_config_hash(self.effective_config)
+        self.effective_config = CanonicalConfigService.build_effective_config(self.candidate_config, {})
+        self.config_hash = CanonicalConfigService.compute_hash(self.effective_config)
 
         # Seed experiment
         with self.db_manager.get_unit_of_work() as uow:

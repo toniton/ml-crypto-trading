@@ -22,11 +22,7 @@ from src.database.repositories.providers.postgres_promotion_repository import (
     PostgresSimulatedRunRepository,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.server.services.canonical_config import (
-    build_canonical_effective_config,
-    compute_canonical_config_hash,
-    validate_commit_hash,
-)
+from src.server.services.canonical_config import CanonicalConfigService
 from src.server.services.promotion_policy import PromotionPolicy
 from src.server.services.simulation_report_service import SimulationReportService
 from src.simulation.simulated_account import SimulatedAccount
@@ -73,7 +69,7 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                 base_commit = None
 
         candidate_commit = candidate.get("candidate_commit_hash") or base_commit
-        validate_commit_hash(candidate_commit)
+        CanonicalConfigService.validate_commit_hash(candidate_commit)
 
         gate_a = self._policy.evaluate_gate_a(
             candidate=candidate,
@@ -105,13 +101,13 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         mkt_spec_dict["started_at"] = now.isoformat()
         mkt_spec_dict["planned_end_at"] = planned_end.isoformat()
 
-        candidate_effective_config = build_canonical_effective_config(
+        candidate_effective_config = CanonicalConfigService.build_effective_config(
             candidate,
             experiment,
             execution_spec=exec_spec.model_dump(mode="json"),
             market_data_spec=mkt_spec_dict,
         )
-        candidate_config_hash = compute_canonical_config_hash(candidate_effective_config)
+        candidate_config_hash = CanonicalConfigService.compute_hash(candidate_effective_config)
 
         target_ticker = (
             candidate.get("ticker_symbol")
@@ -131,13 +127,13 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             if matching_asset:
                 baseline_candidate = matching_asset
 
-        baseline_effective_config = build_canonical_effective_config(
+        baseline_effective_config = CanonicalConfigService.build_effective_config(
             baseline_candidate,
             base_config or experiment,
             execution_spec=exec_spec.model_dump(mode="json"),
             market_data_spec=mkt_spec_dict,
         )
-        baseline_config_hash = compute_canonical_config_hash(baseline_effective_config)
+        baseline_config_hash = CanonicalConfigService.compute_hash(baseline_effective_config)
 
         run_id = f"sim_run_{uuid.uuid4().hex[:12]}"
         baseline_run_id = f"sim_base_{uuid.uuid4().hex[:12]}"
@@ -376,12 +372,10 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             cand_strats = list(cand_weights.keys())
             base_strats = list(base_weights.keys())
 
-            raw_ticks = getattr(exec_spec, "slippage_ticks", 1)
-            slippage_ticks = 1 if raw_ticks is None else raw_ticks
+            slippage_ticks = 1 if exec_spec.slippage_ticks is None else exec_spec.slippage_ticks
             slippage = float(slippage_ticks) * 0.0001
 
-            raw_fee = getattr(exec_spec, "fee_rate", 0.001)
-            fee_rate = 0.001 if raw_fee is None else float(raw_fee)
+            fee_rate = 0.001 if exec_spec.fee_rate is None else float(exec_spec.fee_rate)
 
             effective_duration = max(0.1, float(mkt_spec.duration_hours))
             target_trades = max(6, int(effective_duration * 2))

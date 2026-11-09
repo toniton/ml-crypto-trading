@@ -227,7 +227,8 @@ class AssetPerformanceService:
         quote_suffix = f"_{ticker_symbol.split('_')[-1]}"
         try:
             status = self._trading_proxy.get_status()
-            for monitored in getattr(status, "monitored_assets", []) or []:
+            monitored_assets = status.monitored_assets if status and status.monitored_assets else []
+            for monitored in monitored_assets:
                 if monitored.endswith(quote_suffix):
                     peer = self._trading_proxy.get_asset_snapshot(monitored)
                     if peer is not None and peer.available_balance is not None:
@@ -248,13 +249,15 @@ class AssetPerformanceService:
                 if not decisions:
                     return None
                 latest = decisions[0]
-                close_p = getattr(latest.market_snapshot, "close_price", None)
+                market_snap = latest.market_snapshot
+                close_p = market_snap.close_price if market_snap else None
                 latest_price = (
                     float(close_p)
                     if isinstance(close_p, (int, float, Decimal)) and float(close_p) > 0
                     else None
                 )
-                avail_cash = getattr(latest.portfolio_snapshot, "available_cash", None)
+                portfolio_snap = latest.portfolio_snapshot
+                avail_cash = portfolio_snap.available_cash if portfolio_snap else None
                 available_balance = (
                     float(avail_cash)
                     if isinstance(avail_cash, (int, float, Decimal)) and Decimal(str(avail_cash)) > Decimal("0")
@@ -691,7 +694,7 @@ class AssetPerformanceService:
         for o in sorted_orders:
             action = (
                 o.trade_action
-                if hasattr(o.trade_action, "value")
+                if isinstance(o.trade_action, TradeAction)
                 else (TradeAction.BUY if "BUY" in str(o.trade_action).upper() else TradeAction.SELL)
             )
             qty = Decimal(str(o.quantity or "0"))

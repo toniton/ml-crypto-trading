@@ -19,10 +19,7 @@ from src.database.repositories.providers.postgres_promotion_repository import (
     PostgresSimulationReportRepository,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
-from src.server.services.canonical_config import (
-    build_canonical_effective_config,
-    compute_canonical_config_hash,
-)
+from src.server.services.canonical_config import CanonicalConfigService
 from src.server.services.promotion_policy import PromotionPolicy
 from src.vcs.application.service import VCSService
 
@@ -54,10 +51,23 @@ class MainPromotionService(ApplicationLoggingMixin):
             target_ref=req.target_ref,
         )
 
+        if isinstance(merge_preview, dict):
+            can_ff = bool(merge_preview.get("can_fast_forward", False))
+            raw_conflicts = merge_preview.get("conflicts", [])
+            base_hash = merge_preview.get("merge_base_hash")
+        else:
+            can_ff = bool(merge_preview.can_fast_forward)
+            raw_conflicts = merge_preview.conflicts or []
+            base_hash = merge_preview.merge_base_hash
+
+        conflicts = [
+            c if isinstance(c, dict) else vars(c)
+            for c in raw_conflicts
+        ]
         preview_dict = {
-            "can_fast_forward": getattr(merge_preview, "can_fast_forward", False),
-            "conflicts": [c.__dict__ if hasattr(c, "__dict__") else c for c in getattr(merge_preview, "conflicts", [])],
-            "merge_base_hash": getattr(merge_preview, "merge_base_hash", None),
+            "can_fast_forward": can_ff,
+            "conflicts": conflicts,
+            "merge_base_hash": base_hash,
         }
 
         gate_c = self._policy.evaluate_gate_c(
@@ -124,13 +134,13 @@ class MainPromotionService(ApplicationLoggingMixin):
             with self._db_manager.get_unit_of_work() as uow:
                 run_repo = uow.get_repository(PostgresSimulatedRunRepository)
                 run_data = run_repo.get_run(req.run_id)
-            resolved_effective = build_canonical_effective_config(
+            resolved_effective = CanonicalConfigService.build_effective_config(
                 candidate=resolved_config,
                 experiment=exp,
                 execution_spec=run_data.get("execution_spec") if run_data else {},
                 market_data_spec=run_data.get("market_data_spec") if run_data else {},
             )
-            resolved_hash = compute_canonical_config_hash(resolved_effective)
+            resolved_hash = CanonicalConfigService.compute_hash(resolved_effective)
             if resolved_hash != report.get("config_hash"):
                 raise ValueError(
                     f"Resolved configuration hash '{resolved_hash}' does not match "
@@ -155,7 +165,10 @@ class MainPromotionService(ApplicationLoggingMixin):
             resolved_config=resolved_config,
         )
 
-        merge_commit = getattr(merge_result, "merge_commit_hash", None)
+        if isinstance(merge_result, dict):
+            merge_commit = merge_result.get("merge_commit_hash")
+        else:
+            merge_commit = merge_result.merge_commit_hash
         promotion_id = f"promo_{uuid.uuid4().hex[:12]}"
 
         with self._db_manager.get_unit_of_work() as uow:
@@ -298,13 +311,13 @@ class MainPromotionService(ApplicationLoggingMixin):
                 f"does not match candidate source commit '{source_commit}'."
             )
 
-        current_effective_config = build_canonical_effective_config(
+        current_effective_config = CanonicalConfigService.build_effective_config(
             candidate=candidate,
             experiment=experiment,
             execution_spec=run.get("execution_spec"),
             market_data_spec=run.get("market_data_spec"),
         )
-        current_hash = compute_canonical_config_hash(current_effective_config)
+        current_hash = CanonicalConfigService.compute_hash(current_effective_config)
         if report.get("config_hash") != current_hash:
             raise ValueError(
                 f"Candidate configuration hash mismatch: report hash '{report.get('config_hash')}' "

@@ -9,7 +9,7 @@ from api.interfaces.promotion import (
     GateDecision,
     GateEvaluationResult,
 )
-from src.server.services.canonical_config import validate_commit_hash
+from src.server.services.canonical_config import CanonicalConfigService
 
 
 class PromotionPolicy:
@@ -53,7 +53,7 @@ class PromotionPolicy:
 
         # 2. Source commit traceability (reject "HEAD" or invalid hashes)
         source_commit = candidate.get("candidate_commit_hash") or base_commit or experiment.get("base_commit_hash")
-        valid_commit = validate_commit_hash(source_commit)
+        valid_commit = CanonicalConfigService.validate_commit_hash(source_commit)
         checks.append(
             GateCheckItem(
                 name="source_commit_traceable",

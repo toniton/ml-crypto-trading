@@ -24,11 +24,7 @@ from src.database.repositories.providers.postgres_promotion_repository import (
     PostgresSimulationReportRepository,
 )
 from src.database.sqlalchemy_database_manager import SqlAlchemyDatabaseManager
-from src.server.services.canonical_config import (
-    build_canonical_effective_config,
-    compute_canonical_config_hash,
-    validate_commit_hash,
-)
+from src.server.services.canonical_config import CanonicalConfigService
 from src.server.services.main_promotion_service import MainPromotionService
 from src.server.services.promotion_policy import PromotionPolicy
 from src.server.services.simulation_orchestrator import SimulationOrchestrator
@@ -70,8 +66,8 @@ class TestPromotionHardening:
             "strategy_weights": {"TrendStrategy": 1.0},
             "candidate_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6",
         }
-        self.effective_config = build_canonical_effective_config(self.candidate, {})
-        self.config_hash = compute_canonical_config_hash(self.effective_config)
+        self.effective_config = CanonicalConfigService.build_effective_config(self.candidate, {})
+        self.config_hash = CanonicalConfigService.compute_hash(self.effective_config)
 
         with self.db_manager.get_unit_of_work() as uow:
             exp_repo = uow.get_repository(PostgresExperimentRepository)
@@ -130,22 +126,22 @@ class TestPromotionHardening:
         self.engine.dispose()
 
     def test_canonical_config_hash_covers_all_components(self):
-        config_a = build_canonical_effective_config(
+        config_a = CanonicalConfigService.build_effective_config(
             {"candidate_id": "c1", "strategy_weights": {"A": 1.0}},
             {},
         )
-        config_b = build_canonical_effective_config(
+        config_b = CanonicalConfigService.build_effective_config(
             {"candidate_id": "c1", "strategy_weights": {"A": 1.0}, "consensus": {"buy": 0.9}},
             {},
         )
-        assert compute_canonical_config_hash(config_a) != compute_canonical_config_hash(config_b)
+        assert CanonicalConfigService.compute_hash(config_a) != CanonicalConfigService.compute_hash(config_b)
 
     def test_validate_commit_hash_rejects_head_and_short_strings(self):
-        assert validate_commit_hash("HEAD") is False
-        assert validate_commit_hash("head") is False
-        assert validate_commit_hash("abc") is False
-        assert validate_commit_hash("not_a_hex_commit_hash") is False
-        assert validate_commit_hash("a1b2c3d4e5f6") is True
+        assert CanonicalConfigService.validate_commit_hash("HEAD") is False
+        assert CanonicalConfigService.validate_commit_hash("head") is False
+        assert CanonicalConfigService.validate_commit_hash("abc") is False
+        assert CanonicalConfigService.validate_commit_hash("not_a_hex_commit_hash") is False
+        assert CanonicalConfigService.validate_commit_hash("a1b2c3d4e5f6") is True
 
     def test_gate_c_cannot_be_bypassed_via_resolved_config(self):
         conflict_preview = MagicMock()
