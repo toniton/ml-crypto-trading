@@ -1,4 +1,4 @@
-langchain-core~=1.7.5
+langchain-core~=1.7.6
 langgraph~=1.2.20
 langchain-ollama~=1.1.0
 langchain-deepseek~=1.1.1
