@@ -9,6 +9,7 @@ from installer.context import DatabaseMode, InstallProfile, InstallerContext
 from installer.steps import (
     BaseStep,
     CredentialsStep,
+    DatabaseProvisioningStep,
     DatabaseStep,
     DependenciesStep,
     EnvironmentStep,
@@ -87,6 +88,7 @@ def build_pipeline(skip_deps: bool) -> List[BaseStep]:
         DatabaseStep(),
         CredentialsStep(),
         EnvironmentStep(),
+        DatabaseProvisioningStep(),
     ]
 
     if not skip_deps:

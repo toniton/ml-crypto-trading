@@ -18,11 +18,11 @@ from installer.ui.prompts import (
 
 
 class DatabaseStep(BaseStep):
-    """Configures database connection and provisions local container if requested."""
+    """Configures database connection parameters."""
 
     @property
     def name(self) -> str:
-        return "Database Setup & Provisioning"
+        return "Database Configuration"
 
     def run(self, context: InstallerContext) -> bool:
         console.print_section(self.name)
@@ -32,16 +32,8 @@ class DatabaseStep(BaseStep):
 
         if context.database.mode == DatabaseMode.SKIP:
             console.info("Skipping database configuration.")
-            return True
 
-        if context.database.mode == DatabaseMode.DOCKER:
-            self._start_docker_postgres(context)
-
-        if context.dry_run:
-            console.info(f"[dry-run] Would test connection to {context.database.host_with_port}")
-            return True
-
-        return self._verify_connection(context)
+        return True
 
     def _read_existing_env(self, context: InstallerContext) -> Dict[str, str]:
         env_path = context.env_file_path
@@ -88,6 +80,30 @@ class DatabaseStep(BaseStep):
         context.database.password = prompt_password("PostgreSQL password", default=default_pg_pass)
         default_pg_db = existing_env.get("POSTGRES_DATABASE", "trading")
         context.database.name = prompt_text("Database name", default=default_pg_db)
+
+
+class DatabaseProvisioningStep(BaseStep):
+    """Provisions local database container if requested and verifies connectivity."""
+
+    @property
+    def name(self) -> str:
+        return "Database Provisioning & Connectivity Check"
+
+    def run(self, context: InstallerContext) -> bool:
+        console.print_section(self.name)
+
+        if context.database.mode == DatabaseMode.SKIP:
+            console.info("Skipping database provisioning.")
+            return True
+
+        if context.database.mode == DatabaseMode.DOCKER:
+            self._start_docker_postgres(context)
+
+        if context.dry_run:
+            console.info(f"[dry-run] Would test connection to {context.database.host_with_port}")
+            return True
+
+        return self._verify_connection(context)
 
     def _start_docker_postgres(self, context: InstallerContext) -> None:
         if context.dry_run:

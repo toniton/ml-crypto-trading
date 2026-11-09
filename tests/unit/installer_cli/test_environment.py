@@ -84,3 +84,17 @@ def test_environment_step_handles_backslashes_in_secrets(tmp_path):
     step = EnvironmentStep()
     step.run(context)
     assert r"CRYPTO_DOT_COM__SECRET_KEY=secret\1\g<test>" in env_file.read_text(encoding="utf-8")
+
+
+def test_environment_step_fresh_run_uses_context_password_not_example(tmp_path):
+    example_file = tmp_path / ".env.example"
+    example_file.write_text("POSTGRES_PASSWORD=your_password_here\n", encoding="utf-8")
+    context = InstallerContext(
+        project_root=tmp_path,
+        venv_dir=tmp_path / "venv",
+        interactive=False,
+    )
+    step = EnvironmentStep()
+    step.run(context)
+    env_content = (tmp_path / ".env").read_text(encoding="utf-8")
+    assert "POSTGRES_PASSWORD=postgres" in env_content

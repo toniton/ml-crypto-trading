@@ -23,12 +23,13 @@ class EnvironmentStep(BaseStep):
 
         env_path = context.env_file_path
         example_path = context.env_example_path
+        is_pre_existing = env_path.exists()
 
         if context.dry_run:
             console.info(f"[dry-run] Would generate and write configuration to {env_path}")
             return True
 
-        if env_path.exists():
+        if is_pre_existing:
             backup_path = self._create_backup(env_path)
             console.info(f"Backed up existing .env to {backup_path.name}")
         elif example_path.exists():
@@ -38,7 +39,7 @@ class EnvironmentStep(BaseStep):
             env_path.touch()
             console.info("Created new empty .env file")
 
-        variables = self._build_variable_map(context)
+        variables = self._build_variable_map(context, is_pre_existing=is_pre_existing)
         self._apply_variables(env_path, variables)
         console.success(f"Updated {env_path.name} with configuration settings.")
         return True
@@ -60,8 +61,8 @@ class EnvironmentStep(BaseStep):
                 result[key.strip()] = val.strip()
         return result
 
-    def _build_variable_map(self, context: InstallerContext) -> Dict[str, str]:
-        existing = self._read_existing_env(context.env_file_path)
+    def _build_variable_map(self, context: InstallerContext, is_pre_existing: bool = True) -> Dict[str, str]:
+        existing = self._read_existing_env(context.env_file_path) if is_pre_existing else {}
 
         var_map: Dict[str, str] = {
             "APP_ENV": context.app.app_env,
