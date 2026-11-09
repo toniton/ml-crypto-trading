@@ -287,16 +287,81 @@ Test strategies against historical CSV or recorded audit data with realistic exe
 make run-backtest
 ```
 
-### 🚀 Live Trading (Integrated API Server)
+Or via Docker:
+```bash
+docker run -v $PWD:/workspace toniton/ml-crypto-trading \
+  --assets-conf=/workspace/trading-config.yaml \
+  --backtest-mode=true \
+  --backtest-source=/workspace/history/ \
+  --backtest-latency-ms=500.0 \
+  --backtest-slippage-ticks=2 \
+  --backtest-fee-rate=0.001
+```
 
-Start the trading engine with live exchange order execution and the FastAPI server:
+### 🚀 Live Trading (Real Exchange)
+
+Execute live orders on the configured exchange (starts integrated FastAPI & Agent server by default):
 
 ```bash
 make run-live
 ```
 
+Or via Docker:
+```bash
+docker run --env-file .env -v $PWD:/workspace toniton/ml-crypto-trading \
+  --assets-conf=/workspace/trading-config.yaml
+```
+
+### 🔕 Headless Mode (Core Engine Only)
+
+Run trading operations without starting the FastAPI HTTP / WebSocket server:
+
+```bash
+make run-headless
+```
+
+Or via Docker:
+```bash
+docker run --env-file .env -v $PWD:/workspace toniton/ml-crypto-trading \
+  --assets-conf=/workspace/trading-config.yaml \
+  --headless=true
+```
+
+### 🌐 REST API & AI Agent Server
+
+Start the integrated FastAPI and AI Agent server for interactive chat, log streaming, and metric APIs:
+
+```bash
+docker run --env-file .env -p 8000:8000 -v $PWD:/workspace toniton/ml-crypto-trading \
+  --assets-conf=/workspace/trading-config.yaml \
+  --server=true \
+  --api-port=8000
+```
+
 ---
 
-## License
+## Documentation
 
-This project is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.txt).
+For comprehensive information, please explore the documentation in the `docs/` directory:
+
+- [Introduction & Features](docs/introduction.md) — System motivation and comprehensive feature breakdown.
+- [Core Concepts](docs/concepts.md) — Consensus model, Dynamic expressions, AI Agent architecture, and Backtesting.
+- [Agent Automation & Monitoring](docs/agent-automation.md) — Watchdog, event-driven automation, safety classification, and the async approval lifecycle.
+- [Configuration & System Properties](docs/configuration.md) — CLI flags, environment variables, and YAML schemas.
+- [Architecture & Diagrams](docs/architecture.md) — Manager layer, Agent graphs, API server, and system flow.
+- [Logging Architecture](docs/logging.md) — Application, trading, audit replay, and WebSocket log streaming.
+- [Community & Contributing](docs/community.md) — Contributing guidelines and Discord community.
+
+---
+
+## License & Commercial Terms
+
+This project is source-available under the **[PolyForm Noncommercial License 1.0.0](LICENSE.txt)**.
+
+- **Free for Personal & Educational Use**: You are free to view, download, modify, and run this software for non-commercial purposes, personal trading research, and learning.
+- **Commercial Restrictions**: Any commercial use, proprietary trading for profit by institutions or funds, hosting MCT as a commercial service/SaaS, or selling software built on MCT requires a separate commercial license from the author.
+
+For commercial licensing inquiries or institutional partnerships, please reach out via [Discord](https://discord.gg/vZh8w3Sz) or open a private inquiry.
+
+## Copyright
+Copyright © 2026 Toni Akinjiola. All rights reserved.
