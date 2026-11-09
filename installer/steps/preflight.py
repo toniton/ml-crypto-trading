@@ -30,6 +30,10 @@ class PreflightStep(BaseStep):
         os_name = self._detect_os()
         console.info(f"Operating System: {os_name} ({platform.machine()})")
 
+        if context.dry_run:
+            console.info("[dry-run] Skipping Docker daemon and port probes during dry run.")
+            return True
+
         docker_available = self._check_docker()
         if docker_available:
             console.success("Docker engine is running.")

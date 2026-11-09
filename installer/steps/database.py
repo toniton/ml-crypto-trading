@@ -1,11 +1,12 @@
 """Database configuration and provisioning step."""
 
+import os
 import socket
 import subprocess
 import time
-from typing import Optional
+from typing import Dict
 
-from installer.context import DatabaseConfig, DatabaseMode, InstallerContext
+from installer.context import DatabaseMode, InstallerContext
 from installer.steps.base import BaseStep
 from installer.ui.console import console
 from installer.ui.prompts import (
@@ -26,16 +27,33 @@ class DatabaseStep(BaseStep):
     def run(self, context: InstallerContext) -> bool:
         console.print_section(self.name)
 
-        if context.interactive:
+        if context.interactive and context.database.mode != DatabaseMode.SKIP:
             self._prompt_database_config(context)
+
+        if context.database.mode == DatabaseMode.SKIP:
+            console.info("Skipping database configuration.")
+            return True
 
         if context.database.mode == DatabaseMode.DOCKER:
             self._start_docker_postgres(context)
 
-        if context.database.mode != DatabaseMode.SKIP:
-            self._verify_connection(context)
+        if context.dry_run:
+            console.info(f"[dry-run] Would test connection to {context.database.host_with_port}")
+            return True
 
-        return True
+        return self._verify_connection(context)
+
+    def _read_existing_env(self, context: InstallerContext) -> Dict[str, str]:
+        env_path = context.env_file_path
+        if not env_path.exists():
+            return {}
+        result: Dict[str, str] = {}
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                result[key.strip()] = val.strip()
+        return result
 
     def _prompt_database_config(self, context: InstallerContext) -> None:
         choices = [
@@ -53,30 +71,35 @@ class DatabaseStep(BaseStep):
             console.info("Skipping database configuration.")
             return
 
-        if mode in (DatabaseMode.LOCAL, DatabaseMode.DOCKER):
-            host = prompt_text("Database host", default="localhost")
-            port_str = prompt_text("Database port", default="5432")
-            user = prompt_text("PostgreSQL username", default="postgres")
-            password = prompt_password("PostgreSQL password", default="postgres")
-            dbname = prompt_text("Database name", default="trading")
-        else:
-            host_input = prompt_text("Database host (e.g. db.xxx.supabase.co)", default="localhost")
-            port_str = prompt_text("Database port", default="5432")
-            user = prompt_text("PostgreSQL username", default="postgres")
-            password = prompt_password("PostgreSQL password")
-            dbname = prompt_text("Database name", default="trading")
-            host = host_input
+        existing_env = self._read_existing_env(context)
+        existing_host = existing_env.get("DATABASE_CONNECTION_HOST", "localhost:5432")
+        default_host, default_port = (
+            existing_host.split(":", 1) if ":" in existing_host else (existing_host, "5432")
+        )
 
-        context.database.host = host
+        is_local = mode in (DatabaseMode.LOCAL, DatabaseMode.DOCKER)
+        host_label = "Database host" if is_local else "Database host (e.g. db.xxx.supabase.co)"
+        context.database.host = prompt_text(host_label, default=default_host)
+        port_str = prompt_text("Database port", default=default_port)
         context.database.port = int(port_str) if port_str.isdigit() else 5432
-        context.database.user = user
-        context.database.password = password
-        context.database.name = dbname
+        default_pg_user = existing_env.get("POSTGRES_USER", "postgres")
+        context.database.user = prompt_text("PostgreSQL username", default=default_pg_user)
+        default_pg_pass = existing_env.get("POSTGRES_PASSWORD", "postgres")
+        context.database.password = prompt_password("PostgreSQL password", default=default_pg_pass)
+        default_pg_db = existing_env.get("POSTGRES_DATABASE", "trading")
+        context.database.name = prompt_text("Database name", default=default_pg_db)
 
     def _start_docker_postgres(self, context: InstallerContext) -> None:
         if context.dry_run:
             console.info("[dry-run] Would launch docker compose up -d postgres")
             return
+
+        compose_env = {
+            **os.environ,
+            "POSTGRES_USER": context.database.user,
+            "POSTGRES_PASSWORD": context.database.password,
+            "POSTGRES_DATABASE": context.database.name,
+        }
 
         console.info("Starting PostgreSQL container via docker compose...")
         try:
@@ -85,6 +108,7 @@ class DatabaseStep(BaseStep):
                 cwd=str(context.project_root),
                 capture_output=True,
                 text=True,
+                env=compose_env,
                 check=False,
             )
             if result.returncode == 0:

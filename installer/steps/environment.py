@@ -49,17 +49,41 @@ class EnvironmentStep(BaseStep):
         shutil.copy(env_path, backup_path)
         return backup_path
 
+    def _read_existing_env(self, env_path: Path) -> Dict[str, str]:
+        if not env_path.exists():
+            return {}
+        result: Dict[str, str] = {}
+        for line in env_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#") and "=" in line:
+                key, val = line.split("=", 1)
+                result[key.strip()] = val.strip()
+        return result
+
     def _build_variable_map(self, context: InstallerContext) -> Dict[str, str]:
+        existing = self._read_existing_env(context.env_file_path)
+
         var_map: Dict[str, str] = {
             "APP_ENV": context.app.app_env,
             "LOG_LEVEL": context.app.log_level,
         }
 
         if context.database.mode != DatabaseMode.SKIP:
-            var_map["DATABASE_CONNECTION_HOST"] = context.database.host_with_port
-            var_map["POSTGRES_USER"] = context.database.user
-            var_map["POSTGRES_PASSWORD"] = context.database.password
-            var_map["POSTGRES_DATABASE"] = context.database.name
+            host_val = context.database.host_with_port
+            user_val = context.database.user
+            pass_val = context.database.password
+            db_val = context.database.name
+
+            if not context.interactive and existing:
+                host_val = existing.get("DATABASE_CONNECTION_HOST", host_val)
+                user_val = existing.get("POSTGRES_USER", user_val)
+                pass_val = existing.get("POSTGRES_PASSWORD", pass_val)
+                db_val = existing.get("POSTGRES_DATABASE", db_val)
+
+            var_map["DATABASE_CONNECTION_HOST"] = host_val
+            var_map["POSTGRES_USER"] = user_val
+            var_map["POSTGRES_PASSWORD"] = pass_val
+            var_map["POSTGRES_DATABASE"] = db_val
 
         creds = context.credentials
         if creds.crypto_dot_com_key:
@@ -86,7 +110,7 @@ class EnvironmentStep(BaseStep):
             pattern = rf"^{re.escape(key)}=.*$"
             replacement = f"{key}={val}"
             if re.search(pattern, content, flags=re.MULTILINE):
-                content = re.sub(pattern, replacement, content, flags=re.MULTILINE)
+                content = re.sub(pattern, lambda _, r=replacement: r, content, flags=re.MULTILINE)
             else:
                 content = content.rstrip() + f"\n{replacement}\n"
 

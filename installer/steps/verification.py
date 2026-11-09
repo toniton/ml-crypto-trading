@@ -3,7 +3,7 @@
 from pathlib import Path
 import subprocess
 
-from installer.context import DatabaseMode, InstallerContext
+from installer.context import InstallerContext
 from installer.steps.base import BaseStep
 from installer.ui.console import console
 from installer.ui.prompts import prompt_confirm
@@ -52,7 +52,7 @@ class VerificationStep(BaseStep):
         except OSError:
             pass
 
-    def _print_summary(self, context: InstallerContext) -> None:
+    def _print_summary(self, _context: InstallerContext) -> None:
         console.print_banner(
             "Installation Complete!",
             "MCT Trading Bot backend is ready for use.",

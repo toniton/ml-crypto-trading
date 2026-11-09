@@ -20,9 +20,24 @@ class MigrationsStep(BaseStep):
     def run(self, context: InstallerContext) -> bool:
         console.print_section(self.name)
 
-        if context.database.mode == DatabaseMode.SKIP:
-            console.info("Database setup was skipped; skipping migrations.")
+        if not self._should_run_migrations(context):
             return True
+
+        if context.dry_run:
+            console.info("[dry-run] Would execute alembic upgrade head")
+            return True
+
+        alembic_bin = self._resolve_alembic_path(context.venv_dir)
+        if not alembic_bin.exists():
+            console.error(f"Alembic executable not found at {alembic_bin}.")
+            return False
+
+        return self._execute_migration(alembic_bin, context.project_root)
+
+    def _should_run_migrations(self, context: InstallerContext) -> bool:
+        if context.database.mode == DatabaseMode.SKIP or not context.run_migrations:
+            console.info("Skipping database migrations.")
+            return False
 
         if context.interactive:
             context.run_migrations = prompt_confirm(
@@ -32,23 +47,17 @@ class MigrationsStep(BaseStep):
 
         if not context.run_migrations:
             console.info("Skipping database migrations by user request.")
-            return True
+            return False
 
-        if context.dry_run:
-            console.info("[dry-run] Would execute alembic upgrade head")
-            return True
+        return True
 
-        alembic_bin = self._resolve_alembic_path(context.venv_dir)
-        if not alembic_bin.exists():
-            console.warning(f"Alembic executable not found at {alembic_bin}. Skipping migrations.")
-            return True
-
+    def _execute_migration(self, alembic_bin: Path, project_root: Path) -> bool:
         console.info("Applying pending database migrations...")
         try:
             with task_status("Running alembic upgrade head"):
                 result = subprocess.run(
                     [str(alembic_bin), "upgrade", "head"],
-                    cwd=str(context.project_root),
+                    cwd=str(project_root),
                     capture_output=True,
                     text=True,
                     check=False,
@@ -56,11 +65,11 @@ class MigrationsStep(BaseStep):
             if result.returncode == 0:
                 console.success("Database schema is up to date.")
                 return True
-            console.warning(f"Alembic migration warning/failure:\n{result.stderr.strip()}")
-            return True
+            console.error(f"Alembic migration failed:\n{result.stderr.strip()}")
+            return False
         except (subprocess.SubprocessError, OSError) as exc:
-            console.warning(f"Could not execute alembic: {exc}")
-            return True
+            console.error(f"Could not execute alembic: {exc}")
+            return False
 
     def _resolve_alembic_path(self, venv_dir: Path) -> Path:
         windows_alembic = venv_dir / "Scripts" / "alembic.exe"

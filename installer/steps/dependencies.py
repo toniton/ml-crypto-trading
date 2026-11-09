@@ -53,8 +53,8 @@ class DependenciesStep(BaseStep):
             if result.returncode == 0:
                 console.success("Dependencies installed successfully.")
                 return True
-            console.warning("Pip reported warnings/errors during installation.")
-            return True
+            console.error(f"Pip installation failed:\n{result.stderr.strip()}")
+            return False
         except (subprocess.SubprocessError, OSError) as exc:
             console.error(f"Failed to run pip: {exc}")
             return False
