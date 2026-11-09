@@ -1,7 +1,6 @@
 """Progress indicators and task spinners."""
 
 import contextlib
-import sys
 from typing import Generator
 
 try:

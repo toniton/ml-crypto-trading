@@ -11,9 +11,7 @@ class BaseStep(ABC):
     @abstractmethod
     def name(self) -> str:
         """User-facing step title."""
-        pass
 
     @abstractmethod
     def run(self, context: InstallerContext) -> bool:
         """Executes the step. Returns True on success, False on failure."""
-        pass

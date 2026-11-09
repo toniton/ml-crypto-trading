@@ -1,7 +1,6 @@
 """Terminal presentation and styling helpers."""
 
 import sys
-from typing import Optional
 
 try:
     from rich.console import Console

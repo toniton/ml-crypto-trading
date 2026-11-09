@@ -67,8 +67,21 @@ def create_argument_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def build_pipeline(context: InstallerContext, skip_deps: bool) -> List[BaseStep]:
-    """Assembles the sequence of installation steps based on context and flags."""
+def apply_profile_defaults(context: InstallerContext) -> None:
+    """Applies profile-specific defaults to the installation context."""
+    if context.profile == InstallProfile.DEVELOPER:
+        context.install_dev_deps = True
+        context.app.app_env = "staging"
+    elif context.profile == InstallProfile.PRODUCTION:
+        context.install_dev_deps = False
+        context.app.app_env = "production"
+    elif context.profile == InstallProfile.QUICKSTART:
+        context.install_dev_deps = False
+        context.app.app_env = "production"
+
+
+def build_pipeline(skip_deps: bool) -> List[BaseStep]:
+    """Assembles the sequence of installation steps based on flags."""
     steps: List[BaseStep] = [
         PreflightStep(),
         DatabaseStep(),
@@ -119,14 +132,9 @@ def main(argv: List[str] = None) -> int:
         chosen_profile = prompt_choice("Choose installation profile:", profile_choices, default_index=0)
         context.profile = InstallProfile(chosen_profile)
 
-        if context.profile == InstallProfile.DEVELOPER:
-            context.install_dev_deps = True
-            context.app.app_env = "staging"
-        elif context.profile == InstallProfile.PRODUCTION:
-            context.install_dev_deps = False
-            context.app.app_env = "production"
+    apply_profile_defaults(context)
 
-    pipeline = build_pipeline(context, skip_deps=args.skip_deps)
+    pipeline = build_pipeline(skip_deps=args.skip_deps)
 
     for step in pipeline:
         success = step.run(context)
