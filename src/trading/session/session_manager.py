@@ -131,6 +131,9 @@ class SessionManager:
                     return ctx
             return None
 
+    def has_session(self, ticker_symbol: str) -> bool:
+        return self.get_trading_context_by_symbol(ticker_symbol) is not None
+
     def subscribe(self, event_bus: EventBus) -> None:
         self._event_bus = event_bus
         event_bus.subscribe(BalanceChangedEvent.__name__, CallbackSubscription(self._on_balance_changed))

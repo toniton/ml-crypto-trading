@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import time
+from decimal import Decimal
+from unittest.mock import MagicMock
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -56,7 +58,7 @@ class TestSimulationOrchestrator:
                 name="BTC Strategy Experiment",
                 ticker_symbol="BTC_USD",
                 branch_id="exp-branch-01",
-                base_commit_hash="commit_head_123",
+                base_commit_hash="a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
                 status="DRAFT",
                 spec={
                     "candidates": [
@@ -64,7 +66,7 @@ class TestSimulationOrchestrator:
                             "candidate_id": "cand_trend",
                             "name": "Trend Candidate",
                             "strategy_weights": {"TrendBreakout": 1.5},
-                            "candidate_commit_hash": "commit_head_123",
+                            "candidate_commit_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
                         },
                         {
                             "candidate_id": "cand_invalid",
@@ -78,10 +80,23 @@ class TestSimulationOrchestrator:
 
         self.policy = PromotionPolicy(min_trades=5)
         self.report_service = SimulationReportService(self.db_manager, self.policy)
+
+        tick_counter = 0
+
+        def mock_feed(_exchange, _ticker):
+            nonlocal tick_counter
+            tick_counter += 1
+            p = Decimal("50000.0") if (tick_counter % 2 != 0) else Decimal("52000.0")
+            m = MagicMock()
+            m.close_price = p
+            return m
+
+        self.mock_feed = mock_feed
         self.orchestrator = SimulationOrchestrator(
             db_manager=self.db_manager,
             report_service=self.report_service,
             policy=self.policy,
+            market_data_provider=self.mock_feed,
         )
 
     def teardown_method(self):
@@ -152,7 +167,7 @@ class TestSimulationOrchestrator:
 
         report = self.report_service.get_report_by_run(run_id)
         assert report is not None
-        assert report["decision"] == "PASS"
+        assert report["decision"] == "INCONCLUSIVE"
 
     def test_cancel_simulated_run(self):
         req = CreateSimulatedRunRequest(
@@ -167,3 +182,80 @@ class TestSimulationOrchestrator:
 
         run = self.orchestrator.get_simulated_run(run_id)
         assert run["status"] == "CANCELLED"
+
+    def test_direct_baseline_cancellation_is_rejected(self):
+        req = CreateSimulatedRunRequest(
+            experiment_id="exp_btc",
+            candidate_id="cand_trend",
+        )
+        res = self.orchestrator.start_simulated_run(req)
+        baseline_run_id = res["baseline_run_id"]
+
+        with pytest.raises(ValueError, match="Direct cancellation of baseline run"):
+            self.orchestrator.cancel_simulated_run(baseline_run_id)
+
+    def test_unbacked_simulation_yields_inconclusive(self):
+        unbacked_orchestrator = SimulationOrchestrator(
+            db_manager=self.db_manager,
+            report_service=self.report_service,
+            policy=self.policy,
+            market_data_provider=None,
+        )
+        req = CreateSimulatedRunRequest(
+            experiment_id="exp_btc",
+            candidate_id="cand_trend",
+            market_data=SimulatedRunMarketDataSpec(ticker_symbol="BTC_USD", duration_hours=3, real_time=False),
+        )
+        res = unbacked_orchestrator.start_simulated_run(req)
+        run_id = res["run_id"]
+        for _ in range(30):
+            time.sleep(0.1)
+            run = unbacked_orchestrator.get_simulated_run(run_id)
+            if run and run["status"] == "REPORT_READY":
+                break
+
+        report = self.report_service.get_report_by_run(run_id)
+        assert report is not None
+        assert report["decision"] == "INCONCLUSIVE"
+
+    def test_candidate_with_disabled_strategy_produces_no_trades(self):
+        with self.db_manager.get_unit_of_work() as uow:
+            exp_repo = uow.get_repository(PostgresExperimentRepository)
+            exp_repo.save_experiment(
+                experiment_id="exp_disabled",
+                name="Disabled Strategy Experiment",
+                ticker_symbol="BTC_USD",
+                branch_id="exp-branch-disabled",
+                base_commit_hash="a1b2c3d4e5f6",
+                status="DRAFT",
+                spec={
+                    "candidates": [
+                        {
+                            "candidate_id": "cand_off",
+                            "name": "Disabled Candidate",
+                            "candidate_commit_hash": "a1b2c3d4e5f6",
+                            "strategies": [{"name": "TrendBreakout", "weight": 1.0, "enabled": False}],
+                        }
+                    ]
+                },
+                run_bindings=[{"run_id": "prior_bt_1"}],
+            )
+
+        req = CreateSimulatedRunRequest(
+            experiment_id="exp_disabled",
+            candidate_id="cand_off",
+            market_data=SimulatedRunMarketDataSpec(ticker_symbol="BTC_USD", duration_hours=3, real_time=False),
+        )
+        res = self.orchestrator.start_simulated_run(req)
+        run_id = res["run_id"]
+        for _ in range(30):
+            time.sleep(0.1)
+            run = self.orchestrator.get_simulated_run(run_id)
+            if run and run["status"] == "REPORT_READY":
+                break
+
+        report = self.report_service.get_report_by_run(run_id)
+        assert report is not None
+        assert report["summary_metrics"]["executed_trades"] == 0
+        assert report["decision"] == "INCONCLUSIVE"
+

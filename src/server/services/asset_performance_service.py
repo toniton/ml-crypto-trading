@@ -24,7 +24,11 @@ from src.backtest.domain.metrics import (
 )
 from src.backtest.domain.result import BacktestFill, BacktestResult, PortfolioSnapshot
 from src.core.interfaces.database_manager import DatabaseManager
+from src.core.interfaces.trading_engine_proxy import AssetRuntimeSnapshot, TradingEngineProxy
 from src.database.repositories.providers.postgres_order_repository import PostgresOrderRepository
+from src.database.repositories.providers.postgres_trading_decision_repository import (
+    PostgresTradingDecisionRepository,
+)
 from src.trading.analytics.trade_attribution_service import (
     AttributionMetrics,
     TradeAttributionService,
@@ -69,6 +73,13 @@ class TradeExecutionItem(BaseModel):
     realized_pnl: Optional[str] = None
 
 
+class AssetEquityPointModel(BaseModel):
+    timestamp: str
+    equity: str
+    cumulative_pnl: str
+    drawdown_pct: float
+
+
 class StrategyAttributionModel(BaseModel):
     total_trades: int
     winning_trades: int
@@ -111,6 +122,9 @@ class AssetPerformanceResponse(BaseModel):
     summary: PerformanceSummary
     daily: List[DailyPerformance]
     trades: List[TradeExecutionItem]
+    equity_curve: List[AssetEquityPointModel] = []
+    starting_balance: Optional[str] = None
+    current_equity: Optional[str] = None
     strategy_attribution: Dict[str, StrategyAttributionModel] = {}
     commit_attribution: Dict[str, StrategyAttributionModel] = {}
     risk_adjusted: Optional[RiskAdjustedMetrics] = None
@@ -154,9 +168,20 @@ class TradeExtractionResult:
     unmatched_exit_orders: int
 
 
+@dataclass(frozen=True)
+class FillEquityStep:
+    timestamp: float
+    cumulative_pnl: Decimal
+
+
 class AssetPerformanceService:
-    def __init__(self, database_manager: DatabaseManager) -> None:
+    def __init__(
+            self,
+            database_manager: DatabaseManager,
+            trading_proxy: Optional[TradingEngineProxy] = None,
+    ) -> None:
         self._database_manager = database_manager
+        self._trading_proxy = trading_proxy
 
     def calculate_performance(
             self,
@@ -165,7 +190,66 @@ class AssetPerformanceService:
             end: datetime,
     ) -> AssetPerformanceResponse:
         orders = self._fetch_completed_orders(ticker_symbol, start, end)
-        return self.compute_metrics(ticker_symbol, start, end, orders)
+        now_utc = datetime.now(timezone.utc)
+        is_near_present = abs((now_utc - end).total_seconds()) <= 300 or end >= now_utc
+        runtime_snapshot = self._fetch_runtime_snapshot(ticker_symbol) if is_near_present else None
+        return self.compute_metrics(
+            ticker_symbol,
+            start,
+            end,
+            orders,
+            runtime_snapshot=runtime_snapshot,
+        )
+
+    def _fetch_runtime_snapshot(self, ticker_symbol: str) -> Optional[AssetRuntimeSnapshot]:
+        snapshot: Optional[AssetRuntimeSnapshot] = None
+        if self._trading_proxy is not None:
+            try:
+                snapshot = self._trading_proxy.get_asset_snapshot(ticker_symbol)
+            except Exception:  # pylint: disable=broad-except
+                snapshot = None
+
+        if snapshot is not None and (
+            snapshot.available_balance is not None or snapshot.starting_balance is not None
+        ):
+            return snapshot
+
+        db_snapshot = self._fetch_decision_snapshot(ticker_symbol)
+        if db_snapshot is not None:
+            return db_snapshot
+
+        return snapshot
+
+    def _fetch_decision_snapshot(self, ticker_symbol: str) -> Optional[AssetRuntimeSnapshot]:
+        try:
+            with self._database_manager.get_unit_of_work() as uow:
+                repo = uow.get_repository(PostgresTradingDecisionRepository)
+                decisions = repo.get_by_ticker_symbol(ticker_symbol, limit=1)
+                if not decisions:
+                    return None
+                latest = decisions[0]
+                market_snap = latest.market_snapshot
+                close_p = market_snap.close_price if market_snap else None
+                latest_price = (
+                    float(close_p)
+                    if isinstance(close_p, (int, float, Decimal)) and float(close_p) > 0
+                    else None
+                )
+                portfolio_snap = latest.portfolio_snapshot
+                avail_cash = portfolio_snap.available_cash if portfolio_snap else None
+                available_balance = (
+                    float(avail_cash)
+                    if isinstance(avail_cash, (int, float, Decimal)) and Decimal(str(avail_cash)) > Decimal("0")
+                    else None
+                )
+                return AssetRuntimeSnapshot(
+                    ticker_symbol=ticker_symbol,
+                    position_quantity=None,
+                    latest_price=latest_price,
+                    available_balance=available_balance,
+                )
+        except Exception:  # pylint: disable=broad-except
+            return None
 
     def _fetch_completed_orders(
         self, ticker_symbol: str, start: datetime, end: datetime
@@ -274,6 +358,16 @@ class AssetPerformanceService:
     def extract_trades(cls, ticker_symbol: str, orders: List[Order]) -> List[Trade]:
         return cls.extract_trades_with_audit(ticker_symbol, orders).trades
 
+    @staticmethod
+    def _calculate_open_lots_pnl(buy_lots: Deque[BuyLot], mark_price: Decimal) -> Decimal:
+        unrealized = Decimal("0")
+        for lot in buy_lots:
+            if lot.remaining_qty <= Decimal("0"):
+                continue
+            unit_net = (mark_price - lot.buy_price) - lot.fee_per_unit - lot.slippage_per_unit
+            unrealized += unit_net * lot.remaining_qty
+        return unrealized
+
     @classmethod
     def compute_metrics(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
             cls,
@@ -281,6 +375,7 @@ class AssetPerformanceService:
             start: datetime,
             end: datetime,
             orders: List[Order],
+            runtime_snapshot: Optional[AssetRuntimeSnapshot] = None,
     ) -> AssetPerformanceResponse:
         # Sort chronologically by execution time
         def get_exec_dt(o: Order) -> datetime:
@@ -309,6 +404,7 @@ class AssetPerformanceService:
 
         matched_trades: List[Trade] = []
         execution_items: List[TradeExecutionItem] = []
+        fill_steps: List[FillEquityStep] = []
 
         for order in sorted_orders:
             action_raw = order.trade_action.value
@@ -410,6 +506,14 @@ class AssetPerformanceService:
                 total_realized_pnl += order_realized_pnl
                 daily_buckets[date_str]["realized_pnl"] += order_realized_pnl
 
+            open_lots_pnl = cls._calculate_open_lots_pnl(buy_lots, fill_price_val)
+            step_pnl = (total_realized_pnl + open_lots_pnl).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            fill_steps.append(
+                FillEquityStep(timestamp=exec_dt.timestamp(), cumulative_pnl=step_pnl)
+            )
+
             execution_items.append(
                 TradeExecutionItem(
                     order_id=order.uuid,
@@ -477,7 +581,31 @@ class AssetPerformanceService:
         }
 
         # 4 Dimensions of Strategy Robustness Metrics
-        initial_balance = Decimal("10000")
+        end_mark_price = Decimal("0")
+        if (
+            runtime_snapshot is not None
+            and runtime_snapshot.latest_price is not None
+            and Decimal(str(runtime_snapshot.latest_price)) > Decimal("0")
+        ):
+            end_mark_price = Decimal(str(runtime_snapshot.latest_price))
+        elif sorted_orders:
+            last_order = sorted_orders[-1]
+            end_mark_price = Decimal(str(last_order.fill_price or last_order.price or "0"))
+
+        end_open_lots_pnl = (
+            cls._calculate_open_lots_pnl(buy_lots, end_mark_price)
+            if end_mark_price > Decimal("0")
+            else Decimal("0")
+        )
+        total_period_pnl = (total_realized_pnl + end_open_lots_pnl).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+        initial_balance, mark_to_market_equity = cls._resolve_live_balances(
+            runtime_snapshot=runtime_snapshot,
+            sorted_orders=sorted_orders,
+            total_period_pnl=total_period_pnl,
+        )
         current_equity = initial_balance
         peak_equity = initial_balance
         max_dd = Decimal("0")
@@ -492,8 +620,10 @@ class AssetPerformanceService:
             )
         ]
 
-        for trade in matched_trades:
-            current_equity += trade.net_pnl
+        for step in fill_steps:
+            current_equity = (initial_balance + step.cumulative_pnl).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
             peak_equity = max(peak_equity, current_equity)
             dd = peak_equity - current_equity
             max_dd = max(max_dd, dd)
@@ -502,18 +632,48 @@ class AssetPerformanceService:
                 max_dd_pct = max(max_dd_pct, dd_pct)
             snapshots.append(
                 PortfolioSnapshot(
-                    timestamp=int(trade.exit_timestamp),
+                    timestamp=int(step.timestamp),
                     cash=current_equity,
                     positions={},
                     equity=current_equity,
                 )
             )
 
+        if mark_to_market_equity is not None:
+            current_equity = mark_to_market_equity
+            peak_equity = max(peak_equity, current_equity)
+            dd = peak_equity - current_equity
+            max_dd = max(max_dd, dd)
+            if peak_equity > Decimal("0"):
+                dd_pct = (dd / peak_equity) * Decimal("100")
+                max_dd_pct = max(max_dd_pct, dd_pct)
+            avail_cash = (
+                Decimal(str(runtime_snapshot.available_balance)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                if runtime_snapshot and runtime_snapshot.available_balance is not None
+                else current_equity
+            )
+            snapshots.append(
+                PortfolioSnapshot(
+                    timestamp=int(end.timestamp()),
+                    cash=avail_cash,
+                    positions={},
+                    equity=current_equity,
+                )
+            )
+
+        equity_curve = cls._build_equity_curve(
+            start=start,
+            end=end,
+            initial_balance=initial_balance,
+            fill_steps=fill_steps,
+            mark_to_market_equity=mark_to_market_equity,
+        )
+
         fills: list[BacktestFill] = []
         for o in sorted_orders:
             action = (
                 o.trade_action
-                if hasattr(o.trade_action, "value")
+                if isinstance(o.trade_action, TradeAction)
                 else (TradeAction.BUY if "BUY" in str(o.trade_action).upper() else TradeAction.SELL)
             )
             qty = Decimal(str(o.quantity or "0"))
@@ -576,6 +736,9 @@ class AssetPerformanceService:
             summary=summary,
             daily=daily_list,
             trades=execution_items,
+            equity_curve=equity_curve,
+            starting_balance=f"{initial_balance:.2f}",
+            current_equity=f"{current_equity:.2f}",
             strategy_attribution=strategy_attribution_models,
             commit_attribution=commit_attribution_models,
             risk_adjusted=risk_adjusted,
@@ -583,3 +746,165 @@ class AssetPerformanceService:
             execution=execution,
             portfolio=portfolio,
         )
+
+    @staticmethod
+    def _estimate_capital_from_orders(sorted_orders: List[Order]) -> Decimal:
+        net_cash_deployed = Decimal("0")
+        peak_deployed = Decimal("0")
+        max_order_notional = Decimal("0")
+
+        for order in sorted_orders:
+            action_raw = order.trade_action.value
+            side = "BUY" if "BUY" in action_raw.upper() else "SELL"
+            qty = Decimal(str(order.quantity or "0"))
+            fill_price = Decimal(str(order.fill_price or order.price or "0"))
+            fee = Decimal(str(order.fees or "0"))
+            notional = qty * fill_price
+            max_order_notional = max(max_order_notional, notional + fee)
+
+            if side == "BUY":
+                net_cash_deployed += notional + fee
+                peak_deployed = max(peak_deployed, net_cash_deployed)
+            else:
+                net_cash_deployed = max(Decimal("0"), net_cash_deployed - (notional - fee))
+
+        candidate = peak_deployed if peak_deployed > Decimal("0") else max_order_notional
+        return candidate.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+    @classmethod
+    def _resolve_live_balances(
+            cls,
+            runtime_snapshot: Optional[AssetRuntimeSnapshot],
+            sorted_orders: List[Order],
+            total_period_pnl: Decimal,
+    ) -> tuple[Decimal, Optional[Decimal]]:
+        if runtime_snapshot is None:
+            return cls._estimate_capital_from_orders(sorted_orders), None
+
+        mark_to_market_equity: Optional[Decimal] = None
+        if (
+            runtime_snapshot.available_balance is not None
+            and runtime_snapshot.position_quantity is not None
+        ):
+            avail = Decimal(str(runtime_snapshot.available_balance))
+            pos_qty = Decimal(str(runtime_snapshot.position_quantity))
+            if (
+                runtime_snapshot.latest_price is not None
+                and Decimal(str(runtime_snapshot.latest_price)) > Decimal("0")
+            ):
+                price = Decimal(str(runtime_snapshot.latest_price))
+            elif pos_qty > Decimal("0") and sorted_orders:
+                last_order = sorted_orders[-1]
+                price = Decimal(str(last_order.fill_price or last_order.price or "0"))
+            else:
+                price = Decimal("0")
+            mark_to_market_equity = (avail + pos_qty * price).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+
+        if mark_to_market_equity is not None:
+            derived = (mark_to_market_equity - total_period_pnl).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            if derived > Decimal("0"):
+                initial_balance = derived
+            elif (
+                runtime_snapshot.starting_balance is not None
+                and Decimal(str(runtime_snapshot.starting_balance)) > Decimal("0")
+            ):
+                initial_balance = Decimal(str(runtime_snapshot.starting_balance)).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            else:
+                initial_balance = mark_to_market_equity
+        elif (
+            runtime_snapshot.starting_balance is not None
+            and Decimal(str(runtime_snapshot.starting_balance)) > Decimal("0")
+        ):
+            initial_balance = Decimal(str(runtime_snapshot.starting_balance)).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            mark_to_market_equity = (initial_balance + total_period_pnl).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+        else:
+            initial_balance = cls._estimate_capital_from_orders(sorted_orders)
+
+        return initial_balance, mark_to_market_equity
+
+    @classmethod
+    def _make_equity_point(
+            cls,
+            timestamp_iso: str,
+            initial_balance: Decimal,
+            current_equity: Decimal,
+            peak_equity: Decimal,
+    ) -> AssetEquityPointModel:
+        rounded_pnl = (current_equity - initial_balance).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        dd = peak_equity - current_equity
+        dd_pct = (
+            round(float((dd / peak_equity) * Decimal("100")), 2)
+            if peak_equity > Decimal("0")
+            else 0.0
+        )
+        return AssetEquityPointModel(
+            timestamp=timestamp_iso,
+            equity=f"{current_equity:.2f}",
+            cumulative_pnl=f"{rounded_pnl:+.2f}",
+            drawdown_pct=dd_pct,
+        )
+
+    @classmethod
+    def _upsert_equity_point(
+            cls,
+            curve: List[AssetEquityPointModel],
+            point: AssetEquityPointModel,
+    ) -> None:
+        if curve and curve[-1].timestamp == point.timestamp:
+            curve[-1] = point
+        else:
+            curve.append(point)
+
+    @classmethod
+    def _build_equity_curve(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+            cls,
+            start: datetime,
+            end: datetime,
+            initial_balance: Decimal,
+            fill_steps: List[FillEquityStep],
+            mark_to_market_equity: Optional[Decimal] = None,
+    ) -> List[AssetEquityPointModel]:
+        if not fill_steps and mark_to_market_equity is None:
+            return []
+
+        curve: List[AssetEquityPointModel] = [
+            cls._make_equity_point(
+                start.isoformat(), initial_balance, initial_balance, initial_balance
+            )
+        ]
+
+        peak_equity = initial_balance
+
+        for step in fill_steps:
+            current_equity = (initial_balance + step.cumulative_pnl).quantize(
+                Decimal("0.01"), rounding=ROUND_HALF_UP
+            )
+            peak_equity = max(peak_equity, current_equity)
+            fill_iso = datetime.fromtimestamp(step.timestamp, tz=timezone.utc).isoformat()
+            cls._upsert_equity_point(
+                curve,
+                cls._make_equity_point(fill_iso, initial_balance, current_equity, peak_equity),
+            )
+
+        if mark_to_market_equity is not None:
+            peak_equity = max(peak_equity, mark_to_market_equity)
+            cls._upsert_equity_point(
+                curve,
+                cls._make_equity_point(
+                    end.isoformat(), initial_balance, mark_to_market_equity, peak_equity
+                ),
+            )
+
+        return curve

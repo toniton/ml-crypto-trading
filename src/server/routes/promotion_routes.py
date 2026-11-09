@@ -9,9 +9,6 @@ from api.interfaces.promotion import (
     CreateSimulatedRunRequest,
     PromoteToMainRequest,
 )
-from src.database.repositories.providers.postgres_promotion_repository import (
-    PostgresPromotionAuditRepository,
-)
 from src.server.services.main_promotion_service import MainPromotionService
 from src.server.services.simulation_orchestrator import SimulationOrchestrator
 from src.server.services.simulation_report_service import SimulationReportService
@@ -108,8 +105,12 @@ def create_promotion_router() -> APIRouter:
             limit: int = 50,
             offset: int = 0,
     ):
-        with request.app.state.db_manager.get_unit_of_work() as uow:
-            audit_repo = uow.get_repository(PostgresPromotionAuditRepository)
-            return await asyncio.to_thread(audit_repo.list_events, promotion_id=promotion_id, limit=limit, offset=offset)
+        promo_srv: MainPromotionService = request.app.state.main_promotion_service
+        return await asyncio.to_thread(
+            promo_srv.list_audit_events,
+            promotion_id=promotion_id,
+            limit=limit,
+            offset=offset,
+        )
 
     return router

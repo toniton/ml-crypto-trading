@@ -23,6 +23,8 @@ class SimulatedRunRepository(BaseRepository[SimulatedRunDao]):
             status: str,
             market_data_spec: dict[str, Any],
             execution_spec: dict[str, Any],
+            effective_config: Optional[dict[str, Any]] = None,
+            baseline_run_id: Optional[str] = None,
             error_message: Optional[str] = None,
     ) -> None:
         raise NotImplementedError
@@ -91,6 +93,9 @@ class PromotionRecordRepository(BaseRepository[PromotionRecordDao]):
             gate_results: dict[str, Any],
             approval_notes: Optional[str] = None,
             merge_commit_hash: Optional[str] = None,
+            report_id: Optional[str] = None,
+            run_id: Optional[str] = None,
+            config_hash: Optional[str] = None,
     ) -> None:
         raise NotImplementedError
 

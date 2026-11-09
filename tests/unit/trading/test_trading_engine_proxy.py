@@ -1,3 +1,4 @@
+# pylint: disable=duplicate-code
 import unittest
 from unittest.mock import MagicMock
 
@@ -80,6 +81,7 @@ class TestLocalTradingEngineProxy(unittest.TestCase):
         mock_engine = MagicMock()
         mock_asset = MagicMock(spec=Asset)
         mock_asset.ticker_symbol = "BTC_USD"
+        mock_asset.exchange.value = "CRYPTO_DOT_COM"
         mock_engine.monitored_assets = [mock_asset]
         mock_strategy = MagicMock()
         mock_strategy.name = "RSIStrategy"
@@ -108,6 +110,46 @@ class TestLocalTradingEngineProxy(unittest.TestCase):
         self.assertEqual(snapshot.position_quantity, 1.5)
         self.assertEqual(snapshot.total_trades_count, 1)
         self.assertEqual(snapshot.active_strategies, ["RSIStrategy"])
+
+    def test_get_asset_snapshot_passes_exchange_to_get_open_orders(self):
+        mock_engine = MagicMock()
+        mock_asset = MagicMock(spec=Asset)
+        mock_asset.ticker_symbol = "DOGE_USD"
+        mock_asset.exchange.value = "CRYPTO_DOT_COM"
+        mock_engine.monitored_assets = [mock_asset]
+        mock_engine.strategies = []
+
+        mock_managers = MagicMock()
+        mock_managers.order_manager.get_open_orders.return_value = [MagicMock()]
+        mock_managers.market_data_manager.get_last_price.return_value = 0.071
+        mock_context = MagicMock()
+        mock_context.position_qty = 342.995
+        mock_context.starting_balance = 68.26
+        mock_context.available_balance = 68.26
+        mock_context.trades = []
+        mock_managers.session_manager.get_trading_context_by_symbol.return_value = mock_context
+
+        proxy = self._create_proxy(trading_engine=mock_engine, managers=mock_managers)
+        snapshot = proxy.get_asset_snapshot("DOGE_USD")
+        mock_managers.order_manager.get_open_orders.assert_called_once_with("CRYPTO_DOT_COM", "DOGE_USD")
+        self.assertEqual(snapshot.available_balance, 68.26)
+
+    def test_get_asset_snapshot_skips_open_orders_when_exchange_unresolved(self):
+        mock_engine = MagicMock()
+        mock_engine.monitored_assets = []
+        mock_engine.strategies = []
+
+        mock_managers = MagicMock()
+        mock_managers.session_manager.has_session.return_value = True
+        mock_context = MagicMock()
+        mock_context.exchange = None
+        mock_context.position_qty = 0.0
+        mock_context.trades = []
+        mock_managers.session_manager.get_trading_context_by_symbol.return_value = mock_context
+
+        proxy = self._create_proxy(trading_engine=mock_engine, managers=mock_managers)
+        proxy.get_asset_snapshot("DOGE_USD")
+        mock_managers.order_manager.get_open_orders.assert_not_called()
 
     def test_get_recorded_market_data(self):
         md_store = MarketDataStore()
@@ -138,4 +180,3 @@ class TestLocalTradingEngineProxy(unittest.TestCase):
         res = proxy.compare_backtest_drift("dummy_action")
         self.assertEqual(res, {"drift": 0.05})
         mock_compare.assert_called_once_with("dummy_action")
-

@@ -19,6 +19,7 @@ from src.database.repositories.providers.postgres_promotion_repository import (
     PostgresSimulationReportRepository,
 )
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.server.services.canonical_config import CanonicalConfigService
 from src.server.services.promotion_policy import PromotionPolicy
 from src.vcs.application.service import VCSService
 
@@ -34,29 +35,73 @@ class MainPromotionService(ApplicationLoggingMixin):
         self._vcs_service = vcs_service
         self._policy = policy or PromotionPolicy()
 
-    def preview_promotion(self, req: PromoteToMainRequest) -> dict[str, Any]:
-        candidate, source_commit = self._get_candidate_and_commit(req.experiment_id, req.candidate_id)
-        report = self._get_latest_passing_report(req.experiment_id, req.candidate_id)
-        if not report or report.get("decision") != GateDecision.PASS.value:
-            raise ValueError(
-                f"Candidate '{req.candidate_id}' cannot be previewed for promotion: "
-                "no completed simulated run with passing Gate B evidence was found."
-            )
+    def preview_promotion(self, req: PromoteToMainRequest) -> dict[str, Any]:  # pylint: disable=too-many-locals
+        exp = self._get_experiment(req.experiment_id)
+        candidate, source_commit = self._get_candidate_and_commit(exp, req.candidate_id)
+        report = self._get_and_validate_report(
+            experiment=exp,
+            candidate=candidate,
+            source_commit=source_commit,
+            report_id=req.report_id,
+            run_id=req.run_id,
+        )
 
         merge_preview = self._vcs_service.preview_merge(
             source_ref_or_commit=source_commit,
             target_ref=req.target_ref,
         )
 
+        if isinstance(merge_preview, dict):
+            can_ff = bool(merge_preview.get("can_fast_forward", False))
+            raw_conflicts = merge_preview.get("conflicts", [])
+            base_hash = merge_preview.get("merge_base_hash")
+            raw_merged_config = merge_preview.get("merged_config")
+            merged_config = raw_merged_config if isinstance(raw_merged_config, dict) else None
+        else:
+            can_ff = bool(merge_preview.can_fast_forward)
+            raw_conflicts = merge_preview.conflicts or []
+            base_hash = merge_preview.merge_base_hash
+            raw_merged_config = merge_preview.merged_config
+            merged_config = raw_merged_config if isinstance(raw_merged_config, dict) else None
+
+        if merged_config is None and self._vcs_service:
+            try:
+                checked_out = self._vcs_service.checkout(source_commit)
+                if isinstance(checked_out, dict) and isinstance(checked_out.get("assets"), list):
+                    merged_config = checked_out
+            except Exception:
+                pass
+        if merged_config is None or not isinstance(merged_config, dict):
+            merged_config = candidate
+
+        conflicts = [
+            c if isinstance(c, dict) else vars(c)
+            for c in raw_conflicts
+        ]
         preview_dict = {
-            "can_fast_forward": getattr(merge_preview, "can_fast_forward", False),
-            "conflicts": [c.__dict__ if hasattr(c, "__dict__") else c for c in getattr(merge_preview, "conflicts", [])],
-            "merge_base_hash": getattr(merge_preview, "merge_base_hash", None),
+            "can_fast_forward": can_ff,
+            "conflicts": conflicts,
+            "merge_base_hash": base_hash,
         }
+
+        config_hash_match = False
+        if not conflicts and merged_config is not None:
+            with self._db_manager.get_unit_of_work() as uow:
+                run_repo = uow.get_repository(PostgresSimulatedRunRepository)
+                run_data = run_repo.get_run(req.run_id)
+            actual_effective = CanonicalConfigService.build_effective_config(
+                candidate=merged_config,
+                experiment=exp,
+                execution_spec=run_data.get("execution_spec") if run_data else {},
+                market_data_spec=run_data.get("market_data_spec") if run_data else {},
+            )
+            actual_hash = CanonicalConfigService.compute_hash(actual_effective)
+            config_hash_match = actual_hash == report.get("config_hash")
 
         gate_c = self._policy.evaluate_gate_c(
             approver=req.approver,
             merge_preview=preview_dict,
+            config_hash_match=config_hash_match,
         )
 
         return {
@@ -65,9 +110,10 @@ class MainPromotionService(ApplicationLoggingMixin):
             "merge_preview": preview_dict,
             "source_commit": source_commit,
             "target_ref": req.target_ref,
+            "config_hash": report.get("config_hash"),
         }
 
-    def promote_to_main(
+    def promote_to_main(  # pylint: disable=too-many-locals
             self,
             req: PromoteToMainRequest,
             resolved_config: Optional[dict[str, Any]] = None,
@@ -84,25 +130,57 @@ class MainPromotionService(ApplicationLoggingMixin):
                 )
                 return existing
 
-        candidate, source_commit = self._get_candidate_and_commit(req.experiment_id, req.candidate_id)
-        report = self._get_latest_passing_report(req.experiment_id, req.candidate_id)
-        if not report or report.get("decision") != GateDecision.PASS.value:
-            raise ValueError(
-                f"Promotion blocked: Candidate '{req.candidate_id}' has no verified passing Gate B simulation report."
-            )
+        exp = self._get_experiment(req.experiment_id)
+        candidate, source_commit = self._get_candidate_and_commit(exp, req.candidate_id)
+        report = self._get_and_validate_report(
+            experiment=exp,
+            candidate=candidate,
+            source_commit=source_commit,
+            report_id=req.report_id,
+            run_id=req.run_id,
+        )
 
         preview_result = self.preview_promotion(req)
         gate_c = preview_result["gate_c"]
-        if gate_c["decision"] != GateDecision.PASS.value and not resolved_config:
-            raise ValueError(
-                f"Promotion blocked by Gate C checks: "
-                f"{'; '.join(c['message'] for c in gate_c['checks'] if c['status'] != 'PASSED')}"
+
+        checks_by_name = {c["name"]: c for c in gate_c.get("checks", [])}
+        approver_check = checks_by_name.get("authorized_approver")
+        hash_check = checks_by_name.get("evidence_hash_match")
+        conflict_check = checks_by_name.get("merge_conflict_free")
+
+        if approver_check and approver_check.get("status") != "PASSED":
+            raise ValueError(f"Promotion blocked: {approver_check.get('message')}")
+
+        if conflict_check and conflict_check.get("status") != "PASSED":
+            if not resolved_config:
+                raise ValueError(f"Promotion blocked: {conflict_check.get('message')}")
+
+        if resolved_config:
+            with self._db_manager.get_unit_of_work() as uow:
+                run_repo = uow.get_repository(PostgresSimulatedRunRepository)
+                run_data = run_repo.get_run(req.run_id)
+            resolved_effective = CanonicalConfigService.build_effective_config(
+                candidate=resolved_config,
+                experiment=exp,
+                execution_spec=run_data.get("execution_spec") if run_data else {},
+                market_data_spec=run_data.get("market_data_spec") if run_data else {},
             )
+            resolved_hash = CanonicalConfigService.compute_hash(resolved_effective)
+            if resolved_hash != report.get("config_hash"):
+                raise ValueError(
+                    f"Resolved configuration hash '{resolved_hash}' does not match "
+                    f"simulation report evidence hash '{report.get('config_hash')}'. "
+                    "Simulation evidence is required for resolved configuration before promotion."
+                )
+        elif hash_check and hash_check.get("status") != "PASSED":
+            raise ValueError(f"Promotion blocked: {hash_check.get('message')}")
 
         merge_message = (
             f"Promote candidate '{candidate.get('name', req.candidate_id)}' "
             f"from experiment '{req.experiment_id}' to {req.target_ref}\n\n"
             f"Approver: {req.approver}\n"
+            f"Report: {req.report_id} (run {req.run_id})\n"
+            f"Config Hash: {report.get('config_hash')}\n"
             f"Notes: {req.approval_notes or 'None'}"
         )
 
@@ -114,7 +192,10 @@ class MainPromotionService(ApplicationLoggingMixin):
             resolved_config=resolved_config,
         )
 
-        merge_commit = getattr(merge_result, "merge_commit_hash", None)
+        if isinstance(merge_result, dict):
+            merge_commit = merge_result.get("merge_commit_hash")
+        else:
+            merge_commit = merge_result.merge_commit_hash
         promotion_id = f"promo_{uuid.uuid4().hex[:12]}"
 
         with self._db_manager.get_unit_of_work() as uow:
@@ -131,6 +212,9 @@ class MainPromotionService(ApplicationLoggingMixin):
                 approval_notes=req.approval_notes,
                 gate_results={"gate_c": gate_c, "merge_commit": merge_commit},
                 merge_commit_hash=merge_commit,
+                report_id=req.report_id,
+                run_id=req.run_id,
+                config_hash=report.get("config_hash"),
             )
 
             audit_repo = uow.get_repository(PostgresPromotionAuditRepository)
@@ -144,6 +228,9 @@ class MainPromotionService(ApplicationLoggingMixin):
                 payload={
                     "experiment_id": req.experiment_id,
                     "candidate_id": req.candidate_id,
+                    "report_id": req.report_id,
+                    "run_id": req.run_id,
+                    "config_hash": report.get("config_hash"),
                     "source_commit": source_commit,
                     "merge_commit": merge_commit,
                     "target_ref": req.target_ref,
@@ -151,7 +238,8 @@ class MainPromotionService(ApplicationLoggingMixin):
             )
 
         self.app_logger.info(
-            "Successfully promoted candidate %s (experiment %s) to %s at commit %s. Live trading safeguards remain active.",
+            "Successfully promoted candidate %s (experiment %s) to %s at commit %s. "
+            "Live trading safeguards remain active.",
             req.candidate_id,
             req.experiment_id,
             req.target_ref,
@@ -163,23 +251,38 @@ class MainPromotionService(ApplicationLoggingMixin):
             "idempotency_key": req.idempotency_key,
             "experiment_id": req.experiment_id,
             "candidate_id": req.candidate_id,
+            "report_id": req.report_id,
+            "run_id": req.run_id,
+            "config_hash": report.get("config_hash"),
             "status": PromotionLifecycleState.PROMOTED.value,
             "merge_commit_hash": merge_commit,
             "approver": req.approver,
             "live_trading_status": "UNTOUCHED_SAFEGUARDED",
         }
 
-    def _get_candidate_and_commit(self, experiment_id: str, candidate_id: str) -> tuple[dict[str, Any], str]:
+    def list_audit_events(
+            self,
+            promotion_id: Optional[str] = None,
+            limit: int = 50,
+            offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        with self._db_manager.get_unit_of_work() as uow:
+            audit_repo = uow.get_repository(PostgresPromotionAuditRepository)
+            return audit_repo.list_events(promotion_id=promotion_id, limit=limit, offset=offset)
+
+    def _get_experiment(self, experiment_id: str) -> dict[str, Any]:
         with self._db_manager.get_unit_of_work() as uow:
             exp_repo = uow.get_repository(PostgresExperimentRepository)
             exp = exp_repo.get_experiment(experiment_id)
             if not exp:
                 raise ValueError(f"Experiment '{experiment_id}' not found.")
+            return exp
 
+    def _get_candidate_and_commit(self, exp: dict[str, Any], candidate_id: str) -> tuple[dict[str, Any], str]:
         candidates = (exp.get("spec") or {}).get("candidates", [])
         candidate = next((c for c in candidates if c.get("candidate_id") == candidate_id), None)
         if not candidate:
-            raise ValueError(f"Candidate '{candidate_id}' not found in experiment '{experiment_id}'.")
+            raise ValueError(f"Candidate '{candidate_id}' not found in experiment '{exp.get('experiment_id')}'.")
 
         source_commit = candidate.get("candidate_commit_hash") or exp.get("base_commit_hash")
         if not source_commit:
@@ -187,17 +290,74 @@ class MainPromotionService(ApplicationLoggingMixin):
 
         return candidate, source_commit
 
-    def _get_latest_passing_report(self, experiment_id: str, candidate_id: str) -> Optional[dict[str, Any]]:
+    def _get_and_validate_report(
+            self,
+            experiment: dict[str, Any],
+            candidate: dict[str, Any],
+            source_commit: str,
+            report_id: str,
+            run_id: str,
+    ) -> dict[str, Any]:
         with self._db_manager.get_unit_of_work() as uow:
+            rep_repo = uow.get_repository(PostgresSimulationReportRepository)
+            report = rep_repo.get_report(report_id)
+            if not report:
+                raise ValueError(f"Simulation report '{report_id}' not found.")
+
+            if report.get("run_id") != run_id:
+                raise ValueError(
+                    f"Report '{report_id}' is associated with run '{report.get('run_id')}', not '{run_id}'."
+                )
+
             run_repo = uow.get_repository(PostgresSimulatedRunRepository)
-            runs = run_repo.list_runs(experiment_id=experiment_id, candidate_id=candidate_id)
-            if not runs:
-                return None
+            run = run_repo.get_run(run_id)
+            if not run:
+                raise ValueError(f"Simulated run '{run_id}' not found.")
 
-            report_repo = uow.get_repository(PostgresSimulationReportRepository)
-            for run in runs:
-                report = report_repo.get_report_by_run(run["run_id"])
-                if report and report.get("decision") == GateDecision.PASS.value:
-                    return report
+        if report.get("decision") != GateDecision.PASS.value:
+            raise ValueError(
+                f"Candidate promotion blocked: Simulation report '{report_id}' has decision "
+                f"'{report.get('decision')}', must be 'PASS'."
+            )
 
-        return None
+        if run.get("experiment_id") != experiment.get("experiment_id"):
+            raise ValueError(
+                f"Simulation run belongs to experiment '{run.get('experiment_id')}', "
+                f"not '{experiment.get('experiment_id')}'."
+            )
+
+        if run.get("candidate_id") != candidate.get("candidate_id"):
+            raise ValueError(
+                f"Simulation report belongs to candidate '{run.get('candidate_id')}', "
+                f"not '{candidate.get('candidate_id')}'."
+            )
+
+        if run.get("candidate_commit") != source_commit:
+            raise ValueError(
+                f"Simulation run commit '{run.get('candidate_commit')}' "
+                f"does not match candidate source commit '{source_commit}'."
+            )
+
+        candidate_source = candidate
+        if self._vcs_service and source_commit:
+            try:
+                checked_out = self._vcs_service.checkout(source_commit)
+                if checked_out and isinstance(checked_out.get("assets"), list):
+                    candidate_source = checked_out
+            except Exception:
+                candidate_source = candidate
+
+        current_effective_config = CanonicalConfigService.build_effective_config(
+            candidate=candidate_source,
+            experiment=experiment,
+            execution_spec=run.get("execution_spec"),
+            market_data_spec=run.get("market_data_spec"),
+        )
+        current_hash = CanonicalConfigService.compute_hash(current_effective_config)
+        if report.get("config_hash") != current_hash:
+            raise ValueError(
+                f"Candidate configuration hash mismatch: report hash '{report.get('config_hash')}' "
+                f"!= current configuration hash '{current_hash}'."
+            )
+
+        return report

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Callable, List, Optional
 
 from src.configuration.trading_config import TradingConfig
@@ -71,23 +72,117 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
     def list_monitored_assets(self) -> List[str]:
         return sorted([asset.ticker_symbol for asset in self._trading_engine.monitored_assets])
 
-    def get_asset_snapshot(self, ticker_symbol: str) -> Optional[AssetRuntimeSnapshot]:
-        monitored = self.list_monitored_assets()
-        if ticker_symbol not in monitored and not self._has_asset(ticker_symbol):
-            return None
+    def _find_monitored_asset(self, ticker_symbol: str) -> Optional[Any]:
+        for asset in self._trading_engine.monitored_assets:
+            if asset.ticker_symbol == ticker_symbol:
+                return asset
+        return None
 
-        open_orders = self._managers.order_manager.get_open_orders(ticker_symbol)
-        open_orders_count = len(open_orders) if open_orders else 0
+    def _resolve_exchange(self, asset: Optional[Any], context: Optional[Any]) -> Optional[str]:
+        if asset is not None and hasattr(asset, "exchange"):
+            raw_exchange = getattr(asset.exchange, "value", asset.exchange)
+            if isinstance(raw_exchange, str) and raw_exchange:
+                return raw_exchange
+        if context is not None:
+            ctx_exchange = getattr(context, "exchange", None)
+            if isinstance(ctx_exchange, str) and ctx_exchange:
+                return ctx_exchange
+        return None
 
-        price = self._managers.market_data_manager.get_last_price(ticker_symbol)
-        latest_price = float(price) if price is not None else None
+    def _fetch_open_orders_count(self, exchange: Optional[str], ticker_symbol: str) -> int:
+        if exchange:
+            try:
+                open_orders = self._managers.order_manager.get_open_orders(exchange, ticker_symbol)
+                return len(open_orders) if open_orders else 0
+            except Exception:  # pylint: disable=broad-except
+                return 0
+        return 0
 
+    def _resolve_latest_price(self, ticker_symbol: str, asset: Optional[Any]) -> Optional[float]:
+        try:
+            price = self._managers.market_data_manager.get_last_price(ticker_symbol)
+            if isinstance(price, (int, float, Decimal)) and float(price) > 0:
+                return float(price)
+        except Exception:  # pylint: disable=broad-except
+            pass
+        if asset is not None:
+            try:
+                market_data = self._managers.market_data_manager.get_market_data(asset)
+                close_price = getattr(market_data, "close_price", None)
+                if isinstance(close_price, (int, float, Decimal)) and float(close_price) > 0:
+                    return float(close_price)
+            except Exception:  # pylint: disable=broad-except
+                pass
+        return None
+
+    def _resolve_balances_and_position(
+            self,
+            asset: Optional[Any],
+            exchange: Optional[str],
+            context: Optional[Any],
+    ) -> tuple[float, int, Optional[float], Optional[float]]:
         position_quantity = 0.0
         total_trades_count = 0
-        context = self._managers.session_manager.get_trading_context_by_symbol(ticker_symbol)
+        starting_balance: Optional[float] = None
+        available_balance: Optional[float] = None
         if context is not None:
-            position_quantity = float(context.position_qty)
-            total_trades_count = len(context.trades)
+            raw_pos = getattr(context, "position_qty", 0.0)
+            if isinstance(raw_pos, (int, float, Decimal)):
+                position_quantity = float(raw_pos)
+            raw_trades = getattr(context, "trades", None)
+            total_trades_count = len(raw_trades) if raw_trades is not None else 0
+            raw_starting = getattr(context, "starting_balance", None)
+            if isinstance(raw_starting, (int, float, Decimal)):
+                starting_balance = float(raw_starting)
+            raw_available = getattr(context, "available_balance", None)
+            if isinstance(raw_available, (int, float, Decimal)):
+                available_balance = float(raw_available)
+
+        if asset is not None and exchange is not None and self._managers.account_manager is not None:
+            if available_balance is None or available_balance <= 0.0:
+                available_balance = self._fetch_quote_balance(asset, exchange, available_balance)
+            if position_quantity <= 0.0:
+                position_quantity = self._fetch_base_balance(asset, exchange, position_quantity)
+
+        return position_quantity, total_trades_count, starting_balance, available_balance
+
+    def _fetch_quote_balance(
+            self, asset: Any, exchange: str, fallback: Optional[float]
+    ) -> Optional[float]:
+        try:
+            quote_bal = self._managers.account_manager.get_quote_balance(asset, exchange)
+            raw_quote = getattr(quote_bal, "available_balance", None)
+            if isinstance(raw_quote, (int, float, Decimal)) and float(raw_quote) >= 0.0:
+                return float(raw_quote)
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return fallback
+
+    def _fetch_base_balance(self, asset: Any, exchange: str, fallback: float) -> float:
+        try:
+            base_bal = self._managers.account_manager.get_base_balance(asset, exchange)
+            raw_base = getattr(base_bal, "available_balance", None)
+            if isinstance(raw_base, (int, float, Decimal)) and float(raw_base) > 0.0:
+                return float(raw_base)
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return fallback
+
+    def get_asset_snapshot(self, ticker_symbol: str) -> Optional[AssetRuntimeSnapshot]:
+        asset = self._find_monitored_asset(ticker_symbol)
+        if asset is None and not self._has_asset(ticker_symbol):
+            return None
+
+        context = self._managers.session_manager.get_trading_context_by_symbol(ticker_symbol)
+        exchange = self._resolve_exchange(asset, context)
+        open_orders_count = self._fetch_open_orders_count(exchange, ticker_symbol)
+        latest_price = self._resolve_latest_price(ticker_symbol, asset)
+        (
+            position_quantity,
+            total_trades_count,
+            starting_balance,
+            available_balance,
+        ) = self._resolve_balances_and_position(asset, exchange, context)
 
         active_strategies = [
             strat.name
@@ -102,6 +197,8 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
             total_trades_count=total_trades_count,
             position_quantity=position_quantity,
             latest_price=latest_price,
+            starting_balance=starting_balance,
+            available_balance=available_balance,
         )
 
     def _has_asset(self, ticker_symbol: str) -> bool:

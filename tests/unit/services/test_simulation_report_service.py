@@ -77,12 +77,19 @@ class TestSimulationReportService:
             for i in range(1, 7)
         ]
         equity_curve = [10000.0, 10050.0, 10100.0, 10150.0, 10200.0, 10250.0, 10300.0]
+        baseline_trades = [
+            {"trade_id": f"b{i}", "pnl": 10.0, "strategy_name": "Baseline"}
+            for i in range(1, 6)
+        ]
+        baseline_equity_curve = [10000.0, 10010.0, 10020.0, 10030.0, 10040.0, 10050.0]
 
         report = self.service.generate_and_save_report(
             run_id="sim_run_test_01",
             trades=trades,
             equity_curve=equity_curve,
-            operational_diagnostics={"missed_ticks": 0, "runtime_errors_count": 0},
+            operational_diagnostics={"missed_ticks": 0, "runtime_errors_count": 0, "telemetry_available": True},
+            baseline_trades=baseline_trades,
+            baseline_equity_curve=baseline_equity_curve,
         )
 
         assert report["decision"] == "PASS"
