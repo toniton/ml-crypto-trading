@@ -35,7 +35,7 @@ class MainPromotionService(ApplicationLoggingMixin):
         self._vcs_service = vcs_service
         self._policy = policy or PromotionPolicy()
 
-    def preview_promotion(self, req: PromoteToMainRequest) -> dict[str, Any]:
+    def preview_promotion(self, req: PromoteToMainRequest) -> dict[str, Any]:  # pylint: disable=too-many-locals
         exp = self._get_experiment(req.experiment_id)
         candidate, source_commit = self._get_candidate_and_commit(exp, req.candidate_id)
         report = self._get_and_validate_report(
@@ -55,10 +55,24 @@ class MainPromotionService(ApplicationLoggingMixin):
             can_ff = bool(merge_preview.get("can_fast_forward", False))
             raw_conflicts = merge_preview.get("conflicts", [])
             base_hash = merge_preview.get("merge_base_hash")
+            raw_merged_config = merge_preview.get("merged_config")
+            merged_config = raw_merged_config if isinstance(raw_merged_config, dict) else None
         else:
             can_ff = bool(merge_preview.can_fast_forward)
             raw_conflicts = merge_preview.conflicts or []
             base_hash = merge_preview.merge_base_hash
+            raw_merged_config = merge_preview.merged_config
+            merged_config = raw_merged_config if isinstance(raw_merged_config, dict) else None
+
+        if merged_config is None and self._vcs_service:
+            try:
+                checked_out = self._vcs_service.checkout(source_commit)
+                if isinstance(checked_out, dict) and isinstance(checked_out.get("assets"), list):
+                    merged_config = checked_out
+            except Exception:
+                pass
+        if merged_config is None or not isinstance(merged_config, dict):
+            merged_config = candidate
 
         conflicts = [
             c if isinstance(c, dict) else vars(c)
@@ -70,10 +84,24 @@ class MainPromotionService(ApplicationLoggingMixin):
             "merge_base_hash": base_hash,
         }
 
+        config_hash_match = False
+        if not conflicts and merged_config is not None:
+            with self._db_manager.get_unit_of_work() as uow:
+                run_repo = uow.get_repository(PostgresSimulatedRunRepository)
+                run_data = run_repo.get_run(req.run_id)
+            actual_effective = CanonicalConfigService.build_effective_config(
+                candidate=merged_config,
+                experiment=exp,
+                execution_spec=run_data.get("execution_spec") if run_data else {},
+                market_data_spec=run_data.get("market_data_spec") if run_data else {},
+            )
+            actual_hash = CanonicalConfigService.compute_hash(actual_effective)
+            config_hash_match = actual_hash == report.get("config_hash")
+
         gate_c = self._policy.evaluate_gate_c(
             approver=req.approver,
             merge_preview=preview_dict,
-            config_hash_match=True,
+            config_hash_match=config_hash_match,
         )
 
         return {
@@ -85,7 +113,7 @@ class MainPromotionService(ApplicationLoggingMixin):
             "config_hash": report.get("config_hash"),
         }
 
-    def promote_to_main(
+    def promote_to_main(  # pylint: disable=too-many-locals
             self,
             req: PromoteToMainRequest,
             resolved_config: Optional[dict[str, Any]] = None,
@@ -123,9 +151,6 @@ class MainPromotionService(ApplicationLoggingMixin):
         if approver_check and approver_check.get("status") != "PASSED":
             raise ValueError(f"Promotion blocked: {approver_check.get('message')}")
 
-        if hash_check and hash_check.get("status") != "PASSED":
-            raise ValueError(f"Promotion blocked: {hash_check.get('message')}")
-
         if conflict_check and conflict_check.get("status") != "PASSED":
             if not resolved_config:
                 raise ValueError(f"Promotion blocked: {conflict_check.get('message')}")
@@ -147,6 +172,8 @@ class MainPromotionService(ApplicationLoggingMixin):
                     f"simulation report evidence hash '{report.get('config_hash')}'. "
                     "Simulation evidence is required for resolved configuration before promotion."
                 )
+        elif hash_check and hash_check.get("status") != "PASSED":
+            raise ValueError(f"Promotion blocked: {hash_check.get('message')}")
 
         merge_message = (
             f"Promote candidate '{candidate.get('name', req.candidate_id)}' "
@@ -311,8 +338,17 @@ class MainPromotionService(ApplicationLoggingMixin):
                 f"does not match candidate source commit '{source_commit}'."
             )
 
+        candidate_source = candidate
+        if self._vcs_service and source_commit:
+            try:
+                checked_out = self._vcs_service.checkout(source_commit)
+                if checked_out and isinstance(checked_out.get("assets"), list):
+                    candidate_source = checked_out
+            except Exception:
+                candidate_source = candidate
+
         current_effective_config = CanonicalConfigService.build_effective_config(
-            candidate=candidate,
+            candidate=candidate_source,
             experiment=experiment,
             execution_spec=run.get("execution_spec"),
             market_data_spec=run.get("market_data_spec"),

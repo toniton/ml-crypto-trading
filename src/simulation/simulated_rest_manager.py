@@ -13,9 +13,20 @@ from src.simulation.simulated_account import SimulatedAccount
 
 
 class SimulatedRestManager(RestManager):
-    def __init__(self, account: SimulatedAccount, metrics_collector: Optional[ExchangeMetricsCollector] = None):
+    def __init__(
+            self,
+            account: SimulatedAccount,
+            metrics_collector: Optional[ExchangeMetricsCollector] = None,
+            market_data_provider: Optional[Any] = None,
+    ):
         super().__init__(metrics_collector=metrics_collector)
         self._account = account
+        self._market_data_provider = market_data_provider
+
+    def get_market_data(self, exchange: str, ticker_symbol: str) -> Any:
+        if self._market_data_provider is not None:
+            return self._market_data_provider(exchange, ticker_symbol)
+        return super().get_market_data(exchange, ticker_symbol)
 
     def get_account_balance(self, exchange: str, force_refresh: bool = False) -> List[AccountBalance]:
         balances = []

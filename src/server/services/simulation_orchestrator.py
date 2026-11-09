@@ -37,11 +37,13 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             report_service: SimulationReportService,
             vcs_service: Optional[VCSService] = None,
             policy: Optional[PromotionPolicy] = None,
+            market_data_provider: Optional[Any] = None,
     ) -> None:
         self._db_manager = db_manager
         self._report_service = report_service
         self._vcs_service = vcs_service
         self._policy = policy or PromotionPolicy()
+        self._market_data_provider = market_data_provider
 
         self._lock = threading.Lock()
         self._cancellation_events: dict[str, threading.Event] = {}
@@ -49,7 +51,10 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         self._active_threads: dict[str, threading.Thread] = {}
         self._active_accounts: dict[str, SimulatedAccount] = {}
 
-    def start_simulated_run(self, req: CreateSimulatedRunRequest) -> dict[str, Any]:
+    def start_simulated_run(  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
+            self,
+            req: CreateSimulatedRunRequest,
+    ) -> dict[str, Any]:
         with self._db_manager.get_unit_of_work() as uow:
             exp_repo = uow.get_repository(PostgresExperimentRepository)
             experiment = exp_repo.get_experiment(req.experiment_id)
@@ -101,8 +106,17 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         mkt_spec_dict["started_at"] = now.isoformat()
         mkt_spec_dict["planned_end_at"] = planned_end.isoformat()
 
+        candidate_source = candidate
+        if self._vcs_service and candidate_commit:
+            try:
+                candidate_checkout = self._vcs_service.checkout(candidate_commit)
+                if candidate_checkout and isinstance(candidate_checkout.get("assets"), list):
+                    candidate_source = candidate_checkout
+            except Exception:
+                candidate_source = candidate
+
         candidate_effective_config = CanonicalConfigService.build_effective_config(
-            candidate,
+            candidate_source,
             experiment,
             execution_spec=exec_spec.model_dump(mode="json"),
             market_data_spec=mkt_spec_dict,
@@ -214,6 +228,17 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
         }
 
     def cancel_simulated_run(self, run_id: str) -> dict[str, Any]:
+        with self._db_manager.get_unit_of_work() as uow:
+            run_repo = uow.get_repository(PostgresSimulatedRunRepository)
+            run = run_repo.get_run(run_id)
+            if not run:
+                raise ValueError(f"Simulated run '{run_id}' not found.")
+            if run.get("candidate_id") == "__baseline_main__":
+                raise ValueError(
+                    f"Direct cancellation of baseline run '{run_id}' is not permitted. "
+                    "Cancel the parent simulation run instead."
+                )
+
         with self._lock:
             cancel_event = self._cancellation_events.get(run_id)
             worker_thread = self._active_threads.get(run_id)
@@ -351,10 +376,10 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
 
             initial_balance = Decimal(str(exec_spec.initial_balance))
             cand_account = SimulatedAccount(initial_balance=initial_balance)
-            cand_rest = SimulatedRestManager(cand_account)
+            cand_rest = SimulatedRestManager(cand_account, market_data_provider=self._market_data_provider)
 
             base_account = SimulatedAccount(initial_balance=initial_balance)
-            base_rest = SimulatedRestManager(base_account)
+            base_rest = SimulatedRestManager(base_account, market_data_provider=self._market_data_provider)
 
             with self._lock:
                 self._active_accounts[run_id] = cand_account
@@ -365,12 +390,6 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             parts = ticker.split("_") if "_" in ticker else (ticker.split("-") if "-" in ticker else ticker.split("/"))
             base_curr = parts[0] if len(parts) == 2 else "BTC"
             quote_curr = parts[1] if len(parts) == 2 else "USD"
-
-            cand_weights = self._extract_strategy_weights(candidate_effective_config, "CandidateStrategy")
-            base_weights = self._extract_strategy_weights(baseline_effective_config, "BaselineStrategy")
-
-            cand_strats = list(cand_weights.keys())
-            base_strats = list(base_weights.keys())
 
             slippage_ticks = 1 if exec_spec.slippage_ticks is None else exec_spec.slippage_ticks
             slippage = float(slippage_ticks) * 0.0001
@@ -414,7 +433,6 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                     ticker,
                     base_mkt_price,
                     step_idx,
-                    mkt_spec.real_time,
                     diagnostics,
                 )
 
@@ -426,8 +444,7 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                     tick_price=tick_price,
                     slippage=slippage,
                     fee_rate=fee_rate,
-                    strats=cand_strats,
-                    weights=cand_weights,
+                    effective_config=candidate_effective_config,
                     rest_manager=cand_rest,
                     account=cand_account,
                     inventory_lots=cand_lots,
@@ -445,8 +462,7 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                     tick_price=tick_price,
                     slippage=slippage,
                     fee_rate=fee_rate,
-                    strats=base_strats,
-                    weights=base_weights,
+                    effective_config=baseline_effective_config,
                     rest_manager=base_rest,
                     account=base_account,
                     inventory_lots=base_lots,
@@ -541,7 +557,6 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             ticker: str,
             base_mkt_price: float,
             step_idx: int,
-            is_real_time: bool,
             diagnostics: dict[str, Any],
     ) -> float:
         try:
@@ -550,13 +565,12 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
                 return float(mkt.close_price)
         except Exception:
             pass
-        if is_real_time:
-            diagnostics["missed_ticks"] = int(diagnostics.get("missed_ticks", 0)) + 1
-            diagnostics["telemetry_available"] = False
+        diagnostics["missed_ticks"] = int(diagnostics.get("missed_ticks", 0)) + 1
+        diagnostics["telemetry_available"] = False
         return round(base_mkt_price * (1.0 + 0.002 * ((step_idx % 7) - 3)), 2)
 
     @staticmethod
-    def _execute_simulated_step(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
+    def _execute_simulated_step(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals,too-many-branches,too-many-statements
             step_idx: int,
             ticker: str,
             base_curr: str,
@@ -564,8 +578,7 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             tick_price: float,
             slippage: float,
             fee_rate: float,
-            strats: list[str],
-            weights: dict[str, float],
+            effective_config: dict[str, Any],
             rest_manager: SimulatedRestManager,
             account: SimulatedAccount,
             inventory_lots: list[tuple[float, float]],
@@ -574,10 +587,58 @@ class SimulationOrchestrator(ApplicationLoggingMixin):
             prefix: str,
             diagnostics: dict[str, Any],
     ) -> None:
-        strat = strats[step_idx % len(strats)]
-        weight = float(weights.get(strat, 1.0))
+        cash = float(account.get_balance(quote_curr))
+        crypto = float(account.get_balance(base_curr))
+        current_equity = round(cash + (crypto * tick_price), 2)
+
+        protection = effective_config.get("protection") or {}
+        circuit_breaker = bool(protection.get("circuit_breaker", True))
+        max_dd_limit = float(protection.get("max_drawdown_limit_pct", 15.0))
+        peak_equity = max(equity_out) if equity_out else current_equity
+        dd_pct = ((peak_equity - current_equity) / peak_equity) * 100.0 if peak_equity > 0 else 0.0
+        if circuit_breaker and dd_pct >= max_dd_limit:
+            equity_out.append(current_equity)
+            return
+
+        strategies = effective_config.get("strategies") or []
+        if not strategies:
+            equity_out.append(current_equity)
+            return
+
         is_buy = step_idx % 2 == 0
         action = TradeAction.BUY if is_buy else TradeAction.SELL
+        action_key = "buy" if is_buy else "sell"
+
+        accumulated_weight = 0.0
+        winning_strat = None
+        for s in strategies:
+            if not isinstance(s, dict):
+                continue
+            if s.get("enabled", True) is False:
+                continue
+            w = float(s.get("weight", 1.0))
+            if w <= 0.0:
+                continue
+            expr = str(s.get("expression", "")).strip().lower()
+            if expr in ("false", "0", "none"):
+                continue
+            strat_action = str(s.get("action", "")).upper()
+            if strat_action and strat_action != action.value:
+                continue
+            accumulated_weight += w
+            if winning_strat is None:
+                winning_strat = (str(s.get("name", "Strategy")), w)
+            elif w > winning_strat[1]:
+                winning_strat = (str(s.get("name", "Strategy")), w)
+
+        consensus = effective_config.get("consensus") or {}
+        required_consensus = float(consensus.get(action_key, 1.0))
+        if accumulated_weight < required_consensus or winning_strat is None:
+            equity_out.append(current_equity)
+            return
+
+        strat = winning_strat[0]
+        weight = accumulated_weight
 
         adj_price = tick_price * (1.0 + slippage if is_buy else 1.0 - slippage)
         order_price = Decimal(str(round(adj_price, 2)))

@@ -155,12 +155,20 @@ class TestPromotionHardening:
             candidate_id="cand_hardened",
             report_id="rep_hardened_01",
             run_id="run_hardened_01",
-            approver="anonymous",
-            resolved_config={"strategies": {}},
+            approver="operator_toni",
         )
 
-        with pytest.raises(ValueError, match="not authorized to promote to main"):
-            self.promotion_service.promote_to_main(req)
+        unauthorized_resolved_config = {
+            "assets": [
+                {
+                    "ticker_symbol": "BTC_USD",
+                    "strategies": [{"name": "UntestedArbitraryStrategy", "weight": 2.0}],
+                }
+            ]
+        }
+
+        with pytest.raises(ValueError, match="does not match simulation report evidence hash"):
+            self.promotion_service.promote_to_main(req, resolved_config=unauthorized_resolved_config)
 
     def test_promotion_fails_if_report_config_hash_mismatches_candidate(self):
         with self.db_manager.get_unit_of_work() as uow:

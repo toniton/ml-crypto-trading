@@ -260,3 +260,37 @@ def test_equity_curve_uses_real_runtime_snapshot_balance_and_mark_to_market():
             ("2650.00", "+150.00"),
         ],
     )
+
+
+def test_zero_mark_to_market_equity_is_preserved_not_overwritten():
+    snapshot = AssetRuntimeSnapshot(
+        ticker_symbol="BTC_USD",
+        starting_balance=1000.0,
+        available_balance=0.0,
+        position_quantity=0.0,
+        latest_price=50000.0,
+    )
+    init_bal, mtm = AssetPerformanceService._resolve_live_balances(
+        snapshot,
+        [],
+        Decimal("0"),
+    )
+    assert mtm == Decimal("0.00")
+
+
+def test_unknown_position_leaves_mark_to_market_equity_unavailable():
+    snapshot = AssetRuntimeSnapshot(
+        ticker_symbol="BTC_USD",
+        starting_balance=1000.0,
+        available_balance=500.0,
+        position_quantity=None,
+        latest_price=50000.0,
+    )
+    init_bal, mtm = AssetPerformanceService._resolve_live_balances(
+        snapshot,
+        [],
+        Decimal("0"),
+    )
+    assert mtm == Decimal("1000.00")
+    assert init_bal == Decimal("1000.00")
+

@@ -10,7 +10,24 @@ class CanonicalConfigService:
     """Static service for canonical configuration building, hashing, and validation."""
 
     @staticmethod
-    def build_effective_config(
+    def extract_asset_configuration(
+            config_or_candidate: dict[str, Any],
+            target_ticker: str,
+    ) -> dict[str, Any]:
+        if isinstance(config_or_candidate.get("assets"), list):
+            for asset in config_or_candidate["assets"]:
+                if isinstance(asset, dict):
+                    sym = (
+                        asset.get("ticker_symbol")
+                        or f"{asset.get('base_ticker_symbol', '')}_{asset.get('quote_ticker_symbol', '')}".strip("_")
+                    )
+                    if sym == target_ticker:
+                        return asset
+            return {}
+        return config_or_candidate
+
+    @staticmethod
+    def build_effective_config(  # pylint: disable=too-many-locals
             candidate: dict[str, Any],
             experiment: dict[str, Any],
             execution_spec: Optional[dict[str, Any]] = None,
@@ -24,23 +41,51 @@ class CanonicalConfigService:
             or exp_spec.get("ticker_symbol")
             or "BTC_USD"
         )
+        asset_cfg = CanonicalConfigService.extract_asset_configuration(candidate, ticker)
 
-        strategies = candidate.get("strategies") or []
-        if not strategies and candidate.get("strategy_weights"):
-            strategies = [
+        raw_strategies = asset_cfg.get("strategies") or candidate.get("strategies") or []
+        if not raw_strategies and (asset_cfg.get("strategy_weights") or candidate.get("strategy_weights")):
+            weights = asset_cfg.get("strategy_weights") or candidate.get("strategy_weights")
+            raw_strategies = [
                 {"name": name, "weight": float(weight), "type": "EXPRESSION"}
-                for name, weight in candidate["strategy_weights"].items()
+                for name, weight in weights.items()
             ]
-        sorted_strategies = sorted(strategies, key=lambda s: s.get("name", ""))
 
-        consensus = (
-            candidate.get("consensus")
+        canonical_strategies = []
+        for s in raw_strategies:
+            if isinstance(s, dict):
+                entry: dict[str, Any] = {
+                    "name": str(s.get("name", "")),
+                    "weight": float(s.get("weight", 1.0)),
+                    "type": str(s.get("type", "EXPRESSION")),
+                }
+                if "expression" in s:
+                    entry["expression"] = str(s["expression"])
+                if "enabled" in s:
+                    entry["enabled"] = bool(s["enabled"])
+                canonical_strategies.append(entry)
+        sorted_strategies = sorted(canonical_strategies, key=lambda s: s.get("name", ""))
+
+        raw_consensus = (
+            asset_cfg.get("consensus")
+            or candidate.get("consensus")
             or exp_spec.get("consensus")
             or {"buy": 1.0, "sell": 1.0}
         )
+        if isinstance(raw_consensus, dict):
+            consensus = {
+                "buy": float(raw_consensus.get("buy", 1.0)),
+                "sell": float(raw_consensus.get("sell", 1.0)),
+            }
+        else:
+            consensus = {"buy": 1.0, "sell": 1.0}
 
         scheduling = {
-            "timeframe": (market_data_spec or {}).get("timeframe") or exp_spec.get("candles_timeframe", "MIN1"),
+            "timeframe": (
+                asset_cfg.get("candles_timeframe")
+                or (market_data_spec or {}).get("timeframe")
+                or exp_spec.get("candles_timeframe", "MIN1")
+            ),
         }
 
         exec_spec = execution_spec or candidate.get("execution_spec") or exp_spec.get("execution_spec") or {}
@@ -50,16 +95,31 @@ class CanonicalConfigService:
             "slippage_ticks": int(exec_spec.get("slippage_ticks", 1)),
         }
 
-        protection = candidate.get("protection") or exp_spec.get("protection") or {
-            "max_drawdown_limit_pct": 15.0,
-            "circuit_breaker": True,
-        }
+        raw_protection = (
+            asset_cfg.get("guard_config")
+            or asset_cfg.get("protection")
+            or candidate.get("protection")
+            or exp_spec.get("protection")
+            or {
+                "max_drawdown_limit_pct": 15.0,
+                "circuit_breaker": True,
+            }
+        )
+        if isinstance(raw_protection, dict):
+            protection = {
+                "circuit_breaker": bool(raw_protection.get("circuit_breaker", True)),
+                "max_drawdown_limit_pct": float(raw_protection.get("max_drawdown_limit_pct", 15.0)),
+            }
+        else:
+            protection = {
+                "circuit_breaker": True,
+                "max_drawdown_limit_pct": 15.0,
+            }
 
         return {
             "asset": {
                 "ticker_symbol": ticker,
             },
-            "candidate_id": candidate.get("candidate_id", ""),
             "consensus": consensus,
             "execution": execution,
             "protection": protection,
@@ -83,8 +143,3 @@ class CanonicalConfigService:
             return False
         clean = commit_hash.strip()
         return bool(re.match(r"^[0-9a-fA-F]{7,64}$", clean))
-
-
-build_canonical_effective_config = CanonicalConfigService.build_effective_config
-compute_canonical_config_hash = CanonicalConfigService.compute_hash
-validate_commit_hash = CanonicalConfigService.validate_commit_hash

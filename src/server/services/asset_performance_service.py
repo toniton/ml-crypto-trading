@@ -218,28 +218,7 @@ class AssetPerformanceService:
         if db_snapshot is not None:
             return db_snapshot
 
-        peer_snapshot = self._fetch_peer_quote_snapshot(ticker_symbol)
-        return peer_snapshot if peer_snapshot is not None else snapshot
-
-    def _fetch_peer_quote_snapshot(self, ticker_symbol: str) -> Optional[AssetRuntimeSnapshot]:
-        if self._trading_proxy is None or "_" not in ticker_symbol:
-            return None
-        quote_suffix = f"_{ticker_symbol.split('_')[-1]}"
-        try:
-            status = self._trading_proxy.get_status()
-            monitored_assets = status.monitored_assets if status and status.monitored_assets else []
-            for monitored in monitored_assets:
-                if monitored.endswith(quote_suffix):
-                    peer = self._trading_proxy.get_asset_snapshot(monitored)
-                    if peer is not None and peer.available_balance is not None:
-                        return AssetRuntimeSnapshot(
-                            ticker_symbol=ticker_symbol,
-                            position_quantity=0.0,
-                            available_balance=peer.available_balance,
-                        )
-        except Exception:  # pylint: disable=broad-except
-            return None
-        return None
+        return snapshot
 
     def _fetch_decision_snapshot(self, ticker_symbol: str) -> Optional[AssetRuntimeSnapshot]:
         try:
@@ -265,7 +244,7 @@ class AssetPerformanceService:
                 )
                 return AssetRuntimeSnapshot(
                     ticker_symbol=ticker_symbol,
-                    position_quantity=0.0,
+                    position_quantity=None,
                     latest_price=latest_price,
                     available_balance=available_balance,
                 )
@@ -803,9 +782,12 @@ class AssetPerformanceService:
             return cls._estimate_capital_from_orders(sorted_orders), None
 
         mark_to_market_equity: Optional[Decimal] = None
-        if runtime_snapshot.available_balance is not None:
+        if (
+            runtime_snapshot.available_balance is not None
+            and runtime_snapshot.position_quantity is not None
+        ):
             avail = Decimal(str(runtime_snapshot.available_balance))
-            pos_qty = Decimal(str(runtime_snapshot.position_quantity or 0.0))
+            pos_qty = Decimal(str(runtime_snapshot.position_quantity))
             if (
                 runtime_snapshot.latest_price is not None
                 and Decimal(str(runtime_snapshot.latest_price)) > Decimal("0")
@@ -820,7 +802,7 @@ class AssetPerformanceService:
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
 
-        if mark_to_market_equity is not None and mark_to_market_equity > Decimal("0"):
+        if mark_to_market_equity is not None:
             derived = (mark_to_market_equity - total_period_pnl).quantize(
                 Decimal("0.01"), rounding=ROUND_HALF_UP
             )
