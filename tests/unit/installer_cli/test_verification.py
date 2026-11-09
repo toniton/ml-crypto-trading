@@ -1,5 +1,5 @@
+# pylint: disable=protected-access
 from unittest.mock import patch
-from pathlib import Path
 from installer.context import InstallerContext
 from installer.steps.verification import VerificationStep
 

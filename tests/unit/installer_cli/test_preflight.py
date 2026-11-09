@@ -1,3 +1,4 @@
+# pylint: disable=protected-access
 import sys
 from installer.context import InstallerContext
 from installer.steps.preflight import PreflightStep

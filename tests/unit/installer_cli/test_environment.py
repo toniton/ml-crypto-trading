@@ -1,5 +1,4 @@
-from pathlib import Path
-from installer.context import DatabaseConfig, DatabaseMode, InstallerContext
+from installer.context import InstallerContext
 from installer.steps.environment import EnvironmentStep
 
 
@@ -71,3 +70,17 @@ def test_environment_step_dry_run_leaves_file_untouched(tmp_path):
     step = EnvironmentStep()
     step.run(context)
     assert not (tmp_path / ".env").exists()
+
+
+def test_environment_step_handles_backslashes_in_secrets(tmp_path):
+    env_file = tmp_path / ".env"
+    env_file.write_text("CRYPTO_DOT_COM__SECRET_KEY=placeholder\n", encoding="utf-8")
+    context = InstallerContext(
+        project_root=tmp_path,
+        venv_dir=tmp_path / "venv",
+        interactive=False,
+    )
+    context.credentials.crypto_dot_com_secret = r"secret\1\g<test>"
+    step = EnvironmentStep()
+    step.run(context)
+    assert r"CRYPTO_DOT_COM__SECRET_KEY=secret\1\g<test>" in env_file.read_text(encoding="utf-8")
