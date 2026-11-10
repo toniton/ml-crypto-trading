@@ -132,9 +132,32 @@ The bot can be run using **Make / standard Python** or **Docker**.
 - **PostgreSQL**: A running instance (local Docker, native service, or remote like **Supabase**, **Neon**, **AWS RDS**).
 - **Operating System**: macOS, Linux, or Windows (PowerShell, WSL, or Git Bash).
 
-### 1. Automated Setup (Cross-Platform)
+### 1. Interactive CLI Setup Wizard (Recommended)
 
-The automated setup guides you through dependency installation, environment configuration, and database connection options:
+Launch the guided interactive terminal installer to configure your environment, provision the PostgreSQL database, setup exchange & LLM credentials, install dependencies, and run database migrations:
+
+**macOS / Linux:**
+```bash
+./install.sh
+# Or via Make
+make install-interactive
+```
+
+**Windows (PowerShell):**
+```powershell
+.\install.ps1
+```
+
+> **Automated / CI/CD Mode**: Run unattended with defaults or specific profiles:
+> ```bash
+> ./install.sh --non-interactive --profile=quickstart
+> # Simulate without writing files
+> ./install.sh --dry-run
+> ```
+
+### 2. Traditional Setup Script
+
+Alternatively, you can run the standard environment setup script:
 
 **macOS / Linux / WSL / Git Bash:**
 ```bash
@@ -152,7 +175,7 @@ During setup, you will be prompted to choose how your PostgreSQL database is pro
 - **Option 2: Local Database Setup** — Automatically launches `db_setup` to detect/install/start local PostgreSQL or a Docker container.
 - **Option 3: Manual Configuration** — Skip to configure `.env` manually.
 
-### 2. Configuration & Manual Commands
+### 3. Configuration & Manual Commands
 
 1. **Environment Variables**: Edit `.env` (copied from `.env.example` during setup):
    ```env
@@ -217,6 +240,7 @@ During setup, you will be prompted to choose how your PostgreSQL database is pro
 
 | Command | Description |
 | :--- | :--- |
+| `make install-interactive` | Launch guided interactive CLI setup wizard |
 | `make setup` | Bootstrap virtualenv, install dependencies, init `.env`, and setup git hooks |
 | `make venv` | Create virtual environment and install development dependencies |
 | `make install` | Install production requirements (`requirements.txt`) |

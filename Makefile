@@ -9,11 +9,12 @@ DEFAULT_CONFIG := examples/configurations/trading-config.yaml
 BACKTEST_CONFIG := examples/configurations/backtest-trading-config.yaml
 BACKTEST_SOURCE := examples/coinmarketcap/history
 
-.PHONY: help setup venv install install-dev clean db-up db-down db-setup migrate upgrade downgrade format lint test test-agent-20q test-agent-50q test-50q test-agent-adversarial benchmark-agent benchmark-agent-live benchmark-50q benchmark-50q-live benchmark-50q-live-http run-simulated run-backtest run-live run-headless start
+.PHONY: help setup venv install install-interactive install-dev clean db-up db-down db-setup migrate upgrade downgrade format lint test test-agent-20q test-agent-50q test-50q test-agent-adversarial benchmark-agent benchmark-agent-live benchmark-50q benchmark-50q-live benchmark-50q-live-http run-simulated run-backtest run-live run-headless start
 
 help:
 	@echo "Available commands:"
 	@echo "  make setup          - Set up virtual environment and install all dependencies"
+	@echo "  make install-interactive - Launch interactive CLI setup wizard"
 	@echo "  make venv           - Create virtualenv and install development dependencies"
 	@echo "  make install        - Install production dependencies"
 	@echo "  make install-dev    - Install development dependencies"
@@ -43,6 +44,9 @@ help:
 
 setup:
 	@./scripts/setup.sh
+
+install-interactive:
+	@./install.sh
 
 venv: $(VENV_DIR)/bin/activate
 
