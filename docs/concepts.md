@@ -223,3 +223,13 @@ Common indicators are available as helper functions within expressions:
 ```yaml
 dynamic_quantity: "(equity * 0.02) / close" # Risk 2% of total equity per trade
 ```
+
+---
+
+## Related Documentation
+
+- [Introduction & Features](introduction.md) — Motivation and feature overview.
+- [Strategy Promotion Pipeline](strategy-promotion.md) — Simulating, evaluating, and promoting dynamic strategy rules.
+- [Agent Automation & Monitoring](agent-automation.md) — Autonomous watchdog anomaly handling.
+- [Configuration Guide](configuration.md) — Full YAML and environment property reference.
+- [Architecture & Diagrams](architecture.md) — Internal system design and class structure.

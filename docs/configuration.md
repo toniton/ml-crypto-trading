@@ -342,23 +342,4 @@ custom variable instead.
 
 ## REST API & WebSocket Endpoints
 
-When running the server (`--server=true`), FastAPI provides the following endpoints:
-
-| Method | Endpoint | Description |
-|:-------|:---------|:------------|
-| `POST` | `/api/v1/chat` | Server-Sent Events (SSE) chat stream with the LangGraph AI Agent. |
-| `GET`  | `/api/v1/sessions` | List active agent conversation sessions. |
-| `GET`  | `/api/v1/sessions/{session_id}` | Retrieve message history for a specific conversation session. |
-| `POST` | `/api/v1/proposals/{message_id}/decision` | Approve or reject a pending configuration change proposal. |
-| `GET`  | `/api/v1/config` | Retrieve current active bot configuration. |
-| `GET`  | `/api/v1/config/options` | Retrieve supported exchanges, timeframes, and strategies. |
-| `POST` | `/api/v1/config` | Direct commit of configuration to VCS. |
-| `GET`  | `/api/v1/vcs/log` | Query configuration version control commit history. |
-| `GET`  | `/api/v1/vcs/checkout/{commit_hash}` | Inspect or restore configuration at a specific commit hash. |
-| `GET`  | `/api/v1/heatmap/orders/{year}/{month}` | Daily trade counts and volume heatmap. |
-| `GET`  | `/api/v1/orders/{year}/{month}/{day}` | Detailed trade records for a specific day. |
-| `GET`  | `/api/v1/orders/week/{year}/{month}/{day}` | Weekly aggregated trade summary. |
-| `GET`  | `/api/v1/orders/latency/{year}/{month}` | Execution latency distribution and percentiles. |
-| `GET`  | `/api/v1/runtime` | Live CPU, memory, and process health metrics. |
-| `GET`  | `/api/v1/orders/lifecycle` | Order lifecycle telemetry and fill statistics. |
-| `WS`   | `/api/v1/logs/ws` | Real-time WebSocket stream for application and trading log events. |
+For the full catalog of REST endpoints, WebSocket streaming channels, and JSON payload contracts, see the dedicated [REST API & WebSocket Reference](api.md).

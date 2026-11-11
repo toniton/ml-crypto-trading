@@ -50,10 +50,14 @@ FastAPI-powered backend offering:
 - **Proposal Lifecycle**: Endpoints to review, approve, or reject AI configuration proposals.
 - **Live WebSocket Streaming**: Stream application and trade logs via `/api/v1/logs/ws`.
 
+### Strategy Promotion Pipeline
+A multi-stage, guarded pipeline for validating new or adjusted strategy configurations against historical market simulations before promoting them into active live execution. Evaluates Sharpe ratios, drawdowns, win-rates, and execution drift.
+
 ### Observability & Runtime Metrics
 - Process telemetry (CPU and memory usage collectors).
 - Exchange connectivity and WebSocket error monitoring.
 - Order lifecycle metrics tracking time-to-fill, fill prices, and slippage.
+- Automated data retention enforcement (`RetentionManager`).
 
 ### Configuration Version Control (VCS)
 Git-like content-addressable history tracking for all configuration changes with instant rollback and audit logging.
@@ -62,6 +66,16 @@ Git-like content-addressable history tracking for all configuration changes with
 - [Crypto.com Exchange](https://crypto.com/exchange)
 - CCXT-compatible exchanges (e.g. Binance)
 - In-memory Simulated Client for paper trading and backtesting
+
+---
+
+## Documentation Links
+
+- [Documentation Hub](README.md)
+- [Installation Guide](installation.md)
+- [Core Concepts](concepts.md)
+- [Strategy Promotion](strategy-promotion.md)
+- [REST API Reference](api.md)
 
 ---
 
