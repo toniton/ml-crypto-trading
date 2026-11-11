@@ -83,7 +83,17 @@ VCS / Backtest perform the approved operation
 
 ## REST & WebSocket
 
-See the README's *Agent REST endpoints* table. Commands return `202 Accepted` with a `request_id`;
+See the dedicated [REST API & WebSocket Reference](api.md) for full action and approval endpoints. Commands return `202 Accepted` with a `request_id`;
 the final outcome is delivered over `/api/v1/agent/ws` as `agent_*` events. The projector,
 which is idempotent per `event_id`, materialises results into the conversation store and the
+in-memory read model.
+
+---
+
+## Related Documentation
+
+- [Documentation Hub](README.md)
+- [Architecture & Diagrams](architecture.md)
+- [Strategy Promotion Pipeline](strategy-promotion.md)
+- [REST API Reference](api.md)
 action/approval read models.

@@ -68,12 +68,18 @@ The application follows a modular, decoupled architecture adhering to strict sep
 - **`ConsensusManager`**: Evaluates multi-strategy quorum voting (1-of-1, 1-of-2 OR, 2-of-2 strict consensus).
 - **`ProtectionManager`**: Enforces risk guardrails (e.g. `MaxDrawdownGuard`, cooldowns, circuit breakers).
 
-### 🧠 AI Agent System (LangGraph)
+### 🧠 AI Agent & Automation Subsystem (LangGraph & Watchdog)
 - **`RouterGraph`**: Classifies incoming natural language queries and dynamically routes execution.
 - **`ConfigurationGraph`**: Proposes strategy parameter adjustments, validates formulas, calculates diffs, and manages human-in-the-loop approvals.
 - **`BacktestGraph`**: Automates on-demand historical simulations and parameter sweeps.
 - **`PerformanceAnalysisGraph`**: Generates analytics on order distributions, latency, and win-rates.
 - **`TradingOracle`**: Emits proactive trading and market summaries based on trade event counters.
+- **`StarvationWatchdog` & `AutomationController`**: Autonomous activity tracking that detects asset inactivity and plans deterministic anomaly investigations.
+
+### 🛡️ Strategy Promotion Pipeline
+- **`SimulationOrchestrator`**: Coordinates paper simulations on historical/recorded datasets.
+- **`AssetPerformanceService`**: Evaluates simulated returns, Sharpe ratio, drawdown, and execution friction.
+- **`PromotionPolicy`**: Enforces quantitative gating criteria before staging or committing changes into VCS.
 
 ### 📊 High-Fidelity Backtesting Subsystem
 - **Multi-Asset Simulation**: Independent `BacktestClock` instances running per asset.
@@ -82,20 +88,27 @@ The application follows a modular, decoupled architecture adhering to strict sep
 - **Drift Detection & Market Recording**: `DriftDetector` evaluates strategy robustness; `MarketDataRecorder` enables deterministic tick replay.
 
 ### 🌐 Server & API Layer (FastAPI)
-- Exposes RESTful endpoints for configuration, VCS logs, order heatmaps, and order latency distributions.
+- Exposes RESTful endpoints for configuration, VCS logs, order heatmaps, order latency distributions, and promotion candidate lifecycle.
 - Streams live conversational agent turns via Server-Sent Events (`/api/v1/chat`).
-- Streams real-time trading and application logs via WebSockets (`/api/v1/logs/ws`).
+- Streams real-time trading and application logs via WebSockets (`/api/v1/logs/ws`) and agent events via (`/api/v1/agent/ws`).
 
 ### 📈 Observability & Telemetry Subsystem
 - **`RuntimeMetricsCollector`**: Gathers CPU and RAM utilization.
 - **`OrderLifecycleCollector`**: Telemetry on order placement latency, fill delays, and slippage.
 - **`ExchangeMetricsCollector`**: Monitors WebSocket connection health, REST API response times, and error rates.
+- **`RetentionManager`**: Automated data retention enforcement and disk space management.
 
 ---
 
 ## Configuration & Documentation Links
 
-- [Configuration & System Properties](configuration.md)
-- [Core Concepts](concepts.md)
-- [Logging Architecture](logging.md)
+- [Documentation Index](README.md)
 - [Introduction & Features](introduction.md)
+- [Core Concepts](concepts.md)
+- [Installation & Setup](installation.md)
+- [Configuration & System Properties](configuration.md)
+- [Strategy Promotion Pipeline](strategy-promotion.md)
+- [Agent Automation & Monitoring](agent-automation.md)
+- [REST API & WebSocket Reference](api.md)
+- [Logging Architecture](logging.md)
+- [Data Retention Inventory](retention-inventory.md)
