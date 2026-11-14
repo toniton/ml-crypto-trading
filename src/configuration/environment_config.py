@@ -56,6 +56,7 @@ class EnvironmentConfig(BaseSettings):
     postgres_pool_recycle: int = Field(default=1800)
     log_dir: str = Field(default='.')
     log_level: Optional[str] = Field(default=None)
+    tenant_user_id: str = Field(default='default')
 
     # Nested CCXT provider settings
     ccxt_providers: CCXTProviderSettings = Field(default_factory=CCXTProviderSettings)

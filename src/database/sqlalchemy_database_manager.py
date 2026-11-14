@@ -2,16 +2,17 @@ import os
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
+from src.database.tenant_context import TenantContext, TenantScopedMixin
 from src.configuration.providers.database_config import DatabaseConfig
 
 
 class SqlAlchemyDatabaseManager(DatabaseManager):
-    BaseTableModel = declarative_base()
+    BaseTableModel = declarative_base(cls=TenantScopedMixin)
 
     def __init__(self):
         config = DatabaseConfig.get_instance()
@@ -54,6 +55,23 @@ class SqlAlchemyDatabaseManager(DatabaseManager):
         self._create_tables()
         engine = self.get_engine()
         self._session_factory = sessionmaker(bind=engine)
+        self._register_tenant_rls_hook(self._session_factory)
+
+    @staticmethod
+    def apply_rls_context(connection, tenant_id: str | None = None) -> None:
+        if connection.dialect.name != "postgresql":
+            return
+        resolved_tenant = tenant_id or TenantContext.get_current_tenant_id()
+        connection.execute(
+            text("SELECT set_config('app.current_user_id', :tenant_id, true)"),
+            {"tenant_id": resolved_tenant},
+        )
+
+    @classmethod
+    def _register_tenant_rls_hook(cls, session_factory: sessionmaker) -> None:
+        @event.listens_for(session_factory, "after_begin")
+        def _on_after_begin(_session, _transaction, connection) -> None:
+            cls.apply_rls_context(connection)
 
     def get_unit_of_work(self) -> SqlAlchemyUnitOfWork:
         if self._session_factory is None:
