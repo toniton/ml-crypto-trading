@@ -67,6 +67,7 @@ class EnvironmentStep(BaseStep):
         var_map: Dict[str, str] = {
             "APP_ENV": context.app.app_env,
             "LOG_LEVEL": context.app.log_level,
+            "TENANT_USER_ID": context.app.tenant_user_id,
         }
 
         if context.database.mode != DatabaseMode.SKIP:
