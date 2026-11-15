@@ -7,6 +7,7 @@ from installer.steps.dependencies import DependenciesStep
 from installer.steps.environment import EnvironmentStep
 from installer.steps.migrations import MigrationsStep
 from installer.steps.preflight import PreflightStep
+from installer.steps.tenant_bootstrap import TenantBootstrapStep
 from installer.steps.verification import VerificationStep
 
 __all__ = [
@@ -18,5 +19,6 @@ __all__ = [
     "EnvironmentStep",
     "MigrationsStep",
     "PreflightStep",
+    "TenantBootstrapStep",
     "VerificationStep",
 ]

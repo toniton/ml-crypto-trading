@@ -53,6 +53,7 @@ class AppConfig:
     """Application runtime configuration."""
     app_env: str = "production"
     log_level: str = "INFO"
+    tenant_user_id: str = "default"
 
 
 @dataclass
