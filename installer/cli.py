@@ -15,6 +15,7 @@ from installer.steps import (
     EnvironmentStep,
     MigrationsStep,
     PreflightStep,
+    TenantBootstrapStep,
     VerificationStep,
 )
 from installer.ui.console import console
@@ -85,6 +86,7 @@ def build_pipeline(skip_deps: bool) -> List[BaseStep]:
     """Assembles the sequence of installation steps based on flags."""
     steps: List[BaseStep] = [
         PreflightStep(),
+        TenantBootstrapStep(),
         DatabaseStep(),
         CredentialsStep(),
         EnvironmentStep(),

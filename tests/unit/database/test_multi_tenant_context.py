@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 
 from alembic.migration import MigrationContext
 from alembic.operations import Operations
+import pytest
 import sqlalchemy as sa
 from sqlalchemy.orm import sessionmaker
 
@@ -91,3 +92,71 @@ class TestMultiTenantMigration:
 
         downgraded_cols = {c["name"] for c in sa.inspect(engine).get_columns("orders")}
         assert "user_id" in upgraded_cols and "user_id" not in downgraded_cols
+
+
+class TestRlsRoleVerification:
+    def test_allows_restricted_role_for_tenant(self, monkeypatch):
+        monkeypatch.setenv(TenantContext.TENANT_ENV_VAR, "usr-10492")
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "postgresql"
+        mock_conn.execute.return_value.fetchone.return_value = ("rio_app", False, False)
+        SqlAlchemyDatabaseManager.verify_rls_role_enforced(mock_conn)
+
+    def test_rejects_superuser_for_non_default_tenant(self, monkeypatch):
+        monkeypatch.setenv(TenantContext.TENANT_ENV_VAR, "usr-10492")
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "postgresql"
+        mock_conn.execute.return_value.fetchone.return_value = ("postgres", True, False)
+        with pytest.raises(RuntimeError, match="NOSUPERUSER NOBYPASSRLS"):
+            SqlAlchemyDatabaseManager.verify_rls_role_enforced(mock_conn)
+
+    def test_rejects_bypassrls_when_enforcement_required(self, monkeypatch):
+        monkeypatch.delenv(TenantContext.TENANT_ENV_VAR, raising=False)
+        monkeypatch.setenv("REQUIRE_RLS_ENFORCEMENT", "true")
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "postgresql"
+        mock_conn.execute.return_value.fetchone.return_value = ("migrator", False, True)
+        with pytest.raises(RuntimeError, match="NOSUPERUSER NOBYPASSRLS"):
+            SqlAlchemyDatabaseManager.verify_rls_role_enforced(mock_conn)
+
+    def test_warns_only_for_superuser_in_default_local_mode(self, monkeypatch):
+        monkeypatch.delenv(TenantContext.TENANT_ENV_VAR, raising=False)
+        monkeypatch.delenv("REQUIRE_RLS_ENFORCEMENT", raising=False)
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "postgresql"
+        mock_conn.execute.return_value.fetchone.return_value = ("postgres", True, True)
+        SqlAlchemyDatabaseManager.verify_rls_role_enforced(mock_conn)
+
+
+class TestSchemaCompatibilityVerification:
+    def test_passes_when_current_head_matches_expected(self, monkeypatch):
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "postgresql"
+        monkeypatch.setattr(
+            "src.database.sqlalchemy_database_manager.ScriptDirectory.from_config",
+            lambda _cfg: MagicMock(get_heads=lambda: ["v1a2b3c4d5e6"]),
+        )
+        monkeypatch.setattr(
+            "src.database.sqlalchemy_database_manager.MigrationContext.configure",
+            lambda _conn: MagicMock(get_current_heads=lambda: ("v1a2b3c4d5e6",)),
+        )
+        SqlAlchemyDatabaseManager.verify_schema_compatibility(mock_conn)
+
+    def test_raises_when_schema_revision_mismatches(self, monkeypatch):
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "postgresql"
+        monkeypatch.setattr(
+            "src.database.sqlalchemy_database_manager.ScriptDirectory.from_config",
+            lambda _cfg: MagicMock(get_heads=lambda: ["v1a2b3c4d5e6"]),
+        )
+        monkeypatch.setattr(
+            "src.database.sqlalchemy_database_manager.MigrationContext.configure",
+            lambda _conn: MagicMock(get_current_heads=lambda: ("u1a2b3c4d5e6",)),
+        )
+        with pytest.raises(RuntimeError, match="Database schema revision mismatch"):
+            SqlAlchemyDatabaseManager.verify_schema_compatibility(mock_conn)
+
+    def test_skips_schema_check_for_sqlite(self):
+        mock_conn = MagicMock()
+        mock_conn.dialect.name = "sqlite"
+        SqlAlchemyDatabaseManager.verify_schema_compatibility(mock_conn)
