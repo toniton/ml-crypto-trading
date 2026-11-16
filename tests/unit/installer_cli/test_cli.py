@@ -37,6 +37,15 @@ def test_build_pipeline_excludes_dependencies_when_skipped():
     assert "Python Environment & Dependencies Setup" not in step_names
 
 
+def test_build_pipeline_registers_tenant_bootstrap_before_environment():
+    steps = build_pipeline(skip_deps=True)
+    step_names = [s.name for s in steps]
+    assert "Multi-Tenant Context Bootstrap" in step_names
+    assert step_names.index("Multi-Tenant Context Bootstrap") < step_names.index(
+        "Environment File (.env) Configuration"
+    )
+
+
 def test_cli_main_dry_run_non_interactive_returns_success():
     exit_code = main(["--non-interactive", "--dry-run", "--skip-deps", "--skip-db", "--skip-migrations"])
     assert exit_code == 0
