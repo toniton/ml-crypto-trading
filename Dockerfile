@@ -6,7 +6,6 @@ WORKDIR /app
 
 COPY . .
 
-RUN pip install --no-cache-dir -r requirements.txt \
-    && chmod +x /app/deploy/cloud-entrypoint.sh
+RUN pip install --no-cache-dir -r requirements.txt
 
-ENTRYPOINT ["/app/deploy/cloud-entrypoint.sh"]
+ENTRYPOINT ["python", "main.py"]
