@@ -1,4 +1,3 @@
-import logging
 import os
 
 from alembic import command
@@ -12,11 +11,11 @@ from src.core.interfaces.database_manager import DatabaseManager
 from src.database.sqlalchemy_unit_of_work import SqlAlchemyUnitOfWork
 from src.database.tenant_context import TenantContext, TenantScopedMixin
 from src.configuration.providers.database_config import DatabaseConfig
+from src.logging.application_logging_mixin import ApplicationLoggingMixin
+from src.logging.factory import LoggingFactory
 
-logger = logging.getLogger(__name__)
 
-
-class SqlAlchemyDatabaseManager(DatabaseManager):
+class SqlAlchemyDatabaseManager(DatabaseManager, ApplicationLoggingMixin):
     BaseTableModel = declarative_base(cls=TenantScopedMixin)
 
     def __init__(self):
@@ -62,7 +61,7 @@ class SqlAlchemyDatabaseManager(DatabaseManager):
     def initialize(self) -> None:
         skip_migrations = os.getenv("SKIP_MIGRATIONS", "").strip().lower() == "true"
         if skip_migrations:
-            logger.info("Skipping Alembic migrations because SKIP_MIGRATIONS=true.")
+            self.app_logger.info("Skipping Alembic migrations because SKIP_MIGRATIONS=true.")
         else:
             self._run_migrations()
             self._create_tables()
@@ -89,8 +88,8 @@ class SqlAlchemyDatabaseManager(DatabaseManager):
                 f"expected={sorted(expected_heads)}. Run database migrations before starting tenant containers."
             )
 
-    @staticmethod
-    def verify_rls_role_enforced(connection) -> None:
+    @classmethod
+    def verify_rls_role_enforced(cls, connection) -> None:
         """Ensure PostgreSQL runtime connections do not bypass Row-Level Security."""
         if connection.dialect.name != "postgresql":
             return
@@ -111,7 +110,7 @@ class SqlAlchemyDatabaseManager(DatabaseManager):
                 f"which disables Row-Level Security for tenant '{tenant_id}'. "
                 "Connect with a dedicated least-privileged role (NOSUPERUSER NOBYPASSRLS)."
             )
-        logger.warning(
+        LoggingFactory.get_application_logger(cls.__name__).warning(
             "PostgreSQL role '%s' has SUPERUSER or BYPASSRLS privileges; RLS is bypassed in local default mode.",
             role_name,
         )
