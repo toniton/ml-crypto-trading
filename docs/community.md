@@ -37,3 +37,11 @@ If you have an idea for an enhancement or a bug fix, feel free to open a Pull Re
 
 4. Submit a [Pull Request (PR)](https://github.com/toniton/ml-stocks-trading/compare) with a clear explanation of your
    changes.
+
+### Contributor License & Ownership
+
+By submitting a Pull Request or other contribution to this repository, you confirm that:
+
+1. Your contribution is your original work and you have the legal right to submit it.
+2. You grant the project copyright holder a perpetual, worldwide, non-exclusive, irrevocable license to use, modify, distribute, and sub-license your contribution—both under the **[PolyForm Noncommercial License 1.0.0](../LICENSE.txt)** and under separate commercial licenses (including operation within **Rio Cloud**).
+3. For substantial contributions or ongoing maintainers, you may be asked to sign a Contributor License Agreement (CLA) or copyright assignment before your changes are merged.
