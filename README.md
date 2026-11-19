@@ -39,7 +39,8 @@ Join our Discord community to discuss strategies, report issues, and collaborate
 - [Run Modes](#run-modes)
 - [Makefile Commands Reference](#makefile-commands-reference)
 - [Documentation Hub](#documentation)
-- [Community & License](#community)
+- [Rio Cloud Integration](#rio-cloud-integration)
+- [Community & License](#license--commercial-terms)
 
 ---
 
@@ -230,14 +231,35 @@ For in-depth guides, architectural blueprints, and API references, browse the do
 
 ---
 
+## Rio Cloud Integration
+
+**Rio Cloud** is the managed hosting and orchestration platform for MCT (ML-Crypto-Trading). It provides a managed environment for deploying and operating independent MCT trading instances without requiring users to provision and maintain their own infrastructure.
+
+Features include:
+- **Managed Provisioning & Lifecycle**: Automated deployment and lifecycle management for MCT instances.
+- **Dedicated Runtime**: Isolated trading runtime per tenant.
+- **Centralised Observability**: Instance monitoring and resource metrics.
+- **Managed Persistence**: Managed infrastructure and database persistence.
+- **Remote Access**: Secure access through tenant-specific endpoints.
+
+MCT remains independently deployable and can be self-hosted without Rio Cloud.
+
+[Explore Rio Cloud](https://riotrading.app)
+
+---
+
 ## License & Commercial Terms
 
 This project is source-available under the **[PolyForm Noncommercial License 1.0.0](LICENSE.txt)**.
 
 - **Free for Personal & Educational Use**: You are free to view, download, modify, and run this software for non-commercial purposes, personal trading research, and learning.
-- **Commercial Restrictions**: Any commercial use, proprietary trading for profit by institutions or funds, hosting MCT as a commercial service/SaaS, or selling software built on MCT requires a separate commercial license from the author.
+- **Commercial Restrictions**: Any commercial use, proprietary trading for profit by institutions or funds, hosting MCT as a commercial service/SaaS, or selling software built on MCT requires a separate commercial license from the author. Rio Cloud is a separately operated managed service.
 
 For commercial licensing inquiries or institutional partnerships, please reach out via [Discord](https://discord.gg/vZh8w3Sz) or open a private inquiry.
+
+### Trademark & Brand Notice
+
+The PolyForm Noncommercial License 1.0.0 does not grant any right or license to use the **Rio** name, **Rio Cloud** brand, or associated logos. Accurate textual references to Rio Cloud are permitted, but independent forks or third-party hosting providers may not use Rio branding or present themselves as official Rio services without written authorization.
 
 ## Copyright
 Copyright © 2026 Toni Akinjiola. All rights reserved.
