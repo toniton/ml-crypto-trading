@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessageChunk
 
 from src.llm import LangChainOpenCodeAdapter, OPENCODE_API_BASE
-from src.llm.langchain_opencode_adapter import OPENCODE_USER_AGENT
+from src.llm.base_langchain_adapter import BaseLangChainAdapter
 
 
 async def collect_stream(adapter, prompt):
@@ -39,7 +39,7 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
             max_retries=2,
             default_headers={
                 "x-opencode-session": "sess-1",
-                "User-Agent": OPENCODE_USER_AGENT,
+                "User-Agent": BaseLangChainAdapter.USER_AGENT,
             },
         )
 
@@ -63,10 +63,13 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
             max_retries=2,
             default_headers={
                 "x-opencode-session": "sess-2",
-                "User-Agent": OPENCODE_USER_AGENT,
+                "User-Agent": BaseLangChainAdapter.USER_AGENT,
             },
             max_tokens=1024,
         )
+
+    def test_user_agent_inherited_from_base_adapter(self):
+        self.assertEqual(LangChainOpenCodeAdapter.USER_AGENT, BaseLangChainAdapter.USER_AGENT)
 
     @patch("src.llm.langchain_opencode_adapter.ChatOpenAI")
     def test_init_generates_session_header_when_not_provided(self, mock_chat_openai):

@@ -9,7 +9,6 @@ from src.core.interfaces.llm_adapter import LlmAdapter
 from src.llm.base_langchain_adapter import BaseLangChainAdapter
 
 OPENCODE_API_BASE = "https://opencode.ai/inference/go/openai/v1"
-OPENCODE_USER_AGENT = "rio-trading-agent/1.0"
 
 
 class LangChainOpenCodeAdapter(BaseLangChainAdapter, LlmAdapter):
@@ -39,7 +38,7 @@ class LangChainOpenCodeAdapter(BaseLangChainAdapter, LlmAdapter):
             max_retries=max_retries,
             default_headers={
                 "x-opencode-session": resolved_session_id,
-                "User-Agent": OPENCODE_USER_AGENT,
+                "User-Agent": self.USER_AGENT,
             },
             **extra_kwargs,
         )
