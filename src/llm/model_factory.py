@@ -11,10 +11,12 @@ from src.llm.langchain_deepseek_adapter import LangChainDeepSeekAdapter
 from src.llm.langchain_gemini_adapter import LangChainGeminiAdapter
 from src.llm.langchain_groq_adapter import LangChainGroqAdapter
 from src.llm.langchain_ollama_adapter import LangChainOllamaAdapter
+from src.llm.langchain_opencode_adapter import LangChainOpenCodeAdapter
 
 DEEPSEEK_API_KEY_ENV = "LLM_PROVIDER__DEEPSEEK__API_KEY"
 GEMINI_API_KEY_ENV = "LLM_PROVIDER__GEMINI__API_KEY"
 GROQ_API_KEY_ENV = "LLM_PROVIDER__GROQ__API_KEY"
+OPENCODE_API_KEY_ENV = "LLM_PROVIDER__OPENCODE__API_KEY"
 
 
 class ModelFactory:
@@ -49,6 +51,16 @@ class ModelFactory:
         if model.provider == LlmProvider.GROQ:
             key = api_key or ModelFactory._resolve_api_key(model, GROQ_API_KEY_ENV, "Groq")
             return LangChainGroqAdapter(
+                model_name=model.model_name,
+                api_key=key,
+                base_url=resolved_base_url,
+                temperature=model.temperature,
+                timeout=model.timeout,
+                max_tokens=model.max_tokens,
+            )
+        if model.provider == LlmProvider.OPENCODE:
+            key = api_key or ModelFactory._resolve_api_key(model, OPENCODE_API_KEY_ENV, "OpenCode")
+            return LangChainOpenCodeAdapter(
                 model_name=model.model_name,
                 api_key=key,
                 base_url=resolved_base_url,
