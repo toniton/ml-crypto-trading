@@ -478,7 +478,15 @@ class ConfigurationService(AgentLoggingMixin):
 
         if proposal.base_commit_hash:
             current_head = self._vcs.resolve_commit_hash(ref)
-            if current_head != proposal.base_commit_hash:
+            base_hash = proposal.base_commit_hash.strip()
+            matches_head = bool(
+                current_head
+                and (
+                    current_head == base_hash
+                    or (len(base_hash) >= 7 and current_head.startswith(base_hash))
+                )
+            )
+            if not matches_head:
                 raise VcsError(
                     f"Configuration has diverged from base commit '{proposal.base_commit_hash}' "
                     f"(current {ref} is '{current_head}')."
