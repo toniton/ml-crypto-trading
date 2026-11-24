@@ -5,7 +5,7 @@ from api.interfaces.backtest_request import BacktestDataSourceType
 from api.interfaces.order import Order
 from api.interfaces.trade_action import TradeAction
 from src.backtest.analysis.drift_detector import BacktestDriftDetector
-from src.backtest.domain.result import BacktestFill
+from src.backtest.domain.result import BacktestFill, PortfolioSnapshot
 
 
 def _fill(action: TradeAction, price: str, quantity: str) -> BacktestFill:
@@ -107,3 +107,75 @@ class TestBacktestDriftDetector:
         _, kwargs = service.build_request.call_args
         assert kwargs["source_type"] == BacktestDataSourceType.MARKET_DATA
         assert report.drifted is False
+
+    def test_detect_populates_simulated_equity_curve_from_portfolio_snapshots(self):
+        service = Mock()
+        service.build_request.return_value = Mock()
+        result = Mock()
+        result.fills = [_fill(TradeAction.BUY, "100", "1")]
+        result.initial_balance = Decimal("10000")
+        result.portfolio_snapshots = [
+            PortfolioSnapshot(timestamp=1700000000, cash=Decimal("10000"), positions={}, equity=Decimal("10000")),
+            PortfolioSnapshot(timestamp=1700003600, cash=Decimal("9900"), positions={}, equity=Decimal("10150.25")),
+        ]
+        service.run.return_value = result
+        journal = Mock()
+        journal.entries.return_value = []
+
+        detector = BacktestDriftDetector(service, journal)
+        report = detector.detect("BTC_USD")
+
+        assert [pnl for _, pnl in report.simulated_equity_curve] == [0.0, 150.25]
+
+    def test_detect_populates_simulated_pnl_from_snapshots(self):
+        service = Mock()
+        service.build_request.return_value = Mock()
+        result = Mock()
+        result.fills = []
+        result.initial_balance = Decimal("10000")
+        result.portfolio_snapshots = [
+            PortfolioSnapshot(timestamp=1700000000, cash=Decimal("10000"), positions={}, equity=Decimal("10000")),
+            PortfolioSnapshot(timestamp=1700003600, cash=Decimal("10250"), positions={}, equity=Decimal("10250")),
+        ]
+        service.run.return_value = result
+        journal = Mock()
+        journal.entries.return_value = []
+
+        detector = BacktestDriftDetector(service, journal)
+        report = detector.detect("BTC_USD")
+
+        assert report.simulated_pnl == Decimal("250")
+
+    def test_detect_checks_out_explicit_commit_hash_from_vcs(self):
+        service = Mock()
+        service.build_request.return_value = Mock()
+        result = Mock()
+        result.fills = []
+        result.portfolio_snapshots = []
+        service.run.return_value = result
+        journal = Mock()
+        journal.entries.return_value = []
+        vcs = Mock()
+        vcs.checkout.return_value = {"assets": []}
+
+        detector = BacktestDriftDetector(service, journal, vcs_service=vcs)
+        detector.detect("BTC_USD", commit_hash="exp_commit_123")
+
+        vcs.checkout.assert_called_once_with("exp_commit_123")
+
+    def test_detect_defaults_to_main_ref_when_commit_hash_omitted(self):
+        service = Mock()
+        service.build_request.return_value = Mock()
+        result = Mock()
+        result.fills = []
+        result.portfolio_snapshots = []
+        service.run.return_value = result
+        journal = Mock()
+        journal.entries.return_value = []
+        vcs = Mock()
+        vcs.checkout.return_value = {"assets": []}
+
+        detector = BacktestDriftDetector(service, journal, vcs_service=vcs)
+        detector.detect("BTC_USD")
+
+        vcs.checkout.assert_called_once_with("refs/heads/main")
