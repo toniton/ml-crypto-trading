@@ -1,18 +1,15 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
+from src.configuration.strategy_config import StrategyConfig
+from src.core.interfaces.trading_strategy import TradingStrategy
 from src.trading.strategies.models.strategy_schedule import (
     StrategySchedule,
     TradingWindow,
     Weekday,
 )
-
-if TYPE_CHECKING:
-    from src.configuration.strategy_config import StrategyConfig
-    from src.core.interfaces.trading_strategy import TradingStrategy
 
 
 class StrategyWeightResolver:

@@ -3,17 +3,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import TYPE_CHECKING, Sequence
+from typing import Protocol, Sequence
 
-from api.interfaces.backtest_request import BacktestDataSourceType
+from api.interfaces.backtest_request import BacktestDataSourceType, BacktestRequest
 from api.interfaces.order import Order
-from src.backtest.domain.result import BacktestFill, PortfolioSnapshot
+from src.backtest.domain.result import BacktestFill, BacktestResult, PortfolioSnapshot
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.trading_journal import TradingJournal
+from src.vcs.application.service import VCSService
 
-if TYPE_CHECKING:
-    from src.agent.backtest.backtest_service import BacktestService
-    from src.vcs.application.service import VCSService
+
+class BacktestReplayService(Protocol):
+    """Minimal backtest execution contract required by BacktestDriftDetector."""
+
+    def build_request(
+            self,
+            ticker_symbol: str,
+            source_type: BacktestDataSourceType | None = None,
+    ) -> BacktestRequest:
+        ...
+
+    def run(
+            self,
+            request: BacktestRequest,
+            trading_config: TradingConfig | None = None,
+    ) -> BacktestResult:
+        ...
 
 EPOCH_MS_THRESHOLD = 100_000_000_000
 MAX_SIMULATED_EQUITY_POINTS = 500
@@ -60,7 +75,7 @@ class BacktestDriftDetector:
 
     def __init__(
             self,
-            backtest_service: BacktestService,
+            backtest_service: BacktestReplayService,
             trading_journal: TradingJournal,
             price_tolerance_pct: Decimal = Decimal("0.5"),
             vcs_service: VCSService | None = None,
