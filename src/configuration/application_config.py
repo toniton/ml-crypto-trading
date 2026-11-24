@@ -26,6 +26,14 @@ class ApplicationConfig(BaseSettings):
         default=8000,
         validation_alias=AliasChoices("api_port", "api-port", "port", "PORT", "API_PORT"),
     )
+    market_data_snapshot_path: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "market_data_snapshot_path",
+            "market-data-snapshot-path",
+            "MARKET_DATA_SNAPSHOT_PATH",
+        ),
+    )
 
     model_config = SettingsConfigDict(
         cli_parse_args=True,
