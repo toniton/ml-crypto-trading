@@ -318,7 +318,11 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
             return repo.delete_experiment(experiment_id)
 
-    def start_experiment(self, experiment_id: str) -> dict[str, Any]:
+    def start_experiment(
+            self,
+            experiment_id: str,
+            test_selection: Optional[TestSelection] = None,
+    ) -> dict[str, Any]:
         with self._db_manager.get_unit_of_work() as uow:
             repo = uow.get_repository(PostgresExperimentRepository)
             exp = repo.get_experiment(experiment_id)
@@ -334,6 +338,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 )
 
             spec = ExperimentSpec.model_validate(exp["spec"])
+            if test_selection is not None:
+                spec.test_selection = test_selection
+                if (
+                    test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+                    and spec.windows is None
+                ):
+                    spec.windows = WalkForwardWindowSpec()
             for cand in spec.candidates:
                 cand.candidate_commit_hash = None
             bindings = self._dispatch_candidate_runs(spec, spec.candidates)

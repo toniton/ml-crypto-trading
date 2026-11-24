@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Body, HTTPException, Request, status
 
 from api.interfaces.evidence_proposal import GenerateExperimentProposalRequest
-from api.interfaces.experiment import CreateExperimentRequest, ExperimentSpec
+from api.interfaces.experiment import (
+    CreateExperimentRequest,
+    ExperimentSpec,
+    StartExperimentRequest,
+)
 from src.server.services.evidence_proposal_application_service import (
     EvidenceProposalApplicationService,
 )
@@ -86,8 +90,20 @@ def create_experiment_router() -> APIRouter:
         return {"experiment_id": experiment_id, "deleted": True}
 
     @router.post("/{experiment_id}/start")
-    async def start_experiment_endpoint(experiment_id: str, request: Request):
+    async def start_experiment_endpoint(
+            experiment_id: str,
+            request: Request,
+            req_body: Optional[StartExperimentRequest] = Body(default=None),
+    ):
         srv: ExperimentApplicationService = request.app.state.experiment_service
+        test_selection = req_body.test_selection if req_body else None
+        if test_selection is not None:
+            return await _run_experiment_action(
+                "Failed to start experiment",
+                srv.start_experiment,
+                experiment_id,
+                test_selection,
+            )
         return await _run_experiment_action(
             "Failed to start experiment", srv.start_experiment, experiment_id
         )

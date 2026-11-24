@@ -93,3 +93,20 @@ class TestExperimentRoutes:  # pylint: disable=attribute-defined-outside-init
         res = self.client.post("/api/v1/experiments/exp_1/candidates/cand_1/retry")
         assert res.status_code == 200
         assert res.json()["status"] == "RUNNING"
+
+    def test_start_experiment_forwards_test_selection_override(self):
+        from api.interfaces.experiment import TestSelection
+
+        self.mock_service.start_experiment.return_value = {
+            "experiment_id": "exp_1",
+            "status": "RUNNING",
+        }
+        res = self.client.post(
+            "/api/v1/experiments/exp_1/start",
+            json={"test_selection": "BOTH"},
+        )
+        assert res.status_code == 200
+        self.mock_service.start_experiment.assert_called_once_with(
+            "exp_1",
+            TestSelection.BOTH,
+        )
