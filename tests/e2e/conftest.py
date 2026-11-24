@@ -79,8 +79,14 @@ class _FakeExchangeBuilder(ExchangeRestBuilder, ExchangeWebSocketBuilder):
         self.kind, self.payload = "market_data", {"ticker_symbol": ticker_symbol}
         return self
 
-    def candles(self, ticker_symbol, timeframe):
-        self.kind, self.payload = "candles", {"ticker_symbol": ticker_symbol, "timeframe": timeframe}
+    def candles(self, ticker_symbol, timeframe, start_time=None, end_time=None, limit=None):
+        self.kind, self.payload = "candles", {
+            "ticker_symbol": ticker_symbol,
+            "timeframe": timeframe,
+            "start_time": start_time,
+            "end_time": end_time,
+            "limit": limit,
+        }
         return self
 
     def account_balance(self):
