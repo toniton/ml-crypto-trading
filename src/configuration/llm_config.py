@@ -15,6 +15,7 @@ class LlmProvider(str, Enum):
     DEEPSEEK = "deepseek"
     GEMINI = "gemini"
     GROQ = "groq"
+    OPENCODE = "opencode"
 
 
 class ToolConfig(BaseModel):

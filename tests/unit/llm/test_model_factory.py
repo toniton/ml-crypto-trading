@@ -6,6 +6,7 @@ from src.llm.langchain_deepseek_adapter import LangChainDeepSeekAdapter
 from src.llm import LangChainGeminiAdapter
 from src.llm import LangChainGroqAdapter
 from src.llm import LangChainOllamaAdapter
+from src.llm import LangChainOpenCodeAdapter
 from src.llm import ModelFactory
 
 
@@ -61,6 +62,31 @@ class TestModelFactory(unittest.TestCase):
         mock_init.assert_called_once()
         _, kwargs = mock_init.call_args
         self.assertEqual(kwargs["max_tokens"], 800)
+
+    @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="oc-test")
+    def test_create_opencode_model(self, _mock_key):
+        config = _config(LlmModelConfig(
+            name="opencode-zen", provider=LlmProvider.OPENCODE, model_name="deepseek-v4-pro", timeout=120,
+        ))
+        model = ModelFactory.create_model(config)
+        self.assertIsInstance(model, LangChainOpenCodeAdapter)
+
+    @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="oc-test")
+    def test_create_opencode_model_passes_base_url_and_max_tokens(self, _mock_key):
+        config = _config(LlmModelConfig(
+            name="opencode-zen",
+            provider=LlmProvider.OPENCODE,
+            model_name="deepseek-v4-pro",
+            api_base_url=LangChainOpenCodeAdapter.DEFAULT_API_BASE,
+            max_tokens=2048,
+        ))
+        with patch.object(LangChainOpenCodeAdapter, "__init__", return_value=None) as mock_init:
+            ModelFactory.create_model(config)
+        _, kwargs = mock_init.call_args
+        self.assertEqual(
+            (kwargs["base_url"], kwargs["max_tokens"]),
+            (LangChainOpenCodeAdapter.DEFAULT_API_BASE, 2048),
+        )
 
     @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")
     def test_selects_model_by_name(self, _mock_key):
