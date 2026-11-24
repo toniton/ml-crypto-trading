@@ -41,6 +41,17 @@ models:
     requires_api_key: true
     default: false
 
+  - id: "opencode-zen"
+    name: "OpenCode Go (DeepSeek V4 Pro)"
+    provider: "opencode"
+    model_name: "deepseek-v4-pro"
+    api_base_url: "https://opencode.ai/inference/go/openai/v1"
+    temperature: 0.1
+    timeout: 120
+    capabilities: ["tools", "reasoning"]
+    requires_api_key: true
+    default: false
+
   - id: "ollama-local"
     name: "Ollama Llama 3.2 (Local)"
     provider: "ollama"
