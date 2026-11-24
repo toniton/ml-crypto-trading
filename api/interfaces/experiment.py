@@ -111,3 +111,7 @@ class CreateExperimentRequest(BaseModel):
     control_policy: ControlPolicySpec = Field(default_factory=ControlPolicySpec)
     source_commit_hash: Optional[str] = None
     triggered_by: Optional[dict[str, Any]] = None
+
+
+class StartExperimentRequest(BaseModel):
+    test_selection: Optional[TestSelection] = None

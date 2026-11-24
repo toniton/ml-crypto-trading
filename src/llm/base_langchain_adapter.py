@@ -183,10 +183,10 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
                 messages.append(response)
                 self._execute_tool_calls(tool_calls, messages)
                 continue
-            return self._strip_thinking_tags(str(response.content))
+            return self._strip_thinking_tags(self._extract_text_content(response.content))
 
         final_response = active_model.invoke(messages)
-        return self._strip_thinking_tags(str(final_response.content))
+        return self._strip_thinking_tags(self._extract_text_content(final_response.content))
 
     def generate_structured(self, schema: Type[Structured], prompt: str, system_prompt: str) -> Structured:
         messages: list[BaseMessage] = [
@@ -244,8 +244,14 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
                 "insufficient balance",
                 "error code: 401",
                 "invalid_api_key",
+                "error code: 403",
+                "permission_denied",
+                "api_key_invalid",
+                "api key not valid",
                 "error code: 429",
                 "rate_limit_exceeded",
+                "resource_exhausted",
+                "quota exceeded",
             )
         )
 
@@ -271,6 +277,29 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
             return schema(**result)
         return self._parse_json_fallback(schema, result)
 
+    @staticmethod
+    def _extract_text_content(content: Any) -> str:
+        """Normalizes string and block-list message content into plain text."""
+        if content is None:
+            return ""
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            parts: List[str] = []
+            for item in content:
+                if isinstance(item, str):
+                    parts.append(item)
+                elif isinstance(item, dict):
+                    if item.get("type") == "thinking":
+                        continue
+                    text = item.get("text")
+                    if text is not None:
+                        parts.append(str(text))
+                else:
+                    parts.append(str(item))
+            return "".join(parts)
+        return str(content)
+
     def _parse_json_fallback(self, schema: Type[Structured], result: Any) -> Structured:
         """Parses a structured output from raw model content when the provider does not
         support native structured output (e.g. local Ollama models)."""
@@ -278,12 +307,7 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
             content = result.content
         except AttributeError:
             content = result
-        if isinstance(content, list):
-            content = "".join(
-                str(item.get("text", "")) if isinstance(item, dict) else str(item)
-                for item in content
-            )
-        parsed = self._extract_json_object(str(content))
+        parsed = self._extract_json_object(self._extract_text_content(content))
         try:
             return schema(**parsed)
         except ValidationError as exc:
@@ -336,8 +360,9 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
                     chunk_content = chunk.content
                 except AttributeError:
                     chunk_content = None
-                if chunk_content:
-                    yield str(chunk_content)
+                text_chunk = self._extract_text_content(chunk_content)
+                if text_chunk:
+                    yield text_chunk
                 accumulated = chunk if accumulated is None else accumulated + chunk
 
             try:
