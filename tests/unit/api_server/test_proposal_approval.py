@@ -107,7 +107,8 @@ def _stream_and_extract_message_id(client):
 
 
 class TestProposalDecisionEndpoint:
-    def test_approve_applies_and_commits_to_vcs(self, config_file, db_manager, vcs):
+    def test_approve_applies_and_commits_to_forked_branch_without_mutating_main(self, config_file, db_manager, vcs):
+        initial_head = vcs.head("HEAD").hash
         client = TestClient(_build_app(config_file, db_manager))
         message_id = _stream_and_extract_message_id(client)
 
@@ -120,9 +121,36 @@ class TestProposalDecisionEndpoint:
         body = response.json()
         assert body["action"] == "approve"
         assert body["commit_hash"]
+        assert body["branch_id"]
+        assert body["experiment_id"]
         assert body["summary"] == "less conservative"
-        assert vcs.head("HEAD").hash == body["commit_hash"]
-        assert vcs.checkout("HEAD")["assets"][0]["consensus"]["buy"] == 1.1
+        assert vcs.head("HEAD").hash == initial_head
+        assert vcs.checkout("HEAD")["assets"][0]["consensus"]["buy"] == 1.3
+        assert vcs.checkout(body["commit_hash"])["assets"][0]["consensus"]["buy"] == 1.1
+
+    def test_approve_with_experiment_id_repoints_existing_experiment(self, config_file, db_manager, vcs):
+        app = _build_app(config_file, db_manager)
+        client = TestClient(app)
+        created = client.post(
+            "/api/v1/experiments",
+            json={"name": "Refine BTC", "ticker_symbol": "BTC_USD", "test_selection": "BACKTEST_ONLY"},
+        ).json()
+        exp_id = created["experiment_id"]
+        old_branch = created["branch_id"]
+
+        message_id = _stream_and_extract_message_id(client)
+        response = client.post(
+            f"/api/v1/proposals/{message_id}/decision",
+            json={"action": "approve", "experiment_id": exp_id},
+        )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["experiment_id"] == exp_id
+        assert body["branch_id"] != old_branch
+        updated_exp = client.get(f"/api/v1/experiments/{exp_id}").json()
+        assert updated_exp["branch_id"] == body["branch_id"]
+        assert updated_exp["base_commit_hash"] == body["commit_hash"]
 
     def test_reject_records_decision_and_blocks_reapproval(self, config_file, db_manager):
         app = _build_app(config_file, db_manager)
