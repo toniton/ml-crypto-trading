@@ -79,8 +79,12 @@ class ExchangeRestManager(ABC):
 
     @abc.abstractmethod
     def get_candles(
-            self, exchange: str,
+            self,
+            exchange: str,
             ticker_symbol: str,
-            timeframe: Timeframe
+            timeframe: Timeframe,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
     ) -> list[Candle]:
         raise NotImplementedError()
