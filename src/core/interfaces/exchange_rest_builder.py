@@ -34,7 +34,14 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
         raise NotImplementedError()
 
     @abc.abstractmethod
-    def candles(self, ticker_symbol: str, timeframe) -> 'ExchangeRestBuilder[T, list[Candle]]':
+    def candles(
+            self,
+            ticker_symbol: str,
+            timeframe,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
+    ) -> 'ExchangeRestBuilder[T, list[Candle]]':
         raise NotImplementedError()
 
     @abc.abstractmethod

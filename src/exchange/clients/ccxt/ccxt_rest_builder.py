@@ -41,13 +41,24 @@ class CCXTExchangeRestBuilder(ExchangeRestBuilder[T, R]):
         self._mapper = CCXTMapperFactory.get_mapper('ticker')
         return self
 
-    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> 'CCXTExchangeRestBuilder[T, list[Candle]]':
+    def candles(
+            self,
+            ticker_symbol: str,
+            timeframe: Timeframe,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
+    ) -> 'CCXTExchangeRestBuilder[T, list[Candle]]':
+        del end_time
         self._method_name = 'fetch_ohlcv'
-        self._params = {
+        params: dict[str, Any] = {
             'symbol': ticker_symbol,
             'timeframe': CCXTTimeframe.MAP.get(timeframe),
-            'limit': 50
+            'limit': limit if limit is not None else 50,
         }
+        if start_time is not None:
+            params['since'] = int(start_time * 1000)
+        self._params = params
         self._mapper = CCXTMapperFactory.get_mapper('ohlcv')
         return self
 

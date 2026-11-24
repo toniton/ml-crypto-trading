@@ -145,7 +145,21 @@ class RestManager(ExchangeRestManager, RestRegistry):
 
     @_instrument_rest("get_candles")
     @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
-    def get_candles(self, exchange: str, ticker_symbol: str, timeframe: Timeframe) -> List[Candle]:
+    def get_candles(
+            self,
+            exchange: str,
+            ticker_symbol: str,
+            timeframe: Timeframe,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
+    ) -> List[Candle]:
         service = self.get_service(exchange)
-        builder = service.builder().candles(ticker_symbol, timeframe)
+        builder = service.builder().candles(
+            ticker_symbol,
+            timeframe,
+            start_time=start_time,
+            end_time=end_time,
+            limit=limit,
+        )
         return service.execute(builder)
