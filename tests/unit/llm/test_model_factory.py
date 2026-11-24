@@ -44,6 +44,20 @@ class TestModelFactory(unittest.TestCase):
         model = ModelFactory.create_model(config)
         self.assertIsInstance(model, LangChainGeminiAdapter)
 
+    @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="ai-test")
+    def test_create_gemini_model_passes_max_tokens(self, _mock_key):
+        config = _config(LlmModelConfig(
+            name="default",
+            provider=LlmProvider.GEMINI,
+            model_name="gemini-3-flash-preview",
+            max_tokens=2048,
+        ))
+        with patch.object(LangChainGeminiAdapter, "__init__", return_value=None) as mock_init:
+            ModelFactory.create_model(config)
+        mock_init.assert_called_once()
+        _, kwargs = mock_init.call_args
+        self.assertEqual(kwargs["max_tokens"], 2048)
+
     @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")
     def test_create_groq_model(self, _mock_key):
         config = _config(LlmModelConfig(

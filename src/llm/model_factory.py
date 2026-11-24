@@ -75,6 +75,7 @@ class ModelFactory:
             base_url=base_url,
             temperature=model.temperature,
             timeout=model.timeout,
+            max_tokens=model.max_tokens,
         )
 
     @classmethod

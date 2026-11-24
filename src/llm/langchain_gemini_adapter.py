@@ -20,10 +20,11 @@ class LangChainGeminiAdapter(BaseLangChainAdapter, LlmAdapter):
             max_turns: int = 5,
             system_prompt: str | None = None,
             max_retries: int = 2,
+            max_tokens: Optional[int] = None,
             thinking_budget: int | None = 0,
     ):
         super().__init__(max_turns=max_turns, system_prompt=system_prompt)
-        request_timeout = timeout if timeout is not None else 60.0
+        request_timeout = self.DEFAULT_TIMEOUT if timeout is None else timeout
         self._model = ChatGoogleGenerativeAI(
             model=model_name,
             google_api_key=api_key,
@@ -31,6 +32,7 @@ class LangChainGeminiAdapter(BaseLangChainAdapter, LlmAdapter):
             temperature=temperature,
             timeout=request_timeout,
             max_retries=max_retries,
+            max_output_tokens=max_tokens,
             thinking_budget=thinking_budget,
         )
         self._bound_model = self._model

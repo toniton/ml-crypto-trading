@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessageChunk
 
 from src.llm import LangChainGeminiAdapter
+from src.llm.base_langchain_adapter import BaseLangChainAdapter
 
 
 async def collect_stream(adapter, prompt):
@@ -33,11 +34,12 @@ class TestLangChainGeminiAdapter(unittest.TestCase):
             temperature=0.0,
             timeout=60.0,
             max_retries=2,
+            max_output_tokens=None,
             thinking_budget=0,
         )
 
     @patch("src.llm.langchain_gemini_adapter.ChatGoogleGenerativeAI")
-    def test_generate_with_timeout_and_base_url(self, mock_chat_gemini):
+    def test_generate_with_timeout_base_url_and_max_tokens(self, mock_chat_gemini):
         mock_instance = MagicMock()
         mock_response = MagicMock()
         mock_response.content = "Test response"
@@ -50,6 +52,7 @@ class TestLangChainGeminiAdapter(unittest.TestCase):
             api_key="ai-test",
             timeout=30.0,
             base_url="https://custom.gemini.test/v1",
+            max_tokens=1024,
         )
         response = adapter.generate("Hello")
 
@@ -61,7 +64,58 @@ class TestLangChainGeminiAdapter(unittest.TestCase):
             temperature=0.0,
             timeout=30.0,
             max_retries=2,
+            max_output_tokens=1024,
             thinking_budget=0,
+        )
+
+    @patch("src.llm.langchain_gemini_adapter.ChatGoogleGenerativeAI")
+    def test_generate_extracts_text_from_content_blocks(self, mock_chat_gemini):
+        mock_instance = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = [
+            {"type": "thinking", "thinking": "Internal reasoning"},
+            {"type": "text", "text": "BTC_USD is "},
+            {"type": "text", "text": "flat."},
+        ]
+        mock_response.tool_calls = []
+        mock_instance.invoke.return_value = mock_response
+        mock_chat_gemini.return_value = mock_instance
+
+        adapter = LangChainGeminiAdapter(model_name="gemini-3-flash-preview", api_key="ai-test")
+        self.assertEqual(adapter.generate("Status?"), "BTC_USD is flat.")
+
+    @patch("src.llm.langchain_gemini_adapter.ChatGoogleGenerativeAI")
+    def test_stream_extracts_text_from_content_blocks(self, mock_chat_gemini):
+        chunks = [
+            AIMessageChunk(content=[{"type": "thinking", "thinking": "Hidden"}]),
+            AIMessageChunk(content=[{"type": "text", "text": "Hello "}]),
+            AIMessageChunk(content=[{"type": "text", "text": "Gemini!"}]),
+        ]
+
+        async def fake_astream(_messages):
+            for chunk in chunks:
+                yield chunk
+
+        mock_instance = MagicMock()
+        mock_instance.astream.side_effect = fake_astream
+        mock_chat_gemini.return_value = mock_instance
+
+        adapter = LangChainGeminiAdapter(model_name="gemini-3-flash-preview", api_key="ai-test")
+        result = asyncio.run(collect_stream(adapter, "Say hello"))
+        self.assertEqual(result, ["Hello ", "Gemini!"])
+
+    def test_non_recoverable_provider_error_detects_gemini_errors(self):
+        for message in (
+            "429 RESOURCE_EXHAUSTED: Quota exceeded for metric",
+            "400 API_KEY_INVALID: API key not valid.",
+            "403 PERMISSION_DENIED: Caller does not have permission",
+        ):
+            self.assertTrue(
+                BaseLangChainAdapter.is_non_recoverable_provider_error(RuntimeError(message)),
+                msg=f"Expected non-recoverable error for: {message}",
+            )
+        self.assertFalse(
+            BaseLangChainAdapter.is_non_recoverable_provider_error(RuntimeError("temporary network timeout"))
         )
 
     @patch("src.llm.langchain_gemini_adapter.ChatGoogleGenerativeAI")
