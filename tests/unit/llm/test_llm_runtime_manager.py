@@ -137,6 +137,35 @@ class TestLlmRuntimeManager(unittest.TestCase):
         self.assertEqual(len(tools), 1)
         self.assertEqual(tools[0]["name"], "trading_context")
 
+    @patch("src.llm.llm_runtime_manager.ModelFactory.create_model")
+    def test_list_models_status_matches_live_active_model_after_failover(self, mock_create_model):
+        mock_create_model.return_value = MagicMock()
+
+        uow = MagicMock()
+        repo = MagicMock()
+        db_active = LlmCredential(
+            model_id="groq-qwen", provider="groq", api_key="gsk-12345678", is_active=True
+        )
+        fallback = LlmCredential(
+            model_id="gemini-3-flash", provider="gemini", api_key="AIza-fallback", is_active=False
+        )
+        repo.get_active.return_value = db_active
+        repo.get_by_model_id.return_value = db_active
+        repo.get_all.return_value = [db_active, fallback]
+        uow.get_repository.return_value = repo
+        self.db_manager.get_unit_of_work.return_value.__enter__.return_value = uow
+
+        manager = LlmRuntimeManager(self.config, self.db_manager)
+        self.assertEqual(manager.active_model_id, "groq-qwen")
+
+        failed_over = manager.try_failover_adapter("429 quota exceeded")
+        self.assertIsNotNone(failed_over)
+        self.assertEqual(manager.active_model_id, "gemini-3-flash")
+
+        models = manager.list_models_status()
+        active_models = [m["id"] for m in models if m["is_active"]]
+        self.assertEqual(active_models, ["gemini-3-flash"])
+
 
 if __name__ == "__main__":
     unittest.main()

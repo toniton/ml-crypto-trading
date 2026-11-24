@@ -232,7 +232,7 @@ class LlmRuntimeManager(ApplicationLoggingMixin):
                 return repo.delete_by_model_id(model_id)
 
     def list_models_status(self) -> List[dict]:
-        active_id = self.resolve_active_model_id()
+        active_id = self.active_model_id or self.resolve_active_model_id()
         cred_map: Dict[str, LlmCredential] = {}
         try:
             with self._db_manager.get_unit_of_work() as uow:
