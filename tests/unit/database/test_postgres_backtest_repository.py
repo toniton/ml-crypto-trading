@@ -8,6 +8,7 @@ from api.interfaces.backtest_request import (
     BacktestRequest,
     ExecutionConfiguration,
 )
+from api.interfaces.trade import Trade
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
 from src.core.interfaces.execution_status import ExecutionStatus
@@ -87,6 +88,60 @@ class TestBacktestDBVSEntityMapper:
         mapped_result = BacktestDBVSEntityMapper.dao_to_result(dao)
         assert mapped_result.session_id == result.session_id
         assert mapped_result.final_equity == Decimal("10750.0")
+
+    def test_result_to_dao_persists_and_deserializes_trades(self):
+        trade = Trade.create(
+            trade_id="tr_001",
+            ticker_symbol="CRO_USD",
+            entry_order_uuid="ord_buy_1",
+            exit_order_uuid="ord_sell_1",
+            entry_price=Decimal("0.10"),
+            exit_price=Decimal("0.095"),
+            quantity=Decimal("100"),
+            entry_fee=Decimal("0.01"),
+            exit_fee=Decimal("0.01"),
+            entry_timestamp=1700000000.0,
+            exit_timestamp=1700000600.0,
+            slippage=Decimal("0.02"),
+            commit_hash="abc123",
+            winning_strategy="momentum",
+            strategy_votes={"momentum": "BUY"},
+            entry_strategy_attributions={"momentum": 1.0},
+            exit_strategy_attributions={"momentum": 1.0},
+            exit_winning_strategy="momentum",
+            exit_strategy_votes={"momentum": "SELL"},
+            entry_regime="TRENDING_DOWN",
+            exit_regime="TRENDING_DOWN",
+        )
+        result = BacktestResult(
+            session_id="bt_trades_1",
+            ticker_symbol="CRO_USD",
+            initial_balance=Decimal("10000.0"),
+            final_balance=Decimal("9999.46"),
+            final_equity=Decimal("9999.46"),
+            execution=ExecutionConfiguration(),
+            trades=[trade],
+        )
+
+        dao = BacktestDBVSEntityMapper.result_to_dao(result)
+        mapped_result = BacktestDBVSEntityMapper.dao_to_result(dao)
+
+        assert mapped_result.trades == [trade]
+
+    def test_dao_to_result_defaults_missing_trades_to_empty_list(self):
+        dao = BacktestResultDao(
+            session_id="bt_legacy_1",
+            ticker_symbol="CRO_USD",
+            data={
+                "initial_balance": "10000.0",
+                "final_balance": "9999.78",
+                "final_equity": "9999.78",
+            },
+        )
+
+        mapped_result = BacktestDBVSEntityMapper.dao_to_result(dao)
+
+        assert mapped_result.trades == []
 
 
 class TestPostgresBacktestRepository:
@@ -282,4 +337,14 @@ class TestPostgresBacktestRepository:
 
         filtered.first.return_value = ("COMPLETED",)
         assert repo.is_session_active("bt_002") is False
+
+    def test_session_mapper_round_trips_commit_hash(self):
+        session = build_session()
+        session.commit_hash = "cddfe5aa85797258bbc003f6cf21ec55597da8470"
+
+        dao = BacktestDBVSEntityMapper.session_to_dao(session)
+        restored = BacktestDBVSEntityMapper.dao_to_session(dao)
+
+        assert dao.config["commit_hash"] == "cddfe5aa85797258bbc003f6cf21ec55597da8470"
+        assert restored.commit_hash == "cddfe5aa85797258bbc003f6cf21ec55597da8470"
 
