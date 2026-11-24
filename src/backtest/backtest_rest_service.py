@@ -145,15 +145,23 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             self,
             ticker_symbol: str,
             timeframe: Timeframe = None,  # pylint: disable=unused-argument
-            limit: int = DEFAULT_CANDLES_LIMIT,
+            limit: Optional[int] = None,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
     ) -> list[Candle]:
-
         dataset = self.datasets.get(ticker_symbol)
         if not dataset or not dataset.data_points:
             return []
-        current = self.clock.now(ticker_symbol)
-        idx = bisect.bisect_right(dataset.timestamps, current)
-        start_idx = max(0, idx - limit) if limit else 0
+        effective_limit = self.DEFAULT_CANDLES_LIMIT if limit is None else limit
+        upper_bound = self.clock.now(ticker_symbol)
+        if end_time is not None:
+            upper_bound = min(upper_bound, end_time)
+        idx = bisect.bisect_right(dataset.timestamps, upper_bound)
+        if start_time is not None:
+            lower_idx = bisect.bisect_left(dataset.timestamps, start_time, 0, idx)
+            start_idx = max(lower_idx, idx - effective_limit) if effective_limit else lower_idx
+        else:
+            start_idx = max(0, idx - effective_limit) if effective_limit else 0
         return [
             Candle(
                 open=p.open_price,
