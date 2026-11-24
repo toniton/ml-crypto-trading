@@ -8,9 +8,11 @@ from langchain_openai import ChatOpenAI
 from src.core.interfaces.llm_adapter import LlmAdapter
 from src.llm.base_langchain_adapter import BaseLangChainAdapter
 
+OPENCODE_API_BASE = "https://opencode.ai/inference/go/openai/v1"
+
 
 class LangChainOpenCodeAdapter(BaseLangChainAdapter, LlmAdapter):
-    DEFAULT_API_BASE: str = "https://opencode.ai/inference/go/openai/v1"
+    DEFAULT_API_BASE: str = OPENCODE_API_BASE
     SESSION_HEADER: str = "x-opencode-session"
 
     def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
@@ -36,7 +38,7 @@ class LangChainOpenCodeAdapter(BaseLangChainAdapter, LlmAdapter):
             "max_retries": max_retries,
             "default_headers": self._build_headers(session_id),
         }
-        if max_tokens:
+        if max_tokens is not None:
             client_kwargs["max_tokens"] = max_tokens
         self._model = ChatOpenAI(**client_kwargs)
         self._bound_model = self._model

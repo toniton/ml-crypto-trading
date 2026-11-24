@@ -15,6 +15,11 @@ from src.llm.langchain_opencode_adapter import LangChainOpenCodeAdapter
 
 ProviderBuilder = Callable[[LlmModelConfig, Optional[str], Optional[str]], LlmAdapter]
 
+DEEPSEEK_API_KEY_ENV = "LLM_PROVIDER__DEEPSEEK__API_KEY"
+GEMINI_API_KEY_ENV = "LLM_PROVIDER__GEMINI__API_KEY"
+GROQ_API_KEY_ENV = "LLM_PROVIDER__GROQ__API_KEY"
+OPENCODE_API_KEY_ENV = "LLM_PROVIDER__OPENCODE__API_KEY"
+
 
 class ModelFactory:
     DEEPSEEK_API_KEY_ENV: str = "LLM_PROVIDER__DEEPSEEK__API_KEY"
