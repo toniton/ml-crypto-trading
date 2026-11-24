@@ -25,6 +25,7 @@ from src.backtest.execution.fees.percentage_fee import PercentageFee
 from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
 from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
 from src.configuration.strategies_config import StrategiesConfig
+from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.noop_database_manager import NoopDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
@@ -68,6 +69,16 @@ class BacktestRunner:
         self._resolver = data_source_resolver or BacktestDataSourceResolver(
             market_data_store=MarketDataStore(),
             dataset_service=DatasetService(),
+        )
+
+    def with_config(self, trading_config: TradingConfig) -> "BacktestRunner":
+        return BacktestRunner(
+            db_manager=self._db_manager,
+            assets={asset.ticker_symbol: asset for asset in trading_config.assets},
+            strategy_registry=self._strategy_registry,
+            activity_queue=self._activity_queue,
+            dynamic_quantity=trading_config.dynamic_quantity,
+            data_source_resolver=self._resolver,
         )
 
     def run(self, requests: list[BacktestRequest]) -> list[BacktestResult]:

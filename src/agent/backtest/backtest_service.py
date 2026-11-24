@@ -14,6 +14,7 @@ from src.backtest.domain.metrics import BacktestSummary
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
 from src.backtest.runner.backtest_runner import BacktestRunner
+from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.logging.agent_logging_mixin import AgentLoggingMixin
@@ -49,7 +50,11 @@ class BacktestService(AgentLoggingMixin):
         self._sessions[session.id] = session
         return session
 
-    def run(self, request: BacktestRequest) -> BacktestResult:
+    def run(
+            self,
+            request: BacktestRequest,
+            trading_config: TradingConfig | None = None,
+    ) -> BacktestResult:
         """Run a backtest for the given request and return its result.
 
         This is the canonical application entry point: the request is the complete
@@ -59,7 +64,8 @@ class BacktestService(AgentLoggingMixin):
 
         session = self.create(request)
         self.agent_logger.info(f"Running backtest for {request.ticker_symbol}")
-        result = self._runner.run_session(session)
+        runner = self._runner.with_config(trading_config) if trading_config is not None else self._runner
+        result = runner.run_session(session)
         self._sessions[session.id] = session
         self._results[session.id] = result
         self._persist_run(session, result)
