@@ -103,7 +103,7 @@ class DefaultRetentionPolicies:
             ),
             "market_data_buffer": PolicySettings(
                 data_category=DataCategory.MARKET_DATA_BUFFER.value,
-                retention_period="6h",
+                retention_period="12h",
                 retention_mode=RetentionMode.DELETE.value,
                 description="In-memory recorded market data used for backtests and recorded-data reads.",
             ),

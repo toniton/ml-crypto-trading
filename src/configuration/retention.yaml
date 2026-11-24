@@ -74,7 +74,7 @@ retention:
 
     market_data_buffer:
       data_category: MARKET_DATA_BUFFER
-      retention_period: 6h
+      retention_period: 12h
       retention_mode: DELETE
       description: In-memory recorded market data used for backtests and recorded-data reads.
 
