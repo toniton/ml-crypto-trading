@@ -109,6 +109,7 @@ class BacktestApplicationService(ApplicationLoggingMixin):
             id=session_id,
             ticker_symbol=spec.ticker_symbol,
             request=bt_request,
+            commit_hash=spec.configuration.vcs_commit_hash,
             status=ExecutionStatus.QUEUED,
             created_at=datetime.now(timezone.utc),
         )

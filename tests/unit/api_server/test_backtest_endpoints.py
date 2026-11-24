@@ -11,6 +11,7 @@ from api.interfaces.backtest_request import (
     BacktestRequest,
     ExecutionConfiguration,
 )
+from api.interfaces.trade import Trade
 from src.agent import AgentGateway
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
@@ -130,6 +131,56 @@ class TestBacktestEndpoints(unittest.TestCase):
         self.assertEqual(data["session_id"], "bt_101")
         self.assertEqual(data["final_equity"], "10750.0")
         self.assertEqual(data["execution_config"]["latency_ms"], 500.0)
+        self.assertEqual(data["trades"], [])
+
+    def test_get_backtest_endpoint_returns_serialized_trades(self):
+        db_manager, repo = self._setup_db_manager()
+
+        trade = Trade.create(
+            trade_id="tr_101",
+            ticker_symbol="CRO_USD",
+            entry_order_uuid="ord_1",
+            exit_order_uuid="ord_2",
+            entry_price=Decimal("0.10"),
+            exit_price=Decimal("0.09"),
+            quantity=Decimal("10"),
+            entry_fee=Decimal("0.01"),
+            exit_fee=Decimal("0.01"),
+            entry_timestamp=1700000000.0,
+            exit_timestamp=1700000120.0,
+            entry_regime="CHOPPY",
+            exit_regime="CHOPPY",
+        )
+        session = BacktestSession(
+            id="bt_202",
+            ticker_symbol="CRO_USD",
+            request=BacktestRequest(ticker_symbol="CRO_USD", initial_balance=Decimal("10000.0")),
+            status=ExecutionStatus.COMPLETED,
+            created_at=datetime(2026, 9, 10, 0, 0, 0, tzinfo=timezone.utc),
+        )
+        result = BacktestResult(
+            session_id="bt_202",
+            ticker_symbol="CRO_USD",
+            initial_balance=Decimal("10000.0"),
+            final_balance=Decimal("9999.88"),
+            final_equity=Decimal("9999.88"),
+            execution=ExecutionConfiguration(),
+            trades=[trade],
+        )
+
+        repo.get_session.return_value = session
+        repo.get_result.return_value = result
+        repo.get_result_metrics.return_value = {"total_trades": 1}
+
+        client = TestClient(build_app(db_manager))
+        response = client.get("/api/v1/backtests/bt_202")
+
+        self.assertEqual(response.status_code, 200)
+        trades = response.json()["trades"]
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades[0]["trade_id"], "tr_101")
+        self.assertEqual(trades[0]["net_pnl"], str(trade.net_pnl))
+        self.assertEqual(trades[0]["entry_regime"], "CHOPPY")
 
     def test_get_backtest_endpoint_not_found(self):
         db_manager, repo = self._setup_db_manager()
