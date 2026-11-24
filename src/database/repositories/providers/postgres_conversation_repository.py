@@ -74,15 +74,54 @@ class PostgresConversationRepository(ConversationRepository):
             .order_by(ConversationDao.updated_at.desc())
             .all()
         )
+        session_ids = [conversation.id for conversation, _ in rows]
+        titles: dict[str, str] = {}
+        if session_ids:
+            user_rows = (
+                self.database_session.query(
+                    ConversationMessageDao.conversation_id,
+                    ConversationMessageDao.content,
+                )
+                .filter(
+                    ConversationMessageDao.conversation_id.in_(session_ids),
+                    ConversationMessageDao.role == "user",
+                )
+                .order_by(ConversationMessageDao.id.asc())
+                .all()
+            )
+            for conv_id, content in user_rows:
+                if conv_id not in titles and content:
+                    cleaned = " ".join(str(content).split())
+                    if cleaned:
+                        titles[conv_id] = cleaned[:64] + ("…" if len(cleaned) > 64 else "")
+
         return [
             SessionSummary(
                 id=conversation.id,
                 created_at=conversation.created_at,
                 updated_at=conversation.updated_at,
                 message_count=count,
+                title=titles.get(conversation.id),
             )
             for conversation, count in rows
         ]
+
+    def delete_session(self, session_id: str) -> bool:
+        exists = (
+            self.database_session.query(ConversationDao.id)
+            .filter(ConversationDao.id == session_id)
+            .first()
+        )
+        if not exists:
+            return False
+        self.database_session.query(ConversationMessageDao).filter(
+            ConversationMessageDao.conversation_id == session_id
+        ).delete(synchronize_session=False)
+        self.database_session.query(ConversationDao).filter(
+            ConversationDao.id == session_id
+        ).delete(synchronize_session=False)
+        self.database_session.flush()
+        return True
 
     def append(self, session_id: str, message: ConversationMessage, max_turns: int) -> None:
         self.get_or_create(session_id)

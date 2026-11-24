@@ -24,6 +24,7 @@ class SessionSummary(BaseModel):
     created_at: datetime
     updated_at: datetime
     message_count: int = 0
+    title: Optional[str] = None
 
 
 class ConversationStore(ABC):
