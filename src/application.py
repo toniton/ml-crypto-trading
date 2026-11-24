@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 from decimal import Decimal
+from pathlib import Path
 from queue import Queue
 from threading import Event
 from typing import Optional
@@ -62,7 +63,9 @@ from src.metrics.services.metric_service import MetricService
 from src.retention.handlers import build_default_handlers
 from src.retention.manager import RetentionManager
 from src.retention.scheduler import RetentionScheduler
+from src.recorder.market_data_backfill_service import MarketDataBackfillService
 from src.recorder.market_data_recorder import MarketDataRecorder
+from src.recorder.market_data_snapshot_persistence import MarketDataSnapshotPersistence
 from src.recorder.market_data_store import MarketDataStore
 from src.server.server import ApiServer
 from src.server.services.conversation_service import ConversationService
@@ -113,6 +116,15 @@ class Application(ApplicationLoggingMixin):
         self._activity_queue = activity_queue
         self._market_data_store = MarketDataStore()
         self._market_data_recorder = MarketDataRecorder(self._market_data_store)
+        snapshot_path = (
+            Path(application_config.market_data_snapshot_path)
+            if application_config.market_data_snapshot_path
+            else None
+        )
+        self._market_data_persistence = MarketDataSnapshotPersistence(
+            self._market_data_store,
+            snapshot_path=snapshot_path,
+        )
         self._db_manager: Optional[DatabaseManager] = None
         self._metric_service: Optional[MetricService] = None
         self._retention_manager: Optional[RetentionManager] = None
@@ -136,6 +148,7 @@ class Application(ApplicationLoggingMixin):
         self._order_reconciler: Optional[OrderReconciler] = None
         self._activity_tracker: Optional[AssetActivityTracker] = None
         self._agent_action_executor: Optional[AgentActionExecutor] = None
+        self._drift_detector: Optional[BacktestDriftDetector] = None
         self._automation: Optional[AutomationController] = None
         self._conversation_service: Optional[ConversationService] = None
         self._llm_manager: Optional[LlmRuntimeManager] = None
@@ -303,6 +316,7 @@ class Application(ApplicationLoggingMixin):
 
         trading_scheduler = LiveTradingScheduler()
         trading_scheduler.register_assets(self._assets)
+        self._resume_market_data_store()
         self._market_data_recorder.subscribe(self._trading_event_bus)
         self._event_metric_collector.subscribe(self._trading_event_bus)
         self._trading_metrics_collector.subscribe(self._trading_event_bus)
@@ -324,6 +338,25 @@ class Application(ApplicationLoggingMixin):
         if self._reconciliation_engine:
             self._reconciliation_engine.start()
         self.is_ready.set()
+
+    def _resume_market_data_store(self) -> None:
+        MarketDataBackfillService.configure_store_retention(
+            self._market_data_store,
+            self._assets,
+        )
+        self._market_data_persistence.load()
+        try:
+            backfill_service = MarketDataBackfillService(
+                store=self._market_data_store,
+                rest_manager=self._managers.rest_manager,
+            )
+            backfill_service.backfill_assets(self._assets)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                "Market data backfill failed unexpectedly; continuing boot: %s",
+                exc,
+            )
+        self._market_data_persistence.start_periodic_flush()
 
 
     def _setup_live_engine(self, trading_scheduler, trading_executor):
@@ -380,6 +413,10 @@ class Application(ApplicationLoggingMixin):
                 self._agent_action_executor.compare_backtest_drift
                 if self._agent_action_executor else (lambda action: None)
             ),
+            detect_live_drift=(
+                self._drift_detector.detect
+                if self._drift_detector else None
+            ),
         )
 
         if not self._application_config.headless:
@@ -433,9 +470,10 @@ class Application(ApplicationLoggingMixin):
             backtest_service=backtest_service,
         )
         drift_detector = (
-            BacktestDriftDetector(backtest_service, self._trading_journal)
+            BacktestDriftDetector(backtest_service, self._trading_journal, vcs_service=self._vcs)
             if backtest_service is not None else None
         )
+        self._drift_detector = drift_detector
         investigation = InvestigateActivityAnomaly(
             activity_provider=self._activity_tracker,
             drift_detector=drift_detector,
@@ -589,6 +627,8 @@ class Application(ApplicationLoggingMixin):
             self._reconciliation_engine.stop()
         if self._trading_engine:
             self._trading_engine.stop_application()
+        if not self._is_backtest_mode and self._market_data_persistence is not None:
+            self._market_data_persistence.stop_and_flush()
 
         self.is_running.clear()
         self.is_ready.clear()
