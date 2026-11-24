@@ -66,7 +66,7 @@ class TestModelFactory(unittest.TestCase):
     @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="oc-test")
     def test_create_opencode_model(self, _mock_key):
         config = _config(LlmModelConfig(
-            name="opencode-zen", provider=LlmProvider.OPENCODE, model_name="big-pickle", timeout=120,
+            name="opencode-zen", provider=LlmProvider.OPENCODE, model_name="deepseek-v4-pro", timeout=120,
         ))
         model = ModelFactory.create_model(config)
         self.assertIsInstance(model, LangChainOpenCodeAdapter)
@@ -76,8 +76,8 @@ class TestModelFactory(unittest.TestCase):
         config = _config(LlmModelConfig(
             name="opencode-zen",
             provider=LlmProvider.OPENCODE,
-            model_name="deepseek-v4.1-flash-free",
-            api_base_url="https://opencode.ai/inference/go/openai/v1",
+            model_name="deepseek-v4-pro",
+            api_base_url=LangChainOpenCodeAdapter.DEFAULT_API_BASE,
             max_tokens=2048,
         ))
         with patch.object(LangChainOpenCodeAdapter, "__init__", return_value=None) as mock_init:
@@ -85,7 +85,7 @@ class TestModelFactory(unittest.TestCase):
         _, kwargs = mock_init.call_args
         self.assertEqual(
             (kwargs["base_url"], kwargs["max_tokens"]),
-            ("https://opencode.ai/inference/go/openai/v1", 2048),
+            (LangChainOpenCodeAdapter.DEFAULT_API_BASE, 2048),
         )
 
     @patch("src.llm.model_factory.ModelFactory._resolve_api_key", return_value="gsk-test")

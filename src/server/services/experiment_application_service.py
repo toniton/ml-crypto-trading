@@ -58,6 +58,105 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         self._backtest_app_service = backtest_app_service
         self._walk_forward_app_service = walk_forward_app_service
         self._cancellation_events: dict[str, threading.Event] = {}
+        self._on_experiment_completed: Optional[Any] = None
+
+    def set_completion_hook(self, callback: Any) -> None:
+        self._on_experiment_completed = callback
+
+    def create_and_start_on_branch(
+            self,
+            name: str,
+            ticker_symbol: str,
+            branch_id: str,
+            commit_hash: str,
+            triggered_by: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        current_weights = self._load_asset_strategy_weights(commit_hash, ticker_symbol)
+        candidates: list[ExperimentCandidate] = [
+            ExperimentCandidate(
+                candidate_id="cand_current",
+                name="Current Configuration",
+                candidate_type=CandidateType.CURRENT_CONFIG,
+                strategy_weights=dict(current_weights),
+                description="AI-proposed configuration on forked branch",
+            )
+        ]
+        if current_weights:
+            candidates.append(
+                ExperimentCandidate(
+                    candidate_id="cand_equal_weight",
+                    name="Equal-Weight Strategies",
+                    candidate_type=CandidateType.EQUAL_WEIGHT,
+                    strategy_weights={k: 1.0 for k in current_weights},
+                    description="Equal weight baseline across all registered strategies",
+                )
+            )
+
+        spec = ExperimentSpec(
+            name=name,
+            ticker_symbol=ticker_symbol,
+            base_commit_hash=commit_hash,
+            branch_id=branch_id,
+            test_selection=TestSelection.BACKTEST_ONLY,
+            candidates=candidates,
+            triggered_by=triggered_by,
+        )
+        experiment_id = f"exp_{uuid.uuid4().hex[:12]}"
+        with self._db_manager.get_unit_of_work() as uow:
+            repo = uow.get_repository(PostgresExperimentRepository)
+            repo.save_experiment(
+                experiment_id=experiment_id,
+                name=name,
+                ticker_symbol=ticker_symbol,
+                branch_id=branch_id,
+                base_commit_hash=commit_hash,
+                status=ExperimentStatus.DRAFT.value,
+                spec=spec.model_dump(mode="json"),
+                run_bindings=[],
+            )
+        try:
+            return self.start_experiment(experiment_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning("Created experiment %s on branch %s but auto-start failed: %s", experiment_id, branch_id, exc)
+            return self.get_experiment(experiment_id) or {"experiment_id": experiment_id, "branch_id": branch_id}
+
+    def repoint_and_rerun(
+            self,
+            experiment_id: str,
+            branch_id: str,
+            commit_hash: str,
+    ) -> dict[str, Any]:
+        existing = self.get_experiment(experiment_id)
+        if not existing:
+            raise ValueError(f"Experiment '{experiment_id}' not found.")
+
+        ticker_symbol = existing["ticker_symbol"]
+        spec_dict = dict(existing.get("spec") or {})
+        spec_dict["branch_id"] = branch_id
+        spec_dict["base_commit_hash"] = commit_hash
+        current_weights = self._load_asset_strategy_weights(commit_hash, ticker_symbol)
+        for cand in spec_dict.get("candidates", []):
+            if cand.get("candidate_id") == "cand_current":
+                cand["strategy_weights"] = dict(current_weights)
+
+        with self._db_manager.get_unit_of_work() as uow:
+            repo = uow.get_repository(PostgresExperimentRepository)
+            repo.save_experiment(
+                experiment_id=experiment_id,
+                name=existing["name"],
+                ticker_symbol=ticker_symbol,
+                branch_id=branch_id,
+                base_commit_hash=commit_hash,
+                status=ExperimentStatus.DRAFT.value,
+                spec=spec_dict,
+                run_bindings=[],
+                report=None,
+            )
+        try:
+            return self.start_experiment(experiment_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning("Repointed experiment %s to branch %s but auto-rerun failed: %s", experiment_id, branch_id, exc)
+            return self.get_experiment(experiment_id) or existing
 
     def create_experiment(self, req: CreateExperimentRequest) -> dict[str, Any]:
         base_commit = req.source_commit_hash
@@ -539,6 +638,17 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     )
                     repo.update_report(experiment_id, final_status, report)
                     self.app_logger.info("Experiment %s finished with status %s", experiment_id, final_status)
+                    completed_symbol = spec.ticker_symbol if final_status == ExperimentStatus.COMPLETED.value else None
+                    completed_commit = spec.base_commit_hash
+                    if completed_symbol and self._on_experiment_completed is not None:
+                        try:
+                            self._on_experiment_completed(completed_symbol, completed_commit)
+                        except Exception as exc:  # pylint: disable=broad-except
+                            self.app_logger.warning(
+                                "Post-experiment drift hook failed for %s: %s",
+                                completed_symbol,
+                                exc,
+                            )
                     return
 
     @staticmethod
@@ -561,7 +671,11 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     bt_done = False
                 elif status_str == "FAILED":
                     b_failed = True
-                    error_msg = bt_session.error_message or "Backtest run failed"
+                    error_msg = (
+                        getattr(bt_session, "error_message", None)
+                        or getattr(bt_session, "error", None)
+                        or "Backtest run failed"
+                    )
                 elif status_str == "CANCELLED":
                     b_failed = True
                     error_msg = bt_session.error_message or "Backtest run was cancelled"

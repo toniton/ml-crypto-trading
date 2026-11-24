@@ -11,6 +11,7 @@ from api.interfaces.backtest_request import (
     BacktestRequest,
     ExecutionConfiguration,
 )
+from api.interfaces.trade import Trade
 from src.backtest.domain.metrics import BacktestMetrics
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
@@ -49,6 +50,8 @@ class BacktestDBVSEntityMapper:
                     "fee_rate": str(session.request.execution.fee_rate),
                 } if session.request.execution else None,
             }
+        if session.commit_hash:
+            config_dict["commit_hash"] = session.commit_hash
 
         return BacktestSessionDao(
             id=session.id,
@@ -114,6 +117,7 @@ class BacktestDBVSEntityMapper:
             id=dao.id,
             ticker_symbol=dao.ticker_symbol,
             request=request,
+            commit_hash=config.get("commit_hash"),
             status=status,
             created_at=dao.created_at,
             started_at=dao.started_at or start_time,
@@ -206,6 +210,39 @@ class BacktestDBVSEntityMapper:
         return data
 
     @staticmethod
+    def serialize_trade(trade: Trade) -> dict[str, Any]:
+        return BacktestDBVSEntityMapper._normalize_value(asdict(trade))
+
+    @staticmethod
+    def _deserialize_trade(raw: dict[str, Any]) -> Trade:
+        return Trade(
+            trade_id=str(raw["trade_id"]),
+            ticker_symbol=str(raw["ticker_symbol"]),
+            entry_order_uuid=str(raw["entry_order_uuid"]),
+            exit_order_uuid=str(raw["exit_order_uuid"]),
+            entry_price=Decimal(str(raw["entry_price"])),
+            exit_price=Decimal(str(raw["exit_price"])),
+            quantity=Decimal(str(raw["quantity"])),
+            gross_pnl=Decimal(str(raw["gross_pnl"])),
+            fees=Decimal(str(raw["fees"])),
+            net_pnl=Decimal(str(raw["net_pnl"])),
+            return_pct=Decimal(str(raw["return_pct"])),
+            duration_seconds=float(raw["duration_seconds"]),
+            entry_timestamp=float(raw["entry_timestamp"]),
+            exit_timestamp=float(raw["exit_timestamp"]),
+            slippage=Decimal(str(raw.get("slippage", "0"))),
+            commit_hash=raw.get("commit_hash"),
+            winning_strategy=raw.get("winning_strategy"),
+            strategy_votes=raw.get("strategy_votes"),
+            entry_strategy_attributions=raw.get("entry_strategy_attributions"),
+            exit_strategy_attributions=raw.get("exit_strategy_attributions"),
+            exit_winning_strategy=raw.get("exit_winning_strategy"),
+            exit_strategy_votes=raw.get("exit_strategy_votes"),
+            entry_regime=raw.get("entry_regime"),
+            exit_regime=raw.get("exit_regime"),
+        )
+
+    @staticmethod
     def result_to_dao(
             result: BacktestResult,
             metrics: Optional[BacktestMetrics | dict[str, Any]] = None,
@@ -226,6 +263,7 @@ class BacktestDBVSEntityMapper:
             "total_fills": len(result.fills),
             "execution": execution_dict,
             "metrics": metrics_dict,
+            "trades": [BacktestDBVSEntityMapper.serialize_trade(t) for t in result.trades],
         }
 
         return BacktestResultDao(
@@ -247,6 +285,12 @@ class BacktestDBVSEntityMapper:
         initial_balance = Decimal(str(data.get("initial_balance", "10000.0")))
         final_balance = Decimal(str(data.get("final_balance", "10000.0")))
         final_equity = Decimal(str(data.get("final_equity", "10000.0")))
+        raw_trades = data.get("trades") or []
+        trades = [
+            BacktestDBVSEntityMapper._deserialize_trade(item)
+            for item in raw_trades
+            if isinstance(item, dict)
+        ]
 
         return BacktestResult(
             session_id=dao.session_id,
@@ -255,4 +299,5 @@ class BacktestDBVSEntityMapper:
             final_balance=final_balance,
             final_equity=final_equity,
             execution=exec_cfg,
+            trades=trades,
         )

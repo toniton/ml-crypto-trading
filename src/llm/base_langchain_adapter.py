@@ -43,6 +43,8 @@ class BaseLangChainAdapter(LlmAdapter, ABC):
     """Shared tool-calling loop for LangChain chat model integrations."""
 
     USER_AGENT: str = "rio-trading-agent/1.0"
+    USER_AGENT_HEADER: str = "User-Agent"
+    DEFAULT_TIMEOUT: float = 60.0
 
     def __init__(self, max_turns: int = 5, system_prompt: str | None = None):
         self._tool_lookup: Dict[str, BaseTool] = {}

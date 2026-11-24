@@ -27,9 +27,22 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
         self.params = {"ticker_symbol": ticker_symbol}
         return self
 
-    def candles(self, ticker_symbol: str, timeframe) -> 'BacktestRestBuilder[T, list[Candle]]':
+    def candles(
+            self,
+            ticker_symbol: str,
+            timeframe,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
+    ) -> 'BacktestRestBuilder[T, list[Candle]]':
         self.method_name = "candles"
-        self.params = {"ticker_symbol": ticker_symbol, "timeframe": timeframe}
+        self.params = {
+            "ticker_symbol": ticker_symbol,
+            "timeframe": timeframe,
+            "start_time": start_time,
+            "end_time": end_time,
+            "limit": limit,
+        }
         return self
 
     def account_balance(self) -> 'BacktestRestBuilder[T, list[AccountBalance]]':

@@ -15,7 +15,7 @@ from src.trading.events import MarketDataEvent
 
 
 class MarketDataManager(ApplicationLoggingMixin):
-    MAX_CANDLES = 300
+    MAX_CANDLES = 1000
 
     def __init__(
             self,

@@ -67,3 +67,6 @@ class TestMarketDataManagerPublish:
 
         assert len(received) == 1
         assert received[0].market_data.close_price == Decimal("100")
+
+    def test_max_candles_default_is_1000(self):
+        assert MarketDataManager.MAX_CANDLES == 1000

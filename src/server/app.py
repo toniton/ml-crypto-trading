@@ -21,6 +21,7 @@ from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
 from src.core.interfaces.database_manager import DatabaseManager
+from src.database.repositories.mappers.backtest_db_vs_entity_mapper import BacktestDBVSEntityMapper
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
 from src.events.agent_events import AgentApprovalResolvedEvent
 from src.logging.factory import LoggingFactory
@@ -66,6 +67,10 @@ from src.server.routes.runtime_debug_routes import create_runtime_debug_router
 from src.server.routes.timeline_routes import create_timeline_router
 from src.server.routes.evidence_proposal_routes import create_evidence_proposal_router
 from src.server.routes.promotion_routes import create_promotion_router
+from src.server.routes.drift_routes import create_drift_router
+from src.server.routes.scorecard_routes import create_scorecard_router
+from src.server.services.drift_application_service import DriftApplicationService
+from src.server.services.strategy_scorecard_service import StrategyScorecardService
 from src.server.services.evidence_proposal_application_service import (
     EvidenceProposalApplicationService,
 )
@@ -130,6 +135,10 @@ class AppendMessageRequest(BaseModel):
 
 class ProposalDecisionRequest(BaseModel):
     action: ProposalDecision = Field(description="Decision to take on the pending proposal.")
+    experiment_id: Optional[str] = Field(
+        default=None,
+        description="Optional existing experiment ID to repoint to the newly forked branch and re-run.",
+    )
 
 
 class ConfigCommitRequest(BaseModel):
@@ -439,6 +448,43 @@ class ChatApp:
         app.state.main_promotion_service = main_promotion_service
         app.include_router(create_promotion_router())
 
+        def _detect_live_drift(symbol: str, commit_hash: Optional[str] = None):
+            report = trading_proxy.detect_live_drift(symbol, commit_hash=commit_hash)
+            if report is None:
+                raise RuntimeError("Live-vs-backtest drift detection is unavailable on this engine instance.")
+            return report
+
+        drift_service = DriftApplicationService(
+            detect_fn=_detect_live_drift,
+            vcs_service=vcs,
+            asset_performance_service=asset_performance_service,
+        )
+        scorecard_service = StrategyScorecardService(
+            db_manager=db_manager,
+            vcs_service=vcs,
+            walk_forward_service=walk_forward_service,
+            simulation_orchestrator=simulation_orchestrator,
+            simulation_report_service=simulation_report_service,
+            experiment_service=experiment_service,
+            asset_performance_service=asset_performance_service,
+            drift_service=drift_service,
+            configuration_service=configuration_service,
+        )
+        app.state.drift_service = drift_service
+        app.state.scorecard_service = scorecard_service
+        app.include_router(create_drift_router())
+        app.include_router(create_scorecard_router())
+
+        def _on_experiment_completed(symbol: str, commit_hash: Optional[str]) -> None:
+            drift_service.run_drift_check(symbol, commit_hash=commit_hash)
+            scorecard_service.save_snapshot(
+                symbol=symbol,
+                trigger="drift_run",
+                commit_hash=commit_hash,
+            )
+
+        experiment_service.set_completion_hook(_on_experiment_completed)
+
         @app.get("/api/v1/backtests/branches")
         async def list_backtest_branches_endpoint():
             return await asyncio.to_thread(backtest_branch_service.list_branches)
@@ -690,6 +736,10 @@ class ChatApp:
                     "fee_rate": str(res.execution.fee_rate),
                 } if res else None,
                 "metrics": metrics,
+                "trades": [
+                    BacktestDBVSEntityMapper.serialize_trade(trade)
+                    for trade in res.trades
+                ] if res else [],
             }
 
         @app.post("/api/v1/backtests/{session_id}/cancel")
@@ -786,6 +836,17 @@ class ChatApp:
                 "messages": [message.model_dump(mode="json") for message in messages],
             }
 
+        @app.delete("/api/v1/sessions/{session_id}")
+        async def delete_session_endpoint(session_id: str, req: Request):
+            store: ConversationService = req.app.state.conversation_service
+            deleted = await asyncio.to_thread(store.delete_session, session_id)
+            if not deleted:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Session '{session_id}' not found.",
+                )
+            return {"session_id": session_id, "deleted": True}
+
         @app.post("/api/v1/sessions/{session_id}/messages")
         async def append_session_message_endpoint(session_id: str, msg_req: AppendMessageRequest, req: Request):
             store: ConversationStore = req.app.state.conversation_service
@@ -840,13 +901,81 @@ class ChatApp:
 
             ChatApp._revalidate_live_approval_guardrails(req, proposal)
 
-            commit, warnings = await asyncio.to_thread(
-                configuration_service.apply_proposal_to_vcs, proposal
-            )
-            ChatApp._sync_trading_proxy_config(req, configuration_service, commit.hash)
+            def _apply_to_forked_branch():
+                base_ref = "refs/heads/main"
+                source_commit = None
+                if proposal.base_commit_hash:
+                    head_hash = vcs.resolve_commit_hash("HEAD")
+                    base_hash = proposal.base_commit_hash.strip()
+                    if head_hash and (
+                        head_hash == base_hash
+                        or (len(base_hash) >= 7 and head_hash.startswith(base_hash))
+                    ):
+                        source_commit = head_hash
+                    else:
+                        source_commit = base_hash
+                if not source_commit:
+                    try:
+                        source_commit = vcs.resolve_commit_hash(base_ref)
+                    except VcsError:
+                        source_commit = vcs.resolve_commit_hash("HEAD")
+
+                branch_info = backtest_branch_service.create_branch(
+                    name=f"ai-proposal-{uuid.uuid4().hex[:8]}",
+                    description=proposal.summary,
+                    source_commit_hash=source_commit,
+                    author="agent-proposal",
+                )
+                branch_id = branch_info["branch_id"]
+                branch_ref = branch_info.get("ref") or f"refs/heads/backtest/{branch_id}"
+                commit_obj, warn_list = configuration_service.apply_proposal_to_vcs(
+                    proposal,
+                    ref=branch_ref,
+                )
+                return branch_id, commit_obj, warn_list
+
+            try:
+                forked_branch_id, commit, warnings = await asyncio.to_thread(_apply_to_forked_branch)
+            except VcsError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=str(exc),
+                ) from exc
+
+            target_experiment_id = decision.experiment_id
+            if target_experiment_id:
+                try:
+                    await asyncio.to_thread(
+                        experiment_service.repoint_and_rerun,
+                        target_experiment_id,
+                        forked_branch_id,
+                        commit.hash,
+                    )
+                except ValueError:
+                    target_experiment_id = None
+
+            if not target_experiment_id:
+                inferred_ticker = ChatApp._infer_ticker_from_proposal(proposal, configuration_service)
+                if inferred_ticker:
+                    created_exp = await asyncio.to_thread(
+                        experiment_service.create_and_start_on_branch,
+                        name=(proposal.summary or f"AI Proposal ({inferred_ticker})")[:80],
+                        ticker_symbol=inferred_ticker,
+                        branch_id=forked_branch_id,
+                        commit_hash=commit.hash,
+                        triggered_by={"source": "ai_proposal", "message_id": message_id},
+                    )
+                    target_experiment_id = created_exp.get("experiment_id") or created_exp.get("id")
+
             await asyncio.to_thread(proposal_store.remove, message_id)
             await ChatApp._record_decision(
-                store, message_id, proposal, ProposalDecision.APPROVE, commit_hash=commit.hash
+                store,
+                message_id,
+                proposal,
+                ProposalDecision.APPROVE,
+                commit_hash=commit.hash,
+                branch_id=forked_branch_id,
+                experiment_id=target_experiment_id,
             )
             if event_bus:
                 event_bus.publish(
@@ -857,6 +986,8 @@ class ChatApp:
                             "approval_id": message_id,
                             "title": proposal.summary,
                             "commit_hash": commit.hash,
+                            "branch_id": forked_branch_id,
+                            "experiment_id": target_experiment_id,
                             "status": "APPROVED",
                         },
                     )
@@ -866,6 +997,8 @@ class ChatApp:
                 "action": decision.action.value,
                 "message_id": message_id,
                 "commit_hash": commit.hash,
+                "branch_id": forked_branch_id,
+                "experiment_id": target_experiment_id,
                 "summary": proposal.summary,
                 "warnings": warnings,
             }
@@ -1019,12 +1152,38 @@ class ChatApp:
             tokens.append(event.payload)
 
     @staticmethod
+    def _infer_ticker_from_proposal(
+            proposal: ConfigurationProposal,
+            config_service: ConfigurationService,
+    ) -> Optional[str]:
+        for change in proposal.changes or []:
+            parts = str(change.path or "").split(".")
+            if len(parts) >= 2 and parts[0] == "assets" and parts[1]:
+                return parts[1]
+        try:
+            cfg = config_service.load_config()
+            assets = cfg.get("assets", []) if isinstance(cfg, dict) else []
+            if assets and isinstance(assets[0], dict):
+                first = assets[0]
+                if first.get("ticker"):
+                    return str(first["ticker"])
+                base = first.get("base_ticker_symbol")
+                quote = first.get("quote_ticker_symbol")
+                if base and quote:
+                    return f"{base}_{quote}"
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return None
+
+    @staticmethod
     async def _record_decision(
             store: ConversationStore,
             message_id: str,
             proposal,
             action: ProposalDecision,
             commit_hash: Optional[str] = None,
+            branch_id: Optional[str] = None,
+            experiment_id: Optional[str] = None,
     ) -> None:
         message = await asyncio.to_thread(store.get_message, message_id)
         session_id = message.conversation_id if message else None
@@ -1041,6 +1200,10 @@ class ChatApp:
         }
         if commit_hash:
             decision_data["commit_hash"] = commit_hash
+        if branch_id:
+            decision_data["branch_id"] = branch_id
+        if experiment_id:
+            decision_data["experiment_id"] = experiment_id
 
         await asyncio.to_thread(
             store.append,

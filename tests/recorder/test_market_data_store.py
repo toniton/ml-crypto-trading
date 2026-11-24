@@ -50,7 +50,48 @@ class TestMarketDataStore:
     def test_default_retention_is_time_based(self):
         store = MarketDataStore()
 
-        assert store.max_age == timedelta(hours=6)
+        assert store.max_age == timedelta(hours=12)
+
+    def test_per_ticker_max_age_override_preserves_longer_window(self):
+        store = MarketDataStore(max_age=timedelta(hours=12))
+        store.set_ticker_max_age("ETH_USD", timedelta(days=3))
+        now = 1_700_300_000
+        store.record("BTC_USD", _market_data(now - 2 * 86400, "100"))
+        store.record("ETH_USD", _market_data(now - 2 * 86400, "10"))
+        store.record("BTC_USD", _market_data(now, "101"))
+
+        assert [int(o.timestamp) for o in store.observations("BTC_USD")] == [now]
+        assert [int(o.timestamp) for o in store.observations("ETH_USD")] == [now - 2 * 86400]
+
+    def test_record_if_absent_preserves_existing_observation(self):
+        store = MarketDataStore(max_age=None)
+        store.record("BTC_USD", _market_data(100, "100"))
+        inserted = store.record_if_absent("BTC_USD", _market_data(100, "999"))
+
+        assert inserted is False
+        assert store.observations("BTC_USD")[0].close_price == Decimal("100")
+
+    def test_record_if_absent_inserts_new_timestamp(self):
+        store = MarketDataStore(max_age=None)
+        inserted = store.record_if_absent("BTC_USD", _market_data(100, "100"))
+
+        assert inserted is True
+        assert store.latest_timestamp("BTC_USD") == 100
+
+    def test_latest_timestamp_returns_none_for_missing_ticker(self):
+        store = MarketDataStore()
+
+        assert store.latest_timestamp("ETH_USD") is None
+
+    def test_import_observations_skips_expired_entries(self):
+        store = MarketDataStore(max_age=timedelta(seconds=100))
+        loaded = store.import_observations(
+            {"BTC_USD": [_market_data(100, "100"), _market_data(250, "250")]},
+            now_epoch=300.0,
+        )
+
+        assert loaded == 1
+        assert [int(o.timestamp) for o in store.observations("BTC_USD")] == [250]
 
     def test_prunes_observations_older_than_max_age_on_record(self):
         store = MarketDataStore(max_age=timedelta(seconds=100))

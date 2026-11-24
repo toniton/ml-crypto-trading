@@ -70,3 +70,11 @@ class ConversationService(ConversationStore):
         with self._db_manager.get_unit_of_work() as uow:
             repository = uow.get_repository(PostgresConversationRepository)
             return repository.list_sessions()
+
+    def delete_session(self, session_id: str) -> bool:
+        with self._db_manager.get_unit_of_work() as uow:
+            repository = uow.get_repository(PostgresConversationRepository)
+            deleted = repository.delete_session(session_id)
+        with self._lock:
+            self._cache.pop(session_id, None)
+        return deleted

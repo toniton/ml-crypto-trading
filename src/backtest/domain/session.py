@@ -19,6 +19,7 @@ class BacktestSession(BaseModel):
     id: str = Field(default_factory=generate_session_id)
     ticker_symbol: str
     request: BacktestRequest
+    commit_hash: Optional[str] = None
     status: ExecutionStatus = ExecutionStatus.QUEUED
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     started_at: datetime | None = None

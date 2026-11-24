@@ -4,15 +4,18 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessageChunk
 
-from src.llm import LangChainOpenCodeAdapter, OPENCODE_API_BASE
+from src.llm import LangChainOpenCodeAdapter
 from src.llm.base_langchain_adapter import BaseLangChainAdapter
 
 
-async def collect_stream(adapter, prompt):
-    return [chunk async for chunk in adapter.stream(prompt)]
-
-
 class TestLangChainOpenCodeAdapter(unittest.TestCase):
+    TEST_MODEL = "deepseek-v4-pro"
+    TEST_API_KEY = "oc-test"
+
+    @staticmethod
+    async def _collect_stream(adapter, prompt):
+        return [chunk async for chunk in adapter.stream(prompt)]
+
     @patch("src.llm.langchain_opencode_adapter.ChatOpenAI")
     def test_generate_returns_model_response(self, mock_chat_openai):
         mock_instance = MagicMock()
@@ -22,32 +25,36 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
         mock_instance.invoke.return_value = mock_response
         mock_chat_openai.return_value = mock_instance
 
-        adapter = LangChainOpenCodeAdapter(model_name="big-pickle", api_key="oc-test")
+        adapter = LangChainOpenCodeAdapter(model_name=self.TEST_MODEL, api_key=self.TEST_API_KEY)
 
         self.assertEqual(adapter.generate("Hello"), "Test response")
 
     @patch("src.llm.langchain_opencode_adapter.ChatOpenAI")
     def test_init_uses_default_opencode_base_url(self, mock_chat_openai):
-        LangChainOpenCodeAdapter(model_name="deepseek-v4.1-flash-free", api_key="oc-test", session_id="sess-1")
+        LangChainOpenCodeAdapter(
+            model_name=self.TEST_MODEL,
+            api_key=self.TEST_API_KEY,
+            session_id="sess-1",
+        )
 
         mock_chat_openai.assert_called_once_with(
-            model="deepseek-v4.1-flash-free",
-            api_key="oc-test",
-            base_url=OPENCODE_API_BASE,
+            model=self.TEST_MODEL,
+            api_key=self.TEST_API_KEY,
+            base_url=LangChainOpenCodeAdapter.DEFAULT_API_BASE,
             temperature=0.0,
-            request_timeout=60.0,
+            request_timeout=BaseLangChainAdapter.DEFAULT_TIMEOUT,
             max_retries=2,
             default_headers={
-                "x-opencode-session": "sess-1",
-                "User-Agent": BaseLangChainAdapter.USER_AGENT,
+                LangChainOpenCodeAdapter.SESSION_HEADER: "sess-1",
+                BaseLangChainAdapter.USER_AGENT_HEADER: BaseLangChainAdapter.USER_AGENT,
             },
         )
 
     @patch("src.llm.langchain_opencode_adapter.ChatOpenAI")
     def test_init_forwards_custom_timeout_base_url_and_max_tokens(self, mock_chat_openai):
         LangChainOpenCodeAdapter(
-            model_name="deepseek-v4.1-flash-free",
-            api_key="oc-test",
+            model_name=self.TEST_MODEL,
+            api_key=self.TEST_API_KEY,
             timeout=30.0,
             base_url="https://custom.opencode.test/v1",
             max_tokens=1024,
@@ -55,15 +62,15 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
         )
 
         mock_chat_openai.assert_called_once_with(
-            model="deepseek-v4.1-flash-free",
-            api_key="oc-test",
+            model=self.TEST_MODEL,
+            api_key=self.TEST_API_KEY,
             base_url="https://custom.opencode.test/v1",
             temperature=0.0,
             request_timeout=30.0,
             max_retries=2,
             default_headers={
-                "x-opencode-session": "sess-2",
-                "User-Agent": BaseLangChainAdapter.USER_AGENT,
+                LangChainOpenCodeAdapter.SESSION_HEADER: "sess-2",
+                BaseLangChainAdapter.USER_AGENT_HEADER: BaseLangChainAdapter.USER_AGENT,
             },
             max_tokens=1024,
         )
@@ -72,11 +79,11 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
         self.assertEqual(LangChainOpenCodeAdapter.USER_AGENT, BaseLangChainAdapter.USER_AGENT)
 
     @patch("src.llm.langchain_opencode_adapter.ChatOpenAI")
-    def test_init_generates_session_header_when_not_provided(self, mock_chat_openai):
-        LangChainOpenCodeAdapter(model_name="deepseek-v4.1-flash-free", api_key="oc-test")
+    def test_init_generates_session_header_by_default(self, mock_chat_openai):
+        LangChainOpenCodeAdapter(model_name=self.TEST_MODEL, api_key=self.TEST_API_KEY)
 
         _, kwargs = mock_chat_openai.call_args
-        self.assertTrue(bool(kwargs["default_headers"]["x-opencode-session"]))
+        self.assertTrue(bool(kwargs["default_headers"][LangChainOpenCodeAdapter.SESSION_HEADER]))
 
     @patch("src.llm.langchain_opencode_adapter.ChatOpenAI")
     def test_stream_simple_tokens(self, mock_chat_openai):
@@ -91,8 +98,8 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
         mock_instance.astream.side_effect = fake_astream
         mock_chat_openai.return_value = mock_instance
 
-        adapter = LangChainOpenCodeAdapter(model_name="big-pickle", api_key="oc-test")
-        result = asyncio.run(collect_stream(adapter, "Say hello"))
+        adapter = LangChainOpenCodeAdapter(model_name=self.TEST_MODEL, api_key=self.TEST_API_KEY)
+        result = asyncio.run(self._collect_stream(adapter, "Say hello"))
 
         self.assertEqual(result, ["Hello ", "world!"])
 
@@ -118,7 +125,7 @@ class TestLangChainOpenCodeAdapter(unittest.TestCase):
         mock_instance.bind_tools.return_value = mock_bound_instance
         mock_chat_openai.return_value = mock_instance
 
-        adapter = LangChainOpenCodeAdapter(model_name="big-pickle", api_key="oc-test")
+        adapter = LangChainOpenCodeAdapter(model_name=self.TEST_MODEL, api_key=self.TEST_API_KEY)
         adapter.bind_tools([mock_tool])
 
         self.assertEqual(adapter.generate("Get fees for BTC"), "The maker fee is 0.1%.")

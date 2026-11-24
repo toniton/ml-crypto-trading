@@ -117,14 +117,31 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
             }
         )
 
-    def candles(self, ticker_symbol: str, timeframe: Timeframe) -> CryptoDotComRestBuilder[list[Candle]]:
+    def candles(
+            self,
+            ticker_symbol: str,
+            timeframe: Timeframe,
+            start_time: Optional[float] = None,
+            end_time: Optional[float] = None,
+            limit: Optional[int] = None,
+    ) -> CryptoDotComRestBuilder[list[Candle]]:
         candle_timeframe = CryptoDotComTimeframe.MAP.get(timeframe)
         endpoint = Endpoint(
-            path=f"public/get-candlestick?instrument_name={ticker_symbol}&timeframe={candle_timeframe}",
+            path="public/get-candlestick",
             private=False,
             mapper=CryptoDotComCandleMapper()
         )
-        return self._set_endpoint(endpoint)
+        params: dict[str, Any] = {
+            "instrument_name": ticker_symbol,
+            "timeframe": candle_timeframe,
+        }
+        if limit is not None:
+            params["count"] = int(limit)
+        if start_time is not None:
+            params["start_ts"] = int(start_time * 1000)
+        if end_time is not None:
+            params["end_ts"] = int(end_time * 1000)
+        return self._set_endpoint(endpoint, params)
 
     def account_balance(self) -> CryptoDotComRestBuilder[AccountBalance]:
         endpoint = Endpoint(
