@@ -79,6 +79,10 @@ class TradingEngineProxy(ABC):
     def compare_backtest_drift(self, action: Any) -> Any:
         """Executes backtest comparison if supported."""
 
+    def detect_live_drift(self, ticker_symbol: str, commit_hash: Optional[str] = None) -> Any:
+        """Runs on-demand live-vs-backtest replay drift detection if supported."""
+        return None
+
     def get_reconciliation_status(self) -> dict[str, Any]:
         """Returns reconciliation engine status and active discrepancies."""
         return {"active": False, "has_critical": False, "discrepancies": []}

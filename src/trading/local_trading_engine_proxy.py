@@ -26,10 +26,12 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
             trading_engine: TradingEngine,
             market_data_store: MarketDataStore,
             compare_backtest: Callable[[Any], Any],
+            detect_live_drift: Optional[Callable[..., Any]] = None,
     ) -> None:
         self._trading_engine = trading_engine
         self._market_data_store = market_data_store
         self._compare_backtest = compare_backtest
+        self._detect_live_drift = detect_live_drift
         self._applied_commit_hash: Optional[str] = None
         self._desired_commit_hash: Optional[str] = None
         self._sync_error: Optional[str] = None
@@ -229,6 +231,13 @@ class LocalTradingEngineProxy(TradingEngineProxy, ApplicationLoggingMixin):
 
     def compare_backtest_drift(self, action: Any) -> Any:
         return self._compare_backtest(action)
+
+    def detect_live_drift(self, ticker_symbol: str, commit_hash: Optional[str] = None) -> Any:
+        if self._detect_live_drift is None:
+            return None
+        if commit_hash is not None:
+            return self._detect_live_drift(ticker_symbol, commit_hash=commit_hash)
+        return self._detect_live_drift(ticker_symbol)
 
     def _get_reconciliation_engine(self):
         if self._managers is not None:
