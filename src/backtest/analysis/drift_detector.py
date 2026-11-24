@@ -1,13 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
+from typing import TYPE_CHECKING, Sequence
 
 from api.interfaces.backtest_request import BacktestDataSourceType
 from api.interfaces.order import Order
-from src.agent.backtest.backtest_service import BacktestService
-from src.backtest.domain.result import BacktestFill
+from src.backtest.domain.result import BacktestFill, PortfolioSnapshot
+from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.trading_journal import TradingJournal
+
+if TYPE_CHECKING:
+    from src.agent.backtest.backtest_service import BacktestService
+    from src.vcs.application.service import VCSService
+
+EPOCH_MS_THRESHOLD = 100_000_000_000
+MAX_SIMULATED_EQUITY_POINTS = 500
+
+
+def _snapshot_timestamp_to_iso(timestamp: int | float) -> str:
+    seconds = timestamp / 1000.0 if timestamp >= EPOCH_MS_THRESHOLD else float(timestamp)
+    return datetime.fromtimestamp(seconds, tz=timezone.utc).isoformat()
 
 
 @dataclass(frozen=True)
@@ -31,6 +45,8 @@ class DriftReport:
     simulated_fees: Decimal = Decimal("0")
     live_fees: Decimal = Decimal("0")
     fee_drift: Decimal = Decimal("0")
+    simulated_pnl: Decimal | None = None
+    simulated_equity_curve: tuple[tuple[str, float], ...] = ()
 
 
 class BacktestDriftDetector:
@@ -47,24 +63,63 @@ class BacktestDriftDetector:
             backtest_service: BacktestService,
             trading_journal: TradingJournal,
             price_tolerance_pct: Decimal = Decimal("0.5"),
+            vcs_service: VCSService | None = None,
     ):
         self._backtest_service = backtest_service
         self._trading_journal = trading_journal
         self._price_tolerance_pct = price_tolerance_pct
+        self._vcs_service = vcs_service
 
-    def detect(self, ticker_symbol: str) -> DriftReport:
+    def detect(self, ticker_symbol: str, commit_hash: str | None = None) -> DriftReport:
         request = self._backtest_service.build_request(
             ticker_symbol, source_type=BacktestDataSourceType.MARKET_DATA
         )
-        result = self._backtest_service.run(request)
+        trading_config = self._load_trading_config(commit_hash)
+        if trading_config is not None:
+            result = self._backtest_service.run(request, trading_config=trading_config)
+        else:
+            result = self._backtest_service.run(request)
         live_fills = self._trading_journal.entries(ticker_symbol)
-        return self._compare(ticker_symbol, result.fills, live_fills)
+        snapshots = (
+            result.portfolio_snapshots
+            if isinstance(getattr(result, "portfolio_snapshots", None), list)
+            else []
+        )
+        raw_initial = getattr(result, "initial_balance", None)
+        initial_balance = (
+            Decimal(str(raw_initial))
+            if isinstance(raw_initial, (Decimal, int, float))
+            else None
+        )
+        return self._compare(
+            ticker_symbol,
+            result.fills,
+            live_fills,
+            portfolio_snapshots=snapshots,
+            initial_balance=initial_balance,
+        )
+
+    def _load_trading_config(self, commit_hash: str | None) -> TradingConfig | None:
+        if self._vcs_service is None:
+            return None
+
+        refs_to_try = [commit_hash.strip()] if commit_hash and commit_hash.strip() else ["refs/heads/main", "HEAD"]
+        for ref in refs_to_try:
+            try:
+                raw_config = self._vcs_service.checkout(ref)
+                return TradingConfig.model_validate(raw_config)
+            except Exception:  # pylint: disable=broad-except
+                if commit_hash and commit_hash.strip():
+                    raise
+        return None
 
     def _compare(  # pylint: disable=too-many-locals
             self,
             ticker_symbol: str,
             simulated_fills: list[BacktestFill],
             live_orders: list[Order],
+            portfolio_snapshots: Sequence[PortfolioSnapshot] = (),
+            initial_balance: Decimal | None = None,
     ) -> DriftReport:
         simulated_fill_count = len(simulated_fills)
         live_fill_count = len(live_orders)
@@ -97,6 +152,10 @@ class BacktestDriftDetector:
             price_drift_pct = abs(price_drift) / live_average_price * Decimal("100")
             drifted = drifted or price_drift_pct > self._price_tolerance_pct
 
+        simulated_equity_curve, simulated_pnl, window_start, window_end = (
+            self._build_simulated_equity_curve(portfolio_snapshots, initial_balance)
+        )
+
         return DriftReport(
             ticker_symbol=ticker_symbol,
             simulated_fill_count=simulated_fill_count,
@@ -109,11 +168,48 @@ class BacktestDriftDetector:
             quantity_drift=quantity_drift,
             price_drift=price_drift,
             drifted=drifted,
+            window_start=window_start,
+            window_end=window_end,
             partial_fill_legs_merged=partial_legs,
             simulated_fees=simulated_fees,
             live_fees=live_fees,
             fee_drift=fee_drift,
+            simulated_pnl=simulated_pnl,
+            simulated_equity_curve=simulated_equity_curve,
         )
+
+    @staticmethod
+    def _build_simulated_equity_curve(
+            snapshots: Sequence[PortfolioSnapshot],
+            initial_balance: Decimal | None,
+    ) -> tuple[tuple[tuple[str, float], ...], Decimal | None, str | None, str | None]:
+        if not snapshots:
+            return (), None, None, None
+
+        base_balance = (
+            initial_balance
+            if initial_balance is not None
+            else Decimal(str(snapshots[0].equity))
+        )
+
+        if len(snapshots) <= MAX_SIMULATED_EQUITY_POINTS:
+            selected = list(snapshots)
+        else:
+            step = len(snapshots) / MAX_SIMULATED_EQUITY_POINTS
+            indices = {int(i * step) for i in range(MAX_SIMULATED_EQUITY_POINTS)}
+            indices.add(0)
+            indices.add(len(snapshots) - 1)
+            selected = [snapshots[i] for i in sorted(indices) if i < len(snapshots)]
+
+        curve = tuple(
+            (
+                _snapshot_timestamp_to_iso(snap.timestamp),
+                round(float(Decimal(str(snap.equity)) - base_balance), 4),
+            )
+            for snap in selected
+        )
+        simulated_pnl = Decimal(str(snapshots[-1].equity)) - base_balance
+        return curve, simulated_pnl, curve[0][0], curve[-1][0]
 
     @staticmethod
     def _sum_fill_quantity(fills: list[BacktestFill]) -> Decimal:
