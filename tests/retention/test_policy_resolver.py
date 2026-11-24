@@ -33,7 +33,7 @@ class TestRetentionPolicyResolver:
         assert policy is not None
         assert policy.data_category == DataCategory.MARKET_DATA_BUFFER
         assert policy.retention_mode == RetentionMode.DELETE
-        assert policy.period_delta().total_seconds() == 6 * 3600
+        assert policy.period_delta().total_seconds() == 12 * 3600
 
     def test_unknown_category_raises(self):
         with pytest.raises(ValueError):

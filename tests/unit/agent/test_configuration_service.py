@@ -359,6 +359,25 @@ dynamic_quantity: "max(min_qty, eq * 0.1)"
         assert vcs.resolve_commit_hash("HEAD") == commit.hash
         assert not warnings
 
+    def test_apply_proposal_to_vcs_accepts_short_base_commit_prefix(self, vcs):
+        service = ConfigurationService(vcs)
+        head_commit = vcs.resolve_commit_hash("HEAD")
+        proposal = ConfigurationProposal(
+            summary="Adjust buy threshold with short hash.",
+            changes=[
+                ConfigChange(
+                    path="assets.BTC_USD.consensus.buy",
+                    old_value=1.3,
+                    new_value=1.1,
+                    reason="more signals",
+                )
+            ],
+            base_commit_hash=head_commit[:8],
+        )
+
+        commit, _ = service.apply_proposal_to_vcs(proposal)
+        assert vcs.resolve_commit_hash("HEAD") == commit.hash
+
     def test_apply_proposal_to_vcs_raises_vcs_error_on_commit_divergence(self, vcs):
         service = ConfigurationService(vcs)
         stale_commit = "stale-commit-hash-000000000000"
