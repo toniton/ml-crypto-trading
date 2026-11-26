@@ -46,6 +46,9 @@ class ExperimentCandidate(BaseModel):
     name: str
     candidate_type: CandidateType
     strategy_weights: dict[str, float] = Field(default_factory=dict)
+    strategies_to_add: list[dict[str, Any]] = Field(default_factory=list)
+    strategy_enabled_overrides: dict[str, bool] = Field(default_factory=dict)
+    consensus_override: Optional[dict[str, float]] = None
     candidate_commit_hash: Optional[str] = None
     removed_strategy: Optional[str] = None
     random_seed: Optional[int] = None

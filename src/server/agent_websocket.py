@@ -121,6 +121,7 @@ class AgentWebSocketHandler:
             if "payload" in event_dict and isinstance(event_dict["payload"], dict):
                 for k, v in event_dict["payload"].items():
                     event_dict.setdefault(k, v)
+            self._enrich_notification_fields(event_dict)
             if not await self._send_json(websocket, event_dict):
                 return
             dropped = subscription.take_dropped()
@@ -143,6 +144,22 @@ class AgentWebSocketHandler:
 
     def _stream_status(self, dropped: int) -> dict:
         return {"type": "stream_status", "dropped": dropped, "timestamp": self._now_iso()}
+
+    @staticmethod
+    def _enrich_notification_fields(event_dict: dict) -> None:
+        event_name = event_dict.get("event_name")
+        if event_name == AgentMessageCreatedEvent.EVENT_TYPE:
+            msg_payload = event_dict.get("message_payload")
+            if isinstance(msg_payload, dict):
+                for key in ("message_id", "conversation_id", "title", "preview", "severity"):
+                    if msg_payload.get(key) is not None and event_dict.get(key) is None:
+                        event_dict[key] = msg_payload[key]
+        elif event_name == AgentApprovalRequestedEvent.EVENT_TYPE:
+            approval_payload = event_dict.get("approval_payload")
+            if isinstance(approval_payload, dict):
+                for key in ("conversation_id", "title", "preview", "severity"):
+                    if approval_payload.get(key) is not None and event_dict.get(key) is None:
+                        event_dict[key] = approval_payload[key]
 
     @staticmethod
     def _now_iso() -> str:

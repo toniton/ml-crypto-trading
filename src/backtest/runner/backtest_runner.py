@@ -174,7 +174,10 @@ class BacktestRunner:
         collector = BacktestResultCollector(bus)
         if session_manager.is_running.is_set():
             session_manager.end_session()
-        session_manager.create_session(session_id=session.id, commit_hash="HEAD")
+        session_manager.create_session(
+            session_id=session.id,
+            commit_hash=session.commit_hash or "HEAD",
+        )
         session_manager.init_asset_balance(asset, starting_balance=session.request.initial_balance)
         session_manager.start_session()
 
@@ -209,11 +212,11 @@ class BacktestRunner:
 
     @staticmethod
     def _as_backtest_asset(asset: Asset) -> Asset:
-        # The backtest services register under the BACKTEST provider; normalize the
-        # asset's exchange so live configs (e.g. CRYPTO_DOT_COM) route through them.
-        if asset.exchange == ExchangeProvidersEnum.BACKTEST:
+        # Backtest services register under the BACKTEST provider and Asset.enabled only
+        # governs live trading; normalize both so disabled live assets still simulate.
+        if asset.exchange == ExchangeProvidersEnum.BACKTEST and asset.enabled:
             return asset
-        return replace(asset, exchange=ExchangeProvidersEnum.BACKTEST)
+        return replace(asset, exchange=ExchangeProvidersEnum.BACKTEST, enabled=True)
 
     def _load_datasets(
             self,

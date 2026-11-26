@@ -14,16 +14,32 @@ from api.interfaces.backtest_run_spec import BacktestRunSpec
 from src.configuration.trading_config import TradingConfig
 from src.vcs.domain.diff import ConfigurationProposal
 from src.agent import AgentGateway, ProposalDecision
+from src.agent.automation import ExperimentCompletionAgentHandler
 from src.agent.cache.cached_proposal_store import CachedProposalStore
 from src.agent.events import AIEvent
-from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
+from src.core.hooks import (
+    HookCatalog,
+    HookContext,
+    HookExecutionMode,
+    HookManager,
+    HookStage,
+)
+from src.core.interfaces.conversation_store import (
+    ConversationMessage,
+    ConversationStore,
+    ReservedSessionDeletionError,
+)
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.proposal_store import ProposalStore
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.mappers.backtest_db_vs_entity_mapper import BacktestDBVSEntityMapper
 from src.database.repositories.providers.postgres_backtest_repository import PostgresBacktestRepository
-from src.events.agent_events import AgentApprovalResolvedEvent
+from src.events.agent_events import (
+    AgentApprovalResolvedEvent,
+    AgentExperimentRunRequestedEvent,
+)
+from src.events.message_event_bus import CallbackSubscription
 from src.logging.factory import LoggingFactory
 from src.metrics.api.metric_routes import create_metric_router
 from src.retention.manager import RetentionManager
@@ -165,6 +181,7 @@ class ChatApp:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
         dataset_service = DatasetService()
+        hook_manager = HookManager()
 
         backtest_service = BacktestApplicationService(
             db_manager=db_manager,
@@ -190,6 +207,7 @@ class ChatApp:
                 await runtime_collector.start_monitoring()
             except RuntimeError:
                 pass
+            await asyncio.to_thread(conversation_service.ensure_reserved_agent_session)
             await asyncio.to_thread(walk_forward_service.recover_on_startup)
             await asyncio.to_thread(backtest_service.recover_on_startup)
             if hasattr(_app_instance.state, "simulation_orchestrator"):
@@ -197,6 +215,7 @@ class ChatApp:
             yield
             runtime_collector.stop_monitoring()
             timeline_projector.close()
+            hook_manager.close(wait=False)
 
         app = FastAPI(title="ml-stocks-trading API", version="1.0.0", lifespan=lifespan)
         app.state.db_manager = db_manager
@@ -414,9 +433,81 @@ class ChatApp:
             backtest_service=backtest_branch_service,
             backtest_app_service=backtest_service,
             walk_forward_app_service=walk_forward_service,
+            hook_manager=hook_manager,
         )
+        app.state.hook_manager = hook_manager
         app.state.experiment_service = experiment_service
         app.include_router(create_experiment_router())
+
+        if event_bus is not None:
+            def _handle_experiment_run_requested(event) -> None:
+                if not isinstance(event, AgentExperimentRunRequestedEvent):
+                    return
+                try:
+                    created_exp = experiment_service.create_and_start_from_suggestion(
+                        suggestion=event.experiment_config or {},
+                        triggered_by={
+                            "source": "agent_anomaly_approval",
+                            "approval_id": event.approval_id,
+                            "author": event.author,
+                        },
+                    )
+                    experiment_id = (
+                        created_exp.get("experiment_id") or created_exp.get("id")
+                    )
+                    branch_id = created_exp.get("branch_id")
+                    resolved = AgentApprovalResolvedEvent(
+                        approval_id=event.approval_id,
+                        decision="approve",
+                        approval_payload={
+                            "approval_id": event.approval_id,
+                            "action_type": "RUN_EXPERIMENT",
+                            "title": event.title,
+                            "asset": event.asset,
+                            "experiment_id": experiment_id,
+                            "branch_id": branch_id,
+                            "conversation_id": event.conversation_id,
+                            "status": "APPROVED",
+                        },
+                    )
+                    resolved.set_causality(
+                        correlation_id=(
+                            str(event.correlation_id) if event.correlation_id else None
+                        ),
+                        causation_id=event.approval_id,
+                        actor_type="USER",
+                        source="experiment_application_service",
+                    )
+                    event_bus.publish(resolved)
+                except Exception as exc:  # pylint: disable=broad-except
+                    event_bus.publish(
+                        AgentApprovalResolvedEvent(
+                            approval_id=event.approval_id,
+                            decision="error",
+                            error_code="EXPERIMENT_LAUNCH_FAILED",
+                            error_message=str(exc),
+                            approval_payload={
+                                "approval_id": event.approval_id,
+                                "action_type": "RUN_EXPERIMENT",
+                                "title": event.title,
+                                "conversation_id": event.conversation_id,
+                                "error_code": "EXPERIMENT_LAUNCH_FAILED",
+                                "error_message": str(exc),
+                            },
+                        )
+                    )
+
+            experiment_run_subscription = CallbackSubscription(
+                _handle_experiment_run_requested
+            )
+            for exp_event_type in (
+                AgentExperimentRunRequestedEvent.EVENT_TYPE,
+                "AgentExperimentRunRequestedEvent",
+            ):
+                event_bus.subscribe(
+                    exp_event_type,
+                    experiment_run_subscription,
+                )
 
         evidence_proposal_service = EvidenceProposalApplicationService(
             db_manager=db_manager,
@@ -475,15 +566,33 @@ class ChatApp:
         app.include_router(create_drift_router())
         app.include_router(create_scorecard_router())
 
-        def _on_experiment_completed(symbol: str, commit_hash: Optional[str]) -> None:
-            drift_service.run_drift_check(symbol, commit_hash=commit_hash)
+        def _on_experiment_completed_hook(context: HookContext) -> None:
+            symbol = context.payload.get("ticker_symbol")
+            commit_hash = context.payload.get("base_commit_hash")
+            if not symbol:
+                return
+            drift_service.run_drift_check(str(symbol), commit_hash=commit_hash)
             scorecard_service.save_snapshot(
-                symbol=symbol,
+                symbol=str(symbol),
                 trigger="drift_run",
                 commit_hash=commit_hash,
             )
 
-        experiment_service.set_completion_hook(_on_experiment_completed)
+        hook_manager.register(
+            HookCatalog.EXPERIMENT_RUN,
+            _on_experiment_completed_hook,
+            stages=(HookStage.COMPLETED,),
+            priority=50,
+            mode=HookExecutionMode.ASYNC,
+            name="post_experiment_drift_and_scorecard",
+        )
+
+        if event_bus is not None:
+            experiment_completion_handler = ExperimentCompletionAgentHandler(
+                event_bus=event_bus,
+            )
+            experiment_completion_handler.register(hook_manager, priority=100)
+            app.state.experiment_completion_handler = experiment_completion_handler
 
         @app.get("/api/v1/backtests/branches")
         async def list_backtest_branches_endpoint():
@@ -839,7 +948,13 @@ class ChatApp:
         @app.delete("/api/v1/sessions/{session_id}")
         async def delete_session_endpoint(session_id: str, req: Request):
             store: ConversationService = req.app.state.conversation_service
-            deleted = await asyncio.to_thread(store.delete_session, session_id)
+            try:
+                deleted = await asyncio.to_thread(store.delete_session, session_id)
+            except ReservedSessionDeletionError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=str(exc),
+                ) from exc
             if not deleted:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,

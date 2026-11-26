@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
@@ -78,6 +79,16 @@ class CCXTExchangeRestBuilder(ExchangeRestBuilder[T, R]):
         self._method_name = 'fetch_trading_fee'
         self._params = {'symbol': ticker_symbol}
         self._mapper = CCXTMapperFactory.get_mapper('fees')
+        return self
+
+    def instrument_metadata(
+            self, ticker_symbol: str
+    ) -> 'CCXTExchangeRestBuilder[T, Optional[InstrumentMetadata]]':
+        self._method_name = 'fetch_instrument_metadata'
+        self._params = {'symbol': ticker_symbol}
+        self._mapper = CCXTMapperFactory.get_mapper(
+            'instrument_metadata', self._provider_name
+        )
         return self
 
     def create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument

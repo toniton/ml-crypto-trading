@@ -60,6 +60,19 @@ class BacktestApplicationService(ApplicationLoggingMixin):
         self._threads: dict[str, threading.Thread] = {}
         self._stop_heartbeat_events: dict[str, threading.Event] = {}
 
+    def pin_market_data_snapshot(
+            self,
+            ticker_symbol: str,
+            start_time: Optional[datetime] = None,
+            end_time: Optional[datetime] = None,
+    ) -> Optional[str]:
+        """Snapshot recorded market data so multi-candidate runs share an identical dataset."""
+        return self._resolver.pin_market_data_snapshot(
+            ticker_symbol=ticker_symbol,
+            start_time=start_time,
+            end_time=end_time,
+        )
+
     def start_backtest_run(self, spec: BacktestRunSpec) -> BacktestSession:
         vcs_ref = spec.configuration.vcs_commit_hash or "HEAD"
         raw_config = self._vcs_service.checkout(vcs_ref)
@@ -183,7 +196,8 @@ class BacktestApplicationService(ApplicationLoggingMixin):
             self._active_runs.add(session_id)
 
         try:
-            raw_config = self._vcs_service.checkout("HEAD")
+            vcs_ref = session.commit_hash or "HEAD"
+            raw_config = self._vcs_service.checkout(vcs_ref)
             trading_config = TradingConfig.model_validate(raw_config)
             asset_map = {a.ticker_symbol: a for a in trading_config.assets}
 

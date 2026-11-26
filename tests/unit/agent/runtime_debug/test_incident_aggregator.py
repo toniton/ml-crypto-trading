@@ -106,3 +106,39 @@ def test_classify_error_categories():
     cat, sev = IncidentAggregator.classify_error(network_ev)
     assert cat == ErrorCategory.TRANSIENT_NETWORK
     assert sev == Severity.WARNING
+
+
+def test_incident_aggregator_dispatches_investigation_on_background_thread():
+    import threading
+
+    db_manager = InMemoryDatabaseManager()
+    done = threading.Event()
+    caller_thread_id = threading.get_ident()
+    worker_thread_ids: list[int] = []
+
+    def callback(incident_id: str) -> None:
+        worker_thread_ids.append(threading.get_ident())
+        done.set()
+
+    aggregator = IncidentAggregator(
+        database_manager=db_manager,
+        investigation_callback=callback,
+        auto_investigate=True,
+        async_investigation=True,
+    )
+    try:
+        event = RuntimeErrorEvent(
+            exchange="CRYPTO_DOT_COM",
+            operation="execute_order",
+            http_status=500,
+            exchange_code=415,
+            component="trading.orders.order_manager",
+            message="BELOW_MIN_ORDER_SIZE",
+            asset="CRO_USD",
+        )
+        aggregator.process_error_event(event)
+        assert done.wait(timeout=3.0) is True
+        assert len(worker_thread_ids) == 1
+        assert worker_thread_ids[0] != caller_thread_id
+    finally:
+        aggregator.shutdown()

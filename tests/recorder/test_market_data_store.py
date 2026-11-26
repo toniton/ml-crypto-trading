@@ -130,3 +130,16 @@ class TestMarketDataStore:
         store = MarketDataStore()
 
         assert store.dataset_id("BTC_USD") == "recorded:BTC_USD"
+
+    def test_snapshot_returns_frozen_window_unaffected_by_live_pruning(self):
+        store = MarketDataStore(max_age=timedelta(seconds=100))
+        store.record("BTC_USD", _market_data(100, "100"))
+        store.record("BTC_USD", _market_data(150, "150"))
+        store.record("BTC_USD", _market_data(200, "200"))
+
+        frozen = store.snapshot("BTC_USD", start_epoch=100, end_epoch=180)
+        # Advance live store past max_age so 100 and 150 are pruned from live store
+        store.record("BTC_USD", _market_data(350, "350"))
+
+        assert [int(o.timestamp) for o in store.observations("BTC_USD")] == [350]
+        assert [int(o.timestamp) for o in frozen.observations("BTC_USD")] == [100, 150]

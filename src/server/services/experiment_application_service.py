@@ -4,12 +4,15 @@ import random
 import threading
 import time
 import uuid
+from dataclasses import replace
 from enum import Enum
 from typing import Any, Optional
 
 from api.interfaces.backtest_run_spec import (
     BacktestConfigurationSourceType,
     BacktestConfigurationSpec,
+    BacktestMarketDataSpec,
+    BacktestPeriodSpec,
     BacktestRunSpec,
 )
 from api.interfaces.experiment import (
@@ -24,7 +27,15 @@ from api.interfaces.walk_forward import (
     WalkForwardRunSpec,
     WalkForwardWindowSpec,
 )
+from src.configuration.strategy_config import StrategyConfig
 from src.configuration.trading_config import TradingConfig
+from src.core.hooks import (
+    HookCatalog,
+    HookContext,
+    HookExecutionMode,
+    HookManager,
+    HookStage,
+)
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_backtest_repository import (
     PostgresBacktestRepository,
@@ -51,17 +62,82 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             backtest_service: BacktestService,
             backtest_app_service: Optional[BacktestApplicationService] = None,
             walk_forward_app_service: Optional[WalkForwardApplicationService] = None,
+            hook_manager: Optional[HookManager] = None,
     ) -> None:
         self._db_manager = db_manager
         self._vcs_service = vcs_service
         self._backtest_service = backtest_service
         self._backtest_app_service = backtest_app_service
         self._walk_forward_app_service = walk_forward_app_service
+        self._hook_manager = hook_manager
         self._cancellation_events: dict[str, threading.Event] = {}
         self._on_experiment_completed: Optional[Any] = None
 
     def set_completion_hook(self, callback: Any) -> None:
+        if self._hook_manager is not None:
+            def _legacy_adapter(ctx: HookContext) -> None:
+                symbol = ctx.payload.get("ticker_symbol")
+                commit_hash = ctx.payload.get("base_commit_hash")
+                if symbol:
+                    callback(symbol, commit_hash)
+
+            self._hook_manager.register(
+                HookCatalog.EXPERIMENT_RUN,
+                _legacy_adapter,
+                stages=(HookStage.COMPLETED,),
+                mode=HookExecutionMode.ASYNC,
+                priority=50,
+                name="legacy_experiment_completion_hook",
+            )
+            return
         self._on_experiment_completed = callback
+
+    def _emit_experiment_hook(  # pylint: disable=too-many-arguments
+            self,
+            stage: HookStage,
+            experiment_id: str,
+            spec: ExperimentSpec,
+            status: str,
+            previous_state: Optional[str] = None,
+            report: Optional[dict[str, Any]] = None,
+            error: Optional[str] = None,
+    ) -> None:
+        if self._hook_manager is None:
+            return
+        payload: dict[str, Any] = {
+            "experiment_id": experiment_id,
+            "name": spec.name,
+            "ticker_symbol": spec.ticker_symbol,
+            "branch_id": spec.branch_id,
+            "base_commit_hash": spec.base_commit_hash,
+            "status": status,
+            "report": report,
+            "triggered_by": spec.triggered_by,
+            "candidates": [c.model_dump(mode="json") for c in spec.candidates],
+        }
+        self._hook_manager.emit(
+            HookContext(
+                hook_name=HookCatalog.EXPERIMENT_RUN,
+                stage=stage,
+                source_id=experiment_id,
+                state=status,
+                previous_state=previous_state,
+                payload=payload,
+                error=error,
+            )
+        )
+        if stage in (HookStage.COMPLETED, HookStage.FAILED, HookStage.CANCELLED):
+            self._hook_manager.emit(
+                HookContext(
+                    hook_name=HookCatalog.EXPERIMENT_RUN,
+                    stage=HookStage.FINALLY,
+                    source_id=experiment_id,
+                    state=status,
+                    previous_state=previous_state,
+                    payload=payload,
+                    error=error,
+                )
+            )
 
     def create_and_start_on_branch(
             self,
@@ -119,6 +195,101 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         except Exception as exc:  # pylint: disable=broad-except
             self.app_logger.warning("Created experiment %s on branch %s but auto-start failed: %s", experiment_id, branch_id, exc)
             return self.get_experiment(experiment_id) or {"experiment_id": experiment_id, "branch_id": branch_id}
+
+    def create_and_start_from_suggestion(
+            self,
+            suggestion: dict[str, Any],
+            triggered_by: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        ticker_symbol = str(suggestion.get("ticker_symbol") or "").strip()
+        if not ticker_symbol:
+            raise ValueError("Suggested experiment configuration must specify 'ticker_symbol'.")
+
+        name = str(suggestion.get("name") or f"Suggested Experiment ({ticker_symbol})")[:80]
+        base_commit = str(suggestion.get("base_commit_hash") or "").strip()
+        if not base_commit:
+            try:
+                base_commit = self._vcs_service.resolve_commit_hash("refs/heads/main")
+            except (CommitNotFoundError, InvalidReferenceError):
+                base_commit = self._vcs_service.resolve_commit_hash("HEAD")
+
+        branch_info = self._backtest_service.create_branch(
+            name=f"exp-{name}",
+            description=f"Agent-suggested experiment branch for {ticker_symbol}",
+            source_commit_hash=base_commit,
+            author="agent-experiment",
+        )
+        branch_id = branch_info["branch_id"]
+
+        raw_candidates = suggestion.get("candidates") or []
+        candidates = [
+            ExperimentCandidate.model_validate(item)
+            for item in raw_candidates
+            if isinstance(item, dict)
+        ]
+        if not candidates:
+            current_weights = self._load_asset_strategy_weights(base_commit, ticker_symbol)
+            candidates = [
+                ExperimentCandidate(
+                    candidate_id="cand_current",
+                    name="Current Configuration",
+                    candidate_type=CandidateType.CURRENT_CONFIG,
+                    strategy_weights=dict(current_weights),
+                )
+            ]
+
+        raw_data_source = suggestion.get("data_source")
+        data_source = (
+            BacktestMarketDataSpec.model_validate(raw_data_source)
+            if isinstance(raw_data_source, dict)
+            else BacktestMarketDataSpec()
+        )
+        raw_period = suggestion.get("period")
+        period = (
+            BacktestPeriodSpec.model_validate(raw_period)
+            if isinstance(raw_period, dict)
+            else None
+        )
+        raw_selection = suggestion.get("test_selection") or TestSelection.BACKTEST_ONLY.value
+        test_selection = TestSelection(raw_selection)
+
+        spec = ExperimentSpec(
+            name=name,
+            ticker_symbol=ticker_symbol,
+            base_commit_hash=base_commit,
+            branch_id=branch_id,
+            test_selection=test_selection,
+            data_source=data_source,
+            period=period,
+            candidates=candidates,
+            triggered_by=triggered_by,
+        )
+        experiment_id = f"exp_{uuid.uuid4().hex[:12]}"
+        with self._db_manager.get_unit_of_work() as uow:
+            repo = uow.get_repository(PostgresExperimentRepository)
+            repo.save_experiment(
+                experiment_id=experiment_id,
+                name=name,
+                ticker_symbol=ticker_symbol,
+                branch_id=branch_id,
+                base_commit_hash=base_commit,
+                status=ExperimentStatus.DRAFT.value,
+                spec=spec.model_dump(mode="json"),
+                run_bindings=[],
+            )
+        try:
+            return self.start_experiment(experiment_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                "Created suggested experiment %s on branch %s but auto-start failed: %s",
+                experiment_id,
+                branch_id,
+                exc,
+            )
+            return self.get_experiment(experiment_id) or {
+                "experiment_id": experiment_id,
+                "branch_id": branch_id,
+            }
 
     def repoint_and_rerun(
             self,
@@ -364,6 +535,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         cancel_evt = threading.Event()
         self._cancellation_events[experiment_id] = cancel_evt
+        self._emit_experiment_hook(
+            stage=HookStage.STARTED,
+            experiment_id=experiment_id,
+            spec=spec,
+            status=ExperimentStatus.RUNNING.value,
+            previous_state=ExperimentStatus.DRAFT.value,
+        )
         watcher = threading.Thread(
             target=self._watch_experiment_runs,
             args=(experiment_id,),
@@ -377,6 +555,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         if experiment_id in self._cancellation_events:
             self._cancellation_events[experiment_id].set()
 
+        cancelled_spec: Optional[ExperimentSpec] = None
         with self._db_manager.get_unit_of_work() as uow:
             repo = uow.get_repository(PostgresExperimentRepository)
             exp = repo.get_experiment(experiment_id)
@@ -394,7 +573,17 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                         pass
             repo.update_bindings(experiment_id, bindings)
             repo.update_status(experiment_id, ExperimentStatus.CANCELLED.value)
-            return True
+            if exp.get("spec"):
+                cancelled_spec = ExperimentSpec.model_validate(exp["spec"])
+        if cancelled_spec is not None:
+            self._emit_experiment_hook(
+                stage=HookStage.CANCELLED,
+                experiment_id=experiment_id,
+                spec=cancelled_spec,
+                status=ExperimentStatus.CANCELLED.value,
+                previous_state=ExperimentStatus.RUNNING.value,
+            )
+        return True
 
     def retry_candidate(self, experiment_id: str, candidate_id: str) -> dict[str, Any]:
         with self._db_manager.get_unit_of_work() as uow:
@@ -422,6 +611,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
         cancel_evt = threading.Event()
         self._cancellation_events[experiment_id] = cancel_evt
+        self._emit_experiment_hook(
+            stage=HookStage.STARTED,
+            experiment_id=experiment_id,
+            spec=spec,
+            status=ExperimentStatus.RUNNING.value,
+            previous_state=ExperimentStatus.DRAFT.value,
+        )
         watcher = threading.Thread(
             target=self._watch_experiment_runs,
             args=(experiment_id,),
@@ -469,6 +665,31 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             )
             return updated, msg
 
+        if cand.candidate_type == CandidateType.CUSTOM_COMBINATION:
+            updated = list(strategies)
+            existing_names = {s.name for s in updated if s.name}
+            for raw_strategy in cand.strategies_to_add:
+                parsed = StrategyConfig.model_validate(raw_strategy)
+                if parsed.name and parsed.name not in existing_names:
+                    updated.append(parsed)
+                    existing_names.add(parsed.name)
+            if cand.strategy_enabled_overrides:
+                updated = [
+                    s.model_copy(update={"enabled": bool(cand.strategy_enabled_overrides[s.name])})
+                    if s.name and s.name in cand.strategy_enabled_overrides
+                    else s
+                    for s in updated
+                ]
+            if cand.strategy_weights:
+                updated = [
+                    s.model_copy(update={"weight": float(cand.strategy_weights[s.name])})
+                    if s.name and s.name in cand.strategy_weights
+                    else s
+                    for s in updated
+                ]
+            msg = f"Experiment candidate variant: {cand.name} ({cand.candidate_id})"
+            return updated, msg
+
         return None
 
     def _load_asset_strategy_weights(self, commit_hash: str, ticker: str) -> dict[str, float]:
@@ -491,12 +712,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             branch_id: str,
             ticker_symbol: str,
             cand: ExperimentCandidate,
+            base_commit_hash: Optional[str] = None,
     ) -> str:
         if cand.candidate_commit_hash:
             return cand.candidate_commit_hash
 
         branch_ref = f"refs/heads/backtest/{branch_id}"
-        head_commit = self._vcs_service.resolve_commit_hash(branch_ref)
+        head_commit = base_commit_hash or self._vcs_service.resolve_commit_hash(branch_ref)
 
         if cand.candidate_type == CandidateType.CURRENT_CONFIG:
             cand.strategy_weights = self._load_asset_strategy_weights(head_commit, ticker_symbol)
@@ -512,16 +734,36 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             trading_config = TradingConfig.model_validate(raw_config)
             matched_asset = next((a for a in trading_config.assets if a.ticker_symbol == ticker_symbol), None)
 
-            if matched_asset and matched_asset.strategies:
-                variant_update = self._apply_candidate_weights(cand, matched_asset.strategies)
+            if matched_asset and (matched_asset.strategies or cand.strategies_to_add):
+                variant_update = self._apply_candidate_weights(
+                    cand, list(matched_asset.strategies or [])
+                )
                 if variant_update:
                     updated_strats, commit_msg = variant_update
-                    matched_asset.strategies = updated_strats
+                    asset_updates: dict[str, Any] = {"strategies": updated_strats}
+                    if cand.consensus_override and matched_asset.consensus is not None:
+                        consensus_updates = {
+                            k: float(v)
+                            for k, v in cand.consensus_override.items()
+                            if k in ("buy", "sell")
+                        }
+                        if consensus_updates:
+                            asset_updates["consensus"] = matched_asset.consensus.model_copy(
+                                update=consensus_updates
+                            )
+                    updated_asset = replace(matched_asset, **asset_updates)
+                    updated_assets = [
+                        updated_asset if a.ticker_symbol == ticker_symbol else a
+                        for a in trading_config.assets
+                    ]
+                    updated_config = trading_config.model_copy(update={"assets": updated_assets})
+                    candidate_ref = f"refs/experiments/{branch_id}/{cand.candidate_id}"
+                    self._vcs_service.branch(candidate_ref, from_ref=head_commit)
                     commit = self._vcs_service.commit(
-                        content=trading_config,
+                        content=updated_config,
                         author="experiment-service",
                         message=commit_msg,
-                        ref=branch_ref,
+                        ref=candidate_ref,
                     )
                     cand.candidate_commit_hash = commit.hash
                     return commit.hash
@@ -535,15 +777,53 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         cand.candidate_commit_hash = head_commit
         return head_commit
 
+    def _pin_data_source(
+            self,
+            spec: ExperimentSpec,
+            runner_service: Optional[BacktestApplicationService | WalkForwardApplicationService],
+    ) -> BacktestMarketDataSpec:
+        if (
+            runner_service is None
+            or spec.data_source.dataset_id
+            or spec.data_source.source_type.value not in ("market_data", "recorded_market_data")
+        ):
+            return spec.data_source
+        snapshot_id = runner_service.pin_market_data_snapshot(
+            ticker_symbol=spec.ticker_symbol,
+            start_time=spec.period.start_time if spec.period else None,
+            end_time=spec.period.end_time if spec.period else None,
+        )
+        if isinstance(snapshot_id, str) and snapshot_id:
+            return spec.data_source.model_copy(update={"dataset_id": snapshot_id})
+        return spec.data_source
+
     def _dispatch_candidate_runs(
             self,
             spec: ExperimentSpec,
             candidates: list[ExperimentCandidate],
     ) -> list[dict[str, Any]]:
         bindings: list[dict[str, Any]] = []
+        branch_ref = f"refs/heads/backtest/{spec.branch_id}"
+        base_commit_hash = self._vcs_service.resolve_commit_hash(branch_ref)
+
+        bt_data_source = (
+            self._pin_data_source(spec, self._backtest_app_service)
+            if spec.test_selection in (TestSelection.BACKTEST_ONLY, TestSelection.BOTH)
+            else spec.data_source
+        )
+        wf_data_source = (
+            self._pin_data_source(spec, self._walk_forward_app_service)
+            if spec.test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+            else spec.data_source
+        )
 
         for cand in candidates:
-            commit_hash = self._resolve_candidate_commit(spec.branch_id, spec.ticker_symbol, cand)
+            commit_hash = self._resolve_candidate_commit(
+                spec.branch_id,
+                spec.ticker_symbol,
+                cand,
+                base_commit_hash=base_commit_hash,
+            )
             bt_session_id = None
             wf_run_id = None
 
@@ -555,7 +835,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                             source_type=BacktestConfigurationSourceType.VCS,
                             vcs_commit_hash=commit_hash,
                         ),
-                        data_source=spec.data_source,
+                        data_source=bt_data_source,
                         period=spec.period,
                         initial_balance=spec.initial_balance,
                         execution=spec.execution,
@@ -571,7 +851,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                             source_type=BacktestConfigurationSourceType.VCS,
                             vcs_commit_hash=commit_hash,
                         ),
-                        data_source=spec.data_source,
+                        data_source=wf_data_source,
                         period=spec.period,
                         windows=spec.windows or WalkForwardWindowSpec(),
                         initial_balance=spec.initial_balance,
@@ -593,6 +873,9 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
     def _watch_experiment_runs(self, experiment_id: str) -> None:  # pylint: disable=too-many-locals
         cancel_evt = self._cancellation_events.get(experiment_id)
+        finished_spec: Optional[ExperimentSpec] = None
+        finished_status = ""
+        finished_report: Optional[dict[str, Any]] = None
         while True:
             if cancel_evt and cancel_evt.is_set():
                 self.app_logger.info("Experiment %s cancelled during monitoring", experiment_id)
@@ -641,6 +924,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     spec_dict = exp.get("spec", {})
                     spec = ExperimentSpec.model_validate(spec_dict)
                     repo.update_status(experiment_id, ExperimentStatus.AGGREGATING.value)
+                    self._emit_experiment_hook(
+                        stage=HookStage.STATE_CHANGED,
+                        experiment_id=experiment_id,
+                        spec=spec,
+                        status=ExperimentStatus.AGGREGATING.value,
+                        previous_state=ExperimentStatus.RUNNING.value,
+                    )
                     report = self._compute_experiment_report(uow, spec, bindings, self._vcs_service)
                     final_status = (
                         ExperimentStatus.FAILED.value
@@ -649,18 +939,40 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     )
                     repo.update_report(experiment_id, final_status, report)
                     self.app_logger.info("Experiment %s finished with status %s", experiment_id, final_status)
-                    completed_symbol = spec.ticker_symbol if final_status == ExperimentStatus.COMPLETED.value else None
-                    completed_commit = spec.base_commit_hash
-                    if completed_symbol and self._on_experiment_completed is not None:
-                        try:
-                            self._on_experiment_completed(completed_symbol, completed_commit)
-                        except Exception as exc:  # pylint: disable=broad-except
-                            self.app_logger.warning(
-                                "Post-experiment drift hook failed for %s: %s",
-                                completed_symbol,
-                                exc,
-                            )
-                    return
+                    finished_spec = spec
+                    finished_status = final_status
+                    finished_report = report
+                    break
+
+        if finished_spec is not None:
+            terminal_stage = (
+                HookStage.FAILED
+                if finished_status == ExperimentStatus.FAILED.value
+                else HookStage.COMPLETED
+            )
+            self._emit_experiment_hook(
+                stage=terminal_stage,
+                experiment_id=experiment_id,
+                spec=finished_spec,
+                status=finished_status,
+                previous_state=ExperimentStatus.AGGREGATING.value,
+                report=finished_report,
+            )
+            completed_symbol = (
+                finished_spec.ticker_symbol
+                if finished_status == ExperimentStatus.COMPLETED.value
+                else None
+            )
+            completed_commit = finished_spec.base_commit_hash
+            if completed_symbol and self._on_experiment_completed is not None:
+                try:
+                    self._on_experiment_completed(completed_symbol, completed_commit)
+                except Exception as exc:  # pylint: disable=broad-except
+                    self.app_logger.warning(
+                        "Post-experiment drift hook failed for %s: %s",
+                        completed_symbol,
+                        exc,
+                    )
 
     @staticmethod
     def _poll_binding_status(uow: Any, b: dict[str, Any]) -> tuple[bool, bool, bool, Optional[str]]:

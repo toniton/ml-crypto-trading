@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from unittest.mock import MagicMock
@@ -159,6 +160,30 @@ class TestWalkForwardRunner(unittest.TestCase):
         first_fold = summary.fold_results[0]
         assert first_fold.baseline_test_return_pct is not None
         assert first_fold.equal_weight_test_return_pct is not None
+
+    def test_runs_walk_forward_for_disabled_asset(self):
+        disabled_asset = replace(self.asset, enabled=False)
+        runner = WalkForwardRunner(
+            db_manager=self.db,
+            assets={disabled_asset.ticker_symbol: disabled_asset},
+            data_source_resolver=self.mock_resolver,
+        )
+
+        spec = WalkForwardRunSpec(
+            ticker_symbol=disabled_asset.ticker_symbol,
+            windows=WalkForwardWindowSpec(
+                train_candle_count=15,
+                test_candle_count=5,
+                step_size_candles=5,
+                warmup_candle_count=2,
+                window_mode=WindowMode.ROLLING,
+            ),
+            initial_balance=Decimal("10000.0"),
+        )
+
+        summary = runner.run(spec)
+        assert summary.total_folds > 0
+        assert any(f.test_return_pct != 0.0 or f.train_return_pct != 0.0 for f in summary.fold_results)
 
 
 class TestWalkForwardApi(unittest.TestCase):

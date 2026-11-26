@@ -23,7 +23,11 @@ from src.agent.actions import (
     AgentActionService,
     AgentApprovalService,
 )
-from src.agent.automation import AutomationController, InvestigateActivityAnomaly
+from src.agent.automation import (
+    AutomationController,
+    InvestigateActivityAnomaly,
+    NoSignalsExperimentSuggester,
+)
 from src.agent.backtest.backtest_service import BacktestService
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.monitoring.starvation_watchdog import StarvationWatchdog
@@ -303,12 +307,15 @@ class Application(ApplicationLoggingMixin):
             database_manager=db_manager,
             vcs=self._vcs,
             event_bus=self._trading_event_bus,
+            rest_manager=self._managers.rest_manager,
+            agent_event_bus=self._event_bus,
         )
         self._incident_aggregator = IncidentAggregator(
             database_manager=db_manager,
             event_bus=self._trading_event_bus,
             investigation_callback=self._runtime_debug_service.investigate_incident,
             auto_investigate=True,
+            async_investigation=True,
         )
         self._incident_aggregator.subscribe(self._trading_event_bus)
 
@@ -385,6 +392,8 @@ class Application(ApplicationLoggingMixin):
             db_manager=self._db_manager,
             tool_map=tool_map,
         )
+        if self._runtime_debug_service is not None:
+            self._runtime_debug_service.set_llm(self._llm_manager.proxy_adapter)
 
         oracle_context = OracleContext(
             summary_interval=summary_interval_for(self._llm_config.schedule),
@@ -455,6 +464,11 @@ class Application(ApplicationLoggingMixin):
             conversation_store=self._conversation_service,
         )
         self._approval_service = approval_service
+        if self._runtime_debug_service is not None:
+            self._runtime_debug_service.set_agent_services(
+                action_service=action_service,
+                approval_service=approval_service,
+            )
         try:
             backtest_service = self._build_backtest_service()
         except Exception as exc:  # pylint: disable=broad-except
@@ -474,10 +488,15 @@ class Application(ApplicationLoggingMixin):
             if backtest_service is not None else None
         )
         self._drift_detector = drift_detector
+        experiment_suggester = NoSignalsExperimentSuggester(
+            configuration_service=configuration_service,
+            strategy_registry=self._strategies_registry,
+        )
         investigation = InvestigateActivityAnomaly(
             activity_provider=self._activity_tracker,
             drift_detector=drift_detector,
             event_bus=self._event_bus,
+            experiment_suggester=experiment_suggester,
         )
         watchdog = StarvationWatchdog(
             activity_provider=self._activity_tracker,
@@ -605,6 +624,9 @@ class Application(ApplicationLoggingMixin):
         if self._automation:
             self._automation.stop()
             self._automation = None
+        if self._incident_aggregator:
+            self._incident_aggregator.shutdown()
+            self._incident_aggregator = None
         if self._event_bus:
             self._event_bus.close()
             self._event_bus = None

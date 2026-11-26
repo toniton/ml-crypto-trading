@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Optional
 from uuid import uuid4
 
@@ -41,12 +42,25 @@ class IncidentAggregator(ApplicationLoggingMixin):
             event_bus: Optional[EventBus] = None,
             investigation_callback: Optional[Callable[[str], Any]] = None,
             auto_investigate: bool = True,
+            async_investigation: bool = False,
+            max_workers: int = 2,
     ):
         self._database_manager = database_manager
         self._event_bus = event_bus
         self._investigation_callback = investigation_callback
         self._auto_investigate = auto_investigate
+        self._async_investigation = async_investigation
+        self._executor: Optional[ThreadPoolExecutor] = (
+            ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="runtime-debug")
+            if async_investigation
+            else None
+        )
         self._subscription_id: Optional[str] = None
+
+    def shutdown(self) -> None:
+        if self._executor is not None:
+            self._executor.shutdown(wait=False)
+            self._executor = None
 
     def subscribe(self, event_bus: EventBus) -> str:
         self._event_bus = event_bus
@@ -156,11 +170,22 @@ class IncidentAggregator(ApplicationLoggingMixin):
                     incident_id_to_investigate = str(incident.id)
 
         if should_trigger_investigation and self._investigation_callback and incident_id_to_investigate:
-            try:
-                self._investigation_callback(incident_id_to_investigate)
-            except Exception as exc:
-                self.app_logger.warning(
-                    f"Failed to auto-trigger investigation for incident {incident_id_to_investigate}: {exc}"
-                )
+            self._dispatch_investigation(incident_id_to_investigate)
 
         return incident
+
+    def _dispatch_investigation(self, incident_id: str) -> None:
+        if self._executor is not None:
+            self._executor.submit(self._run_investigation, incident_id)
+            return
+        self._run_investigation(incident_id)
+
+    def _run_investigation(self, incident_id: str) -> None:
+        if not self._investigation_callback:
+            return
+        try:
+            self._investigation_callback(incident_id)
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                f"Failed to auto-trigger investigation for incident {incident_id}: {exc}"
+            )

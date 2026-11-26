@@ -5,7 +5,13 @@ from typing import List, Optional
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
-from src.core.interfaces.conversation_store import ConversationMessage, SessionSummary
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    RESERVED_AGENT_SESSION_TITLE,
+    ConversationMessage,
+    ReservedSessionDeletionError,
+    SessionSummary,
+)
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.database.dao.conversation_dao import ConversationDao
 from src.database.dao.conversation_message_dao import ConversationMessageDao
@@ -101,12 +107,24 @@ class PostgresConversationRepository(ConversationRepository):
                 created_at=conversation.created_at,
                 updated_at=conversation.updated_at,
                 message_count=count,
-                title=titles.get(conversation.id),
+                title=(
+                    RESERVED_AGENT_SESSION_TITLE
+                    if conversation.id == RESERVED_AGENT_SESSION_ID
+                    else titles.get(conversation.id)
+                ),
+                is_reserved=conversation.id == RESERVED_AGENT_SESSION_ID,
+                session_kind=(
+                    "agent" if conversation.id == RESERVED_AGENT_SESSION_ID else "user"
+                ),
             )
             for conversation, count in rows
         ]
 
     def delete_session(self, session_id: str) -> bool:
+        if session_id == RESERVED_AGENT_SESSION_ID:
+            raise ReservedSessionDeletionError(
+                f"Reserved agent session '{session_id}' cannot be deleted."
+            )
         exists = (
             self.database_session.query(ConversationDao.id)
             .filter(ConversationDao.id == session_id)
@@ -140,7 +158,8 @@ class PostgresConversationRepository(ConversationRepository):
             )
         )
         self.database_session.flush()
-        self._prune(session_id, max_turns)
+        if session_id != RESERVED_AGENT_SESSION_ID:
+            self._prune(session_id, max_turns)
         self.database_session.query(ConversationDao).filter(ConversationDao.id == session_id).update(
             {"updated_at": func.now()}  # pylint: disable=not-callable
         )

@@ -29,6 +29,7 @@ def _make_asset(
         quote_decimals: int = 2,
         strategies: list[StrategyConfig] | None = None,
         consensus: ConsensusFactor | None = None,
+        enabled: bool = True,
 ) -> Asset:
     base, quote = ticker_symbol.split("_")
     return Asset(
@@ -43,6 +44,7 @@ def _make_asset(
         candles_timeframe="MIN1",
         strategies=strategies,
         consensus=consensus,
+        enabled=enabled,
     )
 
 
@@ -157,6 +159,37 @@ class TestBacktestRunnerFills:
         result = runner.run_one(_make_request(tmp_path))
 
         assert len(result.fills) > 0
+
+    def test_disabled_asset_is_forced_enabled_during_backtest(self, tmp_path):
+        _write_history(tmp_path, "BTC_USD", [(T0, "100"), (T0 + 1000, "99"), (T0 + 2000, "98")])
+        asset = _make_asset(
+            strategies=[_buy_lower_strategy()],
+            consensus=_consensus(),
+            enabled=False,
+        )
+        runner = _make_runner(asset)
+
+        result = runner.run_one(_make_request(tmp_path))
+
+        assert [fill.execution_price for fill in result.fills] == [Decimal("100"), Decimal("99")]
+        assert result.final_balance == Decimal("9980.10")
+
+    def test_run_session_propagates_session_commit_hash(self, tmp_path):
+        from src.backtest.domain.session import BacktestSession
+
+        _write_history(tmp_path, "BTC_USD", [(T0, "100"), (T0 + 1000, "99"), (T0 + 2000, "98")])
+        asset = _make_asset(strategies=[_buy_lower_strategy()], consensus=_consensus())
+        runner = _make_runner(asset)
+        session = BacktestSession(
+            ticker_symbol="BTC_USD",
+            request=_make_request(tmp_path),
+            commit_hash="commit_variant_abc123",
+        )
+
+        result = runner.run_session(session)
+
+        assert len(result.orders) > 0
+        assert all(order.commit_hash == "commit_variant_abc123" for order in result.orders)
 
 
 class TestBacktestTool:

@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+import re
 import threading
+import time
 from typing import Any, List, Optional
 
-from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
+from src.agent.oracle.events import OracleSummaryEvent
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    ConversationMessage,
+    ConversationStore,
+)
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
+from src.core.severity import Severity
 from src.events.agent_events import (
     AgentActionCompletedEvent,
     AgentActionCreatedEvent,
@@ -20,12 +28,23 @@ from src.logging.application_logging_mixin import ApplicationLoggingMixin
 
 
 class AgentEventProjector(ApplicationLoggingMixin):
-    def __init__(self, event_bus: EventBus, conversation_store: ConversationStore):
+    ORACLE_COOLDOWN_SECONDS = 300.0
+    ELEVATED_RISK_KEYWORDS = ("warning", "critical", "high", "breach", "halt", "block", "pause", "alert")
+
+    def __init__(
+            self,
+            event_bus: EventBus,
+            conversation_store: ConversationStore,
+            oracle_cooldown_seconds: float = ORACLE_COOLDOWN_SECONDS,
+    ):
         self._event_bus = event_bus
         self._conversation_store = conversation_store
+        self._oracle_cooldown_seconds = oracle_cooldown_seconds
         self._actions: dict[str, dict] = {}
         self._approvals: dict[str, dict] = {}
         self._seen_event_ids: set[str] = set()
+        self._last_oracle_fingerprint: Optional[str] = None
+        self._last_oracle_emitted_at: float = 0.0
         self._hydrated: bool = False
         self._lock = threading.Lock()
         self._subscriptions: list[str] = []
@@ -39,6 +58,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
                 AgentActionFailedEvent,
                 AgentApprovalRequestedEvent,
                 AgentApprovalResolvedEvent,
+                OracleSummaryEvent,
         ):
             self._subscriptions.append(
                 self._event_bus.subscribe(event_cls.__name__, CallbackSubscription(self._on_event))
@@ -71,16 +91,99 @@ class AgentEventProjector(ApplicationLoggingMixin):
             self._on_agent_approval_requested(event)
         elif isinstance(event, AgentApprovalResolvedEvent):
             self._on_agent_approval_resolved(event)
+        elif isinstance(event, OracleSummaryEvent):
+            self._on_oracle_summary(event)
+
+    def _on_oracle_summary(self, event: OracleSummaryEvent) -> None:
+        summary = event.payload
+        fingerprint = "|".join(
+            [
+                summary.market_state,
+                summary.trading_state,
+                summary.risk_state,
+                ";".join(summary.observations),
+                ";".join(summary.recommendations),
+            ]
+        )
+        risk_lower = summary.risk_state.lower()
+        is_elevated = any(keyword in risk_lower for keyword in self.ELEVATED_RISK_KEYWORDS)
+        severity = Severity.WARNING if is_elevated else Severity.INFO
+
+        now = time.monotonic()
+        with self._lock:
+            unchanged = fingerprint == self._last_oracle_fingerprint
+            within_cooldown = (now - self._last_oracle_emitted_at) < self._oracle_cooldown_seconds
+            if unchanged and within_cooldown and not is_elevated:
+                return
+            self._last_oracle_fingerprint = fingerprint
+            self._last_oracle_emitted_at = now
+
+        lines = [
+            "### Oracle Market & Risk Summary",
+            "",
+            summary.summary,
+            "",
+            f"- **Market state:** `{summary.market_state}`",
+            f"- **Trading state:** `{summary.trading_state}`",
+            f"- **Risk state:** `{summary.risk_state}`",
+        ]
+        if summary.observations:
+            lines.append("")
+            lines.append("**Observations:**")
+            lines.extend(f"- {obs}" for obs in summary.observations)
+        if summary.recommendations:
+            lines.append("")
+            lines.append("**Recommendations:**")
+            lines.extend(f"- {rec}" for rec in summary.recommendations)
+
+        content = "\n".join(lines)
+        blocks = [{"type": "markdown", "content": content}]
+        title = "Oracle Summary"
+        preview = self._build_preview(summary.summary or content)
+        message_id = f"oracle:{event.id}"
+
+        self._event_bus.publish(
+            AgentMessageCreatedEvent(
+                conversation_id=RESERVED_AGENT_SESSION_ID,
+                message_payload={
+                    "message_id": message_id,
+                    "conversation_id": RESERVED_AGENT_SESSION_ID,
+                    "title": title,
+                    "preview": preview,
+                    "severity": severity.value,
+                    "content": content,
+                    "blocks": blocks,
+                    "payload": {
+                        "blocks": blocks,
+                        "tokens": "",
+                        "notification": {
+                            "title": title,
+                            "preview": preview,
+                            "severity": severity.value,
+                        },
+                    },
+                },
+            )
+        )
+
+    @staticmethod
+    def _build_preview(content: str, max_length: int = 140) -> str:
+        plain = re.sub(r"[#*_`>]+", " ", content or "")
+        plain = re.sub(r"\s+", " ", plain).strip()
+        if len(plain) <= max_length:
+            return plain
+        return f"{plain[: max_length - 1].rstrip()}..."
 
     def _on_agent_message_created(self, event: AgentMessageCreatedEvent) -> None:
         conversation_id = self._resolve_conversation(event)
         payload = event.message_payload or {}
+        message_id = str(payload.get("message_id") or event.event_id)
         self._conversation_store.append(
             conversation_id,
             ConversationMessage(
                 role="assistant",
                 content=payload.get("content") or "Agent message",
-                message_id=event.event_id,
+                message_id=message_id,
                 payload=payload.get("payload") or {"blocks": payload.get("blocks") or []},
                 conversation_id=conversation_id,
             ),
@@ -124,6 +227,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
                             "type": "agent_approval",
                             "approval_id": event.approval_id,
                             "action_id": payload.get("agent_action_id"),
+                            "action_type": payload.get("action_type"),
                             "title": payload.get("title"),
                             "description": payload.get("description"),
                             "base_commit": payload.get("base_commit"),
@@ -158,11 +262,20 @@ class AgentEventProjector(ApplicationLoggingMixin):
             }
             if event.approval_payload and event.approval_payload.get("commit_hash"):
                 decision_data["commit_hash"] = event.approval_payload["commit_hash"]
+            if event.approval_payload and event.approval_payload.get("experiment_id"):
+                decision_data["experiment_id"] = event.approval_payload["experiment_id"]
+            if event.approval_payload and event.approval_payload.get("action_type"):
+                decision_data["action_type"] = event.approval_payload["action_type"]
+            subject = (
+                "experiment proposal"
+                if decision_data.get("action_type") == "RUN_EXPERIMENT"
+                else "configuration change"
+            )
             self._conversation_store.append(
                 conversation_id,
                 ConversationMessage(
                     role="assistant",
-                    content=f"{decision_label} configuration change: {title}",
+                    content=f"{decision_label} {subject}: {title}",
                     message_id=f"decision:{event.approval_id}",
                     payload={"decision": decision_data},
                     conversation_id=conversation_id,
@@ -227,23 +340,7 @@ class AgentEventProjector(ApplicationLoggingMixin):
         if conversation_id:
             return conversation_id
 
-        agent_context_id = (
-            event.agent_context_id
-            if isinstance(event, AgentMessageCreatedEvent) and event.agent_context_id
-            else "agent"
-        )
-        server_profile_id = (
-            event.server_profile_id
-            if isinstance(event, AgentMessageCreatedEvent) and event.server_profile_id
-            else "default"
-        )
-        user_id = (
-            event.user_id
-            if isinstance(event, AgentMessageCreatedEvent) and event.user_id
-            else "system"
-        )
-        session_id = f"system:{server_profile_id}:{agent_context_id}:{user_id}"
-        return self._conversation_store.get_or_create(session_id)
+        return self._conversation_store.get_or_create(RESERVED_AGENT_SESSION_ID)
 
     # Read-model queries used by REST routes.
 

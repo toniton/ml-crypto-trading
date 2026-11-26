@@ -11,6 +11,7 @@ from circuitbreaker import circuit, CircuitBreakerError, CircuitBreakerMonitor
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
@@ -102,6 +103,16 @@ class RestManager(ExchangeRestManager, RestRegistry):
     def get_instrument_fees(self, exchange: str, ticker_symbol: str) -> Fees:
         service = self.get_service(exchange)
         builder = service.builder().instrument_fees(ticker_symbol)
+        return service.execute(builder)
+
+    @cached(cache=TTLCache(maxsize=1024, ttl=3600))
+    @_instrument_rest("get_instrument_metadata")
+    @circuit(failure_threshold=5, expected_exception=(HTTPError, RuntimeError), recovery_timeout=60)
+    def get_instrument_metadata(
+            self, exchange: str, ticker_symbol: str
+    ) -> Optional[InstrumentMetadata]:
+        service = self.get_service(exchange)
+        builder = service.builder().instrument_metadata(ticker_symbol)
         return service.execute(builder)
 
     @_instrument_rest("get_order")

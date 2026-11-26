@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from src.core.interfaces.exchange_rest_builder import ExchangeRestBuilder
@@ -57,6 +58,13 @@ class BacktestRestBuilder(ExchangeRestBuilder[T, R]):
 
     def instrument_fees(self, ticker_symbol: str) -> 'BacktestRestBuilder[T, Fees]':
         self.method_name = "instrument_fees"
+        self.params = {"ticker_symbol": ticker_symbol}
+        return self
+
+    def instrument_metadata(
+            self, ticker_symbol: str
+    ) -> 'BacktestRestBuilder[T, Optional[InstrumentMetadata]]':
+        self.method_name = "instrument_metadata"
         self.params = {"ticker_symbol": ticker_symbol}
         return self
 

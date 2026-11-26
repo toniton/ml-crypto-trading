@@ -48,3 +48,22 @@ def test_extract_runtime_error_exchange_request_error():
     assert event.severity == Severity.CRITICAL
     assert event.metadata["url"] == "https://api.crypto.com/v2/order"
     assert event.metadata["method"] == "POST"
+
+
+def test_extract_runtime_error_http_500_with_exchange_code_415():
+    cause = ExchangeRequestError(
+        message="HTTP error: BELOW_MIN_ORDER_SIZE",
+        http_status=500,
+        response_body={"code": 415, "message": "BELOW_MIN_ORDER_SIZE"},
+        url="https://api.crypto.com/exchange/v1/private/create-order",
+        method="POST",
+    )
+    exc = RuntimeError("Error executing and/or saving order:")
+    exc.__cause__ = cause
+
+    event = ErrorExtractor.extract_runtime_error_from_order_exception(exc)
+
+    assert event.message == "BELOW_MIN_ORDER_SIZE"
+    assert event.exchange_code == 415
+    assert event.http_status == 500
+    assert event.severity == Severity.CRITICAL

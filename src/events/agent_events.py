@@ -88,6 +88,17 @@ class AgentApprovalDecisionRequestedEvent(AgentEvent):
 
 
 @dataclass
+class AgentExperimentRunRequestedEvent(AgentEvent):
+    EVENT_TYPE = "agent_experiment_run_requested"
+    approval_id: str = ""
+    asset: str = ""
+    experiment_config: dict[str, Any] = None
+    conversation_id: Optional[str] = None
+    author: str = "user"
+    title: str = ""
+
+
+@dataclass
 class TradingActivityAnomalyDetectedEvent(AgentEvent):
     EVENT_TYPE = "trading_activity_anomaly_detected"
     asset: str = ""

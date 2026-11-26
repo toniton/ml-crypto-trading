@@ -1,19 +1,26 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from src.agent.actions.models import (
     ActionStatus,
     AgentAction,
+    AgentActionType,
     AgentApprovalRequest,
     ApprovalStatus,
 )
 from src.agent.actions.notification_policy import NotificationPolicy
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.configuration.models import ConfigChange, ConfigurationProposal
-from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    ConversationMessage,
+    ConversationStore,
+)
 from src.core.interfaces.event_bus import EventBus
+from src.core.severity import Severity
 from src.events.agent_events import (
     AgentActionCompletedEvent,
     AgentActionCreatedEvent,
@@ -21,6 +28,7 @@ from src.events.agent_events import (
     AgentActionUpdatedEvent,
     AgentApprovalRequestedEvent,
     AgentApprovalResolvedEvent,
+    AgentExperimentRunRequestedEvent,
     AgentMessageCreatedEvent,
 )
 from src.logging.agent_logging_mixin import AgentLoggingMixin
@@ -114,6 +122,14 @@ class AgentActionService(AgentLoggingMixin):
         actions.sort(key=lambda a: a.created_at, reverse=True)
         return actions[:limit]
 
+    @staticmethod
+    def _build_preview(content: str, max_length: int = 140) -> str:
+        plain = re.sub(r"[#*_`>]+", " ", content or "")
+        plain = re.sub(r"\s+", " ", plain).strip()
+        if len(plain) <= max_length:
+            return plain
+        return f"{plain[: max_length - 1].rstrip()}..."
+
     def send_proactive_message(
             self,
             conversation_id: Optional[str],
@@ -133,16 +149,33 @@ class AgentActionService(AgentLoggingMixin):
             )
             return
 
+        resolved_conversation_id = conversation_id or RESERVED_AGENT_SESSION_ID
+        title = action.title if action and action.title else "Agent Update"
+        severity = action.severity.value if action else Severity.INFO.value
+        preview = self._build_preview(content)
+
         if self._event_bus:
-            payload = {"blocks": blocks, "tokens": ""}
+            payload = {
+                "blocks": blocks,
+                "tokens": "",
+                "notification": {
+                    "title": title,
+                    "preview": preview,
+                    "severity": severity,
+                },
+            }
             if action:
                 payload["agent_action"] = action.model_dump(mode="json")
 
             self._event_bus.publish(
                 AgentMessageCreatedEvent(
-                    conversation_id=conversation_id,
+                    conversation_id=resolved_conversation_id,
                     message_payload={
                         "message_id": message_id,
+                        "conversation_id": resolved_conversation_id,
+                        "title": title,
+                        "preview": preview,
+                        "severity": severity,
                         "content": content,
                         "blocks": blocks,
                         "payload": payload,
@@ -165,24 +198,36 @@ class AgentApprovalService(AgentLoggingMixin):
             action_service: AgentActionService,
             event_bus: Optional[EventBus] = None,
             conversation_store: Optional[ConversationStore] = None,
+            experiment_launcher: Optional[
+                Callable[[dict[str, Any], AgentApprovalRequest], dict[str, Any]]
+            ] = None,
     ):
         self._vcs = vcs
         self._configuration_service = configuration_service
         self._action_service = action_service
         self._event_bus = event_bus
         self._conversation_store = conversation_store
+        self._experiment_launcher = experiment_launcher
         self._approvals: Dict[str, AgentApprovalRequest] = {}
 
     def request_approval(self, request: AgentApprovalRequest) -> AgentApprovalRequest:
+        if not request.conversation_id:
+            request.conversation_id = RESERVED_AGENT_SESSION_ID
         self._approvals[request.id] = request
         self._action_service.update_status(
             request.agent_action_id, ActionStatus.WAITING_FOR_USER
         )
 
         if self._event_bus:
+            approval_payload = request.model_dump(mode="json")
+            approval_payload.setdefault("severity", Severity.WARNING.value)
+            approval_payload.setdefault(
+                "preview",
+                AgentActionService._build_preview(request.description or request.title),
+            )
             event = AgentApprovalRequestedEvent(
                 approval_id=request.id,
-                approval_payload=request.model_dump(mode="json"),
+                approval_payload=approval_payload,
             )
             event.set_causality(
                 correlation_id=str(request.correlation_id) if request.correlation_id else None,
@@ -360,6 +405,14 @@ class AgentApprovalService(AgentLoggingMixin):
             self._publish_resolved(approval, "reject", conversation_id=conversation_id)
             return approval, None, []
 
+        if approval.action_type == AgentActionType.RUN_EXPERIMENT:
+            return self._approve_experiment_run(
+                approval=approval,
+                author=author,
+                now=now,
+                conversation_id=conversation_id,
+            )
+
         # Validate VCS state consistency: base_commit must match current HEAD
         current_head = self._vcs.head("HEAD").hash
         if approval.base_commit and not (
@@ -418,12 +471,70 @@ class AgentApprovalService(AgentLoggingMixin):
 
         return approval, commit.hash, warnings
 
+    def _approve_experiment_run(
+            self,
+            approval: AgentApprovalRequest,
+            author: str,
+            now: datetime,
+            conversation_id: Optional[str] = None,
+    ) -> Tuple[AgentApprovalRequest, Optional[str], List[str]]:
+        experiment_config = approval.proposed_change.get("experiment_config")
+        if not isinstance(experiment_config, dict) or not experiment_config.get("ticker_symbol"):
+            approval.status = ApprovalStatus.CANCELLED
+            self._action_service.update_status(
+                approval.agent_action_id,
+                ActionStatus.FAILED,
+                error="Missing suggested experiment_config in approval payload.",
+            )
+            raise ValueError("Missing suggested experiment_config in approval payload.")
+
+        approval.status = ApprovalStatus.APPROVED
+        self._action_service.update_status(
+            approval.agent_action_id,
+            ActionStatus.COMPLETED,
+            completed_at=now,
+        )
+
+        if self._experiment_launcher is not None:
+            result = self._experiment_launcher(experiment_config, approval) or {}
+            experiment_id = str(result.get("experiment_id") or result.get("id") or "")
+            branch_id = str(result.get("branch_id") or "")
+            self._publish_resolved(
+                approval,
+                "approve",
+                conversation_id=conversation_id,
+                experiment_id=experiment_id or None,
+                branch_id=branch_id or None,
+            )
+            return approval, None, []
+
+        if self._event_bus is not None:
+            run_event = AgentExperimentRunRequestedEvent(
+                approval_id=approval.id,
+                asset=approval.asset or str(experiment_config.get("ticker_symbol") or ""),
+                experiment_config=experiment_config,
+                conversation_id=conversation_id or approval.conversation_id,
+                author=author,
+                title=approval.title,
+            )
+            run_event.set_causality(
+                correlation_id=str(approval.correlation_id) if approval.correlation_id else None,
+                causation_id=approval.id,
+                actor_type="USER",
+                source="agent_approval_service",
+            )
+            self._event_bus.publish(run_event)
+
+        return approval, None, []
+
     def _publish_resolved(
             self,
             approval: AgentApprovalRequest,
             decision: str,
             commit_hash: Optional[str] = None,
             conversation_id: Optional[str] = None,
+            experiment_id: Optional[str] = None,
+            branch_id: Optional[str] = None,
     ) -> None:
         if self._event_bus:
             payload = approval.model_dump(mode="json")
@@ -431,6 +542,10 @@ class AgentApprovalService(AgentLoggingMixin):
                 payload["commit_hash"] = commit_hash
             if conversation_id:
                 payload["conversation_id"] = conversation_id
+            if experiment_id:
+                payload["experiment_id"] = experiment_id
+            if branch_id:
+                payload["branch_id"] = branch_id
             event = AgentApprovalResolvedEvent(
                 approval_id=approval.id,
                 decision=decision,

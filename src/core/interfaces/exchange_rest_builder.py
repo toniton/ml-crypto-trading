@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from src.core.interfaces.mapper import Mapper
@@ -54,6 +55,12 @@ class ExchangeRestBuilder(abc.ABC, Generic[T, R]):
 
     @abc.abstractmethod
     def instrument_fees(self, ticker_symbol: str) -> 'ExchangeRestBuilder[T, Fees]':
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def instrument_metadata(
+            self, ticker_symbol: str
+    ) -> 'ExchangeRestBuilder[T, Optional[InstrumentMetadata]]':
         raise NotImplementedError()
 
     @abc.abstractmethod

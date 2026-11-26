@@ -52,6 +52,35 @@ def test_delete_session_removes_conversation(client):
     assert deleted.status_code == 200 and remaining == []
 
 
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    RESERVED_AGENT_SESSION_TITLE,
+)
+
+
 def test_delete_unknown_session_returns_404(client):
     response = client.delete("/api/v1/sessions/does-not-exist")
     assert response.status_code == 404
+
+
+def test_reserved_agent_session_is_tagged_read_write_and_cannot_be_deleted(client):
+    client.post(
+        f"/api/v1/sessions/{RESERVED_AGENT_SESSION_ID}/messages",
+        json={"role": "assistant", "content": "Autonomous diagnostic update"},
+    )
+    # User can reply directly in the reserved agent session
+    reply = client.post(
+        f"/api/v1/sessions/{RESERVED_AGENT_SESSION_ID}/messages",
+        json={"role": "user", "content": "Why did BTC stop trading?"},
+    )
+    assert reply.status_code == 200
+
+    sessions = client.get("/api/v1/sessions").json()
+    reserved = next(s for s in sessions if s["id"] == RESERVED_AGENT_SESSION_ID)
+    assert reserved["is_reserved"] is True
+    assert reserved["session_kind"] == "agent"
+    assert reserved["title"] == RESERVED_AGENT_SESSION_TITLE
+    assert reserved["message_count"] == 2
+
+    delete_resp = client.delete(f"/api/v1/sessions/{RESERVED_AGENT_SESSION_ID}")
+    assert delete_resp.status_code == 403

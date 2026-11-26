@@ -11,6 +11,7 @@ from src.database.repositories.providers.postgres_order_repository import Postgr
 from src.database.repositories.providers.postgres_runtime_incident_repository import (
     PostgresRuntimeIncidentRepository,
 )
+from src.exchange.interfaces.exchange_rest_manager import ExchangeRestManager
 from src.logging.application_logging_mixin import ApplicationLoggingMixin
 from src.trading.health.health_monitor import HealthMonitor
 from src.vcs.application.service import VCSService
@@ -22,10 +23,12 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
             database_manager: Optional[DatabaseManager] = None,
             vcs: Optional[VCSService] = None,
             health_monitor: Optional[HealthMonitor] = None,
+            rest_manager: Optional[ExchangeRestManager] = None,
     ):
         self._database_manager = database_manager
         self._vcs = vcs
         self._health_monitor = health_monitor
+        self._rest_manager = rest_manager
 
     @staticmethod
     def get_machine_snapshot() -> dict[str, Any]:
@@ -125,9 +128,31 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
             return {}
 
     def get_exchange_instrument_metadata(self, exchange: str, symbol: str) -> dict[str, Any]:
-        # Exchange rule catalog for known symbols
         normalized_symbol = symbol.upper().replace("/", "_").replace("-", "_")
         provider = (exchange or "").upper()
+
+        if self._rest_manager is not None and provider:
+            try:
+                live = self._rest_manager.get_instrument_metadata(provider, normalized_symbol)
+                if live is not None:
+                    return {
+                        "exchange": live.exchange,
+                        "symbol": live.symbol,
+                        "quantity_precision": live.quantity_precision,
+                        "min_quantity": str(live.min_quantity),
+                        "quantity_step": str(live.quantity_step),
+                        "price_precision": live.price_precision,
+                        "min_price": str(live.min_price) if live.min_price is not None else "0.01",
+                        "min_notional": str(live.min_notional) if live.min_notional is not None else None,
+                        "source": "exchange_api",
+                    }
+            except Exception as exc:  # pylint: disable=broad-except
+                self.app_logger.warning(
+                    "Unable to fetch live instrument metadata for %s on %s; using static fallback: %s",
+                    normalized_symbol,
+                    provider,
+                    exc,
+                )
 
         if provider == "CRYPTO_DOT_COM":
             if "BTC" in normalized_symbol:
@@ -139,6 +164,8 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
                     "quantity_step": "0.0001",
                     "price_precision": 2,
                     "min_price": "0.01",
+                    "min_notional": None,
+                    "source": "static_fallback",
                 }
             if "ETH" in normalized_symbol:
                 return {
@@ -149,6 +176,8 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
                     "quantity_step": "0.001",
                     "price_precision": 2,
                     "min_price": "0.01",
+                    "min_notional": None,
+                    "source": "static_fallback",
                 }
 
         return {
@@ -159,4 +188,6 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
             "quantity_step": "0.0001",
             "price_precision": 2,
             "min_price": "0.01",
+            "min_notional": None,
+            "source": "static_fallback",
         }

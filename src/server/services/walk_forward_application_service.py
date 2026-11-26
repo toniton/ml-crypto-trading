@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from datetime import datetime
 from typing import Any, Optional
 
 from api.interfaces.asset import Asset
@@ -51,6 +52,19 @@ class WalkForwardApplicationService(ApplicationLoggingMixin):
         self._cancellation_events: dict[str, threading.Event] = {}
         self._threads: dict[str, threading.Thread] = {}
         self._stop_heartbeat_events: dict[str, threading.Event] = {}
+
+    def pin_market_data_snapshot(
+            self,
+            ticker_symbol: str,
+            start_time: Optional[datetime] = None,
+            end_time: Optional[datetime] = None,
+    ) -> Optional[str]:
+        """Snapshot recorded market data so multi-candidate walk-forward runs share a window."""
+        return self._resolver.pin_market_data_snapshot(
+            ticker_symbol=ticker_symbol,
+            start_time=start_time,
+            end_time=end_time,
+        )
 
     def start_run(self, spec: WalkForwardRunSpec) -> dict[str, Any]:
         vcs_ref = spec.configuration.vcs_commit_hash or "HEAD"

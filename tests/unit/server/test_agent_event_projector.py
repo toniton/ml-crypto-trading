@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import uuid
 
-from src.core.interfaces.conversation_store import ConversationMessage
+from src.agent.oracle.events import OracleSummaryEvent
+from src.agent.oracle.oracle_summary import OracleSummary
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    RESERVED_AGENT_SESSION_TITLE,
+    ConversationMessage,
+)
 from src.events.agent_events import (
     AgentActionCreatedEvent,
     AgentActionUpdatedEvent,
@@ -61,8 +67,42 @@ def test_system_conversation_resolution_when_no_id():
     bus.publish(event)
     sessions = store.list_sessions()
     assert len(sessions) == 1
-    assert sessions[0].id == "system:prod:starvation_watchdog:system"
+    assert sessions[0].id == RESERVED_AGENT_SESSION_ID
+    assert sessions[0].is_reserved is True
+    assert sessions[0].session_kind == "agent"
+    assert sessions[0].title == RESERVED_AGENT_SESSION_TITLE
     assert store.messages(sessions[0].id)[0].content == "autonomous alert"
+
+
+def test_oracle_summary_projected_and_deduplicated_in_reserved_session():
+    bus = MessageEventBus()
+    _proj, store = _projector(bus)
+    summary = OracleSummary(
+        summary="Market is calm and strategies are balanced.",
+        market_state="normal",
+        trading_state="active",
+        risk_state="nominal",
+        observations=["Spread stable"],
+        recommendations=["Keep current weights"],
+    )
+    bus.publish(OracleSummaryEvent(summary))
+    # Identical summary within cooldown should be deduplicated
+    bus.publish(OracleSummaryEvent(summary))
+    messages = store.messages(RESERVED_AGENT_SESSION_ID)
+    assert len(messages) == 1
+    assert "Oracle Market & Risk Summary" in messages[0].content
+
+    # Elevated risk summary bypasses cooldown immediately
+    elevated = OracleSummary(
+        summary="Drawdown guard approaching threshold.",
+        market_state="volatile",
+        trading_state="active",
+        risk_state="warning: drawdown near limit",
+        observations=["BTC volatility spike"],
+        recommendations=["Consider tightening exposure"],
+    )
+    bus.publish(OracleSummaryEvent(elevated))
+    assert len(store.messages(RESERVED_AGENT_SESSION_ID)) == 2
 
 
 def test_autonomous_approval_does_not_pollute_user_session():
@@ -160,8 +200,8 @@ def test_autonomous_approval_routes_to_system_session_and_keeps_user_session_cle
     user_messages = store.messages(user_sid)
     assert len(user_messages) == 0
 
-    # System session receives the background record
-    system_sessions = [s for s in store.list_sessions() if s.id.startswith("system:")]
+    # Reserved agent session receives the background record
+    system_sessions = [s for s in store.list_sessions() if s.id == RESERVED_AGENT_SESSION_ID]
     assert len(system_sessions) == 1
     system_messages = store.messages(system_sessions[0].id)
     assert len(system_messages) == 1

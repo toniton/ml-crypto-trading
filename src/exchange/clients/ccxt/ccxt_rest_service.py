@@ -68,6 +68,7 @@ class CCXTExchangeRestService(ExchangeRestService):
             "fetch_order": self._exchange.fetch_order,
             "fetch_open_orders": self._exchange.fetch_open_orders,
             "cancel_order": self._exchange.cancel_order,
+            "fetch_instrument_metadata": self._fetch_instrument_metadata,
         }
         method = method_map.get(endpoint.method_name)
         if method is None or not callable(method):
@@ -80,6 +81,19 @@ class CCXTExchangeRestService(ExchangeRestService):
             return mapper.map(response)
 
         return response
+
+    def _fetch_instrument_metadata(self, symbol: str) -> dict:
+        markets = self._exchange.load_markets()
+        if symbol in markets:
+            return markets[symbol]
+        slash_symbol = symbol.replace("_", "/").replace("-", "/")
+        if slash_symbol in markets:
+            return markets[slash_symbol]
+        normalized = symbol.upper().replace("/", "_").replace("-", "_")
+        for key, market in markets.items():
+            if key.upper().replace("/", "_").replace("-", "_") == normalized:
+                return market
+        return {}
 
     def builder(self) -> CCXTExchangeRestBuilder:
         return CCXTExchangeRestBuilder(self.get_provider_name())

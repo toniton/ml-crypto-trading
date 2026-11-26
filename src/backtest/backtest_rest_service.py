@@ -8,6 +8,7 @@ from uuid import uuid4
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order, OrderStatus
 from api.interfaces.timeframe import Timeframe
@@ -50,6 +51,7 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
             "account_balance": self._handle_account_balance,
             "account_fees": self._handle_account_fees,
             "instrument_fees": self._handle_instrument_fees,
+            "instrument_metadata": self._handle_instrument_metadata,
             "create_order": self._handle_create_order,
             "get_order": self._handle_get_order,
             "get_open_orders": self._handle_get_open_orders,
@@ -90,6 +92,19 @@ class BacktestRestService(ApplicationLoggingMixin, ExchangeRestService):
         return Fees(
             maker_fee_pct=Decimal("0.0"),
             taker_fee_pct=Decimal("0.0"),
+        )
+
+    def _handle_instrument_metadata(
+            self, ticker_symbol: str
+    ) -> InstrumentMetadata:
+        return InstrumentMetadata(
+            exchange=self.get_provider_name(),
+            symbol=ticker_symbol.upper().replace("/", "_").replace("-", "_"),
+            quantity_precision=4,
+            price_precision=2,
+            min_quantity=Decimal("0.0001"),
+            quantity_step=Decimal("0.0001"),
+            min_price=Decimal("0.01"),
         )
 
     def _handle_create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments
