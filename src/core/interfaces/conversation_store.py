@@ -9,6 +9,14 @@ from pydantic import BaseModel
 from src.core.interfaces.llm_adapter import ChatTurn
 
 
+RESERVED_AGENT_SESSION_ID = "agent:system"
+RESERVED_AGENT_SESSION_TITLE = "Agent Feed"
+
+
+class ReservedSessionDeletionError(ValueError):
+    """Raised when an attempt is made to delete a reserved system session."""
+
+
 class ConversationMessage(BaseModel):
     id: Optional[int] = None
     message_id: str = ""
@@ -25,6 +33,8 @@ class SessionSummary(BaseModel):
     updated_at: datetime
     message_count: int = 0
     title: Optional[str] = None
+    is_reserved: bool = False
+    session_kind: Literal["user", "agent"] = "user"
 
 
 class ConversationStore(ABC):

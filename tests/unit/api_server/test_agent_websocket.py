@@ -85,13 +85,24 @@ class TestAgentWebSocket(unittest.TestCase):
             self.assertEqual(data["asset"], "CRO_USD")
 
             msg_event = AgentMessageCreatedEvent(
-                conversation_id="sess-cro",
-                message_payload={"content": "CRO diagnostic summary", "blocks": []},
+                conversation_id="agent:system",
+                message_payload={
+                    "message_id": "msg-cro-1",
+                    "conversation_id": "agent:system",
+                    "title": "Trading Activity Diagnostic",
+                    "preview": "CRO diagnostic summary",
+                    "severity": "WARNING",
+                    "content": "CRO diagnostic summary",
+                    "blocks": [],
+                },
             )
             bus.publish(msg_event)
             msg_data = ws.receive_json()
             self.assertEqual(msg_data["event_name"], "agent_message_created")
-            self.assertEqual(msg_data["conversation_id"], "sess-cro")
+            self.assertEqual(msg_data["conversation_id"], "agent:system")
+            self.assertEqual(msg_data["title"], "Trading Activity Diagnostic")
+            self.assertEqual(msg_data["preview"], "CRO diagnostic summary")
+            self.assertEqual(msg_data["severity"], "WARNING")
 
     def test_unsubscribe_on_disconnect(self):
         bus = MessageEventBus()

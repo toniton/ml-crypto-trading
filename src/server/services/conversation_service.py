@@ -4,7 +4,13 @@ import threading
 import uuid
 from typing import List, Optional
 
-from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore, SessionSummary
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    ConversationMessage,
+    ConversationStore,
+    ReservedSessionDeletionError,
+    SessionSummary,
+)
 from src.core.interfaces.llm_adapter import ChatTurn
 from src.core.interfaces.database_manager import DatabaseManager
 from src.database.repositories.providers.postgres_conversation_repository import PostgresConversationRepository
@@ -71,7 +77,15 @@ class ConversationService(ConversationStore):
             repository = uow.get_repository(PostgresConversationRepository)
             return repository.list_sessions()
 
+    def ensure_reserved_agent_session(self) -> str:
+        """Ensure the dedicated autonomous agent session exists."""
+        return self.get_or_create(RESERVED_AGENT_SESSION_ID)
+
     def delete_session(self, session_id: str) -> bool:
+        if session_id == RESERVED_AGENT_SESSION_ID:
+            raise ReservedSessionDeletionError(
+                f"Reserved agent session '{session_id}' cannot be deleted."
+            )
         with self._db_manager.get_unit_of_work() as uow:
             repository = uow.get_repository(PostgresConversationRepository)
             deleted = repository.delete_session(session_id)
