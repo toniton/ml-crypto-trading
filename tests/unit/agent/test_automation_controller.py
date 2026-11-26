@@ -11,6 +11,7 @@ from src.agent.automation.automation_controller import AutomationController
 from src.agent.automation.investigate_activity_anomaly import InvestigateActivityAnomaly
 from src.agent.monitoring.activity_state import AssetActivityState
 from src.agent.monitoring.starvation_watchdog import StarvationWatchdog
+from src.core.interfaces.conversation_store import RESERVED_AGENT_SESSION_ID
 from src.events.agent_event_metadata import AgentEventMetadata
 from src.events.agent_events import (
     AgentActionPlanRequestedEvent,
@@ -130,7 +131,7 @@ def test_user_actions_bypass_authority_gate():
     assert executor.plan_and_execute.call_count == 1
 
 
-def test_anomaly_suppresses_autonomous_chat_message():
+def test_anomaly_routes_autonomous_diagnostic_to_reserved_agent_feed():
     executor = MagicMock()
     stale = AssetActivityState(ticker_symbol="BTC_USD", last_market_data_at=time.time() - 10000)
     controller, _bus = _controller(
@@ -142,7 +143,10 @@ def test_anomaly_suppresses_autonomous_chat_message():
         threshold=240.0,
     )
     controller._dispatch(event)
-    assert executor.plan_and_execute.call_count == 0
+    assert executor.plan_and_execute.call_count == 1
+    action = executor.plan_and_execute.call_args.args[0]
+    assert action.type == AgentActionType.SEND_MESSAGE
+    assert action.conversation_id == RESERVED_AGENT_SESSION_ID
 
 
 def test_approval_decision_dispatched():
