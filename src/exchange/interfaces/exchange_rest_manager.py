@@ -9,6 +9,7 @@ from typing import Any, Optional
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
@@ -41,6 +42,12 @@ class ExchangeRestManager(ABC):
 
     @abc.abstractmethod
     def get_instrument_fees(self, exchange: str, ticker_symbol: str) -> Fees:
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def get_instrument_metadata(
+            self, exchange: str, ticker_symbol: str
+    ) -> Optional[InstrumentMetadata]:
         raise NotImplementedError()
 
     @abc.abstractmethod

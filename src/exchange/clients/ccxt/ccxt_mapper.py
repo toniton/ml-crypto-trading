@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
@@ -160,6 +161,70 @@ class CCXTFeesMapper(Mapper[Dict[str, Any], Optional[Fees]], CCXTBaseMapper):
         )
 
 
+class CCXTInstrumentMetadataMapper(
+    Mapper[Dict[str, Any], Optional[InstrumentMetadata]], CCXTBaseMapper
+):
+    """Maps a CCXT market definition dictionary into InstrumentMetadata."""
+
+    def __init__(self, provider_name: str):
+        self._provider_name = provider_name
+
+    def map(self, source: Dict[str, Any]) -> Optional[InstrumentMetadata]:
+        if not isinstance(source, dict) or not source:
+            return None
+        precision = source.get("precision") or {}
+        limits = source.get("limits") or {}
+        amount_limits = limits.get("amount") or {}
+        cost_limits = limits.get("cost") or {}
+        price_limits = limits.get("price") or {}
+
+        raw_amount_prec = precision.get("amount")
+        raw_price_prec = precision.get("price")
+        qty_precision = self._precision_to_decimals(raw_amount_prec, default=4)
+        price_precision = self._precision_to_decimals(raw_price_prec, default=2)
+        qty_step = (
+            Decimal(str(raw_amount_prec))
+            if isinstance(raw_amount_prec, float) and raw_amount_prec < 1
+            else Decimal("1").scaleb(-qty_precision)
+        )
+        min_qty = (
+            Decimal(str(amount_limits["min"]))
+            if amount_limits.get("min") is not None
+            else qty_step
+        )
+        min_notional = (
+            Decimal(str(cost_limits["min"]))
+            if cost_limits.get("min") is not None
+            else None
+        )
+        min_price = (
+            Decimal(str(price_limits["min"]))
+            if price_limits.get("min") is not None
+            else Decimal("1").scaleb(-price_precision)
+        )
+        symbol = str(source.get("symbol") or "").upper().replace("/", "_").replace("-", "_")
+        return InstrumentMetadata(
+            exchange=self._provider_name,
+            symbol=symbol,
+            quantity_precision=qty_precision,
+            price_precision=price_precision,
+            min_quantity=min_qty,
+            quantity_step=qty_step,
+            min_price=min_price,
+            min_notional=min_notional,
+        )
+
+    @staticmethod
+    def _precision_to_decimals(value: Any, default: int) -> int:
+        if value is None:
+            return default
+        if isinstance(value, int):
+            return max(value, 0)
+        dec = Decimal(str(value)).normalize()
+        exp = dec.as_tuple().exponent
+        return abs(exp) if isinstance(exp, int) and exp < 0 else 0
+
+
 class CCXTMapperFactory:
     _MAPPER_REGISTRY: dict[str, type] = {
         'ticker': CCXTTickerMapper,
@@ -168,6 +233,7 @@ class CCXTMapperFactory:
         'orders': CCXTOrderMapper,
         'open_orders': CCXTOpenOrdersMapper,
         'fees': CCXTFeesMapper,
+        'instrument_metadata': CCXTInstrumentMetadataMapper,
     }
 
     @classmethod
@@ -176,9 +242,9 @@ class CCXTMapperFactory:
         if not mapper_class:
             return None
 
-        if subscription_type in ('orders', 'open_orders') and provider_name:
+        if subscription_type in ('orders', 'open_orders', 'instrument_metadata') and provider_name:
             return mapper_class(provider_name)
-        if subscription_type in ('orders', 'open_orders'):
+        if subscription_type in ('orders', 'open_orders', 'instrument_metadata'):
             raise ValueError(f"provider_name is required for '{subscription_type}' mapper")
 
         return mapper_class()

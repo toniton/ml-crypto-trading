@@ -14,14 +14,21 @@ from pydantic import BaseModel
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.timeframe import Timeframe
 from api.interfaces.trade_action import TradeAction
-from src.exchange.clients.cryptodotcom.mappers.cryptodotcom_mappers import CryptoDotComAccountBalanceMapper, \
-    CryptoDotComCandleMapper, \
-    CryptoDotComFeesMapper, CryptoDotComInstrumentFeesMapper, CryptoDotComMarketDataMapper, CryptoDotComOrderMapper, \
-    CryptoDotComOrdersMapper
+from src.exchange.clients.cryptodotcom.mappers.cryptodotcom_mappers import (
+    CryptoDotComAccountBalanceMapper,
+    CryptoDotComCandleMapper,
+    CryptoDotComFeesMapper,
+    CryptoDotComInstrumentFeesMapper,
+    CryptoDotComInstrumentMetadataMapper,
+    CryptoDotComMarketDataMapper,
+    CryptoDotComOrderMapper,
+    CryptoDotComOrdersMapper,
+)
 from src.exchange.clients.cryptodotcom.utils.helpers import params_to_str
 from src.exchange.clients.cryptodotcom.utils.timeframe_map import CryptoDotComTimeframe
 from src.core.interfaces.exchange_rest_builder import Endpoint, ExchangeRestBuilder
@@ -166,6 +173,16 @@ class CryptoDotComRestBuilder(Generic[T], ExchangeRestBuilder[dict, T]):
             mapper=CryptoDotComInstrumentFeesMapper()
         )
         return self._set_endpoint(endpoint, {"instrument_name": ticker_symbol})
+
+    def instrument_metadata(
+            self, ticker_symbol: str
+    ) -> CryptoDotComRestBuilder[Optional[InstrumentMetadata]]:
+        endpoint = Endpoint(
+            path="public/get-instruments",
+            private=False,
+            mapper=CryptoDotComInstrumentMetadataMapper(ticker_symbol),
+        )
+        return self._set_endpoint(endpoint)
 
     def create_order(  # pylint: disable=too-many-arguments,too-many-positional-arguments,unused-argument
             self,

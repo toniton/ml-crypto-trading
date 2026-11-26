@@ -5,11 +5,13 @@ from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import MagicMock, patch
 import pytest
 
+from api.interfaces.backtest_request import BacktestRequest
 from api.interfaces.backtest_run_spec import (
     BacktestConfigurationSourceType,
     BacktestConfigurationSpec,
     BacktestRunSpec,
 )
+from src.backtest.domain.session import BacktestSession
 from src.core.interfaces.execution_status import ExecutionStatus
 from src.server.services.backtest_application_service import BacktestApplicationService
 
@@ -191,4 +193,38 @@ class TestBacktestApplicationServiceLoopIndependence:  # pylint: disable=attribu
 
         assert recovered == ["bt_rec_1", "bt_rec_2"]
         self.mock_repo.recover_abandoned_sessions.assert_called_once_with(timeout_seconds=120)
+
+    @patch("threading.Thread")
+    def test_dispatch_next_checks_out_session_commit_hash(self, mock_thread_cls):
+        queued_session = BacktestSession(
+            id="bt_queued_1",
+            ticker_symbol="BTC_USD",
+            request=BacktestRequest(ticker_symbol="BTC_USD"),
+            commit_hash="forked_commit_abc123",
+            status=ExecutionStatus.RUNNING,
+        )
+        self.mock_repo.acquire_next_queued_session.return_value = queued_session
+        self.mock_vcs.checkout.return_value = self._valid_config()
+
+        self.service._dispatch_next()
+
+        self.mock_vcs.checkout.assert_called_once_with("forked_commit_abc123")
+        mock_thread_cls.return_value.start.assert_called_once()
+
+    @patch("threading.Thread")
+    def test_dispatch_next_falls_back_to_head_when_commit_hash_missing(self, mock_thread_cls):
+        queued_session = BacktestSession(
+            id="bt_queued_2",
+            ticker_symbol="BTC_USD",
+            request=BacktestRequest(ticker_symbol="BTC_USD"),
+            commit_hash=None,
+            status=ExecutionStatus.RUNNING,
+        )
+        self.mock_repo.acquire_next_queued_session.return_value = queued_session
+        self.mock_vcs.checkout.return_value = self._valid_config()
+
+        self.service._dispatch_next()
+
+        self.mock_vcs.checkout.assert_called_once_with("HEAD")
+        mock_thread_cls.return_value.start.assert_called_once()
 

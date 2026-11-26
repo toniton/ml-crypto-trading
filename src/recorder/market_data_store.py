@@ -182,5 +182,23 @@ class MarketDataStore:
             by_timestamp = self._observations.get(ticker_symbol, {})
         return tuple(by_timestamp[timestamp] for timestamp in sorted(by_timestamp))
 
+    def snapshot(
+            self,
+            ticker_symbol: str,
+            start_epoch: Optional[int] = None,
+            end_epoch: Optional[int] = None,
+    ) -> MarketDataStore:
+        """Return an immutable-window copy of recorded observations for one ticker."""
+        items = self.observations(ticker_symbol)
+        if start_epoch is not None:
+            items = tuple(item for item in items if int(item.timestamp) >= start_epoch)
+        if end_epoch is not None:
+            items = tuple(item for item in items if int(item.timestamp) <= end_epoch)
+
+        frozen_store = MarketDataStore(max_age=None)
+        for item in items:
+            frozen_store.record(ticker_symbol, item)
+        return frozen_store
+
     def dataset_id(self, ticker_symbol: str) -> str:
         return f"recorded:{ticker_symbol}"

@@ -101,6 +101,10 @@ class _FakeExchangeBuilder(ExchangeRestBuilder, ExchangeWebSocketBuilder):
         self.kind, self.payload = "instrument_fees", {"ticker_symbol": ticker_symbol}
         return self
 
+    def instrument_metadata(self, ticker_symbol):
+        self.kind, self.payload = "instrument_metadata", {"ticker_symbol": ticker_symbol}
+        return self
+
     def order_update(self, instrument_name):
         self.kind, self.payload = "order_update", {"instrument": instrument_name}
         return self

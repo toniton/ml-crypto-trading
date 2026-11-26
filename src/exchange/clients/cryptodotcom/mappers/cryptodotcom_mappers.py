@@ -4,6 +4,7 @@ from typing import Optional
 from api.interfaces.account_balance import AccountBalance
 from api.interfaces.candle import Candle
 from api.interfaces.fees import Fees
+from api.interfaces.instrument_metadata import InstrumentMetadata
 from api.interfaces.market_data import MarketData
 from api.interfaces.order import Order
 from api.interfaces.trade_action import OrderStatus, TradeAction
@@ -188,3 +189,63 @@ class CryptoDotComOrdersMapper(Mapper[CryptoDotComResponseOrderUpdateDto, list[O
             )
             for order in dto.result.data
         ]
+
+
+class CryptoDotComInstrumentMetadataMapper(
+    Mapper[dict, Optional[InstrumentMetadata]], CryptoDotComBaseMapper
+):
+    """Maps Crypto.com public/get-instruments payloads into InstrumentMetadata."""
+
+    def __init__(self, ticker_symbol: str):
+        self._ticker_symbol = ticker_symbol.upper().replace("/", "_").replace("-", "_")
+
+    def map(self, source: dict) -> Optional[InstrumentMetadata]:
+        result = source.get("result") if isinstance(source, dict) else None
+        items = result.get("data") if isinstance(result, dict) else None
+        if not isinstance(items, list):
+            return None
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            raw_symbol = str(item.get("symbol") or item.get("instrument_name") or "")
+            normalized = raw_symbol.upper().replace("/", "_").replace("-", "_")
+            if normalized != self._ticker_symbol:
+                continue
+
+            qty_decimals = int(item.get("quantity_decimals", 4))
+            price_decimals = int(item.get("price_decimals", 2))
+            default_step = Decimal("1").scaleb(-qty_decimals)
+            qty_step = (
+                Decimal(str(item["qty_tick_size"]))
+                if item.get("qty_tick_size") is not None
+                else default_step
+            )
+            min_qty = (
+                Decimal(str(item["min_quantity"]))
+                if item.get("min_quantity") is not None
+                else qty_step
+            )
+            min_price = (
+                Decimal(str(item["price_tick_size"]))
+                if item.get("price_tick_size") is not None
+                else Decimal("1").scaleb(-price_decimals)
+            )
+            raw_min_notional = item.get("min_notional") or item.get("min_order_value")
+            min_notional = (
+                Decimal(str(raw_min_notional))
+                if raw_min_notional is not None
+                else None
+            )
+            return InstrumentMetadata(
+                exchange=self.provider.value,
+                symbol=normalized,
+                quantity_precision=qty_decimals,
+                price_precision=price_decimals,
+                min_quantity=min_qty,
+                quantity_step=qty_step,
+                min_price=min_price,
+                min_notional=min_notional,
+            )
+
+        return None
