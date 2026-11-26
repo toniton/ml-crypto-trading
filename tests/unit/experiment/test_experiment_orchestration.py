@@ -292,41 +292,77 @@ class TestExperimentOrchestration:  # pylint: disable=attribute-defined-outside-
         assert custom_entry["deltas"]["walk_forward_oos_return_diff"] == 6.0
 
     def test_resolve_candidate_commit_random_control(self):
+        from api.interfaces.asset import Asset
+        from api.interfaces.asset_schedule import AssetSchedule
+        from api.interfaces.timeframe import Timeframe
+        from api.interfaces.trade_action import TradeAction
+        from src.configuration.strategy_config import StrategyConfig, StrategyType
+        from src.configuration.trading_config import TradingConfig
+        from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+        from src.trading.consensus.consensus_factor import ConsensusFactor
+
         self.mock_vcs.resolve_commit_hash.return_value = "commit_head_ref_001"
-        mock_strat_1 = MagicMock()
-        mock_strat_1.name = "TrendFollower"
-        mock_strat_1.model_copy.side_effect = lambda update: MagicMock(name="TrendFollower", weight=update["weight"])
-
-        mock_strat_2 = MagicMock()
-        mock_strat_2.name = "MeanReversion"
-        mock_strat_2.model_copy.side_effect = lambda update: MagicMock(name="MeanReversion", weight=update["weight"])
-
-        mock_asset = MagicMock()
-        mock_asset.ticker_symbol = "BTC_USD"
-        mock_asset.strategies = [mock_strat_1, mock_strat_2]
-
-        mock_config = MagicMock()
-        mock_config.assets = [mock_asset]
+        base_config = TradingConfig(
+            assets=[
+                Asset(
+                    base_ticker_symbol="BTC",
+                    quote_ticker_symbol="USD",
+                    quote_decimals=2,
+                    name="Bitcoin",
+                    exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
+                    min_quantity=0.001,
+                    quantity_decimals=5,
+                    schedule=AssetSchedule.EVERY_MINUTE,
+                    candles_timeframe=Timeframe.MIN1,
+                    consensus=ConsensusFactor(buy=0.7, sell=0.4),
+                    strategies=[
+                        StrategyConfig(
+                            name="TrendFollower",
+                            type=StrategyType.DYNAMIC,
+                            action=TradeAction.BUY,
+                            expression="close > sma(20)",
+                            enabled=True,
+                            weight=2.0,
+                        ),
+                        StrategyConfig(
+                            name="MeanReversion",
+                            type=StrategyType.DYNAMIC,
+                            action=TradeAction.BUY,
+                            expression="rsi(14) < 30",
+                            enabled=True,
+                            weight=1.5,
+                        ),
+                    ],
+                )
+            ]
+        )
+        self.mock_vcs.checkout.return_value = base_config.model_dump(mode="json")
 
         mock_commit = MagicMock()
         mock_commit.hash = "commit_random_hash_999"
         self.mock_vcs.commit.return_value = mock_commit
 
-        patch_target = "src.server.services.experiment_application_service.TradingConfig.model_validate"
-        with patch(patch_target, return_value=mock_config):
-            cand = ExperimentCandidate(
-                candidate_id="cand_random_42",
-                name="Random Control (42)",
-                candidate_type=CandidateType.RANDOM_CONTROL,
-                random_seed=42,
-            )
-            resolved_hash = self.service._resolve_candidate_commit("exp-branch-1", "BTC_USD", cand)
+        cand = ExperimentCandidate(
+            candidate_id="cand_random_42",
+            name="Random Control (42)",
+            candidate_type=CandidateType.RANDOM_CONTROL,
+            random_seed=42,
+        )
+        resolved_hash = self.service._resolve_candidate_commit("exp-branch-1", "BTC_USD", cand)
 
-            assert resolved_hash == "commit_random_hash_999"
-            assert cand.strategy_weights is not None
-            assert "TrendFollower" in cand.strategy_weights
-            assert "MeanReversion" in cand.strategy_weights
-            self.mock_vcs.commit.assert_called_once()
+        assert resolved_hash == "commit_random_hash_999"
+        assert cand.strategy_weights is not None
+        assert "TrendFollower" in cand.strategy_weights
+        assert "MeanReversion" in cand.strategy_weights
+        self.mock_vcs.branch.assert_called_once_with(
+            "refs/experiments/exp-branch-1/cand_random_42",
+            from_ref="commit_head_ref_001",
+        )
+        self.mock_vcs.commit.assert_called_once()
+        committed_cfg = self.mock_vcs.commit.call_args.kwargs["content"]
+        assert isinstance(committed_cfg, TradingConfig)
+        committed_weights = {s.name: s.weight for s in committed_cfg.assets[0].strategies}
+        assert committed_weights == cand.strategy_weights
 
     def test_compute_experiment_report_harmonizes_all_candidate_strategies(self):
         spec = ExperimentSpec(
@@ -434,3 +470,199 @@ class TestExperimentOrchestration:  # pylint: disable=attribute-defined-outside-
 
         assert "EnabledStrat" in cand.strategy_weights
         assert "DisabledStrat" not in cand.strategy_weights
+
+    def test_dispatch_candidate_runs_isolates_variants_on_frozen_assets(self):
+        from api.interfaces.asset import Asset
+        from api.interfaces.asset_schedule import AssetSchedule
+        from api.interfaces.timeframe import Timeframe
+        from api.interfaces.trade_action import TradeAction
+        from src.configuration.strategy_config import StrategyConfig, StrategyType
+        from src.configuration.trading_config import TradingConfig
+        from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
+        from src.trading.consensus.consensus_factor import ConsensusFactor
+
+        base_config = TradingConfig(
+            assets=[
+                Asset(
+                    base_ticker_symbol="BTC",
+                    quote_ticker_symbol="USD",
+                    quote_decimals=2,
+                    name="Bitcoin",
+                    exchange=ExchangeProvidersEnum.CRYPTO_DOT_COM,
+                    min_quantity=0.001,
+                    quantity_decimals=5,
+                    schedule=AssetSchedule.EVERY_MINUTE,
+                    candles_timeframe=Timeframe.MIN1,
+                    consensus=ConsensusFactor(buy=0.7, sell=0.4),
+                    strategies=[
+                        StrategyConfig(
+                            name="BreakoutBuy",
+                            type=StrategyType.DYNAMIC,
+                            action=TradeAction.BUY,
+                            expression="close > sma(20)",
+                            enabled=False,
+                            weight=1.0,
+                        ),
+                        StrategyConfig(
+                            name="TrendBreakoutBuy",
+                            type=StrategyType.DYNAMIC,
+                            action=TradeAction.BUY,
+                            expression="close > sma(50)",
+                            enabled=True,
+                            weight=2.3,
+                        ),
+                    ],
+                )
+            ]
+        )
+
+        # Stateful in-memory VCS fake to verify candidate isolation & ref hygiene
+        refs: dict[str, str] = {"refs/heads/backtest/exp-iso": "base_commit_001"}
+        commits: dict[str, dict] = {"base_commit_001": base_config.model_dump(mode="json")}
+        counter = {"n": 0}
+
+        def fake_resolve(ref: str) -> str:
+            return refs[ref]
+
+        def fake_checkout(commit_hash: str) -> dict:
+            return commits[commit_hash]
+
+        def fake_branch(name: str, from_ref: str = "HEAD") -> None:
+            refs[name] = refs.get(from_ref, from_ref)
+
+        def fake_commit(content: TradingConfig, author: str, message: str, ref: str) -> MagicMock:
+            counter["n"] += 1
+            h = f"cand_commit_{counter['n']:03d}"
+            commits[h] = content.model_dump(mode="json")
+            refs[ref] = h
+            c = MagicMock()
+            c.hash = h
+            return c
+
+        self.mock_vcs.resolve_commit_hash.side_effect = fake_resolve
+        self.mock_vcs.checkout.side_effect = fake_checkout
+        self.mock_vcs.branch.side_effect = fake_branch
+        self.mock_vcs.commit.side_effect = fake_commit
+
+        self.mock_bt_app.pin_market_data_snapshot.return_value = "snapshot:abc123"
+        dispatched_specs = []
+
+        def fake_start_bt(bt_spec):
+            dispatched_specs.append(bt_spec)
+            sess = MagicMock()
+            sess.id = f"bt_{len(dispatched_specs)}"
+            return sess
+
+        self.mock_bt_app.start_backtest_run.side_effect = fake_start_bt
+
+        spec = ExperimentSpec(
+            name="Anomaly BTC_USD Isolation Test",
+            ticker_symbol="BTC_USD",
+            base_commit_hash="base_commit_001",
+            branch_id="exp-iso",
+            test_selection=TestSelection.BACKTEST_ONLY,
+            candidates=[
+                ExperimentCandidate(
+                    candidate_id="cand_current",
+                    name="Current",
+                    candidate_type=CandidateType.CURRENT_CONFIG,
+                ),
+                ExperimentCandidate(
+                    candidate_id="cand_equal_weight",
+                    name="Equal Weight",
+                    candidate_type=CandidateType.EQUAL_WEIGHT,
+                ),
+                ExperimentCandidate(
+                    candidate_id="cand_reenable",
+                    name="Re-enable Disabled",
+                    candidate_type=CandidateType.CUSTOM_COMBINATION,
+                    strategy_enabled_overrides={"BreakoutBuy": True},
+                ),
+                ExperimentCandidate(
+                    candidate_id="cand_tuned",
+                    name="Tuned Thresholds",
+                    candidate_type=CandidateType.CUSTOM_COMBINATION,
+                    strategy_weights={"TrendBreakoutBuy": 1.95},
+                    consensus_override={"buy": 0.56},
+                ),
+                ExperimentCandidate(
+                    candidate_id="cand_add",
+                    name="Add Complementary",
+                    candidate_type=CandidateType.CUSTOM_COMBINATION,
+                    strategies_to_add=[
+                        {
+                            "name": "TrendFollowingBuy",
+                            "type": "DYNAMIC",
+                            "action": "BUY",
+                            "weight": 1.0,
+                            "enabled": True,
+                            "expression": "sma(20) > sma(50) and close > sma(20)",
+                        }
+                    ],
+                ),
+            ],
+        )
+
+        bindings = self.service._dispatch_candidate_runs(spec, spec.candidates)
+
+        assert len(bindings) == 5
+        commit_hashes = [c.candidate_commit_hash for c in spec.candidates]
+        # Every candidate gets a distinct commit hash; branch ref stays at base commit
+        assert commit_hashes[0] == "base_commit_001"
+        assert len(set(commit_hashes)) == 5
+        assert refs["refs/heads/backtest/exp-iso"] == "base_commit_001"
+
+        # Verify each candidate's committed config has ONLY its own mutations (no bleeding)
+        eq_cfg = TradingConfig.model_validate(commits[commit_hashes[1]])
+        assert {s.name: s.weight for s in eq_cfg.assets[0].strategies} == {
+            "BreakoutBuy": 1.0,
+            "TrendBreakoutBuy": 1.0,
+        }
+
+        reenable_cfg = TradingConfig.model_validate(commits[commit_hashes[2]])
+        reenable_strats = {s.name: s for s in reenable_cfg.assets[0].strategies}
+        assert reenable_strats["BreakoutBuy"].enabled is True
+        # Must NOT inherit cand_equal_weight's weight=1.0 for TrendBreakoutBuy
+        assert reenable_strats["TrendBreakoutBuy"].weight == 2.3
+
+        tuned_cfg = TradingConfig.model_validate(commits[commit_hashes[3]])
+        tuned_strats = {s.name: s for s in tuned_cfg.assets[0].strategies}
+        assert tuned_cfg.assets[0].consensus.buy == 0.56
+        assert tuned_cfg.assets[0].consensus.sell == 0.4
+        assert tuned_strats["TrendBreakoutBuy"].weight == 1.95
+        # Must NOT inherit cand_reenable's enabled=True for BreakoutBuy
+        assert tuned_strats["BreakoutBuy"].enabled is False
+
+        add_cfg = TradingConfig.model_validate(commits[commit_hashes[4]])
+        add_names = {s.name for s in add_cfg.assets[0].strategies}
+        assert "TrendFollowingBuy" in add_names
+        # Must NOT inherit cand_tuned's consensus override
+        assert add_cfg.assets[0].consensus.buy == 0.7
+
+        # Verify market data snapshot was pinned once and shared across all 5 candidates
+        self.mock_bt_app.pin_market_data_snapshot.assert_called_once()
+        assert all(s.data_source.dataset_id == "snapshot:abc123" for s in dispatched_specs)
+
+    def test_single_callback_subscription_deduplicates_experiment_run_event(self):
+        from src.events.agent_events import AgentExperimentRunRequestedEvent
+        from src.events.message_event_bus import CallbackSubscription, MessageEventBus
+
+        bus = MessageEventBus()
+        received = []
+        sub = CallbackSubscription(received.append)
+        for event_type in (
+            AgentExperimentRunRequestedEvent.EVENT_TYPE,
+            "AgentExperimentRunRequestedEvent",
+        ):
+            bus.subscribe(event_type, sub)
+
+        bus.publish(
+            AgentExperimentRunRequestedEvent(
+                approval_id="appr_123",
+                asset="BTC_USD",
+                experiment_config={"ticker_symbol": "BTC_USD"},
+            )
+        )
+
+        assert len(received) == 1
+        assert received[0].approval_id == "appr_123"

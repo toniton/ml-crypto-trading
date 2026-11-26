@@ -4,7 +4,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, List, Optional, Type
 
-from src.core.interfaces.conversation_store import ConversationMessage, ConversationStore, SessionSummary
+from src.core.interfaces.conversation_store import (
+    RESERVED_AGENT_SESSION_ID,
+    RESERVED_AGENT_SESSION_TITLE,
+    ConversationMessage,
+    ConversationStore,
+    SessionSummary,
+)
 from src.core.interfaces.llm_adapter import ChatTurn, LlmAdapter
 from src.agent.router.models import AgentIntent, AgentRoute
 
@@ -91,7 +97,7 @@ class FakeConversationStore(ConversationStore):
         message.conversation_id = session_id
         messages = self._sessions.setdefault(session_id, [])
         messages.append(message)
-        if len(messages) > self._max_turns:
+        if session_id != RESERVED_AGENT_SESSION_ID and len(messages) > self._max_turns:
             del messages[: len(messages) - self._max_turns]
 
     def messages(self, session_id: str) -> List[ConversationMessage]:
@@ -107,6 +113,14 @@ class FakeConversationStore(ConversationStore):
     def list_sessions(self) -> List[SessionSummary]:
         now = datetime.now(timezone.utc)
         return [
-            SessionSummary(id=sid, created_at=now, updated_at=now, message_count=len(messages))
+            SessionSummary(
+                id=sid,
+                created_at=now,
+                updated_at=now,
+                message_count=len(messages),
+                title=RESERVED_AGENT_SESSION_TITLE if sid == RESERVED_AGENT_SESSION_ID else None,
+                is_reserved=sid == RESERVED_AGENT_SESSION_ID,
+                session_kind="agent" if sid == RESERVED_AGENT_SESSION_ID else "user",
+            )
             for sid, messages in self._sessions.items()
         ]

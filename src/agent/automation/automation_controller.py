@@ -23,6 +23,7 @@ from src.agent.automation.investigate_activity_anomaly import (
     InvestigateActivityAnomaly,
 )
 from src.agent.monitoring.starvation_watchdog import StarvationWatchdog
+from src.core.interfaces.conversation_store import RESERVED_AGENT_SESSION_ID
 from src.core.interfaces.event import Event
 from src.core.interfaces.event_bus import EventBus
 from src.events.agent_event import AgentEvent
@@ -177,27 +178,38 @@ class AutomationController(ApplicationLoggingMixin):
             self, event: TradingActivityAnomalyDetectedEvent, decision: AnomalyDecision
     ) -> None:
         if decision.kind == "proposal":
+            action_type = decision.action_type or AgentActionType.CREATE_PROPOSAL
             action = self._build_action(
-                AgentActionType.CREATE_PROPOSAL,
+                action_type,
                 event,
-                title=f"Pause {decision.asset}",
-                description="Proposal to pause a starved asset.",
+                title=decision.title or f"Pause {decision.asset}",
+                description=decision.description or "Proposal to pause a starved asset.",
                 payload={
                     "proposed_change": decision.proposed_change or {},
                     "asset": decision.asset,
                 },
                 severity=Severity.WARNING,
             )
-            if safety_class_for_action_type(AgentActionType.CREATE_PROPOSAL) in self._authority:
+            if safety_class_for_action_type(action_type) in self._authority:
                 self._executor.plan_and_execute(action)
             return
 
-        # Autonomous sending of chat messages is disabled; decisions are recorded in timeline stream instead.
-        self.app_logger.info(
-            "Anomaly decision recorded to timeline for %s (kind=%s). Autonomous chat message suppressed.",
-            event.asset,
-            decision.kind,
-        )
+        if decision.kind in ("message", "diagnostic"):
+            if safety_class_for_action_type(AgentActionType.SEND_MESSAGE) not in self._authority:
+                return
+            action = self._build_action(
+                AgentActionType.SEND_MESSAGE,
+                event,
+                title=f"Trading Activity Diagnostic — {decision.asset}",
+                description=decision.content,
+                payload={
+                    "blocks": decision.blocks,
+                    "asset": decision.asset,
+                },
+                severity=Severity.WARNING,
+            )
+            self._executor.plan_and_execute(action)
+            return
 
     def _build_action(
             self,
@@ -212,7 +224,7 @@ class AutomationController(ApplicationLoggingMixin):
             type=action_type,
             title=title,
             description=description,
-            conversation_id=None,
+            conversation_id=RESERVED_AGENT_SESSION_ID,
             payload=payload,
             reason=ActionReason(
                 trigger="STARVATION_DETECTED",

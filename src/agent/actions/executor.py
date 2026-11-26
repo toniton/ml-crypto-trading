@@ -27,6 +27,7 @@ class AgentActionExecutor(AgentLoggingMixin):
         AgentPermission.READ_CONFIGURATION,
         AgentPermission.READ_VCS,
         AgentPermission.RUN_BACKTEST,
+        AgentPermission.RUN_EXPERIMENT,
         AgentPermission.SEND_CHAT_MESSAGE,
         AgentPermission.PROPOSE_CONFIGURATION,
     }
@@ -64,6 +65,7 @@ class AgentActionExecutor(AgentLoggingMixin):
         if action.type in (
                 AgentActionType.REQUEST_APPROVAL,
                 AgentActionType.CREATE_PROPOSAL,
+                AgentActionType.RUN_EXPERIMENT,
                 AgentActionType.APPLY_CONFIGURATION,
                 AgentActionType.CREATE_COMMIT,
         ):
@@ -112,9 +114,16 @@ class AgentActionExecutor(AgentLoggingMixin):
         return action
 
     def _request_approval_for_action(self, action: AgentAction) -> AgentAction:
-        if not self.has_permission(AgentPermission.PROPOSE_CONFIGURATION):
+        required_permission = (
+            AgentPermission.RUN_EXPERIMENT
+            if action.type == AgentActionType.RUN_EXPERIMENT
+            else AgentPermission.PROPOSE_CONFIGURATION
+        )
+        if not self.has_permission(required_permission):
             self._action_service.update_status(
-                action.id, ActionStatus.FAILED, error="Missing PROPOSE_CONFIGURATION permission"
+                action.id,
+                ActionStatus.FAILED,
+                error=f"Missing {required_permission.value} permission",
             )
             return action
 

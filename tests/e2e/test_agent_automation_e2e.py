@@ -48,14 +48,17 @@ def test_starvation_watchdog_detects_and_records_reaction(e2e_stack):
     assert item["entity" if "entity" in item else "primary_entity"].get("id") == "BTC_USD"
     assert "NO_MARKET_DATA" in item["summary"]
 
-    # Current behaviour: autonomous chat messages are suppressed; only the timeline
-    # decision is recorded. No STARVATION SEND_MESSAGE action may be auto-created.
-    time.sleep(0.5)
-    actions = stack.projector.list_actions()
-    starvation_messages = [
-        a for a in actions if a.get("reason", {}).get("trigger") == "STARVATION_DETECTED"
-    ]
-    assert starvation_messages == []
+    # Autonomous diagnostic message is routed to the reserved agent session.
+    def starvation_message_recorded():
+        msgs = stack.conversation_service.messages("agent:system")
+        return next(
+            (m for m in msgs if "NO_MARKET_DATA" in m.content and "BTC_USD" in m.content),
+            None,
+        )
+
+    diagnostic_msg = wait_for(starvation_message_recorded)
+    assert diagnostic_msg is not None
+    assert diagnostic_msg.role == "assistant"
 
 
 def test_agent_proposes_and_user_approves_e2e(e2e_stack):

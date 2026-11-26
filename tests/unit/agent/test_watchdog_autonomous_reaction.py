@@ -14,18 +14,26 @@ from api.interfaces.timeframe import Timeframe
 from src.agent.actions import (
     AgentActionExecutor,
     AgentActionService,
+    AgentActionType,
     AgentApprovalService,
 )
-from src.agent.automation import AutomationController, InvestigateActivityAnomaly
+from src.agent.automation import (
+    AutomationController,
+    InvestigateActivityAnomaly,
+    NoSignalsExperimentSuggester,
+)
 from src.agent.configuration.configuration_service import ConfigurationService
 from src.agent.monitoring.starvation_watchdog import StarvationWatchdog
+from src.configuration.strategy_config import StrategyConfig, StrategyType
 from src.events.agent_events import TradingActivityAnomalyDetectedEvent
 from src.events.message_event_bus import MessageEventBus
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.server.agent_event_projector import AgentEventProjector
 from src.trading.activity.asset_activity_tracker import AssetActivityTracker
 from src.trading.events import MarketDataEvent
+from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.vcs.application.service import VCSService
+from api.interfaces.trade_action import TradeAction
 from tests.unit.agent.fakes import FakeConversationStore
 from tests.unit.api_server.helpers import make_db_manager
 
@@ -82,6 +90,12 @@ def system(tmp_path):
     tracker = AssetActivityTracker()
     tracker.subscribe(bus)
 
+    launched_experiments: list[dict] = []
+
+    def fake_launcher(experiment_config: dict, _approval) -> dict:
+        launched_experiments.append(experiment_config)
+        return {"experiment_id": "exp_test_123", "branch_id": "branch_test_123"}
+
     action_service = AgentActionService(event_bus=bus)
     config_service = ConfigurationService(vcs=vcs)
     approval_service = AgentApprovalService(
@@ -89,6 +103,7 @@ def system(tmp_path):
         configuration_service=config_service,
         action_service=action_service,
         event_bus=bus,
+        experiment_launcher=fake_launcher,
     )
     executor = AgentActionExecutor(
         action_service=action_service,
@@ -97,7 +112,30 @@ def system(tmp_path):
         configuration_service=config_service,
     )
 
-    investigation = InvestigateActivityAnomaly(activity_provider=tracker)
+    registry = StrategyRegistry(
+        predefined=[
+            StrategyConfig(
+                name="TrendFollowingBuy",
+                type=StrategyType.DYNAMIC,
+                action=TradeAction.BUY,
+                expression="sma(20) > sma(50) and close > sma(20)",
+            ),
+            StrategyConfig(
+                name="RsiOverboughtSell",
+                type=StrategyType.DYNAMIC,
+                action=TradeAction.SELL,
+                expression="rsi(14) > 78 and position_qty > 0",
+            ),
+        ]
+    )
+    suggester = NoSignalsExperimentSuggester(
+        configuration_service=config_service,
+        strategy_registry=registry,
+    )
+    investigation = InvestigateActivityAnomaly(
+        activity_provider=tracker,
+        experiment_suggester=suggester,
+    )
     watchdog = StarvationWatchdog(
         activity_provider=tracker,
         assets=[_asset()],
@@ -124,6 +162,9 @@ def system(tmp_path):
         "controller": controller,
         "store": store,
         "projector": projector,
+        "approval_service": approval_service,
+        "vcs": vcs,
+        "launched_experiments": launched_experiments,
     }
 
     controller.stop()
@@ -143,7 +184,7 @@ def _stale_market_data_event(ticker: str) -> MarketDataEvent:
     )
 
 
-def test_watchdog_detects_starvation_and_suppresses_autonomous_chat_message(system):
+def test_watchdog_detects_starvation_and_routes_diagnostic_to_agent_feed(system):
     bus = system["bus"]
     store = system["store"]
     # Simulate an asset whose market data feed has been silent well beyond the threshold.
@@ -154,11 +195,14 @@ def test_watchdog_detects_starvation_and_suppresses_autonomous_chat_message(syst
     assert emitted[0].asset == "BTC_USD"
     assert emitted[0].anomaly_kind == "NO_MARKET_DATA"
 
-    # Give worker time to process and ensure no autonomous chat messages land in store
-    time.sleep(0.2)
-    sessions = store.list_sessions()
-    for session in sessions:
-        assert len(store.messages(session.id)) == 0
+    def diagnostic_landed():
+        messages = store.messages("agent:system")
+        return messages[0] if messages else None
+
+    message = wait_for(diagnostic_landed)
+    assert message.conversation_id == "agent:system"
+    user_sessions = [s for s in store.list_sessions() if s.id != "agent:system"]
+    assert user_sessions == []
 
 
 def test_watchdog_agent_proposes_pause_for_config_gating(system):
@@ -196,3 +240,61 @@ def test_watchdog_agent_proposes_pause_for_config_gating(system):
 
     message = wait_for(card_landed)
     assert message.payload["blocks"][0]["approval_id"] == approval["id"]
+
+
+def test_watchdog_agent_proposes_experiment_for_no_signals_and_launches_on_approval(system):
+    bus = system["bus"]
+    store = system["store"]
+    projector = system["projector"]
+    approval_service = system["approval_service"]
+    vcs = system["vcs"]
+    launched = system["launched_experiments"]
+
+    head_before = vcs.head("HEAD").hash
+
+    event = TradingActivityAnomalyDetectedEvent(
+        asset="BTC_USD",
+        anomaly_kind="NO_SIGNALS",
+        threshold=63.0,
+        detected_at=str(time.time()),
+    )
+    bus.publish(event)
+
+    def approval_requested():
+        approvals = projector.list_approvals()
+        return approvals[0] if approvals else None
+
+    approval = wait_for(approval_requested)
+    assert approval["status"] == "PENDING"
+    assert approval["asset"] == "BTC_USD"
+    assert approval["action_type"] == AgentActionType.RUN_EXPERIMENT.value
+
+    proposed_change = approval["proposed_change"]
+    assert proposed_change["kind"] == "experiment_run"
+    exp_cfg = proposed_change["experiment_config"]
+    assert exp_cfg["ticker_symbol"] == "BTC_USD"
+    assert len(exp_cfg["candidates"]) >= 2
+
+    def card_landed():
+        for session in store.list_sessions():
+            for message in store.messages(session.id):
+                blocks = (message.payload or {}).get("blocks") or []
+                if blocks and blocks[0].get("type") == "agent_approval":
+                    return blocks[0]
+        return None
+
+    card = wait_for(card_landed)
+    assert card["action_type"] == AgentActionType.RUN_EXPERIMENT.value
+    assert card["approval_id"] == approval["id"]
+
+    resolved_approval, commit_hash, warnings = approval_service.decide_approval(
+        approval["id"],
+        "approve",
+        author="tester",
+    )
+    assert resolved_approval.status.value == "APPROVED"
+    assert commit_hash is None
+    assert warnings == []
+    assert vcs.head("HEAD").hash == head_before
+    assert len(launched) == 1
+    assert launched[0]["ticker_symbol"] == "BTC_USD"

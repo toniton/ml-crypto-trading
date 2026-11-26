@@ -4,6 +4,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Literal, Optional
 
+from src.agent.actions.models import AgentActionType
+from src.agent.automation.experiment_suggester import NoSignalsExperimentSuggester
 from src.agent.monitoring.activity_state import ActivityStateProvider, AssetActivityState
 from src.backtest.analysis.drift_detector import BacktestDriftDetector, DriftReport
 from src.core.interfaces.event_bus import EventBus
@@ -25,6 +27,9 @@ class AnomalyDecision:
     content: str
     blocks: list[dict] = field(default_factory=list)
     proposed_change: Optional[dict] = None
+    action_type: Optional[AgentActionType] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
 
 
 class InvestigateActivityAnomaly(ApplicationLoggingMixin):
@@ -33,10 +38,12 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             activity_provider: ActivityStateProvider,
             drift_detector: Optional[BacktestDriftDetector] = None,
             event_bus: Optional[EventBus] = None,
+            experiment_suggester: Optional[NoSignalsExperimentSuggester] = None,
     ):
         self._activity_provider = activity_provider
         self._drift_detector = drift_detector
         self._event_bus = event_bus
+        self._experiment_suggester = experiment_suggester
 
     def investigate(self, event: TradingActivityAnomalyDetectedEvent) -> AnomalyDecision:
         state = self._activity_provider.state_for(event.asset)
@@ -53,6 +60,8 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             )
 
         if event.anomaly_kind == "NO_SIGNALS":
+            if self._experiment_suggester is not None:
+                return self._experiment_proposal_decision(event, state, drift)
             return self._message_decision(
                 event,
                 state,
@@ -105,6 +114,42 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
         )
         return AnomalyDecision(kind="diagnostic", asset=event.asset, content=content, blocks=blocks)
 
+    def _experiment_proposal_decision(
+            self,
+            event: TradingActivityAnomalyDetectedEvent,
+            state: Optional[AssetActivityState],
+            drift: Optional[DriftReport],
+    ) -> AnomalyDecision:
+        title = "Strategy behaviour"
+        body = (
+            "The strategy is evaluating but producing no consensus signals within the "
+            "expected interval. Market conditions may simply be outside the strategy's "
+            "thresholds."
+        )
+        content, blocks = self._build_diagnostic(event, state, drift, title, body)
+        assert self._experiment_suggester is not None
+        suggestion = self._experiment_suggester.suggest(event, state=state, drift=drift)
+        proposed_change = suggestion.to_proposed_change(diagnostic_markdown=content)
+        self._record_decision(
+            event=event,
+            summary=suggestion.title,
+            rationale=suggestion.description,
+            drift=drift,
+            state=state,
+            content=content,
+            blocks=blocks,
+        )
+        return AnomalyDecision(
+            kind="proposal",
+            asset=event.asset,
+            content=content,
+            blocks=blocks,
+            proposed_change=proposed_change,
+            action_type=AgentActionType.RUN_EXPERIMENT,
+            title=suggestion.title,
+            description=suggestion.description,
+        )
+
     def _proposal_decision(
             self,
             event: TradingActivityAnomalyDetectedEvent,
@@ -146,6 +191,9 @@ class InvestigateActivityAnomaly(ApplicationLoggingMixin):
             content=content,
             blocks=blocks,
             proposed_change=proposed_change,
+            action_type=AgentActionType.CREATE_PROPOSAL,
+            title=f"Pause {event.asset}",
+            description="Proposal to pause a starved asset.",
         )
 
     def _record_decision(
