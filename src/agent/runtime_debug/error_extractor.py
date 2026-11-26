@@ -47,7 +47,7 @@ class ErrorExtractor:
             metadata["trade_action"] = order.trade_action.value
 
         severity = Severity.ERROR
-        if http_status == 400 and exchange_code:
+        if exchange_code is not None or http_status == 400:
             severity = Severity.CRITICAL
 
         return RuntimeErrorEvent(

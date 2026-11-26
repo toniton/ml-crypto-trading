@@ -112,3 +112,65 @@ def test_playbook_resolver_selects_correct_playbook():
         message="weird internal error",
     )
     assert resolver.resolve(unknown_event) is None
+
+
+def test_order_validation_playbook_matches_cryptodotcom_415_http_500():
+    playbook = OrderValidationPlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=415,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="BELOW_MIN_ORDER_SIZE",
+    )
+    assert playbook.matches(event) is True
+
+
+def test_order_validation_playbook_uses_live_exchange_metadata_and_computes_min_qty():
+    from decimal import Decimal
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("25"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = OrderValidationPlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=415,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="BELOW_MIN_ORDER_SIZE",
+        metadata={"order_quantity": "19", "order_price": "0.040180"},
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+
+    rest_manager.get_instrument_metadata.assert_called_once_with("CRYPTO_DOT_COM", "CRO_USD")
+    assert evidence[0].data["source"] == "exchange_api"
+    analysis = evidence[1].data
+    assert analysis["violates_min_quantity"] is True
+    assert analysis["violates_min_notional"] is True
+    assert analysis["exchange_reported_min_order_size"] is True
+    assert analysis["recommended_min_quantity"] == "25"
+
+
+def test_toolbox_falls_back_to_static_metadata_when_exchange_api_fails():
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.side_effect = RuntimeError("exchange unreachable")
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+
+    rules = toolbox.get_exchange_instrument_metadata("CRYPTO_DOT_COM", "BTC_USD")
+
+    assert rules["source"] == "static_fallback"
+    assert rules["min_quantity"] == "0.0001"

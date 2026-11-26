@@ -33,13 +33,60 @@ class DiagnoseNode:
         error_event = state.get("error_event")
         component = error_event.component if error_event else "runtime"
 
-        # Check evidence for precision violations
+        size_evidence = next(
+            (
+                e
+                for e in evidence
+                if e.data.get("exchange_reported_min_order_size")
+                or (
+                    not e.data.get("violates_precision")
+                    and (
+                        e.data.get("violates_min_quantity")
+                        or e.data.get("violates_min_notional")
+                    )
+                )
+            ),
+            None,
+        )
         has_precision_violation = any(
-            e.data.get("violates_precision") or e.data.get("violates_min_quantity")
+            e.data.get("violates_precision")
             for e in evidence
         )
 
-        if has_precision_violation:
+        if size_evidence is not None:
+            exchange = (error_event.exchange if error_event else None) or size_evidence.data.get("exchange") or "EXCHANGE"
+            symbol = (error_event.asset if error_event else None) or size_evidence.data.get("symbol") or "UNKNOWN"
+            submitted_qty = size_evidence.data.get("submitted_quantity")
+            min_qty = size_evidence.data.get("min_quantity")
+            min_notional = size_evidence.data.get("min_notional")
+            recommended_qty = size_evidence.data.get("recommended_min_quantity")
+            summary = (
+                f"Exchange {exchange} rejected {symbol} order (qty={submitted_qty}) "
+                f"because it is below the minimum order size."
+            )
+            if size_evidence.data.get("violates_min_notional") and min_notional is not None:
+                root_cause = (
+                    f"Order notional is below {exchange} minimum notional ({min_notional}); "
+                    f"recommended minimum quantity at submitted price is {recommended_qty}."
+                )
+            elif size_evidence.data.get("violates_min_quantity") and min_qty is not None:
+                root_cause = (
+                    f"Submitted quantity {submitted_qty} is below {exchange} minimum quantity ({min_qty})."
+                )
+            else:
+                root_cause = (
+                    f"{exchange} rejected the order with {error_event.message if error_event else 'BELOW_MIN_ORDER_SIZE'} "
+                    f"(minimum quantity={min_qty}, recommended={recommended_qty})."
+                )
+            confidence = ConfidenceLevel.CONFIRMED
+            if self._llm is not None:
+                summary, root_cause = self._refine_with_llm(
+                    error_event=error_event,
+                    evidence=evidence,
+                    fallback_summary=summary,
+                    fallback_root_cause=root_cause,
+                )
+        elif has_precision_violation:
             summary = (
                 f"Exchange rejected order due to quantity precision / formatting mismatch on {error_event.exchange}."
             )
@@ -70,6 +117,38 @@ class DiagnoseNode:
         )
 
         return {"diagnosis": diagnosis, "confidence": confidence}
+
+    def _refine_with_llm(
+            self,
+            error_event: Any,
+            evidence: list[Any],
+            fallback_summary: str,
+            fallback_root_cause: str,
+    ) -> tuple[str, str]:
+        if self._llm is None:
+            return fallback_summary, fallback_root_cause
+        evidence_lines = "\n".join(
+            f"- {item.title} ({item.source}): {item.description}"
+            for item in evidence
+        )
+        prompt = (
+            f"Runtime order rejection on {error_event.exchange if error_event else 'EXCHANGE'} "
+            f"for {error_event.asset if error_event else 'UNKNOWN'}: "
+            f"{error_event.message if error_event else ''}\n\n"
+            f"VERIFIED EVIDENCE:\n{evidence_lines}\n\n"
+            "Provide a concise 1-2 sentence diagnosis grounded strictly in the verified evidence above."
+        )
+        try:
+            response = self._llm.generate(
+                prompt=prompt,
+                system_prompt=RUNTIME_DIAGNOSE_SYSTEM_PROMPT,
+            )
+            cleaned = (response or "").strip()
+            if cleaned:
+                return cleaned, fallback_root_cause
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return fallback_summary, fallback_root_cause
 
     def _diagnose_general_inquiry(
         self,

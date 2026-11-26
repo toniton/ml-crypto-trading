@@ -107,3 +107,101 @@ def test_runtime_debug_service_investigate_and_update():
     assert updated_incident.status == IncidentStatus.SUGGESTION_READY
     assert updated_incident.diagnosis is not None
     assert updated_incident.suggestion is not None
+
+
+def test_runtime_debug_service_below_min_order_size_emits_message_and_approval():
+    from decimal import Decimal
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+    from src.agent.actions.service import AgentActionService, AgentApprovalService
+    from src.core.interfaces.conversation_store import RESERVED_AGENT_SESSION_ID
+    from src.events.agent_events import AgentApprovalRequestedEvent, AgentMessageCreatedEvent
+
+    db_manager = InMemoryDatabaseManager()
+    trading_event_bus = MagicMock()
+    agent_event_bus = MagicMock()
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("25"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    vcs = MagicMock()
+    vcs.head.return_value = MagicMock(hash="abc12345def")
+    vcs.checkout.return_value = {"assets": {"CRO_USD": {"min_quantity": 10}}}
+    config_service = MagicMock()
+    llm = MagicMock()
+    llm.generate.return_value = "CRO_USD order quantity 19 is below Crypto.com minimum size of 25."
+
+    action_service = AgentActionService(event_bus=agent_event_bus)
+    approval_service = AgentApprovalService(
+        vcs=vcs,
+        configuration_service=config_service,
+        action_service=action_service,
+        event_bus=agent_event_bus,
+    )
+    service = RuntimeDebugService(
+        database_manager=db_manager,
+        vcs=vcs,
+        llm=llm,
+        event_bus=trading_event_bus,
+        rest_manager=rest_manager,
+        agent_event_bus=agent_event_bus,
+        action_service=action_service,
+        approval_service=approval_service,
+    )
+
+    incident_id = uuid4()
+    with db_manager.get_unit_of_work() as uow:
+        repo = uow.get_repository(PostgresRuntimeIncidentRepository)
+        repo.save(
+            RuntimeIncident(
+                id=incident_id,
+                fingerprint="fp-cro-min-size",
+                status=IncidentStatus.DETECTED,
+                category=ErrorCategory.EXCHANGE_VALIDATION,
+                severity=Severity.CRITICAL,
+                component="trading.orders.order_manager",
+                operation="execute_order",
+                asset="CRO_USD",
+                exchange="CRYPTO_DOT_COM",
+            )
+        )
+        repo.add_error_event(
+            RuntimeErrorEvent(
+                id=uuid4(),
+                incident_id=incident_id,
+                exchange="CRYPTO_DOT_COM",
+                exchange_code=415,
+                http_status=500,
+                operation="execute_order",
+                message="BELOW_MIN_ORDER_SIZE",
+                asset="CRO_USD",
+                metadata={"order_quantity": "19", "order_price": "0.040180"},
+                fingerprint="fp-cro-min-size",
+            )
+        )
+
+    result = service.investigate_incident(str(incident_id))
+
+    suggestion = result["suggestion"]
+    assert suggestion.requires_configuration_change is True
+    assert suggestion.requires_code_change is False
+    assert suggestion.affected_component == "assets.CRO_USD.min_quantity"
+    assert "25" in suggestion.proposed_change
+
+    published_events = [call.args[0] for call in agent_event_bus.publish.call_args_list]
+    msg_events = [e for e in published_events if isinstance(e, AgentMessageCreatedEvent)]
+    approval_events = [e for e in published_events if isinstance(e, AgentApprovalRequestedEvent)]
+    assert len(msg_events) == 1
+    assert msg_events[0].conversation_id == RESERVED_AGENT_SESSION_ID
+    assert len(approval_events) == 1
+    assert approval_events[0].approval_payload["conversation_id"] == RESERVED_AGENT_SESSION_ID
+    changes = approval_events[0].approval_payload["proposed_change"]["changes"]
+    assert changes[0]["path"] == "assets.CRO_USD.min_quantity"
+    assert changes[0]["old_value"] == 10
+    assert changes[0]["new_value"] == 25.0
