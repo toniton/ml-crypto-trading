@@ -4,7 +4,7 @@ import atexit
 from decimal import Decimal
 from pathlib import Path
 from queue import Queue
-from threading import Event
+from threading import Event, Thread
 from typing import Optional
 
 from api.interfaces.backtest_request import (
@@ -446,6 +446,7 @@ class Application(ApplicationLoggingMixin):
                 retention_manager=self._retention_manager,
                 host=self._application_config.api_host,
                 port=self._application_config.api_port,
+                runtime_debug_service=self._runtime_debug_service,
             )
             self._api_server.start()
 
@@ -469,6 +470,11 @@ class Application(ApplicationLoggingMixin):
                 action_service=action_service,
                 approval_service=approval_service,
             )
+            Thread(
+                target=self._runtime_debug_service.sweep_critical_incidents,
+                name="runtime-debug-startup-sweep",
+                daemon=True,
+            ).start()
         try:
             backtest_service = self._build_backtest_service()
         except Exception as exc:  # pylint: disable=broad-except

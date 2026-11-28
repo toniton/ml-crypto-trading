@@ -4,6 +4,7 @@ from typing import Optional
 import uvicorn
 
 from src.agent import AgentGateway
+from src.agent.runtime_debug.service import RuntimeDebugService
 from src.core.interfaces.database_manager import DatabaseManager
 from src.core.interfaces.event_bus import EventBus
 from src.core.interfaces.trading_engine_proxy import TradingEngineProxy
@@ -26,6 +27,7 @@ class ApiServer(ApplicationLoggingMixin):
             retention_manager: RetentionManager,
             host: str = "0.0.0.0",
             port: int = 8000,
+            runtime_debug_service: Optional[RuntimeDebugService] = None,
     ):
         self.host = host
         self.port = port
@@ -41,6 +43,7 @@ class ApiServer(ApplicationLoggingMixin):
             vcs=vcs,
             llm_manager=llm_manager,
             retention_manager=retention_manager,
+            runtime_debug_service=runtime_debug_service,
         )
         self._server: Optional[uvicorn.Server] = None
         self._thread: Optional[threading.Thread] = None

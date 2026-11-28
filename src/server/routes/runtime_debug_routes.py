@@ -55,6 +55,10 @@ def create_runtime_debug_router(debug_service: RuntimeDebugService) -> APIRouter
         data["events"] = [e.to_dict() for e in events]
         return data
 
+    @router.get("/exchange/{exchange}/instruments/{ticker_symbol}")
+    def get_exchange_instrument_constraints(exchange: str, ticker_symbol: str):
+        return debug_service.get_exchange_constraints(exchange, ticker_symbol)
+
     @router.post("/incidents/{incident_id}/investigate")
     def investigate_incident(incident_id: str):
         incident = debug_service.get_incident(incident_id)
@@ -62,10 +66,33 @@ def create_runtime_debug_router(debug_service: RuntimeDebugService) -> APIRouter
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
         result = debug_service.investigate_incident(incident_id)
         updated = debug_service.get_incident(incident_id)
+        approval = result.get("approval_request")
         return {
             "incident": updated.to_dict() if updated else None,
             "diagnosis": result.get("diagnosis").to_dict() if result.get("diagnosis") else None,
             "suggestion": result.get("suggestion").to_dict() if result.get("suggestion") else None,
+            "approval_request": approval.model_dump(mode="json") if approval is not None else None,
+        }
+
+    @router.post("/incidents/{incident_id}/propose-fix")
+    def propose_incident_fix(incident_id: str):
+        incident = debug_service.get_incident(incident_id)
+        if not incident:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Incident not found")
+        constraints = (
+            debug_service.get_exchange_constraints(incident.exchange, incident.asset)
+            if incident.exchange and incident.asset
+            else None
+        )
+        result = debug_service.investigate_incident(incident_id)
+        updated = debug_service.get_incident(incident_id)
+        approval = result.get("approval_request")
+        return {
+            "incident": updated.to_dict() if updated else None,
+            "exchange_constraints": constraints,
+            "diagnosis": result.get("diagnosis").to_dict() if result.get("diagnosis") else None,
+            "suggestion": result.get("suggestion").to_dict() if result.get("suggestion") else None,
+            "approval_request": approval.model_dump(mode="json") if approval is not None else None,
         }
 
     @router.post("/incidents/{incident_id}/acknowledge")
