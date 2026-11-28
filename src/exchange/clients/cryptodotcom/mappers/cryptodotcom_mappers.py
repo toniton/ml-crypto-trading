@@ -214,7 +214,7 @@ class CryptoDotComInstrumentMetadataMapper(
                 continue
 
             qty_decimals = int(item.get("quantity_decimals", 4))
-            price_decimals = int(item.get("price_decimals", 2))
+            price_decimals = int(item.get("quote_decimals", item.get("price_decimals", 2)))
             default_step = Decimal("1").scaleb(-qty_decimals)
             qty_step = (
                 Decimal(str(item["qty_tick_size"]))
@@ -232,11 +232,14 @@ class CryptoDotComInstrumentMetadataMapper(
                 else Decimal("1").scaleb(-price_decimals)
             )
             raw_min_notional = item.get("min_notional") or item.get("min_order_value")
-            min_notional = (
-                Decimal(str(raw_min_notional))
-                if raw_min_notional is not None
-                else None
-            )
+            if raw_min_notional is not None:
+                min_notional: Optional[Decimal] = Decimal(str(raw_min_notional))
+            else:
+                quote_ccy = str(item.get("quote_ccy") or "").upper()
+                is_usd_spot = quote_ccy in ("USD", "USDT", "USDC") or normalized.endswith(
+                    ("_USD", "_USDT", "_USDC")
+                )
+                min_notional = Decimal("1.00") if is_usd_spot else None
             return InstrumentMetadata(
                 exchange=self.provider.value,
                 symbol=normalized,

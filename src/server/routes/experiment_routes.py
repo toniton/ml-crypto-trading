@@ -96,14 +96,33 @@ def create_experiment_router() -> APIRouter:
             req_body: Optional[StartExperimentRequest] = Body(default=None),
     ):
         srv: ExperimentApplicationService = request.app.state.experiment_service
-        test_selection = req_body.test_selection if req_body else None
-        if test_selection is not None:
-            return await _run_experiment_action(
-                "Failed to start experiment",
-                srv.start_experiment,
-                experiment_id,
-                test_selection,
+        if req_body is not None:
+            has_config_overrides = any(
+                field in req_body.model_fields_set
+                for field in (
+                    "data_source",
+                    "period",
+                    "windows",
+                    "initial_balance",
+                    "execution",
+                    "preserve_other_results",
+                )
             )
+            if has_config_overrides:
+                return await _run_experiment_action(
+                    "Failed to start experiment",
+                    srv.start_experiment,
+                    experiment_id,
+                    req_body.test_selection,
+                    req_body,
+                )
+            if req_body.test_selection is not None:
+                return await _run_experiment_action(
+                    "Failed to start experiment",
+                    srv.start_experiment,
+                    experiment_id,
+                    req_body.test_selection,
+                )
         return await _run_experiment_action(
             "Failed to start experiment", srv.start_experiment, experiment_id
         )

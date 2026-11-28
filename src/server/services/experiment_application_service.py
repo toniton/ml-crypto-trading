@@ -5,6 +5,7 @@ import threading
 import time
 import uuid
 from dataclasses import replace
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -19,8 +20,11 @@ from api.interfaces.experiment import (
     CandidateType,
     CreateExperimentRequest,
     ExperimentCandidate,
+    ExperimentRunConfigSnapshot,
+    ExperimentRunHistoryEntry,
     ExperimentSpec,
     ExperimentStatus,
+    StartExperimentRequest,
     TestSelection,
 )
 from api.interfaces.walk_forward import (
@@ -71,6 +75,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         self._walk_forward_app_service = walk_forward_app_service
         self._hook_manager = hook_manager
         self._cancellation_events: dict[str, threading.Event] = {}
+        self._active_run_meta: dict[str, dict[str, Any]] = {}
         self._on_experiment_completed: Optional[Any] = None
 
     def set_completion_hook(self, callback: Any) -> None:
@@ -173,7 +178,8 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             ticker_symbol=ticker_symbol,
             base_commit_hash=commit_hash,
             branch_id=branch_id,
-            test_selection=TestSelection.BACKTEST_ONLY,
+            test_selection=TestSelection.BOTH,
+            windows=WalkForwardWindowSpec(),
             candidates=candidates,
             triggered_by=triggered_by,
         )
@@ -250,8 +256,18 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             if isinstance(raw_period, dict)
             else None
         )
-        raw_selection = suggestion.get("test_selection") or TestSelection.BACKTEST_ONLY.value
+        raw_selection = suggestion.get("test_selection") or TestSelection.BOTH.value
         test_selection = TestSelection(raw_selection)
+        raw_windows = suggestion.get("windows")
+        windows = (
+            WalkForwardWindowSpec.model_validate(raw_windows)
+            if isinstance(raw_windows, dict)
+            else (
+                WalkForwardWindowSpec()
+                if test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+                else None
+            )
+        )
 
         spec = ExperimentSpec(
             name=name,
@@ -261,6 +277,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             test_selection=test_selection,
             data_source=data_source,
             period=period,
+            windows=windows,
             candidates=candidates,
             triggered_by=triggered_by,
         )
@@ -305,6 +322,10 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
         spec_dict = dict(existing.get("spec") or {})
         spec_dict["branch_id"] = branch_id
         spec_dict["base_commit_hash"] = commit_hash
+        if spec_dict.get("test_selection") in (None, TestSelection.BACKTEST_ONLY.value):
+            spec_dict["test_selection"] = TestSelection.BOTH.value
+        if not spec_dict.get("windows"):
+            spec_dict["windows"] = WalkForwardWindowSpec().model_dump(mode="json")
         current_weights = self._load_asset_strategy_weights(commit_hash, ticker_symbol)
         for cand in spec_dict.get("candidates", []):
             if cand.get("candidate_id") == "cand_current":
@@ -380,6 +401,13 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     )
                 )
 
+        windows = req.windows
+        if (
+            req.test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+            and windows is None
+        ):
+            windows = WalkForwardWindowSpec()
+
         spec = ExperimentSpec(
             name=req.name,
             ticker_symbol=req.ticker_symbol,
@@ -388,7 +416,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             test_selection=req.test_selection,
             data_source=req.data_source,
             period=req.period,
-            windows=req.windows,
+            windows=windows,
             initial_balance=req.initial_balance,
             execution=req.execution,
             control_policy=req.control_policy,
@@ -433,6 +461,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             "candidates": spec_dict.get("candidates", []),
             "run_bindings": [],
             "report": None,
+            "run_history": [],
         }
 
     def get_experiment(self, experiment_id: str) -> Optional[dict[str, Any]]:
@@ -489,10 +518,101 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
 
             return repo.delete_experiment(experiment_id)
 
+    @staticmethod
+    def _build_config_snapshot(spec: ExperimentSpec) -> dict[str, Any]:
+        return ExperimentRunConfigSnapshot(
+            data_source=spec.data_source,
+            period=spec.period,
+            windows=spec.windows,
+            initial_balance=spec.initial_balance,
+            execution=spec.execution,
+        ).model_dump(mode="json")
+
+    @staticmethod
+    def _normalize_shared_config(config: dict[str, Any]) -> dict[str, Any]:
+        ds = dict(config.get("data_source") or {})
+        source_type = str(ds.get("source_type") or "")
+        normalized_ds: dict[str, Any] = {
+            "source_type": source_type,
+            "path": ds.get("path"),
+        }
+        if source_type == "csv":
+            normalized_ds["dataset_id"] = ds.get("dataset_id")
+        return {
+            "data_source": normalized_ds,
+            "period": config.get("period"),
+            "initial_balance": str(config.get("initial_balance") or ""),
+            "execution": config.get("execution") or {},
+        }
+
+    @classmethod
+    def _compute_staleness(
+            cls,
+            leg_configs: dict[str, Any],
+            latest_config: dict[str, Any],
+    ) -> tuple[dict[str, bool], dict[str, list[str]]]:
+        latest_shared = cls._normalize_shared_config(latest_config)
+        stale_legs: dict[str, bool] = {}
+        stale_reasons: dict[str, list[str]] = {}
+        for leg in ("backtest", "walk_forward"):
+            leg_cfg = leg_configs.get(leg)
+            if not isinstance(leg_cfg, dict):
+                stale_legs[leg] = False
+                stale_reasons[leg] = []
+                continue
+            leg_shared = cls._normalize_shared_config(leg_cfg)
+            diffs = [
+                field
+                for field in ("data_source", "period", "initial_balance", "execution")
+                if leg_shared.get(field) != latest_shared.get(field)
+            ]
+            stale_legs[leg] = bool(diffs)
+            stale_reasons[leg] = diffs
+        return stale_legs, stale_reasons
+
+    @staticmethod
+    def _apply_start_overrides(
+            spec: ExperimentSpec,
+            effective_selection: TestSelection,
+            config_overrides: Optional[StartExperimentRequest],
+    ) -> None:
+        data_or_period_changed = False
+        if config_overrides is not None:
+            if config_overrides.data_source is not None:
+                spec.data_source = config_overrides.data_source
+                data_or_period_changed = True
+            if "period" in config_overrides.model_fields_set:
+                spec.period = config_overrides.period
+                data_or_period_changed = True
+            if "windows" in config_overrides.model_fields_set:
+                spec.windows = config_overrides.windows
+            if config_overrides.initial_balance is not None:
+                spec.initial_balance = config_overrides.initial_balance
+            if config_overrides.execution is not None:
+                spec.execution = config_overrides.execution
+
+        if (
+            data_or_period_changed
+            and spec.data_source.source_type.value in ("market_data", "recorded_market_data")
+            and (
+                config_overrides is None
+                or config_overrides.data_source is None
+                or not config_overrides.data_source.dataset_id
+            )
+        ):
+            spec.data_source = spec.data_source.model_copy(update={"dataset_id": None})
+
+        if (
+            effective_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+            and spec.windows is None
+        ):
+            spec.windows = WalkForwardWindowSpec()
+
     def start_experiment(
             self,
             experiment_id: str,
             test_selection: Optional[TestSelection] = None,
+            config_overrides: Optional[StartExperimentRequest] = None,
     ) -> dict[str, Any]:
         with self._db_manager.get_unit_of_work() as uow:
             repo = uow.get_repository(PostgresExperimentRepository)
@@ -508,17 +628,53 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     f"Experiment '{experiment_id}' is already actively executing (status '{exp['status']}')."
                 )
 
+            previous_status = exp["status"]
+            prior_bindings = list(exp.get("run_bindings") or [])
+            prior_report = exp.get("report") if isinstance(exp.get("report"), dict) else {}
+            prior_leg_configs = (
+                dict(prior_report.get("leg_configs") or {})
+                if isinstance(prior_report.get("leg_configs"), dict)
+                else {}
+            )
+
             spec = ExperimentSpec.model_validate(exp["spec"])
-            if test_selection is not None:
-                spec.test_selection = test_selection
-                if (
-                    test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
-                    and spec.windows is None
-                ):
-                    spec.windows = WalkForwardWindowSpec()
+            if not prior_leg_configs and prior_bindings:
+                legacy_cfg = self._build_config_snapshot(spec)
+                if any(b.get("backtest_session_id") for b in prior_bindings):
+                    prior_leg_configs["backtest"] = legacy_cfg
+                if any(b.get("walk_forward_run_id") for b in prior_bindings):
+                    prior_leg_configs["walk_forward"] = legacy_cfg
+
+            effective_selection = (
+                config_overrides.test_selection
+                if config_overrides is not None and config_overrides.test_selection is not None
+                else (test_selection if test_selection is not None else spec.test_selection)
+            )
+            preserve_other = (
+                config_overrides.preserve_other_results
+                if config_overrides is not None
+                else True
+            )
+
+            self._apply_start_overrides(spec, effective_selection, config_overrides)
+
             for cand in spec.candidates:
                 cand.candidate_commit_hash = None
-            bindings = self._dispatch_candidate_runs(spec, spec.candidates)
+
+            bindings = self._dispatch_candidate_runs(
+                spec,
+                spec.candidates,
+                run_selection=effective_selection,
+                previous_bindings=prior_bindings if preserve_other else None,
+            )
+
+            has_bt = any(b.get("backtest_session_id") for b in bindings)
+            has_wf = any(b.get("walk_forward_run_id") for b in bindings)
+            if has_bt and has_wf:
+                spec.test_selection = TestSelection.BOTH
+            else:
+                spec.test_selection = effective_selection
+
             spec_dict = spec.model_dump(mode="json")
 
             repo.save_experiment(
@@ -533,6 +689,12 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 report=None,
             )
 
+        self._active_run_meta[experiment_id] = {
+            "started_at": datetime.now(timezone.utc).isoformat(),
+            "run_selection": effective_selection,
+            "prior_leg_configs": prior_leg_configs,
+            "config_snapshot": self._build_config_snapshot(spec),
+        }
         cancel_evt = threading.Event()
         self._cancellation_events[experiment_id] = cancel_evt
         self._emit_experiment_hook(
@@ -540,7 +702,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             experiment_id=experiment_id,
             spec=spec,
             status=ExperimentStatus.RUNNING.value,
-            previous_state=ExperimentStatus.DRAFT.value,
+            previous_state=previous_status,
         )
         watcher = threading.Thread(
             target=self._watch_experiment_runs,
@@ -801,19 +963,30 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             self,
             spec: ExperimentSpec,
             candidates: list[ExperimentCandidate],
+            run_selection: Optional[TestSelection] = None,
+            previous_bindings: Optional[list[dict[str, Any]]] = None,
     ) -> list[dict[str, Any]]:
         bindings: list[dict[str, Any]] = []
         branch_ref = f"refs/heads/backtest/{spec.branch_id}"
         base_commit_hash = self._vcs_service.resolve_commit_hash(branch_ref)
 
-        bt_data_source = (
-            self._pin_data_source(spec, self._backtest_app_service)
-            if spec.test_selection in (TestSelection.BACKTEST_ONLY, TestSelection.BOTH)
-            else spec.data_source
+        selection = run_selection or spec.test_selection
+        run_bt = selection in (TestSelection.BACKTEST_ONLY, TestSelection.BOTH)
+        run_wf = selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+        prev_by_cid = {
+            str(b.get("candidate_id")): b
+            for b in (previous_bindings or [])
+            if isinstance(b, dict) and b.get("candidate_id")
+        }
+
+        pin_runner = (
+            self._backtest_app_service
+            if (run_bt and self._backtest_app_service is not None)
+            else self._walk_forward_app_service
         )
-        wf_data_source = (
-            self._pin_data_source(spec, self._walk_forward_app_service)
-            if spec.test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH)
+        pinned_data_source = (
+            self._pin_data_source(spec, pin_runner)
+            if (run_bt or run_wf)
             else spec.data_source
         )
 
@@ -824,10 +997,15 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 cand,
                 base_commit_hash=base_commit_hash,
             )
-            bt_session_id = None
-            wf_run_id = None
+            prev = prev_by_cid.get(cand.candidate_id, {})
+            bt_session_id: Optional[str] = None
+            bt_status: Optional[str] = None
+            bt_error: Optional[str] = None
+            wf_run_id: Optional[str] = None
+            wf_status: Optional[str] = None
+            wf_error: Optional[str] = None
 
-            if spec.test_selection in (TestSelection.BACKTEST_ONLY, TestSelection.BOTH):
+            if run_bt:
                 if self._backtest_app_service:
                     bt_spec = BacktestRunSpec(
                         ticker_symbol=spec.ticker_symbol,
@@ -835,15 +1013,20 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                             source_type=BacktestConfigurationSourceType.VCS,
                             vcs_commit_hash=commit_hash,
                         ),
-                        data_source=bt_data_source,
+                        data_source=pinned_data_source,
                         period=spec.period,
                         initial_balance=spec.initial_balance,
                         execution=spec.execution,
                     )
                     bt_session = self._backtest_app_service.start_backtest_run(bt_spec)
                     bt_session_id = bt_session.id
+                    bt_status = "RUNNING"
+            elif prev.get("backtest_session_id"):
+                bt_session_id = prev.get("backtest_session_id")
+                bt_status = prev.get("backtest_status") or "COMPLETED"
+                bt_error = prev.get("backtest_error")
 
-            if spec.test_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH):
+            if run_wf:
                 if self._walk_forward_app_service:
                     wf_spec = WalkForwardRunSpec(
                         ticker_symbol=spec.ticker_symbol,
@@ -851,7 +1034,7 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                             source_type=BacktestConfigurationSourceType.VCS,
                             vcs_commit_hash=commit_hash,
                         ),
-                        data_source=wf_data_source,
+                        data_source=pinned_data_source,
                         period=spec.period,
                         windows=spec.windows or WalkForwardWindowSpec(),
                         initial_balance=spec.initial_balance,
@@ -860,11 +1043,20 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     )
                     wf_run = self._walk_forward_app_service.start_run(wf_spec)
                     wf_run_id = wf_run["run_id"]
+                    wf_status = "RUNNING"
+            elif prev.get("walk_forward_run_id"):
+                wf_run_id = prev.get("walk_forward_run_id")
+                wf_status = prev.get("walk_forward_status") or "COMPLETED"
+                wf_error = prev.get("walk_forward_error")
 
             bindings.append({
                 "candidate_id": cand.candidate_id,
                 "backtest_session_id": bt_session_id,
                 "walk_forward_run_id": wf_run_id,
+                "backtest_status": bt_status,
+                "backtest_error": bt_error,
+                "walk_forward_status": wf_status,
+                "walk_forward_error": wf_error,
                 "status": "RUNNING",
                 "error": None,
             })
@@ -902,17 +1094,34 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 updated = False
 
                 for b in bindings:
-                    if b.get("status") in ("COMPLETED", "FAILED", "CANCELLED"):
+                    if b.get("status") in ("COMPLETED", "PARTIAL", "FAILED", "CANCELLED"):
                         continue
 
-                    bt_done, wf_done, b_failed, error_msg = self._poll_binding_status(uow, b)
-                    if b_failed:
-                        b["status"] = "FAILED"
-                        b["error"] = error_msg
+                    bt_done, wf_done, leg_changed = self._poll_binding_status(uow, b)
+                    if leg_changed:
                         updated = True
-                        any_failed = True
-                    elif bt_done and wf_done:
-                        b["status"] = "COMPLETED"
+
+                    if bt_done and wf_done:
+                        active_statuses = [
+                            s
+                            for s in (b.get("backtest_status"), b.get("walk_forward_status"))
+                            if s is not None
+                        ]
+                        leg_errors = [
+                            e
+                            for e in (b.get("backtest_error"), b.get("walk_forward_error"))
+                            if e
+                        ]
+                        if not active_statuses or all(s == "COMPLETED" for s in active_statuses):
+                            b["status"] = "COMPLETED"
+                            b["error"] = None
+                        elif any(s == "COMPLETED" for s in active_statuses):
+                            b["status"] = "PARTIAL"
+                            b["error"] = "; ".join(leg_errors) if leg_errors else None
+                        else:
+                            b["status"] = "FAILED"
+                            b["error"] = "; ".join(leg_errors) if leg_errors else "Evaluation failed"
+                            any_failed = True
                         updated = True
                     else:
                         all_done = False
@@ -931,13 +1140,49 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                         status=ExperimentStatus.AGGREGATING.value,
                         previous_state=ExperimentStatus.RUNNING.value,
                     )
-                    report = self._compute_experiment_report(uow, spec, bindings, self._vcs_service)
+                    run_meta = self._active_run_meta.pop(experiment_id, {})
+                    run_selection = run_meta.get("run_selection") or spec.test_selection
+                    prior_leg_configs = dict(run_meta.get("prior_leg_configs") or {})
+                    config_snapshot = run_meta.get("config_snapshot") or self._build_config_snapshot(spec)
+
+                    leg_configs = dict(prior_leg_configs)
+                    if run_selection in (TestSelection.BACKTEST_ONLY, TestSelection.BOTH):
+                        leg_configs["backtest"] = config_snapshot
+                    if run_selection in (TestSelection.WALK_FORWARD_ONLY, TestSelection.BOTH):
+                        leg_configs["walk_forward"] = config_snapshot
+                    stale_legs, stale_reasons = self._compute_staleness(leg_configs, config_snapshot)
+
+                    report = self._compute_experiment_report(
+                        uow,
+                        spec,
+                        bindings,
+                        self._vcs_service,
+                        last_run_selection=run_selection,
+                        leg_configs=leg_configs,
+                        stale_legs=stale_legs,
+                        stale_reasons=stale_reasons,
+                    )
                     final_status = (
                         ExperimentStatus.FAILED.value
                         if (any_failed and all(b.get("status") == "FAILED" for b in bindings))
                         else ExperimentStatus.COMPLETED.value
                     )
-                    repo.update_report(experiment_id, final_status, report)
+                    existing_history = list(exp.get("run_history") or [])
+                    history_entry = self._build_run_history_entry(
+                        run_number=len(existing_history) + 1,
+                        started_at=str(run_meta.get("started_at") or datetime.now(timezone.utc).isoformat()),
+                        test_selection=run_selection,
+                        status=final_status,
+                        config_snapshot=config_snapshot,
+                        report=report,
+                    )
+                    existing_history.append(history_entry)
+                    repo.update_report(
+                        experiment_id,
+                        final_status,
+                        report,
+                        run_history=existing_history,
+                    )
                     self.app_logger.info("Experiment %s finished with status %s", experiment_id, final_status)
                     finished_spec = spec
                     finished_status = final_status
@@ -975,61 +1220,134 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                     )
 
     @staticmethod
-    def _poll_binding_status(uow: Any, b: dict[str, Any]) -> tuple[bool, bool, bool, Optional[str]]:
+    def _build_run_history_entry(  # pylint: disable=too-many-arguments
+            run_number: int,
+            started_at: str,
+            test_selection: TestSelection,
+            status: str,
+            config_snapshot: dict[str, Any],
+            report: dict[str, Any],
+    ) -> dict[str, Any]:
+        candidate_summaries: dict[str, Any] = {}
+        for cid, entry in (report.get("candidates") or {}).items():
+            if not isinstance(entry, dict):
+                continue
+            bt = entry.get("backtest") if isinstance(entry.get("backtest"), dict) else None
+            wf = entry.get("walk_forward") if isinstance(entry.get("walk_forward"), dict) else None
+            candidate_summaries[cid] = {
+                "name": entry.get("name") or cid,
+                "status": entry.get("status"),
+                "backtest_status": entry.get("backtest_status"),
+                "walk_forward_status": entry.get("walk_forward_status"),
+                "backtest_return_pct": bt.get("percentage_return") if bt else None,
+                "backtest_total_trades": bt.get("total_trades") if bt else None,
+                "walk_forward_oos_return_pct": (
+                    wf.get("aggregate_oos_return_pct")
+                    if wf and wf.get("aggregate_oos_return_pct") is not None
+                    else (wf.get("out_of_sample_return_pct") if wf else None)
+                ),
+                "walk_forward_wfe": (
+                    wf.get("walk_forward_efficiency_ratio")
+                    if wf and wf.get("walk_forward_efficiency_ratio") is not None
+                    else (wf.get("walk_forward_efficiency") if wf else None)
+                ),
+                "walk_forward_stability": wf.get("stability_classification") if wf else None,
+            }
+        return ExperimentRunHistoryEntry(
+            run_number=run_number,
+            started_at=started_at,
+            completed_at=datetime.now(timezone.utc).isoformat(),
+            test_selection=test_selection,
+            status=status,
+            config=ExperimentRunConfigSnapshot.model_validate(config_snapshot),
+            candidate_summaries=candidate_summaries,
+        ).model_dump(mode="json")
+
+    @staticmethod
+    def _poll_binding_status(uow: Any, b: dict[str, Any]) -> tuple[bool, bool, bool]:
         bt_done = True
         wf_done = True
-        b_failed = False
-        error_msg = None
+        changed = False
 
         if b.get("backtest_session_id"):
-            bt_repo = uow.get_repository(PostgresBacktestRepository)
-            bt_session = bt_repo.get_session(b["backtest_session_id"])
-            if bt_session:
-                status_str = (
-                    bt_session.status.value
-                    if isinstance(bt_session.status, Enum)
-                    else str(bt_session.status)
-                )
-                if status_str in ("QUEUED", "RUNNING"):
-                    bt_done = False
-                elif status_str == "FAILED":
-                    b_failed = True
-                    error_msg = (
-                        getattr(bt_session, "error_message", None)
-                        or getattr(bt_session, "error", None)
-                        or "Backtest run failed"
-                    )
-                elif status_str == "CANCELLED":
-                    b_failed = True
-                    error_msg = bt_session.error_message or "Backtest run was cancelled"
+            if b.get("backtest_status") in ("COMPLETED", "FAILED", "CANCELLED"):
+                bt_done = True
             else:
-                bt_done = False
+                bt_repo = uow.get_repository(PostgresBacktestRepository)
+                bt_session = bt_repo.get_session(b["backtest_session_id"])
+                if bt_session:
+                    status_str = (
+                        bt_session.status.value
+                        if isinstance(bt_session.status, Enum)
+                        else str(bt_session.status)
+                    )
+                    if status_str in ("QUEUED", "RUNNING"):
+                        bt_done = False
+                    elif status_str == "FAILED":
+                        b["backtest_status"] = "FAILED"
+                        b["backtest_error"] = (
+                            getattr(bt_session, "error_message", None)
+                            or getattr(bt_session, "error", None)
+                            or "Backtest run failed"
+                        )
+                        changed = True
+                    elif status_str == "CANCELLED":
+                        b["backtest_status"] = "CANCELLED"
+                        b["backtest_error"] = bt_session.error_message or "Backtest run was cancelled"
+                        changed = True
+                    else:
+                        b["backtest_status"] = "COMPLETED"
+                        b["backtest_error"] = None
+                        changed = True
+                else:
+                    bt_done = False
 
         if b.get("walk_forward_run_id"):
-            wf_repo = uow.get_repository(PostgresWalkForwardRepository)
-            wf_run = wf_repo.get_run(b["walk_forward_run_id"])
-            if wf_run:
-                wf_status = wf_run.get("status")
-                if wf_status in ("QUEUED", "RUNNING"):
-                    wf_done = False
-                elif wf_status == "FAILED":
-                    b_failed = True
-                    error_msg = wf_run.get("error_message") or "Walk-forward run failed"
-                elif wf_status == "CANCELLED":
-                    b_failed = True
-                    error_msg = wf_run.get("error_message") or "Walk-forward run was cancelled"
+            if b.get("walk_forward_status") in ("COMPLETED", "FAILED", "CANCELLED"):
+                wf_done = True
             else:
-                wf_done = False
+                wf_repo = uow.get_repository(PostgresWalkForwardRepository)
+                wf_run = wf_repo.get_run(b["walk_forward_run_id"])
+                if wf_run:
+                    wf_status = wf_run.get("status")
+                    if wf_status in ("QUEUED", "RUNNING"):
+                        wf_done = False
+                    elif wf_status == "FAILED":
+                        b["walk_forward_status"] = "FAILED"
+                        summary = wf_run.get("summary") if isinstance(wf_run.get("summary"), dict) else {}
+                        b["walk_forward_error"] = (
+                            wf_run.get("error_message")
+                            or summary.get("error_message")
+                            or summary.get("error")
+                            or "Walk-forward run failed"
+                        )
+                        changed = True
+                    elif wf_status == "CANCELLED":
+                        b["walk_forward_status"] = "CANCELLED"
+                        b["walk_forward_error"] = (
+                            wf_run.get("error_message") or "Walk-forward run was cancelled"
+                        )
+                        changed = True
+                    else:
+                        b["walk_forward_status"] = "COMPLETED"
+                        b["walk_forward_error"] = None
+                        changed = True
+                else:
+                    wf_done = False
 
-        return bt_done, wf_done, b_failed, error_msg
+        return bt_done, wf_done, changed
 
     @classmethod
-    def _compute_experiment_report(  # pylint: disable=too-many-locals
+    def _compute_experiment_report(  # pylint: disable=too-many-locals,too-many-arguments
             cls,
             uow: Any,
             spec: ExperimentSpec,
             bindings: list[dict[str, Any]],
             vcs_service: Optional[VCSService] = None,
+            last_run_selection: Optional[TestSelection] = None,
+            leg_configs: Optional[dict[str, Any]] = None,
+            stale_legs: Optional[dict[str, bool]] = None,
+            stale_reasons: Optional[dict[str, list[str]]] = None,
     ) -> dict[str, Any]:
         bt_repo = uow.get_repository(PostgresBacktestRepository)
         wf_repo = uow.get_repository(PostgresWalkForwardRepository)
@@ -1049,17 +1367,21 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
                 "candidate_type": cand_obj.candidate_type.value if cand_obj else "CUSTOM",
                 "status": b.get("status"),
                 "error": b.get("error"),
+                "backtest_status": b.get("backtest_status"),
+                "backtest_error": b.get("backtest_error"),
+                "walk_forward_status": b.get("walk_forward_status"),
+                "walk_forward_error": b.get("walk_forward_error"),
                 "backtest": None,
                 "walk_forward": None,
             }
 
-            if b.get("backtest_session_id"):
+            if b.get("backtest_session_id") and b.get("backtest_status") not in ("FAILED", "CANCELLED"):
                 metrics = bt_repo.get_result_metrics(b["backtest_session_id"])
                 cand_entry["backtest"] = metrics
                 if cid == "cand_current" and metrics:
                     baseline_bt_ret = float(metrics.get("percentage_return", 0.0))
 
-            if b.get("walk_forward_run_id"):
+            if b.get("walk_forward_run_id") and b.get("walk_forward_status") not in ("FAILED", "CANCELLED"):
                 wf_run = wf_repo.get_run(b["walk_forward_run_id"])
                 if wf_run and wf_run.get("summary"):
                     cand_entry["walk_forward"] = wf_run["summary"]
@@ -1080,20 +1402,33 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             entry["deltas"] = deltas
 
         total_cands = len(bindings)
-        completed_cands = sum(1 for b in bindings if b.get("status") == "COMPLETED")
+        completed_cands = sum(1 for b in bindings if b.get("status") in ("COMPLETED", "PARTIAL"))
+        partial_cands = sum(1 for b in bindings if b.get("status") == "PARTIAL")
         strat_attr, combo_matrix, strat_actions, strat_weights, strat_regime, regime_attr = (
             cls._extract_strategy_matrices(
                 candidate_reports, spec=spec, vcs_service=vcs_service
             )
         )
 
+        evaluation_context = cls._build_evaluation_context(
+            spec=spec,
+            candidate_reports=candidate_reports,
+            vcs_service=vcs_service,
+        )
+
         return {
             "summary": {
                 "total_candidates": total_cands,
                 "completed_candidates": completed_cands,
+                "partial_candidates": partial_cands,
                 "failed_candidates": total_cands - completed_cands,
                 "test_selection": spec.test_selection.value,
+                "last_run_selection": (last_run_selection or spec.test_selection).value,
             },
+            "leg_configs": leg_configs or {},
+            "stale_legs": stale_legs or {"backtest": False, "walk_forward": False},
+            "stale_reasons": stale_reasons or {"backtest": [], "walk_forward": []},
+            "evaluation_context": evaluation_context,
             "candidates": candidate_reports,
             "strategy_attribution": strat_attr,
             "strategy_combination_matrix": combo_matrix,
@@ -1101,6 +1436,193 @@ class ExperimentApplicationService(ApplicationLoggingMixin):
             "strategy_weights": strat_weights,
             "strategy_regime_matrix": strat_regime,
             "regime_attribution": regime_attr,
+        }
+
+    @classmethod
+    def _build_evaluation_context(  # pylint: disable=too-many-locals
+            cls,
+            spec: ExperimentSpec,
+            candidate_reports: dict[str, Any],
+            vcs_service: Optional[VCSService] = None,
+    ) -> dict[str, Any]:
+        dataset_ctx = cls._extract_dataset_context(spec, candidate_reports, vcs_service)
+        regime_ctx = cls._extract_regime_context(candidate_reports)
+        risk_ctx = cls._extract_risk_block_context(candidate_reports)
+        return {
+            "dataset": dataset_ctx,
+            "market_regime": regime_ctx,
+            "portfolio_risk_blocks": risk_ctx,
+        }
+
+    @classmethod
+    def _extract_dataset_context(
+            cls,
+            spec: ExperimentSpec,
+            candidate_reports: dict[str, Any],
+            vcs_service: Optional[VCSService],
+    ) -> dict[str, Any]:
+        bar_count: Optional[int] = None
+        start_time: Optional[str] = (
+            spec.period.start_time.isoformat()
+            if spec.period and spec.period.start_time
+            else None
+        )
+        end_time: Optional[str] = (
+            spec.period.end_time.isoformat()
+            if spec.period and spec.period.end_time
+            else None
+        )
+        duration_seconds: Optional[float] = None
+
+        for cid in ("cand_current", *candidate_reports.keys()):
+            bt = (candidate_reports.get(cid) or {}).get("backtest")
+            if not isinstance(bt, dict):
+                continue
+            ds = bt.get("dataset_context")
+            if isinstance(ds, dict) and ds.get("bar_count") is not None:
+                bar_count = int(ds["bar_count"])
+                start_time = ds.get("start_time") or start_time
+                end_time = ds.get("end_time") or end_time
+                duration_seconds = ds.get("duration_seconds")
+                break
+
+        timeframe = cls._resolve_asset_timeframe(spec, vcs_service)
+        source_type = (
+            spec.data_source.source_type.value
+            if isinstance(spec.data_source.source_type, Enum)
+            else str(spec.data_source.source_type)
+        )
+        return {
+            "bar_count": bar_count,
+            "timeframe": timeframe,
+            "source_type": source_type,
+            "dataset_id": spec.data_source.dataset_id,
+            "start_time": start_time,
+            "end_time": end_time,
+            "duration_seconds": duration_seconds,
+        }
+
+    @classmethod
+    def _resolve_asset_timeframe(
+            cls,
+            spec: ExperimentSpec,
+            vcs_service: Optional[VCSService],
+    ) -> Optional[str]:
+        commit_hash = cls._resolve_target_commit(spec, vcs_service)
+        if not commit_hash or vcs_service is None:
+            return None
+        try:
+            raw_config = vcs_service.checkout(commit_hash)
+            trading_config = TradingConfig.model_validate(raw_config)
+            matched = next(
+                (a for a in trading_config.assets if a.ticker_symbol == spec.ticker_symbol),
+                None,
+            )
+            if matched and matched.candles_timeframe is not None:
+                return (
+                    matched.candles_timeframe.value
+                    if isinstance(matched.candles_timeframe, Enum)
+                    else str(matched.candles_timeframe)
+                )
+        except Exception:  # pylint: disable=broad-except
+            pass
+        return None
+
+    @staticmethod
+    def _extract_regime_context(
+            candidate_reports: dict[str, Any],
+    ) -> dict[str, Any]:
+        regime_counts: dict[str, int] = {}
+        for cid in ("cand_current", *candidate_reports.keys()):
+            bt = (candidate_reports.get(cid) or {}).get("backtest")
+            if not isinstance(bt, dict):
+                continue
+            counts = bt.get("regime_counts")
+            if isinstance(counts, dict) and counts:
+                regime_counts = {str(k): int(v) for k, v in counts.items() if int(v) > 0}
+                break
+
+        total_obs = sum(regime_counts.values())
+        if total_obs <= 0:
+            return {
+                "dominant": None,
+                "total_observations": 0,
+                "distribution": [],
+            }
+
+        ordered = sorted(regime_counts.items(), key=lambda item: (-item[1], item[0]))
+        distribution = [
+            {
+                "regime": regime,
+                "count": count,
+                "pct": round((count / total_obs) * 100.0, 1),
+            }
+            for regime, count in ordered
+        ]
+        return {
+            "dominant": ordered[0][0],
+            "total_observations": total_obs,
+            "distribution": distribution,
+        }
+
+    @classmethod
+    def _extract_risk_block_context(
+            cls,
+            candidate_reports: dict[str, Any],
+    ) -> dict[str, Any]:
+        baseline_bt = (candidate_reports.get("cand_current") or {}).get("backtest")
+        baseline_diag = (
+            baseline_bt.get("signal_diagnostics")
+            if isinstance(baseline_bt, dict)
+            else None
+        )
+        baseline_summary = cls._summarize_signal_diagnostics(
+            baseline_diag if isinstance(baseline_diag, dict) else {}
+        )
+
+        total_signals = 0
+        total_blocked = 0
+        merged_reasons: dict[str, int] = {}
+        for entry in candidate_reports.values():
+            bt = entry.get("backtest") if isinstance(entry, dict) else None
+            diag = bt.get("signal_diagnostics") if isinstance(bt, dict) else None
+            if not isinstance(diag, dict):
+                continue
+            total_signals += int(diag.get("total_signals") or 0)
+            total_blocked += int(diag.get("risk_blocked_signals") or 0)
+            for reason, cnt in (diag.get("risk_block_reasons") or {}).items():
+                merged_reasons[str(reason)] = merged_reasons.get(str(reason), 0) + int(cnt)
+
+        all_summary = cls._summarize_signal_diagnostics(
+            {
+                "total_signals": total_signals,
+                "risk_blocked_signals": total_blocked,
+                "risk_block_reasons": merged_reasons,
+            }
+        )
+        return {
+            "baseline": baseline_summary,
+            "all_candidates": all_summary,
+        }
+
+    @staticmethod
+    def _summarize_signal_diagnostics(diag: dict[str, Any]) -> dict[str, Any]:
+        total = int(diag.get("total_signals") or 0)
+        blocked = int(diag.get("risk_blocked_signals") or 0)
+        blocked_pct = round((blocked / total) * 100.0, 1) if total > 0 else None
+        reasons_raw = diag.get("risk_block_reasons") or {}
+        top_reasons = [
+            {"reason": str(reason), "count": int(cnt)}
+            for reason, cnt in sorted(
+                reasons_raw.items(), key=lambda item: (-int(item[1]), str(item[0]))
+            )[:4]
+            if int(cnt) > 0
+        ]
+        return {
+            "total_signals": total,
+            "blocked_signals": blocked,
+            "blocked_pct": blocked_pct,
+            "top_reasons": top_reasons,
         }
 
     @classmethod

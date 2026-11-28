@@ -36,6 +36,7 @@ from src.trading.events import (
     DecisionRejectedEvent,
     DecisionRejectedReason,
     MarketDataEvent,
+    MarketRegimeObservedEvent,
     MarketStateChangedEvent,
     OrderSubmittedEvent,
     SignalGeneratedEvent,
@@ -337,6 +338,13 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
             return
 
         regime_metrics = self._regime_detector.detect(candles, market_data)
+        self._publish_event(
+            MarketRegimeObservedEvent(
+                symbol=asset.ticker_symbol,
+                regime=regime_metrics.regime.value,
+                observed_at=float(market_data.timestamp),
+            )
+        )
         if trading_context:
             trading_context.regime = regime_metrics.regime.value
             trading_context.regime_volatility = regime_metrics.volatility
@@ -676,6 +684,13 @@ class TradingExecutor(ApplicationLoggingMixin, TradingLoggingMixin, AuditLogging
         price = self._calculate_price(asset, market_data, fees)
 
         regime_metrics = self._regime_detector.detect(candles, market_data)
+        self._publish_event(
+            MarketRegimeObservedEvent(
+                symbol=asset.ticker_symbol,
+                regime=regime_metrics.regime.value,
+                observed_at=float(market_data.timestamp),
+            )
+        )
         market_snapshot = self._build_market_snapshot(market_data, candles)
         regime_snapshot = self._build_regime_snapshot(regime_metrics)
         portfolio_snapshot = self._build_portfolio_snapshot(asset, trading_context)

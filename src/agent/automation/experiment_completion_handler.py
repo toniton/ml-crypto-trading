@@ -37,6 +37,9 @@ class CandidateOutcome:
     win_rate_pct: float
     profit_factor: float
     max_drawdown: float
+    wf_oos_return_pct: Optional[float] = None
+    wf_efficiency: Optional[float] = None
+    wf_stability: Optional[str] = None
 
 
 class ExperimentCompletionAgentHandler(ApplicationLoggingMixin):
@@ -238,6 +241,23 @@ class ExperimentCompletionAgentHandler(ApplicationLoggingMixin):
             if not isinstance(entry, dict):
                 continue
             bt = entry.get("backtest") if isinstance(entry.get("backtest"), dict) else entry
+            wf = entry.get("walk_forward") if isinstance(entry.get("walk_forward"), dict) else None
+            wf_oos: Optional[float] = None
+            wf_wfe: Optional[float] = None
+            wf_stability: Optional[str] = None
+            if wf is not None:
+                raw_oos = wf.get("aggregate_oos_return_pct")
+                if raw_oos is None:
+                    raw_oos = wf.get("out_of_sample_return_pct")
+                if raw_oos is not None:
+                    wf_oos = float(raw_oos)
+                raw_wfe = wf.get("walk_forward_efficiency_ratio")
+                if raw_wfe is None:
+                    raw_wfe = wf.get("walk_forward_efficiency")
+                if raw_wfe is not None:
+                    wf_wfe = float(raw_wfe)
+                if wf.get("stability_classification") is not None:
+                    wf_stability = str(wf["stability_classification"])
             outcomes.append(
                 CandidateOutcome(
                     candidate_id=str(cand_id),
@@ -247,6 +267,9 @@ class ExperimentCompletionAgentHandler(ApplicationLoggingMixin):
                     win_rate_pct=float(bt.get("win_rate_pct") or 0.0),
                     profit_factor=float(bt.get("profit_factor") or 0.0),
                     max_drawdown=float(bt.get("max_drawdown") or 0.0),
+                    wf_oos_return_pct=wf_oos,
+                    wf_efficiency=wf_wfe,
+                    wf_stability=wf_stability,
                 )
             )
         return outcomes
@@ -286,17 +309,28 @@ class ExperimentCompletionAgentHandler(ApplicationLoggingMixin):
                 f"No immediate configuration change is recommended."
             )
         if baseline is not None and baseline.total_trades == 0:
+            wf_note = (
+                f" Walk-forward OOS return {best.wf_oos_return_pct:+.2f}%"
+                f"{f' ({best.wf_stability})' if best.wf_stability else ''}."
+                if best.wf_oos_return_pct is not None
+                else " Review in Experiments and run walk-forward validation before promoting."
+            )
             return (
                 f"Candidate `{best.name}` broke signal starvation with {best.total_trades} "
                 f"trade(s) (net PnL {best.net_pnl:+.2f}, win rate {best.win_rate_pct:.1f}%) "
-                f"vs 0 baseline trades. Review in Experiments and run walk-forward validation "
-                f"before promoting."
+                f"vs 0 baseline trades.{wf_note}"
             )
+        wf_note = (
+            f" Walk-forward OOS return {best.wf_oos_return_pct:+.2f}%"
+            f"{f' ({best.wf_stability})' if best.wf_stability else ''}. "
+            f"Review the full report before promotion."
+            if best.wf_oos_return_pct is not None
+            else " Review the full report and validate with walk-forward testing before promotion."
+        )
         return (
             f"Candidate `{best.name}` outperformed baseline with {best.total_trades} trade(s) "
             f"(net PnL {best.net_pnl:+.2f}, win rate {best.win_rate_pct:.1f}%, "
-            f"PF {best.profit_factor:.2f}). Review the full report and validate with "
-            f"walk-forward testing before promotion."
+            f"PF {best.profit_factor:.2f}).{wf_note}"
         )
 
     @staticmethod
@@ -315,17 +349,39 @@ class ExperimentCompletionAgentHandler(ApplicationLoggingMixin):
             f"**Summary:** {recommendation}",
         ]
         if outcomes:
-            lines.extend(
-                [
-                    "",
-                    "| Candidate | Trades | Net PnL | Win Rate | Profit Factor |",
-                    "| --- | ---: | ---: | ---: | ---: |",
-                ]
-            )
-            for item in outcomes:
-                lines.append(
-                    f"| {item.name} | {item.total_trades} | "
-                    f"{item.net_pnl:+.2f} | {item.win_rate_pct:.1f}% | "
-                    f"{item.profit_factor:.2f} |"
+            has_wf = any(o.wf_oos_return_pct is not None for o in outcomes)
+            if has_wf:
+                lines.extend(
+                    [
+                        "",
+                        "| Candidate | Trades | Net PnL | Win Rate | Profit Factor | WF OOS | Stability |",
+                        "| --- | ---: | ---: | ---: | ---: | ---: | --- |",
+                    ]
                 )
+                for item in outcomes:
+                    wf_oos_str = (
+                        f"{item.wf_oos_return_pct:+.2f}%"
+                        if item.wf_oos_return_pct is not None
+                        else "—"
+                    )
+                    stability_str = item.wf_stability or "—"
+                    lines.append(
+                        f"| {item.name} | {item.total_trades} | "
+                        f"{item.net_pnl:+.2f} | {item.win_rate_pct:.1f}% | "
+                        f"{item.profit_factor:.2f} | {wf_oos_str} | {stability_str} |"
+                    )
+            else:
+                lines.extend(
+                    [
+                        "",
+                        "| Candidate | Trades | Net PnL | Win Rate | Profit Factor |",
+                        "| --- | ---: | ---: | ---: | ---: |",
+                    ]
+                )
+                for item in outcomes:
+                    lines.append(
+                        f"| {item.name} | {item.total_trades} | "
+                        f"{item.net_pnl:+.2f} | {item.win_rate_pct:.1f}% | "
+                        f"{item.profit_factor:.2f} |"
+                    )
         return "\n".join(lines)

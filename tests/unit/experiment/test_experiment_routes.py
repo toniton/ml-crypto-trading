@@ -110,3 +110,30 @@ class TestExperimentRoutes:  # pylint: disable=attribute-defined-outside-init
             "exp_1",
             TestSelection.BOTH,
         )
+
+    def test_start_experiment_forwards_full_config_overrides(self):
+        from api.interfaces.experiment import StartExperimentRequest, TestSelection
+
+        self.mock_service.start_experiment.return_value = {
+            "experiment_id": "exp_1",
+            "status": "RUNNING",
+        }
+        res = self.client.post(
+            "/api/v1/experiments/exp_1/start",
+            json={
+                "test_selection": "WALK_FORWARD_ONLY",
+                "initial_balance": 25000,
+                "windows": {
+                    "window_mode": "expanding",
+                    "train_candle_count": 100,
+                    "test_candle_count": 30,
+                },
+            },
+        )
+        assert res.status_code == 200
+        call_args = self.mock_service.start_experiment.call_args[0]
+        assert call_args[0] == "exp_1"
+        assert call_args[1] == TestSelection.WALK_FORWARD_ONLY
+        assert isinstance(call_args[2], StartExperimentRequest)
+        assert float(call_args[2].initial_balance) == 25000.0
+        assert call_args[2].windows.train_candle_count == 100

@@ -247,6 +247,13 @@ class AgentApprovalService(AgentLoggingMixin):
                 return app
         return self._find_persisted_approval(approval_id)
 
+    def list_pending_approvals(self) -> List[AgentApprovalRequest]:
+        """Return all currently pending approval requests tracked in memory."""
+        return [
+            app for app in self._approvals.values()
+            if app.status == ApprovalStatus.PENDING
+        ]
+
     def _find_persisted_approval(self, approval_id: str) -> Optional[AgentApprovalRequest]:
         if self._conversation_store is None:
             return None

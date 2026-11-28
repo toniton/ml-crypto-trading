@@ -18,5 +18,6 @@ class ExperimentDao(SqlAlchemyDatabaseManager.BaseTableModel):
     spec = Column(JSON_TYPE, nullable=False)
     run_bindings = Column(JSON_TYPE, nullable=False, default=list)
     report = Column(JSON_TYPE, nullable=True)
+    run_history = Column(JSON_TYPE, nullable=False, default=list)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)  # pylint: disable=not-callable
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)  # pylint: disable=not-callable

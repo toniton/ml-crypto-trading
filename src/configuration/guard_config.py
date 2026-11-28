@@ -23,6 +23,6 @@ class GuardConfig:
         default=None,
         ge=1,
         le=10000,
-        description="Number of candles over which max drawdown is measured before trading halts.",
+        description="Number of recent position entries (open and closed) over which max drawdown is measured before trading halts.",
         json_schema_extra={"mutable": True},
     )
