@@ -33,6 +33,10 @@ class DiagnoseNode:
         error_event = state.get("error_event")
         component = error_event.component if error_event else "runtime"
 
+        balance_evidence = next(
+            (e for e in evidence if e.source == "balance_analysis"),
+            None,
+        )
         size_evidence = next(
             (
                 e
@@ -53,15 +57,67 @@ class DiagnoseNode:
             for e in evidence
         )
 
-        if size_evidence is not None:
+        if balance_evidence is not None:
+            exchange = (error_event.exchange if error_event else None) or balance_evidence.data.get("exchange") or "EXCHANGE"
+            symbol = balance_evidence.data.get("symbol") or (error_event.asset if error_event else None) or "UNKNOWN"
+            trade_action = balance_evidence.data.get("trade_action") or "ORDER"
+            submitted_qty = balance_evidence.data.get("submitted_quantity")
+            required_ccy = balance_evidence.data.get("required_currency") or "funds"
+            avail_bal = balance_evidence.data.get("available_balance")
+            locked_bal = balance_evidence.data.get("locked_balance")
+            min_qty = balance_evidence.data.get("min_quantity")
+            min_notional = balance_evidence.data.get("min_notional")
+            avail_notional = balance_evidence.data.get("available_notional")
+            is_sell_dust = bool(balance_evidence.data.get("is_sell_dust"))
+            min_qty_clause = f", exchange min_qty={min_qty}" if min_qty is not None else ""
+            notional_clause = f", min_notional={min_notional}" if min_notional is not None else ""
+            if is_sell_dust and avail_bal is not None:
+                summary = (
+                    f"Exchange {exchange} rejected {symbol} {trade_action} order "
+                    f"(qty={submitted_qty}{min_qty_clause}{notional_clause}) "
+                    f"due to stale local balance cache on unsellable dust "
+                    f"({avail_bal} {required_ccy}, ~{avail_notional})."
+                )
+                root_cause = (
+                    f"Available {required_ccy} balance ({avail_bal}, ~{avail_notional}) is unsellable dust "
+                    f"below exchange min_notional={min_notional} and below submitted {trade_action} "
+                    f"qty={submitted_qty}; AccountManager reconciles the stale balance on rejection."
+                )
+            else:
+                summary = (
+                    f"Exchange {exchange} rejected {symbol} {trade_action} order "
+                    f"(qty={submitted_qty}{min_qty_clause}{notional_clause}) "
+                    f"due to insufficient available {required_ccy} balance."
+                )
+                if avail_bal is not None:
+                    root_cause = (
+                        f"Available {required_ccy} balance ({avail_bal}"
+                        + (f", locked={locked_bal}" if locked_bal is not None else "")
+                        + f") is insufficient for {trade_action} {symbol} qty={submitted_qty}."
+                    )
+                else:
+                    root_cause = (
+                        f"{exchange} rejected {trade_action} {symbol} qty={submitted_qty} "
+                        f"with {error_event.message if error_event else 'INSUFFICIENT_AVAILABLE_BALANCE'}."
+                    )
+            confidence = ConfidenceLevel.CONFIRMED
+            if self._llm is not None:
+                summary, root_cause = self._refine_with_llm(
+                    error_event=error_event,
+                    evidence=evidence,
+                    fallback_summary=summary,
+                    fallback_root_cause=root_cause,
+                )
+        elif size_evidence is not None:
             exchange = (error_event.exchange if error_event else None) or size_evidence.data.get("exchange") or "EXCHANGE"
             symbol = (error_event.asset if error_event else None) or size_evidence.data.get("symbol") or "UNKNOWN"
             submitted_qty = size_evidence.data.get("submitted_quantity")
             min_qty = size_evidence.data.get("min_quantity")
             min_notional = size_evidence.data.get("min_notional")
             recommended_qty = size_evidence.data.get("recommended_min_quantity")
+            min_qty_clause = f", exchange min_qty={min_qty}" if min_qty is not None else ""
             summary = (
-                f"Exchange {exchange} rejected {symbol} order (qty={submitted_qty}) "
+                f"Exchange {exchange} rejected {symbol} order (qty={submitted_qty}{min_qty_clause}) "
                 f"because it is below the minimum order size."
             )
             if size_evidence.data.get("violates_min_notional") and min_notional is not None:

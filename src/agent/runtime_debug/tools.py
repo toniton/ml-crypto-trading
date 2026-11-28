@@ -127,6 +127,51 @@ class RuntimeDebugToolbox(ApplicationLoggingMixin):
             self.app_logger.warning(f"Unable to compute config diff: {exc}")
             return {}
 
+    def get_account_balances(self, exchange: str) -> list[dict[str, Any]]:
+        """Fetch live account balances from the exchange REST manager."""
+        provider = (exchange or "").upper()
+        if self._rest_manager is None or not provider:
+            return []
+        try:
+            balances = self._rest_manager.get_account_balance(provider, force_refresh=True)
+            return [
+                {
+                    "currency": str(b.currency).upper(),
+                    "available": str(b.available_balance),
+                    "locked": None,
+                    "total": str(b.available_balance),
+                }
+                for b in (balances or [])
+            ]
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                "Unable to fetch live account balances on %s: %s", provider, exc
+            )
+            return []
+
+    def get_open_orders(self, exchange: str, symbol: Optional[str] = None) -> list[dict[str, Any]]:
+        """Fetch live open orders on the exchange for an optional ticker symbol."""
+        provider = (exchange or "").upper()
+        if self._rest_manager is None or not provider:
+            return []
+        try:
+            orders = self._rest_manager.get_open_orders(provider, symbol)
+            return [
+                {
+                    "uuid": str(o.uuid),
+                    "ticker_symbol": o.ticker_symbol,
+                    "trade_action": o.trade_action.value if o.trade_action else None,
+                    "quantity": str(o.quantity),
+                    "price": str(o.price),
+                }
+                for o in (orders or [])
+            ]
+        except Exception as exc:  # pylint: disable=broad-except
+            self.app_logger.warning(
+                "Unable to fetch open orders for %s on %s: %s", symbol, provider, exc
+            )
+            return []
+
     def get_exchange_instrument_metadata(self, exchange: str, symbol: str) -> dict[str, Any]:
         normalized_symbol = symbol.upper().replace("/", "_").replace("-", "_")
         provider = (exchange or "").upper()

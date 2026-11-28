@@ -56,6 +56,36 @@ def test_cryptodotcom_instrument_metadata_builder_and_mapper():
     )
 
 
+def test_cryptodotcom_mapper_infers_usd_min_notional_and_quote_decimals():
+    mapper = CryptoDotComInstrumentMetadataMapper("CRO_USD")
+    payload = {
+        "result": {
+            "data": [
+                {
+                    "symbol": "CRO_USD",
+                    "base_ccy": "CRO",
+                    "quote_ccy": "USD",
+                    "quote_decimals": 5,
+                    "quantity_decimals": 0,
+                    "price_tick_size": "0.00001",
+                    "qty_tick_size": "1",
+                }
+            ]
+        }
+    }
+    metadata = mapper.map(payload)
+    assert metadata == InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+
+
 def test_ccxt_instrument_metadata_mapper():
     mapper = CCXTInstrumentMetadataMapper("CCXT_BINANCE")
     metadata = mapper.map(

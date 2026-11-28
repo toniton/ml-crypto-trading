@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import field
 from decimal import Decimal
+from typing import Optional
 
 from pydantic.dataclasses import dataclass
 
@@ -37,6 +38,18 @@ class PortfolioSnapshot:
     equity: Decimal
 
 
+@dataclass(frozen=True)
+class BacktestExecutionDiagnostics:
+    dataset_bar_count: int = 0
+    dataset_start_at: Optional[str] = None
+    dataset_end_at: Optional[str] = None
+    dataset_duration_seconds: Optional[float] = None
+    total_signals: int = 0
+    risk_blocked_signals: int = 0
+    risk_block_reasons: dict[str, int] = field(default_factory=dict)
+    regime_counts: dict[str, int] = field(default_factory=dict)
+
+
 # pylint: disable=too-many-instance-attributes
 @dataclass
 class BacktestResult:
@@ -54,3 +67,4 @@ class BacktestResult:
     strategy_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)
     commit_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)
     regime_attribution: dict[str, AttributionMetrics] = field(default_factory=dict)
+    diagnostics: Optional[BacktestExecutionDiagnostics] = None

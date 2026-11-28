@@ -16,6 +16,10 @@ class GenerateSuggestionNode:
         evidence = state.get("evidence") or []
         error_event = state.get("error_event")
 
+        balance_evidence = next(
+            (e for e in evidence if e.source == "balance_analysis"),
+            None,
+        )
         size_evidence = next(
             (
                 e
@@ -36,7 +40,126 @@ class GenerateSuggestionNode:
             for e in evidence
         )
 
-        if size_evidence is not None:
+        if balance_evidence is not None:
+            symbol = (
+                balance_evidence.data.get("symbol")
+                or (error_event.asset if error_event else None)
+                or "UNKNOWN"
+            )
+            exchange = (
+                (error_event.exchange if error_event else None)
+                or balance_evidence.data.get("exchange")
+                or "EXCHANGE"
+            )
+            min_qty = balance_evidence.data.get("min_quantity")
+            min_notional = balance_evidence.data.get("min_notional")
+            remediation_action = balance_evidence.data.get("remediation_action")
+            proposed_changes = balance_evidence.data.get("proposed_changes") or []
+            primary_change = proposed_changes[0] if proposed_changes else None
+            min_qty_clause = f" (exchange min_qty={min_qty}" + (
+                f", min_notional={min_notional})" if min_notional is not None else ")"
+            ) if min_qty is not None else ""
+
+            if remediation_action == "reconcile_balance_dust" and not proposed_changes:
+                avail_bal = balance_evidence.data.get("available_balance")
+                avail_notional = balance_evidence.data.get("available_notional")
+                required_ccy = balance_evidence.data.get("required_currency") or "base asset"
+                summary = (
+                    f"No config change needed for {symbol}{min_qty_clause}: remaining "
+                    f"{avail_bal} {required_ccy} (~{avail_notional}) is unsellable dust on {exchange}."
+                )
+                proposed_change = (
+                    f"No configuration change required. AccountManager automatically reconciles "
+                    f"{exchange} balances on order rejection so TradingExecutor skips further "
+                    f"sub-balance SELLs until a future BUY brings {symbol} above min_notional={min_notional}."
+                )
+                rationale = (
+                    f"Available {required_ccy} ({avail_bal}, ~{avail_notional}) is below {exchange} "
+                    f"min_notional={min_notional} (unsellable dust) while still meeting min_qty={min_qty}. "
+                    f"Disabling assets.{symbol}.enabled on a transient stale-balance SELL would unnecessarily "
+                    f"halt BUY orders; automatic balance reconciliation resolves the cache drift."
+                )
+                if self._llm is not None:
+                    rationale = self._refine_rationale_with_llm(
+                        symbol=symbol,
+                        exchange=exchange,
+                        proposed_change=proposed_change,
+                        fallback_rationale=rationale,
+                        evidence=evidence,
+                    )
+                suggestion = DebugSuggestion(
+                    summary=summary,
+                    root_cause=(
+                        diagnosis.suspected_root_cause
+                        if diagnosis
+                        else f"Unsellable {symbol} dust with stale local balance on {exchange}."
+                    ),
+                    affected_component="trading.accounts.account_manager",
+                    proposed_change=proposed_change,
+                    rationale=rationale,
+                    evidence=evidence,
+                    risk=RiskLevel.LOW,
+                    requires_code_change=False,
+                    requires_configuration_change=False,
+                    requires_restart=False,
+                    requires_manual_validation=False,
+                )
+            else:
+                target_path = (
+                    str(primary_change["path"])
+                    if isinstance(primary_change, dict) and primary_change.get("path")
+                    else f"assets.{symbol}.enabled"
+                )
+                target_value = (
+                    primary_change["new_value"]
+                    if isinstance(primary_change, dict) and "new_value" in primary_change
+                    else False
+                )
+
+                if target_path.endswith(".enabled") and target_value is False:
+                    summary = f"Pause {symbol} (set {target_path}=false){min_qty_clause} due to insufficient balance on {exchange}."
+                    proposed_change = (
+                        f"Set {target_path} to false to stop repeated INSUFFICIENT_AVAILABLE_BALANCE "
+                        f"rejections until {symbol} balances are reconciled or replenished."
+                    )
+                else:
+                    summary = f"Update {target_path} to {target_value}{min_qty_clause} to fit available balance on {exchange}."
+                    proposed_change = (
+                        f"Update {target_path} to {target_value} so {symbol} orders fit within "
+                        f"available {exchange} balance."
+                    )
+
+                rationale = (
+                    str(primary_change.get("reason"))
+                    if isinstance(primary_change, dict) and primary_change.get("reason")
+                    else balance_evidence.description
+                )
+                if self._llm is not None:
+                    rationale = self._refine_rationale_with_llm(
+                        symbol=symbol,
+                        exchange=exchange,
+                        proposed_change=proposed_change,
+                        fallback_rationale=rationale,
+                        evidence=evidence,
+                    )
+                suggestion = DebugSuggestion(
+                    summary=summary,
+                    root_cause=(
+                        diagnosis.suspected_root_cause
+                        if diagnosis
+                        else f"Insufficient available balance for {symbol} on {exchange}."
+                    ),
+                    affected_component=target_path,
+                    proposed_change=proposed_change,
+                    rationale=rationale,
+                    evidence=evidence,
+                    risk=RiskLevel.MEDIUM,
+                    requires_code_change=False,
+                    requires_configuration_change=True,
+                    requires_restart=False,
+                    requires_manual_validation=True,
+                )
+        elif size_evidence is not None:
             symbol = (
                 (error_event.asset if error_event else None)
                 or size_evidence.data.get("symbol")
@@ -75,8 +198,9 @@ class GenerateSuggestionNode:
                     fallback_rationale=rationale,
                     evidence=evidence,
                 )
+            min_qty_note = f" (exchange min_qty={min_qty})" if min_qty is not None else ""
             suggestion = DebugSuggestion(
-                summary=f"Raise assets.{symbol}.min_quantity to {recommended_qty} for {exchange}.",
+                summary=f"Raise assets.{symbol}.min_quantity to {recommended_qty}{min_qty_note} for {exchange}.",
                 root_cause=(
                     diagnosis.suspected_root_cause
                     if diagnosis

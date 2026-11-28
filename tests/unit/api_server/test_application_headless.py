@@ -137,6 +137,45 @@ class TestApplicationHeadless(unittest.TestCase):
 
         app.shutdown()
 
+    @patch("src.application.Thread")
+    @patch("src.application.Application._setup_clients")
+    @patch("src.application.Application._setup_configuration")
+    @patch("src.application.SqlAlchemyDatabaseManager")
+    @patch("src.application.VCSService")
+    @patch("src.application.RefChangeListener")
+    @patch("src.trading.managers.manager_factory.ClientFactory")
+    @patch("src.llm.llm_runtime_manager.ModelFactory")
+    @patch("src.application.TradingEngine")
+    @patch("src.application.ApiServer")
+    def test_application_starts_runtime_debug_startup_sweep_thread(
+            self, mock_api_server_cls, mock_trading_engine, mock_model_factory,
+            mock_client_factory, mock_ref_listener, mock_vcs, mock_db_manager,
+            mock_setup_config, _mock_setup_clients, mock_thread_cls
+    ):
+        mock_vcs.return_value = MagicMock(spec=VCSService)
+        mock_db_manager.return_value = MagicMock(spec=DatabaseManager)
+        mock_client_factory.create_rest_manager.return_value = MagicMock(spec=ExchangeRestManager)
+
+        app_config = ApplicationConfig(trading_config_filepath="config.yaml", headless=True)
+        env_config = MagicMock(spec=EnvironmentConfig)
+        trading_config = MagicMock(spec=TradingConfig)
+        trading_config.assets = []
+        trading_config.consensus = MagicMock()
+        trading_config.dynamic_quantity = None
+        llm_config = LlmConfig()
+
+        app = Application(app_config, env_config, trading_config, llm_config)
+        app.startup()
+
+        mock_thread_cls.assert_called_once_with(
+            target=app._runtime_debug_service.sweep_critical_incidents,
+            name="runtime-debug-startup-sweep",
+            daemon=True,
+        )
+        mock_thread_cls.return_value.start.assert_called_once()
+
+        app.shutdown()
+
 
 if __name__ == "__main__":
     unittest.main()

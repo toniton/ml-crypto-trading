@@ -83,6 +83,17 @@ class SignalGeneratedEvent(TradingEvent):
 
 
 @dataclass
+class MarketRegimeObservedEvent(TradingEvent):
+    EVENT_TYPE = "MarketRegimeObservedEvent"
+    symbol: str
+    regime: str
+    observed_at: float
+
+    def _resolve_asset(self) -> Optional[str]:
+        return self.symbol
+
+
+@dataclass
 class MarketStateChangedEvent(TradingEvent):
     symbol: str
     price: Decimal

@@ -177,6 +177,7 @@ class ChatApp:
             vcs: VCSService,
             llm_manager: LlmRuntimeManager,
             retention_manager: RetentionManager,
+            runtime_debug_service: Optional[RuntimeDebugService] = None,
     ) -> FastAPI:
         conversation_service = ConversationService(db_manager)
         configuration_service = ConfigurationService(db_manager)
@@ -238,9 +239,10 @@ class ChatApp:
             allow_headers=["*"],
         )
 
-        runtime_debug_service = RuntimeDebugService(
+        runtime_debug_service = runtime_debug_service or RuntimeDebugService(
             database_manager=db_manager,
             vcs=vcs,
+            llm=llm_manager.proxy_adapter,
             event_bus=event_bus,
         )
         app.state.runtime_debug_service = runtime_debug_service

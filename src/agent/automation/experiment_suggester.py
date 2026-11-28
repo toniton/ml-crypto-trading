@@ -79,7 +79,7 @@ class NoSignalsExperimentSuggester:
             "name": experiment_name,
             "ticker_symbol": event.asset,
             "base_commit_hash": base_commit or "",
-            "test_selection": TestSelection.BACKTEST_ONLY.value,
+            "test_selection": TestSelection.BOTH.value,
             "data_source": {
                 "source_type": BacktestDataSourceType.MARKET_DATA.value,
             },
@@ -117,8 +117,8 @@ class NoSignalsExperimentSuggester:
         )
         risks = [
             "Experiment runs on an isolated branch and does not alter live trading config.",
-            "Observed-window backtest results may overfit a short market regime; "
-            "validate with walk-forward testing before promoting any candidate.",
+            "Observed-window results run both backtest and walk-forward validation; "
+            "short market regimes may still require broader historical data before promotion.",
         ]
         return SuggestedExperimentProposal(
             title=f"Run strategy experiment — {event.asset}",

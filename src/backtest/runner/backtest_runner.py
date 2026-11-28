@@ -5,25 +5,30 @@ from queue import Queue
 from typing import Mapping, Optional
 
 from api.interfaces.asset import Asset
-from api.interfaces.backtest_request import BacktestRequest, ExecutionConfiguration
+from api.interfaces.backtest_request import (BacktestRequest,
+                                             ExecutionConfiguration)
 from src.backtest.backtest_clock import BacktestClock
 from src.backtest.backtest_engine import BacktestEngine
-from src.backtest.backtest_event_bus import BacktestEventBus
+from src.backtest.backtest_event_bus import (BacktestDiagnosticEventBus,
+                                             BacktestEventBus)
 from src.backtest.backtest_infrastructure import BacktestInfrastructure
-from src.backtest.backtest_result_collector import BacktestResultCollector
 from src.backtest.backtest_rest_service import BacktestRestService
+from src.backtest.backtest_result_collector import BacktestResultCollector
 from src.backtest.backtest_trading_scheduler import BacktestTradingScheduler
 from src.backtest.backtest_websocket_service import BacktestWebSocketService
 from src.backtest.data.backtest_data_set import BacktestDataSet
-from src.backtest.data.backtest_data_source_resolver import BacktestDataSourceResolver
+from src.backtest.data.backtest_data_source_resolver import \
+    BacktestDataSourceResolver
 from src.backtest.domain.result import BacktestResult
 from src.backtest.domain.session import BacktestSession
 from src.backtest.events.domain_events import OrderFilledEvent
-from src.backtest.execution.backtest_execution_engine import BacktestExecutionEngine
+from src.backtest.execution.backtest_execution_engine import \
+    BacktestExecutionEngine
 from src.backtest.execution.execution_model import ExecutionModel
 from src.backtest.execution.fees.percentage_fee import PercentageFee
 from src.backtest.execution.latency.fixed_latency import FixedLatencyModel
-from src.backtest.execution.slippage.fixed_tick_slippage import FixedTickSlippage
+from src.backtest.execution.slippage.fixed_tick_slippage import \
+    FixedTickSlippage
 from src.configuration.strategies_config import StrategiesConfig
 from src.configuration.trading_config import TradingConfig
 from src.core.interfaces.database_manager import DatabaseManager
@@ -31,12 +36,21 @@ from src.database.noop_database_manager import NoopDatabaseManager
 from src.exchange.interfaces.exchange_rest_manager import ExchangeProvidersEnum
 from src.recorder.market_data_store import MarketDataStore
 from src.server.services.dataset_service import DatasetService
-from src.trading.events.domain_events import TradeClosedEvent
+from src.trading.events.domain_events import (DecisionRejectedEvent,
+                                              MarketRegimeObservedEvent,
+                                              SignalGeneratedEvent,
+                                              TradeClosedEvent)
 from src.trading.managers.manager_container import ManagerContainer
 from src.trading.managers.manager_factory import ManagerFactory
 from src.trading.sizing import PositionSizer
 from src.trading.strategies.strategy_registry import StrategyRegistry
 from src.trading.trading_executor import TradingExecutor
+
+EXECUTOR_DIAGNOSTIC_EVENT_TYPES: frozenset[str] = frozenset({
+    SignalGeneratedEvent.__name__,
+    DecisionRejectedEvent.__name__,
+    MarketRegimeObservedEvent.__name__,
+})
 
 
 def build_execution_model(config: ExecutionConfiguration) -> ExecutionModel:
@@ -141,7 +155,7 @@ class BacktestRunner:
                 assets=assets,
             ),
             strategies_registry=self._strategy_registry,
-            event_bus=None,
+            event_bus=BacktestDiagnosticEventBus(bus, EXECUTOR_DIAGNOSTIC_EVENT_TYPES),
         )
         infrastructure = BacktestInfrastructure(
             clock=clock, datasets=datasets, bus=bus, execution_engine=execution_engine

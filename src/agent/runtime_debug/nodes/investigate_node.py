@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Any
 
 from src.agent.runtime_debug.models import Evidence
-from src.agent.runtime_debug.playbooks.playbook_resolver import PlaybookResolver
+from src.agent.runtime_debug.playbooks.playbook_resolver import \
+    PlaybookResolver
 from src.agent.runtime_debug.state import RuntimeDebugState
 from src.agent.runtime_debug.tools import RuntimeDebugToolbox
 
@@ -15,10 +17,17 @@ class InvestigateNode:
 
     def __call__(self, state: RuntimeDebugState) -> dict[str, Any]:
         error_event = state.get("error_event")
+        incident = state.get("incident")
         evidence_list: list[Evidence] = list(state.get("evidence") or [])
 
         if not error_event:
             return {"evidence": evidence_list}
+
+        if incident is not None and "occurrence_count" not in error_event.metadata:
+            error_event = replace(
+                error_event,
+                metadata={**error_event.metadata, "occurrence_count": incident.occurrence_count},
+            )
 
         playbook = self._playbook_resolver.resolve(error_event)
         if playbook:

@@ -52,3 +52,28 @@ class BacktestEventBus(EventBus):
                 f"subscribe_callback requires an Event subclass, got {event_class!r}"
             )
         return self.subscribe(event_class.__name__, BacktestCallbackSubscription(callback))
+
+
+class BacktestDiagnosticEventBus(EventBus):
+    """Forwards only allowlisted diagnostic events to a BacktestEventBus."""
+
+    def __init__(
+            self,
+            delegate: BacktestEventBus,
+            allowed_event_types: frozenset[str],
+    ) -> None:
+        self._delegate = delegate
+        self._allowed_event_types = allowed_event_types
+
+    def subscribe(self, event_type: str, subscription: EventSubscription) -> str:
+        return self._delegate.subscribe(event_type, subscription)
+
+    def unsubscribe(self, subscription_id: str) -> None:
+        self._delegate.unsubscribe(subscription_id)
+
+    def publish(self, event: Event) -> None:
+        if event.type in self._allowed_event_types:
+            self._delegate.publish(event)
+
+    def close(self) -> None:
+        return None

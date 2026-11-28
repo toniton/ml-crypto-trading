@@ -19,6 +19,7 @@ class PostgresExperimentRepository(ExperimentRepository):
             spec=entity.spec or {},
             run_bindings=entity.run_bindings or [],
             report=entity.report,
+            run_history=entity.run_history if entity.run_history is not None else [],
         )
         return entity
 
@@ -56,6 +57,7 @@ class PostgresExperimentRepository(ExperimentRepository):
             spec: dict[str, Any],
             run_bindings: list[dict[str, Any]],
             report: Optional[dict[str, Any]] = None,
+            run_history: Optional[list[dict[str, Any]]] = None,
     ) -> None:
         existing = (
             self.database_session.query(ExperimentDao)
@@ -71,6 +73,8 @@ class PostgresExperimentRepository(ExperimentRepository):
             existing.spec = spec
             existing.run_bindings = run_bindings
             existing.report = report
+            if run_history is not None:
+                existing.run_history = run_history
         else:
             self.database_session.add(
                 ExperimentDao(
@@ -83,6 +87,7 @@ class PostgresExperimentRepository(ExperimentRepository):
                     spec=spec,
                     run_bindings=run_bindings,
                     report=report,
+                    run_history=run_history if run_history is not None else [],
                 )
             )
         self.database_session.flush()
@@ -125,6 +130,7 @@ class PostgresExperimentRepository(ExperimentRepository):
             experiment_id: str,
             status: str,
             report: dict[str, Any],
+            run_history: Optional[list[dict[str, Any]]] = None,
     ) -> None:
         row = (
             self.database_session.query(ExperimentDao)
@@ -134,6 +140,8 @@ class PostgresExperimentRepository(ExperimentRepository):
         if row:
             row.status = status
             row.report = report
+            if run_history is not None:
+                row.run_history = run_history
             self.database_session.flush()
 
     def delete_experiment(self, experiment_id: str) -> bool:
@@ -182,6 +190,7 @@ class PostgresExperimentRepository(ExperimentRepository):
             "candidates": (row.spec or {}).get("candidates", []),
             "run_bindings": row.run_bindings or [],
             "report": row.report,
+            "run_history": row.run_history or [],
             "created_at": row.created_at.isoformat() if row.created_at else None,
             "updated_at": row.updated_at.isoformat() if row.updated_at else None,
         }

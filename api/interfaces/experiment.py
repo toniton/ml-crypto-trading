@@ -82,7 +82,30 @@ class CandidateRunBinding(BaseModel):
     candidate_id: str
     backtest_session_id: Optional[str] = None
     walk_forward_run_id: Optional[str] = None
+    backtest_status: Optional[str] = None
+    backtest_error: Optional[str] = None
+    walk_forward_status: Optional[str] = None
+    walk_forward_error: Optional[str] = None
     status: str = "PENDING"
+    error: Optional[str] = None
+
+
+class ExperimentRunConfigSnapshot(BaseModel):
+    data_source: BacktestMarketDataSpec = Field(default_factory=BacktestMarketDataSpec)
+    period: Optional[BacktestPeriodSpec] = None
+    windows: Optional[WalkForwardWindowSpec] = None
+    initial_balance: Decimal = Decimal("10000.0")
+    execution: BacktestExecutionSpec = Field(default_factory=BacktestExecutionSpec)
+
+
+class ExperimentRunHistoryEntry(BaseModel):
+    run_number: int
+    started_at: str
+    completed_at: Optional[str] = None
+    test_selection: TestSelection
+    status: str
+    config: ExperimentRunConfigSnapshot
+    candidate_summaries: dict[str, Any] = Field(default_factory=dict)
     error: Optional[str] = None
 
 
@@ -97,6 +120,7 @@ class ExperimentRecord(BaseModel):
     candidates: list[ExperimentCandidate] = Field(default_factory=list)
     run_bindings: list[CandidateRunBinding] = Field(default_factory=list)
     report: Optional[dict[str, Any]] = None
+    run_history: list[ExperimentRunHistoryEntry] = Field(default_factory=list)
     error_message: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
@@ -118,3 +142,9 @@ class CreateExperimentRequest(BaseModel):
 
 class StartExperimentRequest(BaseModel):
     test_selection: Optional[TestSelection] = None
+    data_source: Optional[BacktestMarketDataSpec] = None
+    period: Optional[BacktestPeriodSpec] = None
+    windows: Optional[WalkForwardWindowSpec] = None
+    initial_balance: Optional[Decimal] = None
+    execution: Optional[BacktestExecutionSpec] = None
+    preserve_other_results: bool = True

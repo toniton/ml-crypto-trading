@@ -16,8 +16,13 @@ class RecordedMarketDataSource(DataSource[BacktestRequest, BacktestDataSet]):
         self._store = store
 
     def load(self, request: BacktestRequest) -> BacktestDataSet:
-        market_data_items = self._store.observations(request.ticker_symbol)
+        all_items = self._store.observations(request.ticker_symbol)
+        if not all_items:
+            raise ValueError(
+                f"No recorded market data for {request.ticker_symbol}."
+            )
 
+        market_data_items = all_items
         filter_start = request.warmup_start_time if request.warmup_start_time is not None else request.start_time
         if filter_start is not None:
             start_epoch = int(filter_start.timestamp())
@@ -31,8 +36,17 @@ class RecordedMarketDataSource(DataSource[BacktestRequest, BacktestDataSet]):
             )
 
         if not market_data_items:
+            avail_start = datetime.fromtimestamp(
+                min(int(item.timestamp) for item in all_items), tz=timezone.utc
+            ).isoformat()
+            avail_end = datetime.fromtimestamp(
+                max(int(item.timestamp) for item in all_items), tz=timezone.utc
+            ).isoformat()
+            req_start = filter_start.isoformat() if filter_start is not None else "start"
+            req_end = request.end_time.isoformat() if request.end_time is not None else "end"
             raise ValueError(
-                f"No recorded market data for {request.ticker_symbol}."
+                f"No recorded market data for {request.ticker_symbol} in requested window "
+                f"({req_start} to {req_end}); available recorded range is {avail_start} to {avail_end}."
             )
 
         data_points_list: list[HistoricalDataPoint] = []

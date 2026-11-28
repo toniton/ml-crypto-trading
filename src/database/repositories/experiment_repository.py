@@ -21,6 +21,7 @@ class ExperimentRepository(BaseRepository[ExperimentDao]):
             spec: dict[str, Any],
             run_bindings: list[dict[str, Any]],
             report: Optional[dict[str, Any]] = None,
+            run_history: Optional[list[dict[str, Any]]] = None,
     ) -> None:
         raise NotImplementedError
 
@@ -55,6 +56,7 @@ class ExperimentRepository(BaseRepository[ExperimentDao]):
             experiment_id: str,
             status: str,
             report: dict[str, Any],
+            run_history: Optional[list[dict[str, Any]]] = None,
     ) -> None:
         raise NotImplementedError
 

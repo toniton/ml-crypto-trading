@@ -11,12 +11,27 @@ class OrderValidationPlaybook:
     name: str = "order_validation"
 
     KNOWN_EXCHANGE_ERROR_CODES: ClassVar[dict[str, set[int | str]]] = {
-        "CRYPTO_DOT_COM": {213, 204, 308, 415},
-        "BINANCE": {-1013, -1111, -1010, -2010},
-        "COINBASE": {"INVALID_ORDER_SIZE", "INSUFFICIENT_FUNDS", "INVALID_PRICE_STEP"},
+        "CRYPTO_DOT_COM": {213, 204, 415},
+        "BINANCE": {-1013, -1111, -1010},
+        "COINBASE": {"INVALID_ORDER_SIZE", "INVALID_PRICE_STEP"},
         "BYBIT": {10001, 170131, 170132, 170137},
         "KRAKEN": {"EOrder:Order minimum not met", "EOrder:Invalid price"},
         "OKX": {51000, 51001, 51006},
+    }
+
+    EXCLUDED_BALANCE_CODES: ClassVar[dict[str, set[int | str]]] = {
+        "CRYPTO_DOT_COM": {306, 308},
+        "BINANCE": {-2010},
+        "COINBASE": {"INSUFFICIENT_FUNDS"},
+    }
+
+    EXCLUDED_BALANCE_KEYWORDS: ClassVar[set[str]] = {
+        "insufficient_available_balance",
+        "insufficient available balance",
+        "insufficient_balance",
+        "insufficient balance",
+        "insufficient_funds",
+        "insufficient funds",
     }
 
     MIN_ORDER_SIZE_CODES: ClassVar[dict[str, set[int | str]]] = {
@@ -59,6 +74,11 @@ class OrderValidationPlaybook:
         msg = (event.message or "").lower()
         normalized_msg = msg.replace("_", " ")
 
+        if provider in self.EXCLUDED_BALANCE_CODES and code in self.EXCLUDED_BALANCE_CODES[provider]:
+            return False
+        if any(kw in msg or kw in normalized_msg for kw in self.EXCLUDED_BALANCE_KEYWORDS):
+            return False
+
         if provider in self.KNOWN_EXCHANGE_ERROR_CODES:
             known_codes = self.KNOWN_EXCHANGE_ERROR_CODES[provider]
             if code in known_codes or any(str(kc).lower() in msg for kc in known_codes):
@@ -97,6 +117,8 @@ class OrderValidationPlaybook:
             step_size: Decimal,
             min_notional: Optional[Decimal],
             price_dec: Optional[Decimal],
+            submitted_qty: Optional[Decimal] = None,
+            exchange_reported_min_size: bool = False,
     ) -> Decimal:
         recommended = min_qty
         if min_notional is not None and price_dec is not None and price_dec > Decimal("0"):
@@ -108,6 +130,9 @@ class OrderValidationPlaybook:
                 notional_qty = raw_qty
             if notional_qty > recommended:
                 recommended = notional_qty
+        if exchange_reported_min_size and submitted_qty is not None and recommended <= submitted_qty:
+            increment = step_size if step_size > Decimal("0") else Decimal("1")
+            recommended = submitted_qty + increment
         return recommended
 
     def investigate(self, event: RuntimeErrorEvent, toolbox: RuntimeDebugToolbox) -> list[Evidence]:
@@ -182,6 +207,8 @@ class OrderValidationPlaybook:
                     step_size=step_size,
                     min_notional=min_notional,
                     price_dec=price_dec,
+                    submitted_qty=qty_dec,
+                    exchange_reported_min_size=exchange_reported_min_size,
                 )
 
                 violation_details: list[str] = []

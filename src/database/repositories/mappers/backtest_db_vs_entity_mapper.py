@@ -207,6 +207,27 @@ class BacktestDBVSEntityMapper:
                 r: BacktestDBVSEntityMapper._serialize_attribution_metric(m)
                 for r, m in regimes.items()
             }
+        if result.diagnostics is not None:
+            diag = result.diagnostics
+            blocked_pct: Optional[float] = (
+                round((diag.risk_blocked_signals / diag.total_signals) * 100.0, 2)
+                if diag.total_signals > 0
+                else None
+            )
+            data["dataset_context"] = {
+                "bar_count": diag.dataset_bar_count,
+                "start_time": diag.dataset_start_at,
+                "end_time": diag.dataset_end_at,
+                "duration_seconds": diag.dataset_duration_seconds,
+            }
+            data["signal_diagnostics"] = {
+                "total_signals": diag.total_signals,
+                "risk_blocked_signals": diag.risk_blocked_signals,
+                "risk_blocked_pct": blocked_pct,
+                "risk_block_reasons": dict(diag.risk_block_reasons),
+            }
+            if diag.regime_counts:
+                data["regime_counts"] = dict(diag.regime_counts)
         return data
 
     @staticmethod
