@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
+import time
 from typing import Any, List, Optional
 from uuid import UUID, uuid4
 
@@ -61,6 +62,7 @@ class RuntimeDebugService(ApplicationLoggingMixin):
             rest_manager=rest_manager,
         )
         self._graph = RuntimeDebugGraph(toolbox=self._toolbox, llm=llm).build()
+        self._last_swept_at: dict[str, float] = {}
 
     @property
     def graph(self):
@@ -103,13 +105,15 @@ class RuntimeDebugService(ApplicationLoggingMixin):
                 ))
 
             if suggestion:
-                self._notify_agent_session(
+                approval_request = self._notify_agent_session(
                     incident_id=incident_id,
                     incident=incident,
                     diagnosis=diagnosis,
                     suggestion=suggestion,
                     presentation=presentation,
                 )
+                if approval_request is not None:
+                    result["approval_request"] = approval_request
 
         return result
 
@@ -120,7 +124,7 @@ class RuntimeDebugService(ApplicationLoggingMixin):
             diagnosis: Optional[DebugDiagnosis],
             suggestion: DebugSuggestion,
             presentation: Optional[RuntimeDebugPresentation],
-    ) -> None:
+    ) -> Optional[AgentApprovalRequest]:
         blocks = list(presentation.blocks) if presentation and presentation.blocks else []
         content = (
             str(blocks[0].get("content"))
@@ -175,71 +179,155 @@ class RuntimeDebugService(ApplicationLoggingMixin):
                 )
             )
 
-        self._maybe_request_min_quantity_approval(
+        return self._maybe_request_config_approval(
             incident_id=incident_id,
             incident=incident,
             suggestion=suggestion,
         )
 
-    def _maybe_request_min_quantity_approval(
+    def _find_pending_config_approval(
+            self,
+            symbol: str,
+            config_path: str,
+    ) -> Optional[AgentApprovalRequest]:
+        if self._approval_service is None:
+            return None
+        for pending in self._approval_service.list_pending_approvals():
+            if pending.asset and pending.asset.upper() != symbol.upper():
+                continue
+            changes = (pending.proposed_change or {}).get("changes") or []
+            if any(isinstance(c, dict) and c.get("path") == config_path for c in changes):
+                return pending
+        return None
+
+    def _resolve_candidate_config_changes(
+            self,
+            incident: Optional[RuntimeIncident],
+            suggestion: DebugSuggestion,
+    ) -> tuple[str, list[dict[str, Any]], str]:
+        """Extract (symbol, raw_changes, trigger_name) from structured suggestion evidence."""
+        balance_evidence = next(
+            (e for e in suggestion.evidence if e.source == "balance_analysis" and e.data.get("proposed_changes")),
+            None,
+        )
+        if balance_evidence is not None:
+            symbol = str(
+                balance_evidence.data.get("symbol")
+                or (incident.asset if incident and incident.asset else None)
+                or (suggestion.affected_component.split(".")[1] if suggestion.affected_component.startswith("assets.") else "UNKNOWN")
+            )
+            return symbol, list(balance_evidence.data["proposed_changes"]), "INSUFFICIENT_AVAILABLE_BALANCE"
+
+        if (
+            suggestion.affected_component.startswith("assets.")
+            and suggestion.affected_component.endswith(".min_quantity")
+        ):
+            size_evidence = next(
+                (e for e in suggestion.evidence if e.data.get("recommended_min_quantity") is not None),
+                None,
+            )
+            if size_evidence is not None:
+                raw_recommended = str(size_evidence.data["recommended_min_quantity"])
+                try:
+                    new_value = float(Decimal(raw_recommended))
+                except (InvalidOperation, ValueError):
+                    return "", [], ""
+                symbol = str(
+                    (incident.asset if incident and incident.asset else None)
+                    or size_evidence.data.get("symbol")
+                    or suggestion.affected_component.split(".")[1]
+                )
+                return (
+                    symbol,
+                    [
+                        {
+                            "path": f"assets.{symbol}.min_quantity",
+                            "new_value": new_value,
+                            "reason": suggestion.rationale,
+                        }
+                    ],
+                    "ORDER_VALIDATION_BELOW_MIN_ORDER_SIZE",
+                )
+
+        return "", [], ""
+
+    def _maybe_request_config_approval(
             self,
             incident_id: str,
             incident: Optional[RuntimeIncident],
             suggestion: DebugSuggestion,
-    ) -> None:
+    ) -> Optional[AgentApprovalRequest]:
         if (
             not suggestion.requires_configuration_change
             or self._approval_service is None
             or self._action_service is None
             or self._vcs is None
         ):
-            return
-        if not suggestion.affected_component.startswith("assets.") or not suggestion.affected_component.endswith(".min_quantity"):
-            return
+            return None
 
-        size_evidence = next(
-            (e for e in suggestion.evidence if e.data.get("recommended_min_quantity") is not None),
-            None,
-        )
-        if size_evidence is None:
-            return
+        symbol, raw_changes, trigger_name = self._resolve_candidate_config_changes(incident, suggestion)
+        if not symbol or not raw_changes:
+            return None
 
-        raw_recommended = str(size_evidence.data["recommended_min_quantity"])
-        try:
-            new_value = float(Decimal(raw_recommended))
-        except (InvalidOperation, ValueError):
-            return
-
-        symbol = (
-            (incident.asset if incident and incident.asset else None)
-            or size_evidence.data.get("symbol")
-            or suggestion.affected_component.split(".")[1]
-        )
-        config_path = f"assets.{symbol}.min_quantity"
+        primary_path = str(raw_changes[0]["path"])
+        existing_pending = self._find_pending_config_approval(symbol, primary_path)
+        if existing_pending is not None:
+            self.app_logger.info(
+                "Skipping duplicate approval for %s (%s); pending approval %s already exists",
+                primary_path,
+                incident_id,
+                existing_pending.id,
+            )
+            return existing_pending
 
         try:
             base_commit = self._vcs.head("HEAD").hash
             current_config = self._vcs.checkout(base_commit)
         except Exception as exc:  # pylint: disable=broad-except
             self.app_logger.warning(
-                "Unable to read VCS HEAD for min_quantity approval proposal on %s: %s",
+                "Unable to read VCS HEAD for config approval proposal on %s: %s",
                 symbol,
                 exc,
             )
-            return
+            return None
 
-        old_value = self._extract_current_min_quantity(current_config, symbol)
-        proposed_change = {
-            "changes": [
+        changes: list[dict[str, Any]] = []
+        for item in raw_changes:
+            path = str(item["path"])
+            new_value = item["new_value"]
+            old_value = self._extract_config_path_value(current_config, path)
+            if path.endswith(".min_quantity") and old_value is not None:
+                try:
+                    if Decimal(str(old_value)) >= Decimal(str(new_value)):
+                        continue
+                except InvalidOperation:
+                    pass
+            elif old_value is not None and old_value == new_value:
+                continue
+            changes.append(
                 {
-                    "path": config_path,
+                    "path": path,
                     "old_value": old_value,
                     "new_value": new_value,
-                    "reason": suggestion.rationale,
+                    "reason": str(item.get("reason") or suggestion.rationale),
                 }
-            ],
+            )
+
+        if not changes:
+            self.app_logger.info(
+                "Skipping no-op config proposal for %s (%s): VCS HEAD already satisfies target values",
+                symbol,
+                incident_id,
+            )
+            return None
+
+        primary_change = changes[0]
+        title = f"Update {primary_change['path']} to {primary_change['new_value']}"
+        proposed_change = {
+            "changes": changes,
             "risks": [
-                f"Minimum order size for {symbol} will increase to {raw_recommended}.",
+                f"Configuration path {primary_change['path']} will change from "
+                f"{primary_change['old_value']} to {primary_change['new_value']}."
             ],
             "expected_effect": suggestion.proposed_change,
         }
@@ -247,12 +335,12 @@ class RuntimeDebugService(ApplicationLoggingMixin):
         proposal_action = self._action_service.create_action(
             AgentAction(
                 type=AgentActionType.REQUEST_APPROVAL,
-                title=f"Update {config_path} to {raw_recommended}",
+                title=title,
                 description=suggestion.proposed_change,
                 conversation_id=RESERVED_AGENT_SESSION_ID,
-                payload={"incident_id": incident_id, "asset": symbol, "path": config_path},
+                payload={"incident_id": incident_id, "asset": symbol, "path": primary_change["path"]},
                 reason=ActionReason(
-                    trigger="ORDER_VALIDATION_BELOW_MIN_ORDER_SIZE",
+                    trigger=trigger_name,
                     evidence_ids=[incident_id],
                     related_entities=[symbol],
                 ),
@@ -264,13 +352,114 @@ class RuntimeDebugService(ApplicationLoggingMixin):
             conversation_id=RESERVED_AGENT_SESSION_ID,
             agent_action_id=proposal_action.id,
             action_type=AgentActionType.CREATE_PROPOSAL,
-            title=f"Update {config_path} to {raw_recommended}",
+            title=title,
             description=suggestion.rationale,
             proposed_change=proposed_change,
             base_commit=base_commit,
             asset=symbol,
         )
-        self._approval_service.request_approval(approval_request)
+        return self._approval_service.request_approval(approval_request)
+
+    @classmethod
+    def _extract_config_path_value(cls, config: Any, path: str) -> Any:
+        if not isinstance(config, dict) or not path:
+            return None
+        parts = path.split(".")
+        if len(parts) >= 3 and parts[0] == "assets":
+            symbol = parts[1]
+            asset_entry = cls._find_asset_entry(config, symbol)
+            if asset_entry is None:
+                return None
+            current: Any = asset_entry
+            for key in parts[2:]:
+                if isinstance(current, dict):
+                    current = current.get(key)
+                else:
+                    return None
+            return current
+        current = config
+        for key in parts:
+            if isinstance(current, dict):
+                current = current.get(key)
+            else:
+                return None
+        return current
+
+    @staticmethod
+    def _find_asset_entry(config: dict[str, Any], symbol: str) -> Optional[dict[str, Any]]:
+        assets = config.get("assets")
+        if isinstance(assets, dict):
+            entry = assets.get(symbol)
+            return entry if isinstance(entry, dict) else None
+        if isinstance(assets, list):
+            for entry in assets:
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("ticker_symbol") == symbol:
+                    return entry
+                base = entry.get("base_ticker_symbol")
+                quote = entry.get("quote_ticker_symbol")
+                sep = entry.get("separator") if entry.get("separator") is not None else "_"
+                if base and quote and f"{base}{sep}{quote}".upper() == symbol.upper():
+                    return entry
+        return None
+
+    def get_exchange_constraints(self, exchange: str, ticker_symbol: str) -> dict[str, Any]:
+        """Fetch live exchange instrument constraints alongside current VCS min_quantity."""
+        normalized_symbol = ticker_symbol.upper().replace("/", "_").replace("-", "_")
+        rules = self._toolbox.get_exchange_instrument_metadata(exchange, normalized_symbol)
+        current_min_quantity = None
+        if self._vcs is not None:
+            try:
+                head_hash = self._vcs.head("HEAD").hash
+                current_config = self._vcs.checkout(head_hash)
+                current_min_quantity = self._extract_current_min_quantity(
+                    current_config, normalized_symbol
+                )
+            except Exception as exc:  # pylint: disable=broad-except
+                self.app_logger.warning(
+                    "Unable to read current min_quantity from VCS HEAD for %s: %s",
+                    normalized_symbol,
+                    exc,
+                )
+        return {
+            **rules,
+            "current_min_quantity": current_min_quantity,
+        }
+
+    def sweep_critical_incidents(self, cooldown_seconds: float = 3600.0) -> list[str]:
+        """Pick up active CRITICAL incidents lacking an actionable configuration proposal."""
+        now = time.monotonic()
+        investigated: list[str] = []
+        active = self.list_active_incidents()
+        for incident in active:
+            if incident.severity != Severity.CRITICAL:
+                continue
+            if incident.status not in (
+                IncidentStatus.DETECTED,
+                IncidentStatus.ACKNOWLEDGED,
+                IncidentStatus.DIAGNOSED,
+            ):
+                continue
+            inc_id = str(incident.id)
+            last_swept = self._last_swept_at.get(inc_id)
+            if last_swept is not None and (now - last_swept) < cooldown_seconds:
+                continue
+            needs_investigation = incident.suggestion is None or (
+                not incident.suggestion.requires_configuration_change
+                and incident.category.value == "EXCHANGE_VALIDATION"
+            )
+            if not needs_investigation:
+                continue
+            self._last_swept_at[inc_id] = now
+            try:
+                self.investigate_incident(inc_id)
+                investigated.append(inc_id)
+            except Exception as exc:  # pylint: disable=broad-except
+                self.app_logger.warning(
+                    "Critical incident sweep failed for %s: %s", inc_id, exc
+                )
+        return investigated
 
     @staticmethod
     def _extract_current_min_quantity(config: Any, symbol: str) -> Any:
@@ -283,7 +472,14 @@ class RuntimeDebugService(ApplicationLoggingMixin):
                 return entry.get("min_quantity")
         elif isinstance(assets, list):
             for entry in assets:
-                if isinstance(entry, dict) and entry.get("ticker_symbol") == symbol:
+                if not isinstance(entry, dict):
+                    continue
+                if entry.get("ticker_symbol") == symbol:
+                    return entry.get("min_quantity")
+                base = entry.get("base_ticker_symbol")
+                quote = entry.get("quote_ticker_symbol")
+                sep = entry.get("separator") if entry.get("separator") is not None else "_"
+                if base and quote and f"{base}{sep}{quote}".upper() == symbol.upper():
                     return entry.get("min_quantity")
         return None
 

@@ -19,14 +19,21 @@ class LoadContextNode:
             incident = self._toolbox.get_incident(incident_id)
 
         if incident and not error_event:
-            events = self._toolbox.get_error_events(str(incident.id), limit=1)
+            events = self._toolbox.get_error_events(str(incident.id), limit=10)
             if events:
-                error_event = events[0]
+                matched = next(
+                    (
+                        e for e in events
+                        if incident.asset and e.asset and e.asset.upper() == incident.asset.upper()
+                    ),
+                    None,
+                )
+                error_event = matched or events[0]
 
         context: dict[str, Any] = {}
         if incident:
             context["incident_id"] = str(incident.id)
-            context["asset"] = incident.asset
+            context["asset"] = (error_event.asset if error_event and error_event.asset else incident.asset)
             context["exchange"] = incident.exchange
             context["occurrences"] = incident.occurrence_count
 

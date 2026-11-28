@@ -31,10 +31,11 @@ def normalize_error_message(message: str) -> str:
 
 def compute_error_fingerprint(event: RuntimeErrorEvent) -> str:
     provider = (event.exchange or "").upper().strip()
+    asset = (event.asset or "").upper().strip()
     operation = (event.operation or "").lower().strip()
     exchange_code = str(event.exchange_code or "").strip()
     component = (event.component or "").lower().strip()
     normalized_message = normalize_error_message(event.message)
 
-    raw_key = f"{provider}:{operation}:{exchange_code}:{normalized_message}:{component}"
+    raw_key = f"{provider}:{asset}:{operation}:{exchange_code}:{normalized_message}:{component}"
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()

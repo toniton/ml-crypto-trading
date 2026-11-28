@@ -4,6 +4,7 @@ from typing import List, Optional
 
 from src.agent.runtime_debug.models import RuntimeErrorEvent
 from src.agent.runtime_debug.playbooks.base_playbook import DebugPlaybook
+from src.agent.runtime_debug.playbooks.insufficient_balance_playbook import InsufficientBalancePlaybook
 from src.agent.runtime_debug.playbooks.order_validation_playbook import OrderValidationPlaybook
 from src.agent.runtime_debug.playbooks.rate_limit_playbook import RateLimitPlaybook
 from src.agent.runtime_debug.playbooks.reconciliation_playbook import ReconciliationPlaybook
@@ -12,6 +13,7 @@ from src.agent.runtime_debug.playbooks.reconciliation_playbook import Reconcilia
 class PlaybookResolver:
     def __init__(self, playbooks: Optional[List[DebugPlaybook]] = None):
         self._playbooks: List[DebugPlaybook] = playbooks or [
+            InsufficientBalancePlaybook(),
             OrderValidationPlaybook(),
             RateLimitPlaybook(),
             ReconciliationPlaybook(),

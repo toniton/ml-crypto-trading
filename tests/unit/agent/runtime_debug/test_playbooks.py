@@ -1,9 +1,12 @@
 from unittest.mock import MagicMock
 
 from src.agent.runtime_debug.models import RuntimeErrorEvent
-from src.agent.runtime_debug.playbooks.order_validation_playbook import OrderValidationPlaybook
-from src.agent.runtime_debug.playbooks.playbook_resolver import PlaybookResolver
-from src.agent.runtime_debug.playbooks.rate_limit_playbook import RateLimitPlaybook
+from src.agent.runtime_debug.playbooks.order_validation_playbook import \
+    OrderValidationPlaybook
+from src.agent.runtime_debug.playbooks.playbook_resolver import \
+    PlaybookResolver
+from src.agent.runtime_debug.playbooks.rate_limit_playbook import \
+    RateLimitPlaybook
 from src.agent.runtime_debug.tools import RuntimeDebugToolbox
 
 
@@ -129,6 +132,7 @@ def test_order_validation_playbook_matches_cryptodotcom_415_http_500():
 
 def test_order_validation_playbook_uses_live_exchange_metadata_and_computes_min_qty():
     from decimal import Decimal
+
     from api.interfaces.instrument_metadata import InstrumentMetadata
 
     rest_manager = MagicMock()
@@ -174,3 +178,285 @@ def test_toolbox_falls_back_to_static_metadata_when_exchange_api_fails():
 
     assert rules["source"] == "static_fallback"
     assert rules["min_quantity"] == "0.0001"
+
+
+def test_order_validation_playbook_recommends_above_rejected_qty_for_cro_usd():
+    from decimal import Decimal
+
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = OrderValidationPlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=415,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="BELOW_MIN_ORDER_SIZE",
+        metadata={"order_quantity": "19", "order_price": "0.039990"},
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+    analysis = evidence[1].data
+    assert analysis["recommended_min_quantity"] == "26"
+    assert analysis["violates_min_notional"] is True
+
+
+def test_order_validation_playbook_never_recommends_below_rejected_qty_without_notional():
+    from decimal import Decimal
+
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=None,
+    )
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = OrderValidationPlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=415,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="BELOW_MIN_ORDER_SIZE",
+        metadata={"order_quantity": "19", "order_price": "0.039990"},
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+    assert evidence[1].data["recommended_min_quantity"] == "20"
+
+
+def test_playbook_resolver_routes_insufficient_balance_away_from_order_validation():
+    resolver = PlaybookResolver()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=306,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="INSUFFICIENT_AVAILABLE_BALANCE",
+    )
+    playbook = resolver.resolve(event)
+    assert playbook is not None
+    assert playbook.name == "insufficient_balance"
+    assert OrderValidationPlaybook().matches(event) is False
+
+
+def test_insufficient_balance_playbook_sell_recommends_pausing_asset():
+    from decimal import Decimal
+
+    from api.interfaces.account_balance import AccountBalance
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+    from src.agent.runtime_debug.playbooks.insufficient_balance_playbook import \
+        InsufficientBalancePlaybook
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    rest_manager.get_account_balance.return_value = [
+        AccountBalance(currency="CRO", available_balance=Decimal("30"))
+    ]
+    rest_manager.get_open_orders.return_value = []
+
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = InsufficientBalancePlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=306,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="INSUFFICIENT_AVAILABLE_BALANCE",
+        metadata={"trade_action": "SELL", "order_quantity": "47", "order_price": "0.039970"},
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+    analysis = evidence[1].data
+    assert analysis["min_quantity"] == "1"
+    assert analysis["available_balance"] == "30"
+    assert analysis["is_sell_dust"] is False
+    assert analysis["remediation_action"] == "pause_asset"
+    assert analysis["proposed_changes"][0]["path"] == "assets.CRO_USD.enabled"
+    assert analysis["proposed_changes"][0]["new_value"] is False
+
+
+def test_insufficient_balance_playbook_transient_sell_dust_avoids_disabling_asset():
+    from decimal import Decimal
+
+    from api.interfaces.account_balance import AccountBalance
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+    from src.agent.runtime_debug.nodes.diagnose_node import DiagnoseNode
+    from src.agent.runtime_debug.nodes.generate_suggestion_node import \
+        GenerateSuggestionNode
+    from src.agent.runtime_debug.playbooks.insufficient_balance_playbook import \
+        InsufficientBalancePlaybook
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    rest_manager.get_account_balance.return_value = [
+        AccountBalance(currency="CRO", available_balance=Decimal("21.5912"))
+    ]
+    rest_manager.get_open_orders.return_value = []
+
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = InsufficientBalancePlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=306,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="INSUFFICIENT_AVAILABLE_BALANCE",
+        metadata={
+            "trade_action": "SELL",
+            "order_quantity": "26",
+            "order_price": "0.039638",
+            "occurrence_count": 1,
+        },
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+    analysis = evidence[1].data
+    assert analysis["is_sell_dust"] is True
+    assert analysis["remediation_action"] == "reconcile_balance_dust"
+    assert analysis["proposed_changes"] == []
+
+    diagnosis = DiagnoseNode()({"error_event": event, "evidence": evidence})["diagnosis"]
+    assert "dust" in diagnosis.summary.lower()
+    assert "min_notional=1.00" in diagnosis.suspected_root_cause
+
+    suggestion = GenerateSuggestionNode()(
+        {"error_event": event, "evidence": evidence, "diagnosis": diagnosis}
+    )["suggestion"]
+    assert suggestion.requires_configuration_change is False
+    assert suggestion.affected_component == "trading.accounts.account_manager"
+    assert "no config change" in suggestion.summary.lower()
+
+
+def test_insufficient_balance_playbook_repeated_sell_dust_still_pauses_asset():
+    from decimal import Decimal
+
+    from api.interfaces.account_balance import AccountBalance
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+    from src.agent.runtime_debug.playbooks.insufficient_balance_playbook import \
+        InsufficientBalancePlaybook
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="CRO_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    rest_manager.get_account_balance.return_value = [
+        AccountBalance(currency="CRO", available_balance=Decimal("21.5912"))
+    ]
+    rest_manager.get_open_orders.return_value = []
+
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = InsufficientBalancePlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=306,
+        http_status=500,
+        operation="execute_order",
+        asset="CRO_USD",
+        message="INSUFFICIENT_AVAILABLE_BALANCE",
+        metadata={
+            "trade_action": "SELL",
+            "order_quantity": "26",
+            "order_price": "0.039638",
+            "occurrence_count": 3,
+        },
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+    analysis = evidence[1].data
+    assert analysis["is_sell_dust"] is True
+    assert analysis["remediation_action"] == "pause_asset"
+    assert analysis["proposed_changes"][0]["path"] == "assets.CRO_USD.enabled"
+    assert analysis["proposed_changes"][0]["new_value"] is False
+
+
+def test_insufficient_balance_playbook_buy_with_partial_capital_tightens_exposure():
+    from decimal import Decimal
+
+    from api.interfaces.account_balance import AccountBalance
+    from api.interfaces.instrument_metadata import InstrumentMetadata
+    from src.agent.runtime_debug.playbooks.insufficient_balance_playbook import \
+        InsufficientBalancePlaybook
+
+    rest_manager = MagicMock()
+    rest_manager.get_instrument_metadata.return_value = InstrumentMetadata(
+        exchange="CRYPTO_DOT_COM",
+        symbol="DOGE_USD",
+        quantity_precision=0,
+        price_precision=5,
+        min_quantity=Decimal("1"),
+        quantity_step=Decimal("1"),
+        min_price=Decimal("0.00001"),
+        min_notional=Decimal("1.00"),
+    )
+    rest_manager.get_account_balance.return_value = [
+        AccountBalance(currency="USD", available_balance=Decimal("5.00"))
+    ]
+    rest_manager.get_open_orders.return_value = []
+
+    toolbox = RuntimeDebugToolbox(rest_manager=rest_manager)
+    playbook = InsufficientBalancePlaybook()
+    event = RuntimeErrorEvent(
+        exchange="CRYPTO_DOT_COM",
+        exchange_code=306,
+        http_status=500,
+        operation="execute_order",
+        asset="DOGE_USD",
+        message="INSUFFICIENT_AVAILABLE_BALANCE",
+        metadata={"trade_action": "BUY", "order_quantity": "100", "order_price": "0.15"},
+    )
+
+    evidence = playbook.investigate(event, toolbox)
+    analysis = evidence[1].data
+    assert analysis["remediation_action"] == "reduce_exposure"
+    assert analysis["proposed_changes"][0]["path"] == "assets.DOGE_USD.portfolio.max_exposure_pct"
+    assert 0.05 <= analysis["proposed_changes"][0]["new_value"] <= 0.50

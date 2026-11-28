@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import time
 from typing import Any, Callable, Optional
 from uuid import uuid4
 
@@ -44,12 +45,15 @@ class IncidentAggregator(ApplicationLoggingMixin):
             auto_investigate: bool = True,
             async_investigation: bool = False,
             max_workers: int = 2,
+            reinvestigate_cooldown_seconds: float = 3600.0,
     ):
         self._database_manager = database_manager
         self._event_bus = event_bus
         self._investigation_callback = investigation_callback
         self._auto_investigate = auto_investigate
         self._async_investigation = async_investigation
+        self._reinvestigate_cooldown_seconds = reinvestigate_cooldown_seconds
+        self._last_investigated_at: dict[str, float] = {}
         self._executor: Optional[ThreadPoolExecutor] = (
             ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="runtime-debug")
             if async_investigation
@@ -136,6 +140,31 @@ class IncidentAggregator(ApplicationLoggingMixin):
                     self._event_bus.publish(RuntimeIncidentUpdatedEvent(
                         incident_payload=active_incident.to_dict()
                     ))
+
+                inc_id_str = str(active_incident.id)
+                needs_reinvestigation = (
+                    self._auto_investigate
+                    and (category == ErrorCategory.EXCHANGE_VALIDATION or severity == Severity.CRITICAL)
+                    and active_incident.status in (
+                        IncidentStatus.DETECTED,
+                        IncidentStatus.ACKNOWLEDGED,
+                        IncidentStatus.DIAGNOSED,
+                    )
+                    and (
+                        active_incident.suggestion is None
+                        or (
+                            category == ErrorCategory.EXCHANGE_VALIDATION
+                            and not active_incident.suggestion.requires_configuration_change
+                        )
+                    )
+                )
+                if needs_reinvestigation:
+                    now_mono = time.monotonic()
+                    last_run = self._last_investigated_at.get(inc_id_str)
+                    if last_run is None or (now_mono - last_run) >= self._reinvestigate_cooldown_seconds:
+                        self._last_investigated_at[inc_id_str] = now_mono
+                        should_trigger_investigation = True
+                        incident_id_to_investigate = inc_id_str
             else:
                 incident = RuntimeIncident(
                     id=uuid4(),
@@ -166,6 +195,7 @@ class IncidentAggregator(ApplicationLoggingMixin):
                     category == ErrorCategory.EXCHANGE_VALIDATION
                     or severity == Severity.CRITICAL
                 ):
+                    self._last_investigated_at[str(incident.id)] = time.monotonic()
                     should_trigger_investigation = True
                     incident_id_to_investigate = str(incident.id)
 
